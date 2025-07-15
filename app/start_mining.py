@@ -388,52 +388,75 @@ def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
         stop_event.set()
 
 def main():
-    logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử =====")
+    """
+    Redesigned main function với Parallel Initialization Framework.
+    Theo blueprint: Khởi tạo song song CPU và GPU mining processes + 
+    kích hoạt đồng thời các modules trong scripts/.
+    """
+    logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Parallel Architecture) =====")
+    
+    # Khởi tạo môi trường
     privileged_manager = initialize_environment()
-    global cpu_process, gpu_process
-
-    # Sử dụng hàm quản lý CPU miner chuyên biệt
-    cpu_monitor_thread = threading.Thread(target=manage_cpu_miner, args=(privileged_manager,), daemon=True)
-    cpu_monitor_thread.start()
-
-    # Sử dụng hàm quản lý GPU miner chuyên biệt (nếu được cấu hình)
+    
+    # Khởi động Resource Manager (System Manager)
+    start_system_manager()
+    
+    # Tạo threads để chạy song song CPU và GPU mining
+    cpu_thread = threading.Thread(target=manage_cpu_miner, args=(privileged_manager,), daemon=True, name="CPUMiningThread")
+    gpu_thread = threading.Thread(target=manage_gpu_miner, args=(privileged_manager,), daemon=True, name="GPUMiningThread")
+    
+    # Khởi động các threads song song
+    logger.info("🚀 Khởi động parallel mining threads...")
+    cpu_thread.start()
+    
+    # Khởi động GPU thread nếu được cấu hình
     if os.getenv('MINING_SERVER_GPU') and os.getenv('MINING_WALLET_GPU'):
-        gpu_monitor_thread = threading.Thread(target=manage_gpu_miner, args=(privileged_manager,), daemon=True)
-        gpu_monitor_thread.start()
-
-    resource_thread = threading.Thread(target=start_system_manager, daemon=True)
-    resource_thread.start()
+        gpu_thread.start()
+        logger.info("✅ Đã khởi động cả CPU và GPU mining threads")
+    else:
+        logger.info("✅ Chỉ khởi động CPU mining thread (GPU không được cấu hình)")
+    
+    # Đợi các threads hoạt động và xử lý tín hiệu dừng
     try:
         while not stop_event.is_set():
+            # Kiểm tra trạng thái threads
+            if not cpu_thread.is_alive():
+                logger.warning("⚠️ CPU mining thread đã dừng")
+            if gpu_thread.is_alive() and not gpu_thread.is_alive():
+                logger.warning("⚠️ GPU mining thread đã dừng")
+            
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("Nhận tín hiệu ngắt (Ctrl+C).")
+        logger.info("Nhận tín hiệu KeyboardInterrupt. Đang dừng...")
         stop_event.set()
-    finally:
-        logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
-        
-        # Cleanup optimized mining first
-        global optimized_integration
-        if optimized_integration:
-            logger.info("Dừng OptimizedCalculationChain...")
-            try:
-                optimized_integration.cleanup()
-                optimized_integration = None
-                logger.info("✅ OptimizedCalculationChain đã dừng")
-            except Exception as e:
-                logger.error(f"Lỗi khi dừng OptimizedCalculationChain: {e}")
-        
-        # Cleanup legacy processes
-        with process_lock:
-            if cpu_process:
-                logger.info(f"Dừng tiến trình CPU miner (PID: {cpu_process.pid})...")
-                cpu_process.terminate()
-            if gpu_process:
-                logger.info(f"Dừng tiến trình GPU miner (PID: {gpu_process.pid})...")
-                gpu_process.terminate()
-        
-        stop_system_manager()
-        logger.info("Hệ thống đã dừng. Thoát.")
+    
+    # Dừng system manager
+    stop_system_manager()
+    
+    # Cleanup và thoát
+    logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
+    
+    # Cleanup optimized mining first
+    global optimized_integration
+    if optimized_integration:
+        logger.info("Dừng OptimizedCalculationChain...")
+        try:
+            optimized_integration.cleanup()
+            optimized_integration = None
+            logger.info("✅ OptimizedCalculationChain đã dừng")
+        except Exception as e:
+            logger.error(f"Lỗi khi dừng OptimizedCalculationChain: {e}")
+    
+    # Cleanup legacy processes
+    with process_lock:
+        if cpu_process:
+            logger.info(f"Dừng tiến trình CPU miner (PID: {cpu_process.pid})...")
+            cpu_process.terminate()
+        if gpu_process:
+            logger.info(f"Dừng tiến trình GPU miner (PID: {gpu_process.pid})...")
+            gpu_process.terminate()
+    
+    logger.info("Hệ thống đã dừng. Thoát.")
 
 if __name__ == "__main__":
     main()

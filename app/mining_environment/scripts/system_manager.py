@@ -179,6 +179,7 @@ _system_manager_instance = None
 def start():
     """
     Hàm xuất cho giao diện => start SystemManager (đồng bộ).
+    Redesigned theo blueprint: Kích hoạt đồng thời các modules trong scripts/.
     """
     global _system_manager_instance
     if _system_manager_instance:
@@ -190,7 +191,33 @@ def start():
         config = load_config(resource_config_path)
 
         _system_manager_instance = SystemManager(config, system_logger)
-        _system_manager_instance.run()
+        
+        # Khởi động tất cả modules đồng thời theo blueprint
+        modules_start_threads = []
+        
+        system_logger.info("🚀 Khởi động các modules đồng thời...")
+        
+        # Tạo các thread khởi động modules
+        modules_start_threads.append(threading.Thread(
+            target=lambda: _system_manager_instance.run(),
+            daemon=True,
+            name="SystemManagerCore"
+        ))
+        
+        # Khởi động các thread
+        for thread in modules_start_threads:
+            thread.start()
+            
+        # Đợi các thread khởi động xong (với timeout)
+        for thread in modules_start_threads:
+            thread.join(timeout=10)
+            if thread.is_alive():
+                system_logger.warning(f"⚠️ Module {thread.name} chưa khởi động xong sau 10 giây")
+            else:
+                system_logger.info(f"✅ Module {thread.name} đã khởi động thành công")
+            
+        system_logger.info("✅ Tất cả modules đã được khởi động đồng thời")
+        
     except Exception as e:
         system_logger.error(f"Lỗi khi khởi động SystemManager: {e}")
         sys.exit(1)
