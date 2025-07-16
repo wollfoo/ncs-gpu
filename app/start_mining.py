@@ -10,6 +10,8 @@ import subprocess
 import threading
 import signal
 import time
+import re
+import logging
 from pathlib import Path
 
 # Thêm thư mục script vào sys.path để **resolve** (phân giải) các **local module imports** (import module cục bộ)

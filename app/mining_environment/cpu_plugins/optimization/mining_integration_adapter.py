@@ -97,25 +97,45 @@ class MiningIntegrationAdapter:
         Replaces traditional subprocess.Popen approach.
         """
         try:
+            # 🔧 Process-level initialization logging
+            self.logger.info(f"[INIT-LOG] Initializing optimized mining - Process PID: {os.getpid()}")
+            
             if self.is_initialized:
-                self.logger.warning("Optimized mining already initialized")
+                self.logger.warning(f"[INIT-LOG] Optimized mining already initialized - Process PID: {os.getpid()}")
                 return True
             
-            self.logger.info(f"Initializing optimized mining system for {cores} cores...")
+            self.logger.info(f"[INIT-LOG] Initializing optimized mining system for {cores} cores - Process PID: {os.getpid()}")
             
             # Generate optimized configuration
             if not config:
+                self.logger.info(f"[INIT-LOG] Generating optimized configuration...")
                 config = self.config_generator.generate_mining_config(
                     performance_profile='optimized', 
                     use_optimized_chain=True
                 )
+                self.logger.info(f"[INIT-LOG] Configuration generated: {config}")
             
-            # Initialize core components
+            # 🔧 Initialize core components với process logging
+            self.logger.info(f"[INIT-LOG] Creating calculation chain for {cores} cores...")
             self.calculation_chain = create_optimized_mining_chain(cores=cores, logger=self.logger)
+            if not self.calculation_chain:
+                raise RuntimeError("Failed to create calculation chain")
+            self.logger.info(f"[INIT-LOG] ✅ Calculation chain created")
+            
+            self.logger.info(f"[INIT-LOG] Creating workload distributor...")
             self.workload_distributor = create_balanced_distributor(cores=cores, logger=self.logger)
+            if not self.workload_distributor:
+                raise RuntimeError("Failed to create workload distributor")
+            self.logger.info(f"[INIT-LOG] ✅ Workload distributor created")
+            
+            self.logger.info(f"[INIT-LOG] Creating synchronization component...")
             self.synchronization = create_high_performance_sync(cores=cores, logger=self.logger)
+            if not self.synchronization:
+                raise RuntimeError("Failed to create synchronization component")
+            self.logger.info(f"[INIT-LOG] ✅ Synchronization component created")
             
             # Register RandomX task profile
+            self.logger.info(f"[INIT-LOG] Registering RandomX task profile...")
             randomx_profile = TaskProfile(
                 task_type="randomx_mining",
                 estimated_complexity=1.2,
@@ -123,22 +143,35 @@ class MiningIntegrationAdapter:
                 parallel_efficiency=0.98  # Excellent parallel efficiency
             )
             self.workload_distributor.register_task_profile("randomx_mining", randomx_profile)
+            self.logger.info(f"[INIT-LOG] ✅ RandomX task profile registered")
             
-            # Initialize calculation chain
+            # Initialize calculation chain worker pool
+            self.logger.info(f"[INIT-LOG] Initializing worker pool...")
             if not self.calculation_chain.initialize_worker_pool():
                 raise RuntimeError("Failed to initialize worker pool")
+            self.logger.info(f"[INIT-LOG] ✅ Worker pool initialized")
             
             # Start workload distributor
+            self.logger.info(f"[INIT-LOG] Starting workload distributor...")
             self.workload_distributor.start()
+            self.logger.info(f"[INIT-LOG] ✅ Workload distributor started")
+            
+            # 🔧 Verify component initialization
+            if hasattr(self.calculation_chain, 'get_performance_stats'):
+                try:
+                    init_stats = self.calculation_chain.get_performance_stats()
+                    self.logger.info(f"[INIT-LOG] Initial performance stats: {init_stats}")
+                except Exception as stats_error:
+                    self.logger.warning(f"[INIT-LOG] Could not get initial stats: {stats_error}")
             
             self.is_initialized = True
             self.legacy_process_replacement = True
             
-            self.logger.info("✅ Optimized mining system initialized successfully")
+            self.logger.info(f"[INIT-LOG] ✅ Optimized mining system initialized successfully - Process PID: {os.getpid()}")
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize optimized mining: {e}")
+            self.logger.error(f"[INIT-LOG] ❌ Failed to initialize optimized mining: {e}")
             self.cleanup()
             return False
     
@@ -148,42 +181,75 @@ class MiningIntegrationAdapter:
         Returns True if started successfully.
         """
         try:
+            # 🔧 Process-level session startup logging
+            self.logger.info(f"[SESSION-LOG] Starting mining session - Process PID: {os.getpid()}")
+            
             if not self.is_initialized:
+                self.logger.info(f"[SESSION-LOG] System not initialized, initializing...")
                 if not self.initialize_optimized_mining():
+                    self.logger.error(f"[SESSION-LOG] Failed to initialize optimized mining")
                     return False
             
             if self.is_running:
-                self.logger.warning("Mining session already running")
+                self.logger.warning(f"[SESSION-LOG] Mining session already running - Process PID: {os.getpid()}")
                 return True
             
             # Use default config if none provided
             self.current_session = session_config or MiningSessionConfig()
             
-            self.logger.info(f"Starting mining session: profile={self.current_session.profile}")
+            self.logger.info(f"[SESSION-LOG] Session config: profile={self.current_session.profile}, "
+                           f"batch_size={self.current_session.batch_size}, "
+                           f"total_iterations={self.current_session.total_iterations}")
+            
+            # 🔧 Process-level thread startup logging
+            self.logger.info(f"[SESSION-LOG] Starting monitoring and workload threads...")
             
             # Start monitoring
             self.shutdown_event.clear()
             self.monitoring_thread = threading.Thread(
                 target=self._monitoring_loop,
                 daemon=True,
-                name="MiningMonitor"
+                name=f"MiningMonitor-{os.getpid()}"
             )
             self.monitoring_thread.start()
+            self.logger.info(f"[SESSION-LOG] Monitoring thread started: {self.monitoring_thread.name}")
             
             # Start workload management
             self.workload_thread = threading.Thread(
                 target=self._workload_management_loop,
                 daemon=True,
-                name="WorkloadManager"
+                name=f"WorkloadManager-{os.getpid()}"
             )
             self.workload_thread.start()
+            self.logger.info(f"[SESSION-LOG] Workload thread started: {self.workload_thread.name}")
+            
+            # 🔧 Verify thread startup
+            time.sleep(0.5)  # Short wait for threads to initialize
+            
+            monitor_alive = self.monitoring_thread.is_alive()
+            workload_alive = self.workload_thread.is_alive()
+            
+            self.logger.info(f"[SESSION-LOG] Thread status: Monitor={monitor_alive}, Workload={workload_alive}")
+            
+            if not monitor_alive or not workload_alive:
+                self.logger.error(f"[SESSION-LOG] Thread startup failed - Monitor: {monitor_alive}, Workload: {workload_alive}")
+                return False
             
             self.is_running = True
-            self.logger.info("✅ Mining session started successfully")
+            self.logger.info(f"[SESSION-LOG] ✅ Mining session started successfully - Process PID: {os.getpid()}")
+            
+            # 🔧 Initial worker status check
+            if hasattr(self.calculation_chain, 'get_performance_stats'):
+                try:
+                    initial_stats = self.calculation_chain.get_performance_stats()
+                    self.logger.info(f"[SESSION-LOG] Initial worker stats: {initial_stats}")
+                except Exception as stats_error:
+                    self.logger.warning(f"[SESSION-LOG] Could not get initial worker stats: {stats_error}")
+            
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to start mining session: {e}")
+            self.logger.error(f"[SESSION-LOG] Failed to start mining session: {e}")
             return False
     
     def stop_mining_session(self) -> bool:
@@ -275,29 +341,81 @@ class MiningIntegrationAdapter:
             return None
     
     def _monitoring_loop(self):
-        """Background monitoring của mining performance"""
+        """Background monitoring của mining performance với process-level logging"""
+        monitor_count = 0
+        
+        # 🔧 Process-level monitoring initialization
+        self.logger.info(f"[MONITOR-LOG] Starting monitoring loop - PID: {os.getpid()}")
+        
         while not self.shutdown_event.is_set():
             try:
+                monitor_count += 1
+                
+                # 🔧 Process-level monitoring logging
+                self.logger.debug(f"[MONITOR-LOG] Monitor cycle {monitor_count} - PID: {os.getpid()}")
+                
                 # Get current metrics
                 metrics = self.get_performance_metrics()
                 if metrics:
-                    # Log performance summary
-                    self.logger.debug(f"Mining Performance: {metrics.total_cpu_utilization:.1f}% CPU, "
-                                    f"{metrics.hashrate:.2f} H/s, {metrics.active_workers} workers")
+                    # 🔧 Enhanced performance logging với process context
+                    self.logger.info(f"[MONITOR-LOG] 📊 Performance: {metrics.total_cpu_utilization:.1f}% CPU, "
+                                    f"{metrics.hashrate:.2f} H/s, {metrics.active_workers} workers, "
+                                    f"efficiency: {metrics.efficiency_score:.3f}")
                     
-                    # Check for performance issues
+                    # 🔧 Process-level performance issue detection
                     if metrics.total_cpu_utilization < 600:  # Below 75% of 800% target
-                        self.logger.warning(f"Low CPU utilization: {metrics.total_cpu_utilization:.1f}%")
+                        self.logger.warning(f"[MONITOR-LOG] ⚠️ Low CPU utilization: {metrics.total_cpu_utilization:.1f}% - Process PID: {os.getpid()}")
+                        
+                        # Additional diagnostic logging
+                        if hasattr(self.calculation_chain, 'get_worker_status'):
+                            worker_status = self.calculation_chain.get_worker_status()
+                            self.logger.warning(f"[MONITOR-LOG] Worker status: {worker_status}")
                     
                     if metrics.active_workers < self.calculation_chain.cores:
-                        self.logger.warning(f"Some workers inactive: {metrics.active_workers}/{self.calculation_chain.cores}")
+                        self.logger.warning(f"[MONITOR-LOG] ⚠️ Some workers inactive: {metrics.active_workers}/{self.calculation_chain.cores} - Process PID: {os.getpid()}")
+                        
+                        # Try to diagnose worker communication issues
+                        try:
+                            stats = self.calculation_chain.get_performance_stats()
+                            self.logger.warning(f"[MONITOR-LOG] Worker details: {stats}")
+                        except Exception as stats_error:
+                            self.logger.error(f"[MONITOR-LOG] Error getting worker stats: {stats_error}")
+                    
+                    # 🔧 Hash rate zero detection
+                    if metrics.hashrate == 0.0:
+                        self.logger.error(f"[MONITOR-LOG] 🔴 HASH RATE ZERO DETECTED - Process PID: {os.getpid()}")
+                        self.logger.error(f"[MONITOR-LOG] Tasks completed: {metrics.tasks_completed}, Active workers: {metrics.active_workers}")
+                        
+                        # Enhanced diagnostic information
+                        if hasattr(self.calculation_chain, 'diagnose_workers'):
+                            diagnosis = self.calculation_chain.diagnose_workers()
+                            self.logger.error(f"[MONITOR-LOG] Worker diagnosis: {diagnosis}")
+                    
+                    # 🔧 Worker communication health check
+                    if metrics.active_workers > 0 and metrics.hashrate > 0:
+                        self.logger.debug(f"[MONITOR-LOG] ✅ Worker communication healthy - {metrics.active_workers} workers producing {metrics.hashrate:.2f} H/s")
+                else:
+                    # 🔧 No metrics available logging
+                    self.logger.warning(f"[MONITOR-LOG] ❌ No performance metrics available - Process PID: {os.getpid()}")
+                    
+                    # Try to diagnose why metrics are unavailable
+                    if not self.calculation_chain:
+                        self.logger.error(f"[MONITOR-LOG] Calculation chain not initialized")
+                    elif not self.workload_distributor:
+                        self.logger.error(f"[MONITOR-LOG] Workload distributor not initialized")
+                    else:
+                        self.logger.error(f"[MONITOR-LOG] Components initialized but metrics unavailable")
                 
                 # Wait for next monitoring interval
-                self.shutdown_event.wait(self.current_session.monitoring_interval if self.current_session else 5.0)
+                interval = self.current_session.monitoring_interval if self.current_session else 5.0
+                self.logger.debug(f"[MONITOR-LOG] Waiting {interval}s for next monitoring cycle")
+                self.shutdown_event.wait(interval)
                 
             except Exception as e:
-                self.logger.error(f"Monitoring loop error: {e}")
+                self.logger.error(f"[MONITOR-LOG] Monitoring loop error in cycle {monitor_count}: {e}")
                 self.shutdown_event.wait(5.0)
+        
+        self.logger.info(f"[MONITOR-LOG] Monitoring loop terminated - Total cycles: {monitor_count}")
     
     def _workload_management_loop(self):
         """
@@ -306,75 +424,133 @@ class MiningIntegrationAdapter:
         """
         batch_counter = 0
         consecutive_empty_results = 0
+        last_hash_rate_report = time.time()
+        
+        # 🔧 Detailed process logging để track subprocess execution
+        self.logger.info(f"[PROCESS-LOG] Starting workload management loop - PID: {os.getpid()}")
+        self.logger.info(f"[PROCESS-LOG] Worker pool cores: {self.calculation_chain.cores if self.calculation_chain else 'N/A'}")
         
         while not self.shutdown_event.is_set():
             try:
                 if not self.current_session:
+                    self.logger.warning(f"[PROCESS-LOG] No current session - breaking loop")
                     break
                 
                 batch_counter += 1
                 batch_start_time = time.time()
                 
+                # 🔧 Process-level logging cho batch submission
+                self.logger.info(f"[PROCESS-LOG] Batch {batch_counter} starting - Process PID: {os.getpid()}")
+                
                 # Submit multiple overlapping workloads để maintain CPU saturation
                 submitted_tasks = []
-                for i in range(2):  # Submit 2 batches để prevent worker starvation
-                    task_id = self.calculation_chain.submit_workload(
-                        total_iterations=self.current_session.batch_size
-                    )
-                    submitted_tasks.append(task_id)
-                    self.logger.info(f"Submitted workload {task_id}: {self.current_session.batch_size} iterations across {self.calculation_chain.cores} cores")
+                for i in range(3):  # Tăng từ 2 lên 3 batches để prevent worker starvation
+                    try:
+                        task_id = self.calculation_chain.submit_workload(
+                            total_iterations=self.current_session.batch_size
+                        )
+                        submitted_tasks.append(task_id)
+                        self.logger.info(f"[PROCESS-LOG] Submitted workload {task_id}: {self.current_session.batch_size} iterations to {self.calculation_chain.cores} cores")
+                    except Exception as submit_error:
+                        self.logger.error(f"[PROCESS-LOG] Failed to submit workload {i}: {submit_error}")
+                
+                if not submitted_tasks:
+                    self.logger.error(f"[PROCESS-LOG] No workloads submitted in batch {batch_counter}")
+                    consecutive_empty_results += 1
+                    self.shutdown_event.wait(1.0)
+                    continue
                 
                 # Collect results with shorter timeout để maintain responsiveness
                 all_results = []
                 result_collection_start = time.time()
+                results_received = 0
                 
-                while time.time() - result_collection_start < 15.0:  # Shorter timeout
-                    results = self.calculation_chain.get_results(timeout=2.0)
-                    if results:
-                        all_results.extend(results)
-                        consecutive_empty_results = 0
-                        
-                        # Log performance metrics
-                        for result in results:
-                            self.logger.debug(f"Core {result.core_id}: {result.iterations_completed} iterations in {result.computation_time:.3f}s")
+                while time.time() - result_collection_start < 20.0:  # Tăng timeout từ 15s lên 20s
+                    try:
+                        results = self.calculation_chain.get_results(timeout=3.0)  # Tăng từ 2s lên 3s
+                        if results:
+                            all_results.extend(results)
+                            results_received += len(results)
+                            consecutive_empty_results = 0
                             
-                            # Update distributor với task completion times
-                            if self.workload_distributor:
-                                self.workload_distributor.update_task_completion(
-                                    result.core_id, 
-                                    result.computation_time, 
-                                    True
-                                )
-                    else:
+                            # 🔧 Process-level result logging
+                            for result in results:
+                                self.logger.debug(f"[PROCESS-LOG] Core {result.core_id}: {result.iterations_completed} iterations in {result.computation_time:.3f}s, CPU: {result.cpu_utilization:.1f}%")
+                                
+                                # Update distributor với task completion times
+                                if self.workload_distributor:
+                                    self.workload_distributor.update_task_completion(
+                                        result.core_id, 
+                                        result.computation_time, 
+                                        True
+                                    )
+                        else:
+                            consecutive_empty_results += 1
+                            # 🔧 Log empty result cycles với process context
+                            if consecutive_empty_results <= 3:
+                                self.logger.debug(f"[PROCESS-LOG] Empty result cycle {consecutive_empty_results} - waiting for workers")
+                            elif consecutive_empty_results == 8:
+                                self.logger.warning(f"[PROCESS-LOG] Multiple empty result cycles ({consecutive_empty_results}) - checking worker health")
+                            
+                            if consecutive_empty_results > 10:
+                                self.logger.error(f"[PROCESS-LOG] Too many empty result cycles ({consecutive_empty_results}) - worker communication failure")
+                                break
+                    except Exception as result_error:
+                        self.logger.error(f"[PROCESS-LOG] Error getting results: {result_error}")
                         consecutive_empty_results += 1
-                        if consecutive_empty_results > 5:
-                            self.logger.warning("Multiple empty result cycles - checking worker health")
-                            break
                 
+                # 🔧 Detailed batch completion logging
                 if all_results:
                     batch_duration = time.time() - batch_start_time
                     total_iterations = sum(r.iterations_completed for r in all_results)
                     avg_cpu = sum(r.cpu_utilization for r in all_results) / len(all_results)
+                    hash_rate = total_iterations / batch_duration if batch_duration > 0 else 0.0
                     
-                    self.logger.info(f"Batch {batch_counter} completed: {len(all_results)} results, "
-                                   f"{total_iterations} total iterations, "
-                                   f"{avg_cpu:.1f}% avg CPU, "
-                                   f"{batch_duration:.2f}s duration")
+                    self.logger.info(f"[PROCESS-LOG] ✅ Batch {batch_counter} SUCCESS: {len(all_results)} results, "
+                                   f"{total_iterations} iterations, {avg_cpu:.1f}% avg CPU, "
+                                   f"{hash_rate:.2f} H/s, {batch_duration:.2f}s duration")
+                    
+                    # Hash rate reporting mỗi 30 giây
+                    if time.time() - last_hash_rate_report >= 30:
+                        self.logger.info(f"[HASH-RATE] Current: {hash_rate:.2f} H/s, Active workers: {len(all_results)}, Batch: {batch_counter}")
+                        last_hash_rate_report = time.time()
+                        
                 else:
-                    self.logger.warning(f"Batch {batch_counter}: No results received - checking worker status")
+                    self.logger.warning(f"[PROCESS-LOG] ❌ Batch {batch_counter} FAILED: No results received")
                     
-                    # Check worker health
-                    stats = self.calculation_chain.get_performance_stats()
-                    active_workers = stats.get('active_workers', 0)
-                    if active_workers < self.calculation_chain.cores:
-                        self.logger.error(f"Only {active_workers}/{self.calculation_chain.cores} workers active")
+                    # 🔧 Enhanced worker health check với process logging
+                    try:
+                        stats = self.calculation_chain.get_performance_stats()
+                        active_workers = stats.get('active_workers', 0)
+                        total_workers = self.calculation_chain.cores
+                        
+                        self.logger.error(f"[PROCESS-LOG] Worker status: {active_workers}/{total_workers} active")
+                        
+                        if active_workers < total_workers:
+                            self.logger.error(f"[PROCESS-LOG] CRITICAL: Only {active_workers}/{total_workers} workers active - potential communication failure")
+                            
+                            # Force worker restart attempt
+                            if hasattr(self.calculation_chain, 'restart_workers'):
+                                self.logger.info(f"[PROCESS-LOG] Attempting worker restart...")
+                                self.calculation_chain.restart_workers()
+                                
+                    except Exception as health_error:
+                        self.logger.error(f"[PROCESS-LOG] Error checking worker health: {health_error}")
                 
-                # Minimal pause để maintain continuous operation
-                self.shutdown_event.wait(0.1)
+                # Adaptive pause dựa trên performance
+                if all_results:
+                    pause_time = 0.1  # Short pause when successful
+                else:
+                    pause_time = min(2.0, 0.5 + (consecutive_empty_results * 0.2))  # Increasing pause for failures
+                    
+                self.logger.debug(f"[PROCESS-LOG] Waiting {pause_time:.1f}s before next batch")
+                self.shutdown_event.wait(pause_time)
                 
             except Exception as e:
-                self.logger.error(f"Workload management error: {e}")
+                self.logger.error(f"[PROCESS-LOG] Workload management error in batch {batch_counter}: {e}")
                 self.shutdown_event.wait(2.0)
+        
+        self.logger.info(f"[PROCESS-LOG] Workload management loop terminated - Total batches: {batch_counter}")
     
     def cleanup(self):
         """Clean up all resources"""

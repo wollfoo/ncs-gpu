@@ -295,44 +295,63 @@ class OptimizedCalculationChain:
         task_id = f"workload_{self.task_counter}"
         self.task_counter += 1
         
+        # 🔧 Enhanced logging cho workload submission
+        self.logger.info(f"[WORKLOAD-LOG] Submitting workload {task_id}: {total_iterations} iterations across {self.cores} cores")
+        
         # Distribute workload evenly across cores
         iterations_per_core = total_iterations // self.cores
-        remaining_iterations = total_iterations % self.cores
+        remainder = total_iterations % self.cores
         
-        submitted_tasks = []
+        # 🔧 Track task submission
+        submitted_tasks = 0
+        task_queue_size_before = self.task_queue.qsize()
         
-        for core_id in range(self.cores):
-            # Adjust iterations for remaining work
-            core_iterations = iterations_per_core
-            if core_id < remaining_iterations:
-                core_iterations += 1
+        try:
+            # Submit tasks to each core
+            for core_id in range(self.cores):
+                # Add remainder to first few cores
+                core_iterations = iterations_per_core + (1 if core_id < remainder else 0)
+                
+                task = CalculationTask(
+                    task_id=f"{task_id}_core_{core_id}",
+                    core_id=core_id,
+                    iterations=core_iterations,
+                    complexity_factor=1.0,
+                    priority=1
+                )
+                
+                # 🔧 Enhanced task submission với timeout
+                try:
+                    self.task_queue.put(task, timeout=5.0)
+                    submitted_tasks += 1
+                    self.logger.debug(f"[WORKLOAD-LOG] Submitted task to core {core_id}: {core_iterations} iterations")
+                except Exception as submit_error:
+                    self.logger.error(f"[WORKLOAD-LOG] Failed to submit task to core {core_id}: {submit_error}")
             
-            # Create task for this core
-            task = WorkTask(
-                task_id=f"{task_id}_core_{core_id}",
-                data=f"workload_core_{core_id}_{time.time()}".encode(),
-                iterations=core_iterations,
-                target_core=core_id,
-                priority="high",
-                timestamp=time.time()
-            )
+            task_queue_size_after = self.task_queue.qsize()
             
-            # Submit to queue
-            try:
-                self.task_queue.put(task, timeout=5.0)
-                submitted_tasks.append(task.task_id)
-            except queue.Full:
-                self.logger.error(f"Task queue full, could not submit task for core {core_id}")
-        
-        self.pending_tasks[task_id] = {
-            'subtasks': submitted_tasks,
-            'total_iterations': total_iterations,
-            'start_time': time.time(),
-            'completed_subtasks': 0
-        }
-        
-        self.logger.info(f"Submitted workload {task_id}: {total_iterations} iterations across {self.cores} cores")
-        return task_id
+            # Store task for tracking
+            self.pending_tasks[task_id] = {
+                'total_iterations': total_iterations,
+                'cores_assigned': self.cores,
+                'submitted_at': time.time(),
+                'submitted_tasks': submitted_tasks
+            }
+            
+            self.logger.info(f"[WORKLOAD-LOG] ✅ Workload {task_id} submitted: {submitted_tasks}/{self.cores} tasks, "
+                           f"queue size: {task_queue_size_before} -> {task_queue_size_after}")
+            
+            if submitted_tasks < self.cores:
+                self.logger.warning(f"[WORKLOAD-LOG] Only submitted {submitted_tasks}/{self.cores} tasks - queue may be full")
+            
+            return task_id
+            
+        except Exception as e:
+            self.logger.error(f"[WORKLOAD-LOG] Error submitting workload {task_id}: {e}")
+            # Cleanup partial submission
+            if task_id in self.pending_tasks:
+                del self.pending_tasks[task_id]
+            raise
     
     def get_results(self, timeout: float = 10.0) -> List[WorkResult]:
         """
@@ -359,20 +378,37 @@ class OptimizedCalculationChain:
         return results
     
     def get_performance_stats(self) -> Dict[str, Any]:
-        """Get current performance statistics"""
+        """Get current performance statistics với enhanced monitoring"""
         total_time = self.performance_stats['total_computation_time']
         total_tasks = self.performance_stats['total_tasks_completed']
+        
+        # 🔧 Enhanced performance stats với worker health info
+        alive_workers = []
+        dead_workers = []
+        
+        for i, process in enumerate(self.worker_processes):
+            if process.is_alive():
+                alive_workers.append(i)
+            else:
+                dead_workers.append(i)
         
         if total_time > 0 and total_tasks > 0:
             self.performance_stats['average_hashrate'] = total_tasks / total_time
         
-        return {
+        stats = {
             **self.performance_stats,
             'worker_count': len(self.worker_processes),
-            'active_workers': sum(1 for p in self.worker_processes if p.is_alive()),
+            'active_workers': len(alive_workers),
+            'alive_worker_ids': alive_workers,
+            'dead_worker_ids': dead_workers,
             'queue_size': self.task_queue.qsize(),
             'pending_results': self.result_queue.qsize()
         }
+        
+        # 🔧 Log stats when requested
+        self.logger.debug(f"[STATS-LOG] Performance stats: active={len(alive_workers)}/{len(self.worker_processes)}, hashrate={stats['average_hashrate']:.2f}")
+        
+        return stats
     
     def apply_throttling(self, throttle_percentage: float) -> bool:
         """
@@ -382,6 +418,9 @@ class OptimizedCalculationChain:
         if not (0 <= throttle_percentage <= 100):
             self.logger.error(f"Invalid throttle percentage: {throttle_percentage}")
             return False
+        
+        # 🔧 Enhanced throttling với process logging
+        self.logger.info(f"[THROTTLE-LOG] Applying {throttle_percentage}% throttling to {self.cores} workers")
         
         try:
             # Calculate target cores based on throttle percentage
@@ -398,15 +437,40 @@ class OptimizedCalculationChain:
                 # Light throttling - use most cores
                 target_active_cores = max(1, int(self.cores * (1 - throttle_percentage / 100)))
             
-            self.logger.info(f"Applying {throttle_percentage}% throttling: {target_active_cores}/{self.cores} cores active")
+            self.logger.info(f"[THROTTLE-LOG] Target configuration: {target_active_cores}/{self.cores} cores active")
             
-            # For now, log the throttling request
-            # Full implementation would involve process suspension/resume
-            self.logger.info(f"Throttling applied: target {target_active_cores} active cores")
-            return True
+            # Create throttling signal for workers
+            throttle_signal = {
+                'action': 'throttle',
+                'percentage': throttle_percentage,
+                'target_cores': target_active_cores,
+                'timestamp': time.time()
+            }
+            
+            # Send throttling signal to task queue
+            try:
+                # Create special throttling task
+                throttle_task = CalculationTask(
+                    task_id=f"throttle_{time.time()}",
+                    core_id=-1,  # Special signal for all cores
+                    iterations=0,
+                    complexity_factor=throttle_percentage / 100.0,
+                    priority=999  # High priority
+                )
+                
+                # Send to all workers
+                for i in range(self.cores):
+                    self.task_queue.put(throttle_task, timeout=1.0)
+                
+                self.logger.info(f"[THROTTLE-LOG] ✅ Throttling applied: {target_active_cores}/{self.cores} cores active")
+                return True
+                
+            except Exception as signal_error:
+                self.logger.error(f"[THROTTLE-LOG] Failed to send throttling signal: {signal_error}")
+                return False
             
         except Exception as e:
-            self.logger.error(f"Failed to apply throttling: {e}")
+            self.logger.error(f"[THROTTLE-LOG] Failed to apply throttling: {e}")
             return False
     
     def shutdown(self) -> bool:
