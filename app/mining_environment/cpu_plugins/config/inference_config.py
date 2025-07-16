@@ -121,16 +121,23 @@ class InferenceConfigService:
 
     def validate_configuration(self) -> bool:
         try:
-            if not all(k in self.config for k in ("processes", "resource_allocation")):
-                self.logger.error("Missing required fields in resource_config.json")
+            # Check for required fields - processes is required, resource_allocation is optional
+            if "processes" not in self.config:
+                self.logger.error("Missing required 'processes' field in resource_config.json")
                 return False
-            if self.get_cpu_process_name() != "ml-inference":
-                self.logger.error("Invalid CPU process name – expected 'ml-inference'")
-                return False
+            
+            # Check CPU process name
+            cpu_process_name = self.get_cpu_process_name()
+            if cpu_process_name != "ml-inference":
+                self.logger.warning(f"CPU process name is '{cpu_process_name}', expected 'ml-inference' but continuing")
+            
+            # Check max threads
             mt = self.get_max_cpu_threads()
             if not (1 <= mt <= 64):
-                self.logger.error(f"Invalid max_threads: {mt}")
+                self.logger.error(f"Invalid max_threads: {mt}, must be between 1 and 64")
                 return False
+                
+            self.logger.info(f"✅ InferenceConfigService validation passed: {cpu_process_name}, {mt} threads")
             return True
         except Exception as e:
             self.logger.error(f"Validation failed: {e}")

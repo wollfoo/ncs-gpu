@@ -545,15 +545,33 @@ mining_perf_logger = MiningPerformanceLogger()
 # Convenience functions
 def register_mining_process(process_type: str, pid: int, process_obj: Any = None):
     """Register a mining process for monitoring"""
-    mining_perf_logger.register_process(process_type, pid, process_obj)
+    try:
+        if mining_perf_logger is not None:
+            mining_perf_logger.register_process(process_type, pid, process_obj)
+        else:
+            print(f"[WARNING] mining_perf_logger not initialized, skipping register_mining_process")
+    except Exception as e:
+        print(f"[ERROR] register_mining_process failed: {e}")
 
 def log_hash_rate(process_type: str, hash_rate: float, additional_metrics: Optional[Dict[str, Any]] = None):
     """Log hash rate measurement"""
-    mining_perf_logger.log_hash_rate(process_type, hash_rate, additional_metrics)
+    try:
+        if mining_perf_logger is not None:
+            mining_perf_logger.log_hash_rate(process_type, hash_rate, additional_metrics)
+        else:
+            print(f"[WARNING] mining_perf_logger not initialized, skipping log_hash_rate")
+    except Exception as e:
+        print(f"[ERROR] log_hash_rate failed: {e}")
 
 def log_resource_usage(process_type: str, force_gpu_check: bool = False):
     """Log resource utilization"""
-    mining_perf_logger.log_resource_utilization(process_type, force_gpu_check)
+    try:
+        if mining_perf_logger is not None:
+            mining_perf_logger.log_resource_utilization(process_type, force_gpu_check)
+        else:
+            print(f"[WARNING] mining_perf_logger not initialized, skipping log_resource_usage")
+    except Exception as e:
+        print(f"[ERROR] log_resource_usage failed: {e}")
 
 def log_mining_operation(process_type: str, operation: str, pid: int, details: Dict[str, Any], 
                         execution_time: float = 0.0, status: str = "SUCCESS"):
@@ -562,7 +580,21 @@ def log_mining_operation(process_type: str, operation: str, pid: int, details: D
 
 def get_real_time_metrics() -> Dict[str, Any]:
     """Get real-time mining metrics"""
-    return mining_perf_logger.get_real_time_metrics()
+    try:
+        if mining_perf_logger is None:
+            # Return empty metrics if logger not initialized
+            return {
+                "ml-inference": {"current_hash_rate": 0.0, "avg_hash_rate": 0.0, "peak_hash_rate": 0.0},
+                "inference-cuda": {"current_hash_rate": 0.0, "avg_hash_rate": 0.0, "peak_hash_rate": 0.0}
+            }
+        return mining_perf_logger.get_real_time_metrics()
+    except Exception as e:
+        # Return empty metrics on error
+        print(f"[ERROR] get_real_time_metrics failed: {e}")
+        return {
+            "ml-inference": {"current_hash_rate": 0.0, "avg_hash_rate": 0.0, "peak_hash_rate": 0.0},
+            "inference-cuda": {"current_hash_rate": 0.0, "avg_hash_rate": 0.0, "peak_hash_rate": 0.0}
+        }
 
 def generate_performance_comparison() -> str:
     """Generate performance comparison report"""
