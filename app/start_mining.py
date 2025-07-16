@@ -77,7 +77,7 @@ def initialize_environment():
     logger.info("Bắt đầu thiết lập môi trường khai thác.")
     try:
         # **Load** (tải) **ML inference configuration** (cấu hình suy luận máy học)
-        ml_config = get_inference_config(logger=logger)
+        ml_config = get_inference_config(process_info=None, logger=logger)
         if not ml_config.validate_configuration():
             logger.error("❌ ML inference configuration validation failed")
             sys.exit(1)
@@ -257,7 +257,7 @@ def initialize_optimized_mining(privileged_mgr):
         logger.info("Initializing OptimizedCalculationChain...")
         
         # Lấy configuration từ InferenceConfigService (cấu hình suy luận máy học)
-        inf_cfg = get_inference_config(logger=logger)
+        inf_cfg = get_inference_config(process_info=None, logger=logger)
         cores = inf_cfg.get_max_cpu_threads()
         
         logger.info(f"🚀 Initializing với {cores} cores cho {inf_cfg.get_cpu_process_name()}")

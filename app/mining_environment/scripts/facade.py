@@ -62,9 +62,15 @@ class SystemFacade:
             self.resource_logger.info(init_msg)
             
             # Create ResourceManager instance
-            self.resource_manager = ResourceManager(self.config, self.resource_logger)
+            progress_msg = "📋 Step 1/4: Creating ResourceManager instance..."
+            self.logger.info(progress_msg)
+            self.resource_logger.info(progress_msg)
+            self.resource_manager = ResourceManager(self.config, self.event_bus, self.resource_logger)
             
             # Start ResourceManager in separate thread (non-blocking)
+            progress_msg = "📋 Step 2/4: Starting ResourceManager thread..."
+            self.logger.info(progress_msg)
+            self.resource_logger.info(progress_msg)
             self.resource_manager_thread = threading.Thread(
                 target=self.resource_manager.start,
                 daemon=True,
@@ -72,10 +78,32 @@ class SystemFacade:
             )
             self.resource_manager_thread.start()
             
-            # Wait a moment for ResourceManager to initialize
-            time.sleep(1)
+            # Wait with progress updates for ResourceManager to initialize
+            progress_msg = "📋 Step 3/4: Waiting for ResourceManager initialization..."
+            self.logger.info(progress_msg)
+            self.resource_logger.info(progress_msg)
+            
+            # Wait with progress logging (up to 25 seconds with progress updates)
+            max_wait_time = 25
+            check_interval = 5
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                time.sleep(check_interval)
+                waited_time += check_interval
+                
+                if self.resource_manager_thread.is_alive():
+                    progress_msg = f"⏳ ResourceManager initialization progress: {waited_time}/{max_wait_time}s elapsed..."
+                    self.logger.info(progress_msg)
+                    self.resource_logger.info(progress_msg)
+                else:
+                    break
             
             # Verify ResourceManager is running
+            progress_msg = "📋 Step 4/4: Verifying ResourceManager status..."
+            self.logger.info(progress_msg)
+            self.resource_logger.info(progress_msg)
+            
             if self.resource_manager_thread.is_alive():
                 success_msg = "✅ ResourceManager started successfully in background thread"
                 self.logger.info(success_msg)

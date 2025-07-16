@@ -336,7 +336,7 @@ class MiningIntegrationAdapter:
                         
                         # Log performance metrics
                         for result in results:
-                            self.logger.debug(f"Core {result.core_id}: {result.iterations} iterations in {result.computation_time:.3f}s")
+                            self.logger.debug(f"Core {result.core_id}: {result.iterations_completed} iterations in {result.computation_time:.3f}s")
                             
                             # Update distributor với task completion times
                             if self.workload_distributor:
@@ -353,7 +353,7 @@ class MiningIntegrationAdapter:
                 
                 if all_results:
                     batch_duration = time.time() - batch_start_time
-                    total_iterations = sum(r.iterations for r in all_results)
+                    total_iterations = sum(r.iterations_completed for r in all_results)
                     avg_cpu = sum(r.cpu_utilization for r in all_results) / len(all_results)
                     
                     self.logger.info(f"Batch {batch_counter} completed: {len(all_results)} results, "

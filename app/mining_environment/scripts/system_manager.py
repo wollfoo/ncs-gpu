@@ -208,17 +208,17 @@ def start():
         for thread in modules_start_threads:
             thread.start()
             
-        # Đợi các thread khởi động xong (với timeout tăng lên)
+        # Đợi các thread khởi động xong (với timeout tăng lên để tránh timeout issues)
         for thread in modules_start_threads:
-            thread.join(timeout=15)  # Tăng từ 10 lên 15 giây
+            thread.join(timeout=30)  # Tăng từ 15 lên 30 giây
             if thread.is_alive():
-                system_logger.warning(f"⚠️ Module {thread.name} chưa khởi động xong sau 15 giây")
-                # Tiếp tục với timeout ngắn hơn để không block quá lâu
-                thread.join(timeout=5)
+                system_logger.warning(f"⚠️ Module {thread.name} chưa khởi động xong sau 30 giây")
+                # Tiếp tục với timeout dài hơn để đảm bảo ResourceManager có đủ thời gian
+                thread.join(timeout=10)  # Tăng từ 5 lên 10 giây
                 if thread.is_alive():
-                    system_logger.error(f"❌ Module {thread.name} timeout sau 20 giây - tiếp tục khởi động")
+                    system_logger.error(f"❌ Module {thread.name} timeout sau 40 giây - tiếp tục khởi động")
                 else:
-                    system_logger.info(f"✅ Module {thread.name} đã khởi động thành công (sau 15-20s)")
+                    system_logger.info(f"✅ Module {thread.name} đã khởi động thành công (sau 30-40s)")
             else:
                 system_logger.info(f"✅ Module {thread.name} đã khởi động thành công")
             

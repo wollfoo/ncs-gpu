@@ -497,7 +497,7 @@ def setup():
     
     # Cấu hình từ InferenceConfigService (ml-inference)
     try:
-        inference_config = get_inference_config(logger)
+        inference_config = get_inference_config(process_info=None, logger=logger)
         if inference_config.validate_configuration():
             # Đặt biến môi trường từ inference_config
             env_vars = inference_config.get_environment_variables()
