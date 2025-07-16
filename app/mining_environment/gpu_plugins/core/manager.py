@@ -4,9 +4,24 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from pathlib import Path
+import time
 
 from .interfaces import IGPUPlugin, IGPUCloakService, IGPUTelemetryFilter, IGPUHookManager
 from .registry import gpu_plugin_registry
+
+# Import GPU optimization logger
+try:
+    from ...logging.gpu_optimization_logger import gpu_opt_logger, log_gpu_optimization
+except ImportError:
+    # Fallback nếu không có logger
+    class DummyLogger:
+        def log_plugin_lifecycle(self, *args, **kwargs): pass
+        def log_function_call(self, *args, **kwargs): pass
+    gpu_opt_logger = DummyLogger()
+    def log_gpu_optimization(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +88,7 @@ class GPUPluginManager:
             }
         }
         
+    @log_gpu_optimization(measure_performance=True)
     def load_plugin(self, name: str, config: Optional[Dict[str, Any]] = None) -> bool:
         """Load và khởi tạo plugin
         
@@ -83,8 +99,12 @@ class GPUPluginManager:
         Returns:
             bool: True nếu load thành công
         """
+        start_time = time.time()
+        
         if name in self.active_plugins:
             logger.info(f"Plugin {name} already loaded")
+            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
+                                               {"reason": "already_loaded"})
             return True
             
         # Get plugin config
@@ -93,25 +113,41 @@ class GPUPluginManager:
         # Check if plugin is enabled
         if not plugin_config.get('enabled', True):
             logger.info(f"Plugin {name} is disabled in config")
+            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "DISABLED", 
+                                               {"config": plugin_config})
             return False
             
         # Create plugin instance
         plugin = self.registry.create_instance(name)
         if not plugin:
-            logger.error(f"Failed to create plugin instance: {name}")
+            error_msg = f"Failed to create plugin instance: {name}"
+            logger.error(error_msg)
+            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+                                               {"error": error_msg})
             return False
             
         # Initialize plugin
         try:
             if plugin.initialize(plugin_config):
                 self.active_plugins[name] = plugin
+                execution_time = time.time() - start_time
+                
                 logger.info(f"Successfully loaded GPU plugin: {name}")
+                gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
+                                                   {"config": plugin_config,
+                                                    "execution_time": execution_time})
                 return True
             else:
-                logger.error(f"Failed to initialize plugin: {name}")
+                error_msg = f"Failed to initialize plugin: {name}"
+                logger.error(error_msg)
+                gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+                                                   {"error": error_msg, "config": plugin_config})
                 return False
         except Exception as e:
-            logger.error(f"Error initializing plugin {name}: {e}")
+            error_msg = f"Error initializing plugin {name}: {e}"
+            logger.error(error_msg)
+            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+                                               {"error": error_msg, "config": plugin_config})
             return False
             
     def unload_plugin(self, name: str) -> bool:
@@ -136,25 +172,56 @@ class GPUPluginManager:
             logger.error(f"Error unloading plugin {name}: {e}")
             return False
             
+    @log_gpu_optimization(measure_performance=True)
     def start_all_plugins(self) -> Dict[str, bool]:
         """Start tất cả loaded plugins
         
         Returns:
             Dict mapping tên plugin -> success status
         """
+        start_time = time.time()
         results = {}
+        
         for name, plugin in self.active_plugins.items():
             try:
+                plugin_start_time = time.time()
                 results[name] = plugin.start()
+                plugin_execution_time = time.time() - plugin_start_time
+                
                 if results[name]:
                     logger.info(f"Started GPU plugin: {name}")
+                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "SUCCESS", 
+                                                       {"execution_time": plugin_execution_time})
                 else:
                     logger.error(f"Failed to start GPU plugin: {name}")
+                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                                                       {"error": "plugin_start_returned_false"})
             except Exception as e:
-                logger.error(f"Error starting plugin {name}: {e}")
+                error_msg = f"Error starting plugin {name}: {e}"
+                logger.error(error_msg)
+                gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                                                   {"error": error_msg})
                 results[name] = False
                 
         self.running = True
+        total_execution_time = time.time() - start_time
+        
+        # Log overall operation
+        successful_plugins = sum(1 for success in results.values() if success)
+        total_plugins = len(results)
+        
+        gpu_opt_logger.log_function_call(
+            function_name="GPUPluginManager.start_all_plugins",
+            status="SUCCESS" if successful_plugins > 0 else "FAILED",
+            execution_time=total_execution_time,
+            additional_data={
+                "successful_plugins": successful_plugins,
+                "total_plugins": total_plugins,
+                "success_rate": successful_plugins / total_plugins if total_plugins > 0 else 0,
+                "plugin_results": results
+            }
+        )
+        
         return results
         
     def stop_all_plugins(self) -> None:

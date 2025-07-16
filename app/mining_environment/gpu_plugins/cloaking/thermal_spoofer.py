@@ -4,6 +4,19 @@ import logging
 from typing import Dict, Any, List
 from ..core.interfaces import IGPUCloakService
 
+# Import GPU cloaking logger
+try:
+    from ...logging.gpu_cloaking_logger import gpu_cloak_logger, log_gpu_cloaking
+except ImportError:
+    # Fallback nếu không có logger
+    class DummyLogger:
+        def log_thermal_spoofing(self, *args, **kwargs): pass
+    gpu_cloak_logger = DummyLogger()
+    def log_gpu_cloaking(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 logger = logging.getLogger(__name__)
 
 class ThermalSpoofer(IGPUCloakService):
@@ -28,9 +41,22 @@ class ThermalSpoofer(IGPUCloakService):
         self.lib_path = config.get('lib_path', '/opt/hooks/libtempspoof.so')
         if not os.path.exists(self.lib_path):
             logger.warning(f"Thermal spoof library not found: {self.lib_path}")
+            gpu_cloak_logger.log_thermal_spoofing(
+                action="INITIALIZE",
+                status="FAILED",
+                lib_path=self.lib_path,
+                error_details=f"Thermal spoof library not found: {self.lib_path}"
+            )
             return False
             
         logger.info(f"Thermal spoofer initialized with fake_temp={self.fake_temperature}")
+        gpu_cloak_logger.log_thermal_spoofing(
+            action="INITIALIZE",
+            status="SUCCESS",
+            fake_temperature=self.fake_temperature,
+            add_noise=self.add_noise,
+            lib_path=self.lib_path
+        )
         return True
         
     def start(self) -> bool:
