@@ -163,6 +163,8 @@ config/staging_*
 !.env.example
 !.env.template
 !.env.development
+# Allow app/.env for private repository
+!app/.env
 
 # Mining data và cache
 cache/
