@@ -14,9 +14,6 @@ from functools import wraps
 
 # LOGS_DIR configuration - thư mục lưu trữ logs
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
-if not os.path.exists(LOGS_DIR):
-    LOGS_DIR = '/home/azureuser/grok4/app/mining_environment/logs'
-
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 class GPUOptimizationLogger:

