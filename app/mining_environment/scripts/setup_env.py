@@ -442,20 +442,20 @@ def apply_cpu_optimizations(max_threads: int, logger: logging.Logger) -> bool:
         bool: Success status
     """
     try:
-        # Set CPU governor to performance mode
+        # Thiết lập **CPU governor** (bộ điều khiển CPU) sang **performance mode** (chế độ hiệu suất)
         try:
             os.system('echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null 2>&1')
             logger.info("✅ Set CPU governor to performance mode")
         except Exception as e:
             logger.warning(f"Could not set CPU governor: {e}")
         
-        # Set process limits
+        # Thiết lập **process limits** (giới hạn tiến trình)
         try:
             import resource
-            # Set unlimited core dump size
+            # Thiết lập **unlimited core dump size** (kích thước core dump không giới hạn)
             resource.setrlimit(resource.RLIMIT_CORE, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
             
-            # Set high file descriptor limit
+            # Thiết lập **high file descriptor limit** (giới hạn file descriptor cao)
             resource.setrlimit(resource.RLIMIT_NOFILE, (65536, 65536))
             
             logger.info("✅ Applied process resource limits")

@@ -51,7 +51,7 @@ class PrivilegedOperationManager:
     def __new__(cls, logger: Optional[logging.Logger] = None):
         if cls._instance is None:
             with cls._lock:
-                # Double-check locking pattern
+                # **Double-check locking pattern** (mẫu khóa kiểm tra kép)
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance

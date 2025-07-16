@@ -60,7 +60,7 @@ class DebugProfiler:
             yield
             return
             
-        # Start profiling
+        # Bắt đầu **profiling** (phân tích hiệu suất)
         profiler = cProfile.Profile()
         start_time = time.time()
         start_memory = self._get_memory_usage()
@@ -71,17 +71,17 @@ class DebugProfiler:
         finally:
             profiler.disable()
             
-            # Collect profile data
+            # Thu thập **profile data** (dữ liệu phân tích)
             end_time = time.time()
             end_memory = self._get_memory_usage()
             
-            # Generate profile stats
+            # Tạo **profile stats** (thống kê phân tích)
             stats_stream = StringIO()
             stats = pstats.Stats(profiler, stream=stats_stream)
             stats.sort_stats('cumulative')
             stats.print_stats(20)  # Top 20 functions
             
-            # Store profile results
+            # Lưu trữ **profile results** (kết quả phân tích)
             self.profiles[operation_name] = {
                 'execution_time': end_time - start_time,
                 'memory_delta': end_memory - start_memory,
@@ -91,7 +91,9 @@ class DebugProfiler:
             }
     
     def _get_memory_usage(self) -> int:
-        """Get current memory usage in bytes."""
+        """
+        Lấy **memory usage** (mức sử dụng bộ nhớ) hiện tại tính bằng bytes.
+        """
         try:
             process = psutil.Process()
             return process.memory_info().rss
@@ -123,7 +125,7 @@ class DebugProfiler:
             
             self.memory_snapshots.append(snapshot)
             
-            # Keep only last 50 snapshots
+            # Chỉ giữ lại 50 **snapshots** (ảnh chụp) gần nhất
             if len(self.memory_snapshots) > 50:
                 self.memory_snapshots = self.memory_snapshots[-50:]
                 
@@ -131,7 +133,9 @@ class DebugProfiler:
             logging.getLogger(__name__).debug(f"Failed to take memory snapshot: {e}")
     
     def get_profile_report(self) -> Dict[str, Any]:
-        """Get comprehensive profile report."""
+        """
+        Lấy **comprehensive profile report** (báo cáo phân tích toàn diện).
+        """
         return {
             'profiler_name': self.name,
             'enabled': self.enabled,
@@ -141,7 +145,9 @@ class DebugProfiler:
         }
     
     def export_profile_data(self, output_path: str):
-        """Export profile data to JSON file."""
+        """
+        **Export** (xuất) **profile data** (dữ liệu phân tích) ra **JSON file** (tệp tin JSON).
+        """
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(self.get_profile_report(), f, indent=2, ensure_ascii=False)
@@ -156,7 +162,9 @@ class ThreadTracker:
     """
     
     def __init__(self):
-        """Initialize ThreadTracker."""
+        """
+        Khởi tạo **ThreadTracker** (trình theo dõi luồng).
+        """
         self.threads: Dict[int, Dict[str, Any]] = {}
         self.lock = threading.Lock()
         self.tracking_enabled = True
@@ -207,7 +215,9 @@ class ThreadTracker:
                 self.threads[thread_id]['memory_usage'] = self._get_thread_memory_usage()
     
     def _get_thread_memory_usage(self) -> int:
-        """Get memory usage for current thread."""
+        """
+        Lấy **memory usage** (mức sử dụng bộ nhớ) cho **current thread** (luồng hiện tại).
+        """
         try:
             process = psutil.Process()
             return process.memory_info().rss
@@ -215,7 +225,9 @@ class ThreadTracker:
             return 0
     
     def get_thread_report(self) -> Dict[str, Any]:
-        """Get comprehensive thread report."""
+        """
+        Lấy **comprehensive thread report** (báo cáo luồng toàn diện).
+        """
         with self.lock:
             current_time = time.time()
             report = {
@@ -230,7 +242,7 @@ class ThreadTracker:
                 age = current_time - thread_info['created_time']
                 inactive_time = current_time - thread_info['last_activity']
                 
-                is_active = inactive_time < 300  # 5 minutes
+                is_active = inactive_time < 300  # 5 phút
                 if is_active:
                     report['active_threads'] += 1
                 else:
@@ -248,7 +260,9 @@ class ThreadTracker:
             return report
     
     def detect_potential_deadlocks(self) -> List[Dict[str, Any]]:
-        """Detect potential deadlocks."""
+        """
+        **Detect** (phát hiện) **potential deadlocks** (khả năng bế tắc luồng).
+        """
         deadlock_candidates = []
         
         with self.lock:
@@ -257,7 +271,7 @@ class ThreadTracker:
             for thread_id, thread_info in self.threads.items():
                 inactive_time = current_time - thread_info['last_activity']
                 
-                # Thread inactive for >10 minutes with recent activity
+                # **Thread** (luồng) không hoạt động >10 phút nhưng có **recent activity** (hoạt động gần đây)
                 if inactive_time > 600 and thread_info['activity_count'] > 0:
                     deadlock_candidates.append({
                         'thread_id': thread_id,

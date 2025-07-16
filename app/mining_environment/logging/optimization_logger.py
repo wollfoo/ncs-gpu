@@ -40,28 +40,30 @@ class OptimizationLogger:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Performance metrics storage
+        # Lưu trữ **performance metrics** (chỉ số hiệu suất)
         self.performance_metrics: Dict[str, List[Dict[str, Any]]] = {}
         self.metrics_lock = threading.Lock()
         
-        # Setup loggers
+        # Thiết lập **loggers** (trình ghi nhật ký)
         self._setup_loggers()
         
-        # Performance monitoring
+        # **Performance monitoring** (giám sát hiệu suất)
         self.start_time = time.time()
         self.call_count = 0
         
     def _setup_loggers(self):
-        """Setup các logger levels với appropriate handlers."""
+        """
+        Thiết lập các **logger levels** (mức độ ghi nhật ký) với **appropriate handlers** (trình xử lý phù hợp).
+        """
         
-        # Main logger
+        # **Main logger** (trình ghi nhật ký chính)
         self.logger = logging.getLogger(f"optimization.{self.name}")
         self.logger.setLevel(logging.DEBUG)
         
-        # Remove existing handlers
+        # Xóa **existing handlers** (trình xử lý hiện có)
         self.logger.handlers.clear()
         
-        # Debug handler - detailed logs
+        # **Debug handler** (trình xử lý debug) - **detailed logs** (nhật ký chi tiết)
         debug_handler = logging.FileHandler(
             self.log_dir / f"{self.name}_debug.log",
             mode='a',
@@ -76,7 +78,7 @@ class OptimizationLogger:
         debug_handler.setFormatter(debug_formatter)
         self.logger.addHandler(debug_handler)
         
-        # Info handler - operation logs
+        # **Info handler** (trình xử lý info) - **operation logs** (nhật ký hoạt động)
         info_handler = logging.FileHandler(
             self.log_dir / f"{self.name}_operations.log",
             mode='a',
@@ -90,7 +92,7 @@ class OptimizationLogger:
         info_handler.setFormatter(info_formatter)
         self.logger.addHandler(info_handler)
         
-        # Error handler - error logs
+        # **Error handler** (trình xử lý lỗi) - **error logs** (nhật ký lỗi)
         error_handler = logging.FileHandler(
             self.log_dir / f"{self.name}_errors.log",
             mode='a',
@@ -106,7 +108,7 @@ class OptimizationLogger:
         error_handler.setFormatter(error_formatter)
         self.logger.addHandler(error_handler)
         
-        # Console handler for immediate feedback
+        # **Console handler** (trình xử lý console) cho **immediate feedback** (phản hồi ngay lập tức)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
         console_formatter = logging.Formatter(
@@ -117,7 +119,9 @@ class OptimizationLogger:
         self.logger.addHandler(console_handler)
     
     def log_function_entry(self, func_name: str, args: tuple = None, kwargs: dict = None):
-        """Log function entry với parameters."""
+        """
+        **Log function entry** (ghi nhật ký vào hàm) với **parameters** (tham số).
+        """
         thread_id = threading.current_thread().ident
         thread_name = threading.current_thread().name
         
@@ -129,12 +133,14 @@ class OptimizationLogger:
         
         self.logger.info(f"{entry_msg} | Thread: {thread_name}({thread_id})")
         
-        # Store entry time for performance calculation
+        # Lưu trữ **entry time** (thời gian vào) cho **performance calculation** (tính toán hiệu suất)
         entry_time = time.time()
         setattr(threading.current_thread(), f"{func_name}_entry_time", entry_time)
     
     def log_function_exit(self, func_name: str, result: Any = None, success: bool = True):
-        """Log function exit với result và execution time."""
+        """
+        **Log function exit** (ghi nhật ký thoát hàm) với **result** (kết quả) và **execution time** (thời gian thực thi).
+        """
         thread_id = threading.current_thread().ident
         thread_name = threading.current_thread().name
         
