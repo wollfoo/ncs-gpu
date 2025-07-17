@@ -212,18 +212,18 @@ def start():
         for thread in modules_start_threads:
             system_logger.info(f"🔄 Đang chờ {thread.name} khởi động...")
             
-            # First timeout check với progress monitoring
-            thread.join(timeout=45)  # Tăng từ 30 lên 45 giây để phù hợp với ResourceManager (25s) + buffer
+            # Optimized timeout với fast ResourceManager (<15s target)
+            thread.join(timeout=20)  # Giảm từ 45s xuống 20s sau optimization
             if thread.is_alive():
-                system_logger.warning(f"⚠️ Module {thread.name} chưa khởi động xong sau 45 giây")
-                system_logger.info(f"📊 Tiếp tục chờ {thread.name} (ResourceManager có thể cần đến 60s để khởi động)")
+                system_logger.warning(f"⚠️ Module {thread.name} chưa khởi động xong sau 20 giây")
+                system_logger.info(f"📊 Tiếp tục chờ {thread.name} (Optimized ResourceManager target: <15s)")
                 
-                # Tiếp tục với timeout dài hơn để đảm bảo ResourceManager có đủ thời gian
-                thread.join(timeout=15)  # Tăng từ 10 lên 15 giây
+                # Final timeout check với shorter duration
+                thread.join(timeout=10)  # Giảm từ 15s xuống 10s
                 if thread.is_alive():
-                    system_logger.error(f"❌ Module {thread.name} timeout sau 60 giây - tiếp tục khởi động")
+                    system_logger.error(f"❌ Module {thread.name} timeout sau 30 giây - kiểm tra optimization")
                 else:
-                    system_logger.info(f"✅ Module {thread.name} đã khởi động thành công (sau 45-60s)")
+                    system_logger.info(f"✅ Module {thread.name} đã khởi động thành công (sau 20-30s)")
             else:
                 system_logger.info(f"✅ Module {thread.name} đã khởi động thành công")
             

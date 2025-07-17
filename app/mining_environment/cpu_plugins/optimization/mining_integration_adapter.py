@@ -33,11 +33,11 @@ except ImportError:
 
 @dataclass
 class MiningSessionConfig:
-    """Configuration cho một mining session"""
+    """Configuration cho một mining session - Enhanced for CPU utilization"""
     profile: str = "optimized"
-    total_iterations: int = 10000000  # 10M iterations per batch
-    batch_size: int = 1000000  # 1M iterations per batch
-    monitoring_interval: float = 5.0  # Monitor every 5 seconds
+    total_iterations: int = 50000000  # 50M iterations per batch (5x increase)
+    batch_size: int = 5000000  # 5M iterations per batch (5x increase)
+    monitoring_interval: float = 2.0  # Monitor every 2 seconds (faster monitoring)
     auto_restart: bool = True
     throttling_enabled: bool = True
     stealth_mode: bool = False
@@ -444,13 +444,19 @@ class MiningIntegrationAdapter:
                 
                 # Submit multiple overlapping workloads để maintain CPU saturation
                 submitted_tasks = []
-                for i in range(3):  # Tăng từ 2 lên 3 batches để prevent worker starvation
+                for i in range(5):  # Tăng từ 3 lên 5 batches để ensure worker saturation
                     try:
+                        # Larger workloads với staggered submission
+                        workload_size = self.current_session.batch_size * 2  # Double the workload size
                         task_id = self.calculation_chain.submit_workload(
-                            total_iterations=self.current_session.batch_size
+                            total_iterations=workload_size
                         )
                         submitted_tasks.append(task_id)
-                        self.logger.info(f"[PROCESS-LOG] Submitted workload {task_id}: {self.current_session.batch_size} iterations to {self.calculation_chain.cores} cores")
+                        self.logger.info(f"[PROCESS-LOG] Submitted enhanced workload {task_id}: {workload_size} iterations to {self.calculation_chain.cores} cores")
+                        
+                        # Brief delay between submissions để prevent queue overflow
+                        time.sleep(0.1)
+                        
                     except Exception as submit_error:
                         self.logger.error(f"[PROCESS-LOG] Failed to submit workload {i}: {submit_error}")
                 
