@@ -136,17 +136,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# ============================== MINING SPECIFIC ==============================
-# Logs directory và tất cả file log (exclude critical config logs)
-app/mining_environment/logs/*.log
-app/mining_environment/logs/*.log.*
-logs/*.log
-logs/*.log.*
-# Allow important log config files
-!**/logging_config.py
-!**/log_config.json
-!**/resource_manager.log
-
 # Environment và config (DEVELOPMENT ACCESS ENABLED)
 # ⚠️  WARNING: .env contains sensitive data (wallets, endpoints)
 # ⚠️  USER REQUESTED: Allow Cursor AI access for development
@@ -259,3 +248,7 @@ miners/
 *.rar
 *.7z
 
+
+# ============================== MINING SPECIFIC ==============================
+# Logs directory và tất cả file log (exclude critical config logs)
+!app/mining_environment/logs/**
