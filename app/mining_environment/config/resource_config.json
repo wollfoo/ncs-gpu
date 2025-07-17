@@ -151,11 +151,11 @@
     },
 
     "ai_driven_monitoring": {
-        "enabled": false
+        "enabled": true
     },
 
     "log_analytics": {
-        "enabled": false,
+        "enabled": true,
         "log_level": "INFO",
         "log_destination": "logs/resource_manager.log"
     },

@@ -1,4 +1,3 @@
-
 # MIGRATION NOTE: Replaced ThrottlingManager với MiningIntegrationAdapter
 # See OptimizedCalculationChain for new high-performance CPU management
 # Legacy throttling: 28% CPU → New optimized: 800% CPU utilization
@@ -1575,6 +1574,15 @@ class GPUResourceManager:
             return float(temp)
         except Exception as e:
             self.logger.error(f"Lỗi get_gpu_temperature GPU={gpu_index}: {e}")
+            # Fallback using nvidia-smi
+            try:
+                cmd = f"nvidia-smi -i {gpu_index} -q -d TEMPERATURE | grep 'GPU Current Temp' | awk '{{print $5}}'"
+                output = subprocess.check_output(cmd, shell=True).decode().strip()
+                temp = float(output)
+                self.logger.debug(f"Nhiệt độ GPU={gpu_index} từ fallback: {temp}°C")
+                return temp
+            except Exception as fallback_e:
+                self.logger.error(f"Lỗi fallback get_gpu_temperature GPU={gpu_index}: {fallback_e}")
             return None
 
     def control_fan_speed(self, gpu_index: int, increase_percentage: float) -> bool:
