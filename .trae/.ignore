@@ -1,0 +1,261 @@
+# ===============================================================================
+#                            TRANSFORMER MINING PROJECT
+#                                .gitignore
+# ===============================================================================
+
+# ============================== PYTHON ==============================
+
+# IDE
+.augment
+.windsurf
+.windsurf_cache
+.roo 
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions (allow specific CUDA library)
+# *.so
+!**/libmlls-cuda.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+django*.log
+*.django.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments (virtual environments và sensitive configs)
+.env.local
+.env.prod*
+.env.staging
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+# Allow development env files (USER REQUESTED)
+!.env
+!.env.development
+!.env.example
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Environment và config (DEVELOPMENT ACCESS ENABLED)
+# ⚠️  WARNING: .env contains sensitive data (wallets, endpoints)
+# ⚠️  USER REQUESTED: Allow Cursor AI access for development
+.env.local
+.env.production
+.env.staging
+*.env.backup
+.environment
+config/local_*
+config/production_*
+config/staging_*
+# Allow development env files
+!.env
+!.env.example
+!.env.template
+!.env.development
+# Allow app/.env for private repository
+!app/.env
+
+# Mining data và cache
+cache/
+tmp/
+temp/
+*.tmp
+*.cache
+
+# NVIDIA GPU monitoring
+nvidia-ml-py*
+cuda_*
+
+# Mining pools config
+pool_config.json
+mining_pools.json
+wallet_*
+
+# Security keys
+*.key
+*.pem
+*.crt
+keys/
+secrets/
+
+# ============================== DEVELOPMENT ==============================
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.backup
+*.bak
+*.orig
+
+# ============================== CLEANUP & ANALYSIS ==============================
+# Cleanup scripts results
+cleanup_*.log
+cleanup_*.json
+cleanup_*.sh
+*_dependency_analyzer.py
+dependency_analysis_*
+
+# Temporary analysis files
+analysis_*
+report_*
+*.analysis
+
+# ============================== PERFORMANCE & MONITORING ==============================
+# Performance monitoring
+perf_*
+profile_*
+*.prof
+*.profile
+
+# Resource monitoring (exclude core files)
+resource_*.log
+resource_report*
+resource_dump*
+resource_analysis*
+resource_temp*
+# Allow critical resource config files
+!**/resource_config.json
+!**/resource_manager.py
+!**/resource_optimization.json
+monitor_*
+
+# System info dumps
+sysinfo_*
+hwinfo_*
+
+# ============================== PACKAGES & BINARIES ==============================
+# Mining binaries
+
+miners/
+*.exe
+*.msi
+
+# Compressed files
+*.zip
+*.rar
+*.7z
+
+
+# ============================== MINING SPECIFIC ==============================
+# Logs directory và tất cả file log (exclude critical config logs)
+!app/mining_environment/logs/**
