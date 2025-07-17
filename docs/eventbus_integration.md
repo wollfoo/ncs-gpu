@@ -68,5 +68,33 @@ sequenceDiagram
 * **enqueue_cloaking** & **CloakStrategy**: giữ nguyên.
 * **Bổ sung** sự kiện phản hồi (`cloaking_applied`, `cloaking_health`) để tăng observability.
 
+## 6️⃣ Định hướng điều chỉnh logic PID dựa trên `start_mining.start_mining_process`
+
+### 6.1 Single Source of Truth
+* **start_mining_process()** là nơi DUY NHẤT sinh ra PID thực của miner.
+* Hàm này phải **publish** sự kiện `mining_started` (và `mining_error`, `mining_stopped`) ngay sau khi `subprocess.Popen` thành công/thất bại.
+
+### 6.2 PID Propagation Flow
+1. `start_mining_process` ➜ `event_bus.publish("mining_started", { pid, miner_type, ts })`  
+2. `ResourceManager` **subscribe** ➜ `register_pid()` ➜ `enqueue_cloaking()`  
+3. `initialize_optimized_mining` **subscribe** ➜ nhận PID CPU để gắn vào chuỗi tối ưu.  
+4. Mọi module tương lai chỉ cần subscribe, loại bỏ quét tên process.
+
+### 6.3 Điều chỉnh mã nguồn đề xuất
+| File | Mô tả thay đổi |
+|------|----------------|
+| `event_bus.py` | Thêm hàm `publish/subscribe` (pyee/redis). |
+| `start_mining.py » start_mining_process` | Gọi `publish("mining_started", {...})` ngay sau khi Popen thành công. |
+| `resource_manager.py` | Thêm `subscribe` trong `__init__`, handler `_on_mining_started` gọi `register_pid`. Giảm polling. |
+| `start_mining.py » initialize_optimized_mining` | Subscribe để lấy PID CPU, dùng cho OptimizedCalculationChain. |
+
+### 6.4 Chính sách fallback
+* Giữ `discover_mining_processes` chạy **mỗi 60 s**.  
+* Chỉ kích hoạt nếu **chưa nhận** PID qua EventBus trong 30 s đầu (đề phòng EventBus downtime).
+
+### 6.5 Roadmap cập nhật
+Phase 1-2 (Foundation & Publish) không đổi.  
+Phase 3 bổ sung bước **unsubscribe/cleanup** khi miner dừng (`mining_stopped`).
+
 ---
 © 2025 Architectural Design – Mining Platform 
