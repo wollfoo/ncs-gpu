@@ -380,7 +380,7 @@ class XeonE5OptimizedConfig:
             'cores': cores,
             'threads': threads,
             'cpu_limit': 100,  # Allow 100% per core
-            'target_cpu_utilization': 800,  # 8 cores × 100%
+            'target_cpu_utilization': 800,  # 8 cores × 100% - restored to original target
             'priority': -5,  # High priority for maximum performance
             'stealth_level': 'none',
             'optimized_chain_enabled': True,
@@ -389,7 +389,7 @@ class XeonE5OptimizedConfig:
             'estimated_hashrate': estimated_hashrate,
             'efficiency_rating': 'Maximum Performance',
             'optimization_multiplier': optimization_multiplier,
-            'performance_target': '800% CPU utilization',
+            'performance_target': '800% CPU utilization (8 cores max)',
             
             # Technical specifications
             'instruction_set': self.isa_optimizer.optimal_instruction_set,
@@ -402,7 +402,7 @@ class XeonE5OptimizedConfig:
                 'type': 'OptimizedCalculationChain',
                 'cores': cores,
                 'worker_processes': cores,
-                'queue_size': cores * 8,
+                'queue_size': cores * 12,  # Increased to 144 for 12 cores
                 'target_utilization_per_core': 100
             },
             

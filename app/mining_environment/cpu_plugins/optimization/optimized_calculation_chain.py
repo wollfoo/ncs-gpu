@@ -140,87 +140,81 @@ class CoreWorker:
     
     def _perform_intensive_calculation(self, task: WorkTask) -> Dict[str, Any]:
         """
-        CPU-intensive calculation designed for maximum single-core utilization.
-        Enhanced RandomX-like cryptographic hashing workload với actual CPU burn.
-        Fixed to ensure continuous CPU utilization.
+        Optimized CPU-intensive calculation designed for maximum single-core utilization.
+        Reduced complexity while maintaining 800% CPU target through efficient operations.
+        Fixed to prevent system overload by optimizing computational complexity.
         """
         # Initialize data for computation
         hash_data = task.data if task.data else f"mining_data_{task.task_id}_{time.time()}".encode()
         iterations = max(1000, task.iterations)  # Minimum 1000 iterations
         computation_counter = 0
-        results = []
         
-        # 🔧 Enhanced CPU burn loop - designed to achieve 100% core utilization
+        # 🔧 OPTIMIZED CPU burn loop - maintains 100% core utilization with reduced complexity
         start_time = time.time()
-        target_duration = max(2.0, iterations / 250000.0)  # Even longer duration for sustained CPU burn
+        target_duration = max(1.0, iterations / 500000.0)  # Optimized duration for efficiency
         
-        # ULTRA-INTENSIVE computation loop for maximum CPU burn
+        # EFFICIENT computation loop for sustained CPU burn without system overload
         while time.time() - start_time < target_duration:
-            # MASSIVE batch size for maximum CPU utilization
-            batch_size = min(100000, iterations * 10)  # 10x larger batch for 100% CPU burn
+            # Optimized batch size for CPU utilization without excessive overhead
+            batch_size = min(50000, iterations * 5)  # Reduced from 10x to 5x for efficiency
             
-            # Nested loops for EXTREME CPU intensity  
-            for outer in range(10):  # 10x multiplier
-                for i in range(batch_size):
-                    computation_counter += 1
-                    
-                    # MULTIPLE INTENSIVE hash computations (SHA256) - INSIDE the nested loops
-                    hash_data = hashlib.sha256(hash_data + str(computation_counter).encode()).digest()
-                    
-                    # Secondary hash computation (Blake2b) - INSIDE the nested loops
+            # Single optimized loop instead of nested loops to reduce O(n³) complexity
+            for i in range(batch_size):
+                computation_counter += 1
+                
+                # Primary hash computation (SHA256) - single operation per iteration
+                hash_data = hashlib.sha256(hash_data + str(computation_counter).encode()).digest()
+                
+                # Alternating hash algorithms for variety without excessive overhead
+                if computation_counter % 3 == 0:
+                    # Secondary hash computation (Blake2b) - every 3rd iteration
                     hash_data = hashlib.blake2b(hash_data, digest_size=32).digest()
-                    
-                    # Mathematical operations để prevent compiler optimization - INSIDE the nested loops
+                
+                # Optimized mathematical operations - reduced from 50 to 20 iterations
+                if computation_counter % 5 == 0:
                     temp_val = 0
-                    for j in range(50):  # CPU intensive math
+                    for j in range(20):  # Reduced CPU intensive math from 50 to 20
                         temp_val += j * j + computation_counter
-                    
-                    # Tertiary hash với temp_val - INSIDE the nested loops
                     hash_data = hashlib.sha256(hash_data + str(temp_val).encode()).digest()
+                
+                # Periodic additional hash for CPU load - optimized frequency
+                if computation_counter % 200 == 0:  # Reduced frequency from 100 to 200
+                    hash_data = hashlib.md5(hash_data + str(computation_counter).encode()).digest()
+                
+                # Memory access pattern - reduced frequency and complexity
+                if computation_counter % 1000 == 0:  # Reduced from 500 to 1000
+                    # Simplified memory stress pattern
+                    temp_list = [i * 2 for i in range(50)]  # Reduced from nested comprehension
+                    hash_data = hashlib.sha256(str(sum(temp_list)).encode() + hash_data).digest()
+                
+                # Additional operations - reduced frequency and complexity
+                if i % 50 == 0:  # Reduced frequency from 10 to 50
+                    # Reduced extra SHA256 rounds from 5 to 2
+                    for extra_round in range(2):
+                        hash_data = hashlib.sha256(hash_data + str(extra_round).encode()).digest()
                     
-                    # MD5 cho additional CPU load - INSIDE the nested loops
-                    if computation_counter % 100 == 0:
-                        hash_data = hashlib.md5(hash_data + str(computation_counter).encode()).digest()
-                    
-                    # Memory access pattern để simulate real workload - INSIDE the nested loops
-                    if computation_counter % 500 == 0:
-                        # Create và destroy small objects để stress memory subsystem
-                        temp_list = [i * j for i in range(10) for j in range(10)]
-                        hash_data = hashlib.sha256(str(sum(temp_list)).encode() + hash_data).digest()
-                        
-                    # ADDITIONAL intensive operations for maximum CPU burn
-                    if i % 10 == 0:
-                        # Extra SHA256 rounds
-                        for extra_round in range(5):
-                            hash_data = hashlib.sha256(hash_data + str(extra_round).encode()).digest()
-                        
-                        # CPU-intensive mathematical operations
-                        math_result = 0
-                        for math_op in range(20):
-                            math_result += math_op ** 2 + computation_counter % 1000
-                        hash_data = hashlib.sha256(hash_data + str(math_result).encode()).digest()
+                    # Optimized mathematical operations - reduced complexity
+                    math_result = sum(math_op ** 2 for math_op in range(10))  # Reduced from 20 to 10
+                    hash_data = hashlib.sha256(hash_data + str(math_result).encode()).digest()
             
-            # TRIPLE-LAYER intensive computation for sustained CPU burn  
-            if computation_counter % 1000 == 0:
-                # Force more intensive computation every 1000 iterations
+            # Simplified intensive computation - reduced from triple-layer to single layer
+            if computation_counter % 5000 == 0:  # Reduced frequency from 1000 to 5000
+                # Single round of intensive computation instead of triple-layer
                 intensive_data = hash_data
-                for intensive_round in range(3):  # 3 rounds of intensive computation
-                    for intensive_inner in range(100):  # 100 inner iterations
-                        intensive_data = hashlib.sha256(intensive_data + str(intensive_round * intensive_inner).encode()).digest()
-                        intensive_data = hashlib.blake2b(intensive_data, digest_size=32).digest()
-                        
-                        # Mathematical stress test
-                        stress_value = 0
-                        for stress_op in range(10):
-                            stress_value += (stress_op ** 3) + (intensive_inner * intensive_round)
-                        intensive_data = hashlib.sha256(intensive_data + str(stress_value).encode()).digest()
+                for intensive_inner in range(20):  # Reduced from 100 to 20
+                    intensive_data = hashlib.sha256(intensive_data + str(intensive_inner).encode()).digest()
+                    
+                    # Simplified mathematical stress test
+                    if intensive_inner % 5 == 0:
+                        stress_value = intensive_inner ** 2  # Simplified calculation
+                        intensive_data = hashlib.blake2b(intensive_data + str(stress_value).encode(), digest_size=32).digest()
                 
                 # Merge intensive computation result back
                 hash_data = hashlib.sha256(hash_data + intensive_data).digest()
             
-            # Brief yield để allow monitoring while maintaining CPU intensity
-            if computation_counter % 10000 == 0:  # Less frequent yield
-                time.sleep(0.00001)  # Even shorter yield
+            # Optimized yield for monitoring while maintaining CPU intensity
+            if computation_counter % 25000 == 0:  # Increased frequency for better responsiveness
+                time.sleep(0.0001)  # Slightly longer yield for system breathing room
         
         # Final hash computation
         final_hash = hashlib.sha256(hash_data + str(computation_counter).encode()).hexdigest()
@@ -252,7 +246,7 @@ class OptimizedCalculationChain:
         self.logger = logger or logging.getLogger(__name__)
         
         # Multi-process communication
-        self.task_queue = mp.Queue(maxsize=cores * 8)  # Large buffer for smooth operation
+        self.task_queue = mp.Queue(maxsize=cores * 12)  # Increased buffer size (144 for 12 cores) để giải quyết QUEUE-FULL-005
         self.result_queue = mp.Queue()
         self.shutdown_event = mp.Event()
         

@@ -130,6 +130,7 @@ def start_system_manager():
         stop_event.set()
         stop_system_manager()
 
+
 def stop_system_manager():
     logger.info("Đang dừng Resource Manager...")
     try:
@@ -539,6 +540,7 @@ def main():
     
     # Khởi động **Resource Manager** (trình quản lý tài nguyên) - **System Manager** (trình quản lý hệ thống)
     start_system_manager()
+    
     
     # Tạo **threads** (luồng) để chạy song song **CPU và GPU mining** (khai thác CPU và GPU)
     cpu_thread = threading.Thread(target=manage_cpu_miner, args=(privileged_manager,), daemon=True, name="CPUMiningThread")
