@@ -270,6 +270,282 @@ class RedisEventBusBackend(EventBusBackend):
         self._logger.info("Redis backend stopped")
 
 
+class RabbitMQEventBusBackend(EventBusBackend):
+    """Backend driver cho EventBus sử dụng RabbitMQ với High Availability."""
+    
+    def __init__(self, logger: logging.Logger | None = None) -> None:
+        self._logger = logger or logging.getLogger(__name__)
+        self._connection = None
+        self._channel = None
+        self._listener_thread = None
+        self._stop_listening = False
+        self._lock = threading.RLock()
+        self._subscribers: DefaultDict[str, List[Callable[[Dict[str, Any]], None]]] = defaultdict(list)
+        self._consumer_tags = {}
+        
+        # RabbitMQ connection configuration
+        self._rabbitmq_config = {
+            'host': os.getenv('RABBITMQ_HOST', 'localhost'),
+            'port': int(os.getenv('RABBITMQ_PORT', '5672')),
+            'virtual_host': os.getenv('RABBITMQ_VHOST', '/mining'),
+            'username': os.getenv('RABBITMQ_USER', 'mining-user'),
+            'password': os.getenv('RABBITMQ_PASSWORD', 'mining-password'),
+            'connection_attempts': 5,
+            'retry_delay': 5,
+            'socket_timeout': 10,
+            'heartbeat': 60,
+            'blocked_connection_timeout': 300,
+        }
+        
+        # Exchange and routing configuration
+        self._exchange_config = {
+            'name': 'mining',
+            'type': 'topic',
+            'durable': True,
+            'auto_delete': False,
+        }
+        
+        # Retry configuration
+        self._retry_config = {
+            'max_retries': 3,
+            'base_delay': 0.1,
+            'max_delay': 5.0,
+            'backoff_factor': 2.0
+        }
+        
+        # Initialize RabbitMQ connection
+        self._initialize_rabbitmq()
+    
+    def _initialize_rabbitmq(self) -> None:
+        """Khởi tạo kết nối RabbitMQ với retry logic và HA support."""
+        try:
+            import pika
+            
+            # Connection parameters với HA support
+            connection_params = pika.ConnectionParameters(
+                host=self._rabbitmq_config['host'],
+                port=self._rabbitmq_config['port'],
+                virtual_host=self._rabbitmq_config['virtual_host'],
+                credentials=pika.PlainCredentials(
+                    self._rabbitmq_config['username'],
+                    self._rabbitmq_config['password']
+                ),
+                connection_attempts=self._rabbitmq_config['connection_attempts'],
+                retry_delay=self._rabbitmq_config['retry_delay'],
+                socket_timeout=self._rabbitmq_config['socket_timeout'],
+                heartbeat=self._rabbitmq_config['heartbeat'],
+                blocked_connection_timeout=self._rabbitmq_config['blocked_connection_timeout']
+            )
+            
+            # Establish connection
+            self._connection = pika.BlockingConnection(connection_params)
+            self._channel = self._connection.channel()
+            
+            # Declare exchange
+            self._channel.exchange_declare(
+                exchange=self._exchange_config['name'],
+                exchange_type=self._exchange_config['type'],
+                durable=self._exchange_config['durable'],
+                auto_delete=self._exchange_config['auto_delete']
+            )
+            
+            self._logger.info("RabbitMQ connection established successfully")
+            
+        except ImportError:
+            raise ImportError("Pika package not installed. Run: pip install pika>=1.3.0")
+        except Exception as e:
+            self._logger.error(f"Failed to initialize RabbitMQ connection: {e}")
+            raise
+    
+    def _retry_operation(self, operation, *args, **kwargs):
+        """Retry logic cho RabbitMQ operations với exponential backoff."""
+        retry_count = 0
+        delay = self._retry_config['base_delay']
+        
+        while retry_count < self._retry_config['max_retries']:
+            try:
+                return operation(*args, **kwargs)
+            except Exception as e:
+                retry_count += 1
+                if retry_count >= self._retry_config['max_retries']:
+                    self._logger.error(f"RabbitMQ operation failed after {retry_count} retries: {e}")
+                    raise
+                
+                self._logger.warning(f"RabbitMQ operation failed (attempt {retry_count}): {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+                delay = min(delay * self._retry_config['backoff_factor'], self._retry_config['max_delay'])
+                
+                # Reconnect if connection is broken
+                if not self._connection or self._connection.is_closed:
+                    self._initialize_rabbitmq()
+    
+    def publish(self, topic: str, payload: Dict[str, Any]) -> None:
+        """Gửi message tới RabbitMQ topic với retry logic và message durability."""
+        if not self._connection or self._connection.is_closed:
+            raise RuntimeError("RabbitMQ connection not initialized")
+        
+        try:
+            # Serialize payload to JSON
+            message_body = json.dumps(payload)
+            
+            # Publish với retry logic và message durability
+            def _publish_operation():
+                import pika
+                
+                self._channel.basic_publish(
+                    exchange=self._exchange_config['name'],
+                    routing_key=topic,
+                    body=message_body,
+                    properties=pika.BasicProperties(
+                        delivery_mode=2,  # Message durability
+                        content_type='application/json',
+                        timestamp=int(time.time()),
+                        message_id=f"{topic}-{int(time.time())}-{os.getpid()}"
+                    )
+                )
+            
+            self._retry_operation(_publish_operation)
+            self._logger.debug(f"Published message to topic '{topic}': {payload}")
+            
+        except Exception as e:
+            self._logger.error(f"Failed to publish message to topic '{topic}': {e}")
+            raise
+    
+    def subscribe(self, topic: str, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """Đăng ký callback cho RabbitMQ topic với durable queue."""
+        with self._lock:
+            if callback not in self._subscribers[topic]:
+                self._subscribers[topic].append(callback)
+                
+                # Declare durable queue for topic if first subscriber
+                if len(self._subscribers[topic]) == 1:
+                    try:
+                        queue_name = topic.replace(':', '.')
+                        
+                        # Declare durable queue
+                        self._channel.queue_declare(
+                            queue=queue_name,
+                            durable=True,
+                            auto_delete=False
+                        )
+                        
+                        # Bind queue to exchange
+                        self._channel.queue_bind(
+                            exchange=self._exchange_config['name'],
+                            queue=queue_name,
+                            routing_key=topic
+                        )
+                        
+                        self._logger.debug(f"Declared and bound queue '{queue_name}' for topic '{topic}'")
+                        
+                    except Exception as e:
+                        self._logger.error(f"Failed to setup queue for topic '{topic}': {e}")
+                        raise
+    
+    def start_listening(self) -> None:
+        """Khởi động background listener thread với consumer acknowledgment."""
+        if self._listener_thread and self._listener_thread.is_alive():
+            self._logger.warning("Listener thread already running")
+            return
+        
+        self._stop_listening = False
+        self._listener_thread = threading.Thread(target=self._consume_messages, daemon=True)
+        self._listener_thread.start()
+        self._logger.info("RabbitMQ listener thread started")
+    
+    def _consume_messages(self) -> None:
+        """Background thread để consume RabbitMQ messages với ACK."""
+        try:
+            # Setup consumers for all subscribed topics
+            for topic in self._subscribers.keys():
+                queue_name = topic.replace(':', '.')
+                
+                def make_callback(topic_name):
+                    def callback(ch, method, properties, body):
+                        try:
+                            # Deserialize JSON payload
+                            payload = json.loads(body.decode('utf-8'))
+                            
+                            # Call all subscribers for this topic
+                            callbacks = []
+                            with self._lock:
+                                callbacks = list(self._subscribers.get(topic_name, []))
+                            
+                            for callback_func in callbacks:
+                                try:
+                                    callback_func(payload)
+                                except Exception as e:
+                                    self._logger.error(f"Error calling callback for topic '{topic_name}': {e}")
+                            
+                            # Acknowledge message after successful processing
+                            ch.basic_ack(delivery_tag=method.delivery_tag)
+                            
+                        except json.JSONDecodeError as e:
+                            self._logger.error(f"Invalid JSON in message from topic '{topic_name}': {e}")
+                            # Reject message with no requeue
+                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                        except Exception as e:
+                            self._logger.error(f"Error processing message from topic '{topic_name}': {e}")
+                            # Reject message with requeue for retry
+                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+                    
+                    return callback
+                
+                # Setup consumer with manual acknowledgment
+                consumer_tag = self._channel.basic_consume(
+                    queue=queue_name,
+                    on_message_callback=make_callback(topic),
+                    auto_ack=False  # Manual acknowledgment for message durability
+                )
+                
+                self._consumer_tags[topic] = consumer_tag
+                self._logger.debug(f"Started consuming queue '{queue_name}' for topic '{topic}'")
+            
+            # Start consuming (blocking)
+            self._channel.start_consuming()
+            
+        except Exception as e:
+            if not self._stop_listening:
+                self._logger.error(f"Error in RabbitMQ consumer thread: {e}")
+    
+    def stop(self) -> None:
+        """Dừng RabbitMQ backend và cleanup resources."""
+        self._stop_listening = True
+        
+        # Stop consuming
+        if self._channel and not self._channel.is_closed:
+            try:
+                self._channel.stop_consuming()
+                
+                # Cancel consumers
+                for topic, consumer_tag in self._consumer_tags.items():
+                    self._channel.basic_cancel(consumer_tag)
+                    self._logger.debug(f"Cancelled consumer for topic '{topic}'")
+                
+            except Exception as e:
+                self._logger.error(f"Error stopping consumers: {e}")
+        
+        # Wait for listener thread to finish
+        if self._listener_thread and self._listener_thread.is_alive():
+            self._listener_thread.join(timeout=5.0)
+            if self._listener_thread.is_alive():
+                self._logger.warning("Listener thread did not stop gracefully")
+        
+        # Close connection
+        if self._connection and not self._connection.is_closed:
+            try:
+                self._connection.close()
+            except Exception as e:
+                self._logger.error(f"Error closing RabbitMQ connection: {e}")
+        
+        # Clear subscribers
+        with self._lock:
+            self._subscribers.clear()
+            self._consumer_tags.clear()
+        
+        self._logger.info("RabbitMQ backend stopped")
+
+
 class KafkaEventBusBackend(EventBusBackend):
     """Backend driver cho EventBus sử dụng Kafka."""
     
@@ -380,6 +656,7 @@ class EventBus:
         backend_map = {
             "memory": MemoryEventBusBackend,
             "redis": RedisEventBusBackend,
+            "rabbitmq": RabbitMQEventBusBackend,
             "kafka": KafkaEventBusBackend,
         }
         

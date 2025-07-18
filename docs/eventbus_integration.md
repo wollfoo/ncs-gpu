@@ -11,19 +11,21 @@ Mục tiêu chi tiết:
 
 ## 2️⃣ Giải pháp tổng thể
 ### 2.1 Luồng hoạt động
-```mermaid
-sequenceDiagram
-    participant CPU as CPU Miner
-    participant GPU as GPU Miner
-    participant EB as EventBus
-    participant RM as ResourceManager
+#### **Event Flow Architecture** (Kiến trúc luồng sự kiện):
+```
+1. start_mining_process() 
+   ↓ subprocess.Popen success/fail
+   ↓ event_bus.publish("mining_started", {pid, miner_type, timestamp})
 
-    CPU->>EB: mining_started {pid, miner_type="CPU"}
-    GPU->>EB: mining_started {pid, miner_type="GPU"}
-    EB-->>RM: mining_started … (subscribe)
-    RM->>RM: register_pid(pid) & enqueue_cloaking()
-    RM->>EB: throttle_request {pid,…} (khi cần)
-    EB-->>CPU: throttle_request (subscribe)
+2. ResourceManager.subscribe("mining_started")
+   ↓ register_pid()
+   ↓ enqueue_cloaking()
+
+3. initialize_optimized_mining.subscribe("mining_started")
+   ↓ receive CPU PID for optimization chain
+
+4. Future modules: ONLY subscribe to events
+   ↓ ELIMINATE process name scanning
 ```
 
 ### 2.2 Vai trò & kênh sự kiện
