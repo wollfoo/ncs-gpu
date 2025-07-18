@@ -9,7 +9,8 @@
 .augment
 .windsurf
 .windsurf_cache
-.roo 
+.roo
+.trae 
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
