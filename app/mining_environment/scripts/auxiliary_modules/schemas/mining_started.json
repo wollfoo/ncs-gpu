@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Mining Started Event Schema",
+  "description": "Schema cho sự kiện khi mining process bắt đầu",
+  "required": ["pid", "miner_type", "timestamp"],
+  "properties": {
+    "pid": {
+      "type": "integer",
+      "description": "Process ID của miner",
+      "minimum": 1
+    },
+    "miner_type": {
+      "type": "string",
+      "description": "Loại miner (CPU/GPU)",
+      "enum": ["CPU", "GPU"]
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp khi mining bắt đầu"
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Trace ID để theo dõi sự kiện xuyên suốt hệ thống",
+      "minLength": 1
+    },
+    "config": {
+      "type": "object",
+      "description": "Cấu hình mining (optional)",
+      "properties": {
+        "threads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "intensity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        }
+      }
+    }
+  }
+}

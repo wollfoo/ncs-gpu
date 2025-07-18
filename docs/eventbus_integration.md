@@ -181,11 +181,6 @@ Kafka Scale Out    :after RabbitMQ Cluster, 2w
 
 
 
-
-
-
-
-
 ## 📖 Tóm tắt nội dung phần "Lộ Trình Triển Khai EventBus"
 Tài liệu mô tả một roadmap gồm nhiều **\[Phase]** (giai đoạn) nhằm “hot-swap” backend **\[EventBus]** (hệ thống truyền sự kiện – cho phép giao tiếp bất đồng bộ) từ nhỏ tới lớn, bảo đảm nguyên API `publish/subscribe`.  
 Trình tự backend: **\[pyee]** (thư viện **\[EventEmitter]** nội bộ) ➜ **\[Redis Pub/Sub]** ➜ **\[RabbitMQ]** (**HA – High Availability**) ➜ **\[Kafka]** (throughput cao).  
@@ -273,3 +268,12 @@ Mỗi phase kèm khung thời gian, mục tiêu, công việc trọng tâm, tiê
 **\[Load Test]** (kiểm thử tải – đo khả năng chịu tải của hệ thống)  
 **\[Observability]** (khả năng quan sát – gồm logging, metrics, tracing)  
 **\[Monitoring]** (giám sát – hoạt động thu thập & cảnh báo sức khỏe hệ thống)
+
+
+
+  | Phase | Backend       | Thời gian | Mục tiêu          | Độ phức tạp |
+  |-------|---------------|-----------|-------------------|-------------|
+  | 1-2   | pyee          | 1-2 tuần  | PoC in-process    | Thấp        |
+  | 2-4   | Redis Pub/Sub | 2-4 tuần  | Đa tiến trình     | Trung bình  |
+  | 4-5   | RabbitMQ      | 4-5 tuần  | HA + durability   | Cao         |
+  | 5-6   | Kafka         | 5-6+ tuần | Scale >10k miners | Rất cao     |

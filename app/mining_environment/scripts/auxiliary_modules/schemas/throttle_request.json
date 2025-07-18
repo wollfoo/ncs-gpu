@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Throttle Request Event Schema",
+  "description": "Schema cho sự kiện yêu cầu throttle mining process",
+  "required": ["target_pid", "action", "timestamp"],
+  "properties": {
+    "target_pid": {
+      "type": "integer",
+      "description": "Process ID cần throttle",
+      "minimum": 1
+    },
+    "action": {
+      "type": "string",
+      "description": "Hành động throttle",
+      "enum": ["throttle", "restore", "pause", "resume"]
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp khi request được gửi"
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Trace ID để theo dõi sự kiện",
+      "minLength": 1
+    },
+    "reason": {
+      "type": "string",
+      "description": "Lý do throttle",
+      "enum": ["cpu_overload", "memory_pressure", "temperature_high", "user_request", "system_policy"]
+    },
+    "intensity": {
+      "type": "number",
+      "description": "Mức độ throttle (0.0-1.0)",
+      "minimum": 0.0,
+      "maximum": 1.0
+    }
+  }
+}
