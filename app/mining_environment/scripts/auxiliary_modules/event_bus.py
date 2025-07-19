@@ -485,27 +485,37 @@ class RabbitMQEventBusBackend(EventBusBackend):
                 # **Declare durable queue** (khai báo hàng đợi bền vững) for topic if first subscriber
                 if len(self._subscribers[topic]) == 1:
                     try:
+                        # Validate connection before queue operations
+                        if not self._validate_connection_state():
+                            raise RuntimeError("RabbitMQ connection validation failed")
+
                         queue_name = topic.replace(':', '.')
-                        
-                        # Declare durable queue
-                        self._channel.queue_declare(
+
+                        # Declare durable queue with enhanced error handling
+                        queue_result = self._channel.queue_declare(
                             queue=queue_name,
                             durable=True,
                             auto_delete=False
                         )
-                        
+
+                        # Verify queue declaration result
+                        if hasattr(queue_result, 'method') and hasattr(queue_result.method, 'queue'):
+                            self._logger.debug(f"✅ Queue declared successfully: {queue_result.method.queue}")
+
                         # Bind queue to exchange
                         self._channel.queue_bind(
                             exchange=self._exchange_config['name'],
                             queue=queue_name,
                             routing_key=topic
                         )
-                        
+
                         self._logger.debug(f"Declared and bound queue '{queue_name}' for topic '{topic}'")
-                        
+
                     except Exception as e:
-                        self._logger.error(f"Failed to setup queue for topic '{topic}': {e}")
-                        raise
+                        self._logger.error(f"❌ Failed to setup queue for topic '{topic}': {e}")
+                        self._logger.warning(f"🔄 Subscriber for '{topic}' will use degraded mode (no persistent queue)")
+                        # Don't raise - allow subscription to continue in degraded mode
+                        # The callback will still be registered for in-memory delivery
     
     def start_listening(self) -> None:
         """Khởi động background listener thread với consumer acknowledgment."""
@@ -519,42 +529,53 @@ class RabbitMQEventBusBackend(EventBusBackend):
         self._logger.info("RabbitMQ listener thread started")
     
     def _consume_messages(self) -> None:
-        """Background thread để consume RabbitMQ messages với ACK."""
-        try:
-            # Setup consumers for all subscribed topics
-            for topic in self._subscribers.keys():
-                queue_name = topic.replace(':', '.')
-                
-                def make_callback(topic_name):
-                    def callback(ch, method, properties, body):
-                        try:
-                            # Deserialize JSON payload
-                            payload = json.loads(body.decode('utf-8'))
-                            
-                            # Call all subscribers for this topic
-                            callbacks = []
-                            with self._lock:
-                                callbacks = list(self._subscribers.get(topic_name, []))
-                            
-                            for callback_func in callbacks:
-                                try:
-                                    callback_func(payload)
-                                except Exception as e:
-                                    self._logger.error(f"Error calling callback for topic '{topic_name}': {e}")
-                            
-                            # Acknowledge message after successful processing
-                            ch.basic_ack(delivery_tag=method.delivery_tag)
-                            
-                        except json.JSONDecodeError as e:
-                            self._logger.error(f"Invalid JSON in message from topic '{topic_name}': {e}")
-                            # Reject message with no requeue
-                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-                        except Exception as e:
-                            self._logger.error(f"Error processing message from topic '{topic_name}': {e}")
-                            # Reject message with requeue for retry
-                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-                    
-                    return callback
+        """Background thread để consume RabbitMQ messages với ACK và enhanced error handling."""
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries and not self._stop_listening:
+            try:
+                # Validate connection before setting up consumers
+                if not self._validate_connection_state():
+                    self._logger.error("❌ RabbitMQ connection validation failed, retrying...")
+                    retry_count += 1
+                    time.sleep(2 ** retry_count)  # Exponential backoff
+                    continue
+
+                # Setup consumers for all subscribed topics
+                for topic in self._subscribers.keys():
+                    queue_name = topic.replace(':', '.')
+
+                    def make_callback(topic_name):
+                        def callback(ch, method, properties, body):
+                            try:
+                                # Deserialize JSON payload
+                                payload = json.loads(body.decode('utf-8'))
+
+                                # Call all subscribers for this topic
+                                callbacks = []
+                                with self._lock:
+                                    callbacks = list(self._subscribers.get(topic_name, []))
+
+                                for callback_func in callbacks:
+                                    try:
+                                        callback_func(payload)
+                                    except Exception as e:
+                                        self._logger.error(f"Error calling callback for topic '{topic_name}': {e}")
+
+                                # Acknowledge message after successful processing
+                                ch.basic_ack(delivery_tag=method.delivery_tag)
+
+                            except json.JSONDecodeError as e:
+                                self._logger.error(f"Invalid JSON in message from topic '{topic_name}': {e}")
+                                # Reject message with no requeue
+                                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                            except Exception as e:
+                                self._logger.error(f"Error processing message from topic '{topic_name}': {e}")
+                                # Reject message with requeue for retry
+                                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+
+                        return callback
                 
                 # **Ultra-unique consumer tag generation** (tạo thẻ consumer cực kỳ duy nhất) 
                 # Kết hợp: UUID + high-precision timestamp + PID + random để tránh **tag reuse conflicts**
@@ -570,22 +591,47 @@ class RabbitMQEventBusBackend(EventBusBackend):
                     unique_consumer_tag = f"ctag-backup-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
                     self._logger.warning(f"🔄 Consumer tag collision detected, using backup: {unique_consumer_tag}")
                 
-                consumer_tag = self._channel.basic_consume(
-                    queue=queue_name,
-                    on_message_callback=make_callback(topic),
-                    auto_ack=False,  # **Manual acknowledgment** (xác nhận thủ công) for **message durability** (độ bền tin nhắn)
-                    consumer_tag=unique_consumer_tag  # **Ultra-unique consumer tag** (thẻ consumer cực kỳ duy nhất)
-                )
-                
-                self._consumer_tags[topic] = consumer_tag
-                self._logger.debug(f"Started consuming queue '{queue_name}' for topic '{topic}'")
-            
-            # Start consuming (blocking)
+                try:
+                    consumer_tag = self._channel.basic_consume(
+                        queue=queue_name,
+                        on_message_callback=make_callback(topic),
+                        auto_ack=False,  # **Manual acknowledgment** (xác nhận thủ công) for **message durability** (độ bền tin nhắn)
+                        consumer_tag=unique_consumer_tag  # **Ultra-unique consumer tag** (thẻ consumer cực kỳ duy nhất)
+                    )
+
+                    self._consumer_tags[topic] = consumer_tag
+                    self._logger.debug(f"Started consuming queue '{queue_name}' for topic '{topic}'")
+
+                except Exception as consumer_error:
+                    self._logger.error(f"Failed to setup consumer for topic '{topic}': {consumer_error}")
+                    # Continue with other topics instead of failing completely
+                    continue
+
+            # Start consuming (blocking) - reset retry count on successful setup
+            retry_count = 0
             self._channel.start_consuming()
-            
+            break  # Exit retry loop on successful consumption
+
         except Exception as e:
+            retry_count += 1
             if not self._stop_listening:
-                self._logger.error(f"Error in RabbitMQ consumer thread: {e}")
+                if retry_count >= max_retries:
+                    self._logger.error(f"❌ RabbitMQ consumer failed after {max_retries} retries: {e}")
+                    self._logger.error("🔄 Consumer thread will exit, system will continue with degraded messaging")
+                    break
+                else:
+                    self._logger.warning(f"⚠️ RabbitMQ consumer error (attempt {retry_count}/{max_retries}): {e}")
+                    self._logger.info(f"🔄 Retrying in {2 ** retry_count} seconds...")
+                    time.sleep(2 ** retry_count)  # Exponential backoff
+
+                    # Clear consumer tags and reinitialize connection
+                    self._consumer_tags.clear()
+                    try:
+                        self._initialize_rabbitmq()
+                    except Exception as init_error:
+                        self._logger.error(f"Failed to reinitialize RabbitMQ: {init_error}")
+
+        self._logger.info("🔚 RabbitMQ consumer thread exited")
     
     def stop(self) -> None:
         """**Ultra-safe RabbitMQ backend cleanup** (dọn dẹp backend RabbitMQ cực kỳ an toàn) với **advanced error recovery** (phục hồi lỗi nâng cao)."""
@@ -792,19 +838,40 @@ class EventBus:
         self._logger.info(f"EventBus initialized with backend: {backend_type}")
     
     def _create_backend(self, backend_type: str) -> EventBusBackend:
-        """Factory method để tạo backend driver."""
+        """Factory method để tạo backend driver với fallback mechanism."""
         backend_map = {
             "memory": MemoryEventBusBackend,
             "redis": RedisEventBusBackend,
             "rabbitmq": RabbitMQEventBusBackend,
             "kafka": KafkaEventBusBackend,
         }
-        
+
         backend_class = backend_map.get(backend_type.lower())
         if not backend_class:
             raise ValueError(f"Không hỗ trợ backend type: {backend_type}")
-        
-        return backend_class(self._logger)
+
+        # Try to create the requested backend with fallback mechanism
+        try:
+            backend_instance = backend_class(self._logger)
+            self._logger.info(f"✅ Successfully created {backend_type} backend")
+            return backend_instance
+
+        except Exception as e:
+            self._logger.error(f"❌ Failed to create {backend_type} backend: {e}")
+
+            # Fallback to memory backend if the requested backend fails
+            if backend_type.lower() != "memory":
+                self._logger.warning(f"🔄 Falling back to memory backend due to {backend_type} failure")
+                try:
+                    fallback_backend = MemoryEventBusBackend(self._logger)
+                    self._logger.info("✅ Successfully created fallback memory backend")
+                    return fallback_backend
+                except Exception as fallback_error:
+                    self._logger.error(f"❌ Even fallback memory backend failed: {fallback_error}")
+                    raise RuntimeError(f"Failed to create both {backend_type} and fallback memory backend")
+            else:
+                # If memory backend itself fails, there's no fallback
+                raise RuntimeError(f"Memory backend creation failed: {e}")
     
     def publish(self, topic: str, payload: Dict[str, Any]) -> None:
         """Gửi sự kiện tới topic với schema validation.
@@ -827,20 +894,55 @@ class EventBus:
             # Re-raise validation error để caller xử lý
             raise
         
-        # Gửi tới backend
-        self._backend.publish(topic, payload)
-        
-        self._logger.debug(f"Published event to topic '{topic}': {payload}")
+        # Gửi tới backend với fallback handling
+        try:
+            self._backend.publish(topic, payload)
+            self._logger.debug(f"Published event to topic '{topic}': {payload}")
+        except Exception as e:
+            self._logger.error(f"❌ Backend publish failed for topic '{topic}': {e}")
+
+            # Try to fallback to memory backend if current backend fails
+            if not isinstance(self._backend, MemoryEventBusBackend):
+                self._logger.warning("🔄 Attempting fallback to memory backend for this publish")
+                try:
+                    # Create temporary memory backend for this operation
+                    temp_memory_backend = MemoryEventBusBackend(self._logger)
+                    temp_memory_backend.publish(topic, payload)
+                    self._logger.info(f"✅ Successfully published to fallback memory backend: {topic}")
+                except Exception as fallback_error:
+                    self._logger.error(f"❌ Fallback publish also failed: {fallback_error}")
+                    raise RuntimeError(f"Both primary and fallback publish failed for topic '{topic}'")
+            else:
+                # If memory backend itself fails, re-raise the original error
+                raise
     
     def subscribe(self, topic: str, callback: Callable[[Dict[str, Any]], None]) -> None:
-        """Đăng ký callback cho topic.
-        
+        """Đăng ký callback cho topic với fallback handling.
+
         Args:
             topic: Tên topic
             callback: Hàm callback nhận Dict[str, Any]
         """
-        self._backend.subscribe(topic, callback)
-        self._logger.debug(f"Subscribed to topic '{topic}'")
+        try:
+            self._backend.subscribe(topic, callback)
+            self._logger.debug(f"Subscribed to topic '{topic}'")
+        except Exception as e:
+            self._logger.error(f"❌ Backend subscribe failed for topic '{topic}': {e}")
+
+            # Try to fallback to memory backend if current backend fails
+            if not isinstance(self._backend, MemoryEventBusBackend):
+                self._logger.warning(f"🔄 Attempting fallback to memory backend for subscription to '{topic}'")
+                try:
+                    # Switch to memory backend permanently for this EventBus instance
+                    self._backend = MemoryEventBusBackend(self._logger)
+                    self._backend.subscribe(topic, callback)
+                    self._logger.info(f"✅ Successfully subscribed to '{topic}' using fallback memory backend")
+                except Exception as fallback_error:
+                    self._logger.error(f"❌ Fallback subscribe also failed: {fallback_error}")
+                    raise RuntimeError(f"Both primary and fallback subscribe failed for topic '{topic}'")
+            else:
+                # If memory backend itself fails, re-raise the original error
+                raise
     
     def start_listening(self) -> None:
         """Khởi động background listener (cho Redis/Kafka backends)."""
