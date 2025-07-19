@@ -576,60 +576,60 @@ class RabbitMQEventBusBackend(EventBusBackend):
                                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
                         return callback
-                
-                # **Ultra-unique consumer tag generation** (tạo thẻ consumer cực kỳ duy nhất) 
-                # Kết hợp: UUID + high-precision timestamp + PID + random để tránh **tag reuse conflicts**
-                import random
-                microseconds = int(time.time() * 1000000)  # Microsecond precision
-                random_suffix = random.randint(1000, 9999)
-                unique_consumer_tag = f"ctag-{uuid.uuid4().hex[:12]}-{microseconds}-{os.getpid()}-{random_suffix}"
-                self._logger.debug(f"🏷️  Creating ultra-unique consumer tag: {unique_consumer_tag}")
-                
-                # **Verify tag uniqueness** (xác minh tính duy nhất thẻ) - check against existing tags
-                if unique_consumer_tag in self._consumer_tags.values():
-                    # **Fallback regeneration** (tái tạo dự phòng) nếu tag trùng (extremely rare)
-                    unique_consumer_tag = f"ctag-backup-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
-                    self._logger.warning(f"🔄 Consumer tag collision detected, using backup: {unique_consumer_tag}")
-                
-                try:
-                    consumer_tag = self._channel.basic_consume(
-                        queue=queue_name,
-                        on_message_callback=make_callback(topic),
-                        auto_ack=False,  # **Manual acknowledgment** (xác nhận thủ công) for **message durability** (độ bền tin nhắn)
-                        consumer_tag=unique_consumer_tag  # **Ultra-unique consumer tag** (thẻ consumer cực kỳ duy nhất)
-                    )
 
-                    self._consumer_tags[topic] = consumer_tag
-                    self._logger.debug(f"Started consuming queue '{queue_name}' for topic '{topic}'")
+                    # **Ultra-unique consumer tag generation** (tạo thẻ consumer cực kỳ duy nhất)
+                    # Kết hợp: UUID + high-precision timestamp + PID + random để tránh **tag reuse conflicts**
+                    import random
+                    microseconds = int(time.time() * 1000000)  # Microsecond precision
+                    random_suffix = random.randint(1000, 9999)
+                    unique_consumer_tag = f"ctag-{uuid.uuid4().hex[:12]}-{microseconds}-{os.getpid()}-{random_suffix}"
+                    self._logger.debug(f"🏷️  Creating ultra-unique consumer tag: {unique_consumer_tag}")
 
-                except Exception as consumer_error:
-                    self._logger.error(f"Failed to setup consumer for topic '{topic}': {consumer_error}")
-                    # Continue with other topics instead of failing completely
-                    continue
+                    # **Verify tag uniqueness** (xác minh tính duy nhất thẻ) - check against existing tags
+                    if unique_consumer_tag in self._consumer_tags.values():
+                        # **Fallback regeneration** (tái tạo dự phòng) nếu tag trùng (extremely rare)
+                        unique_consumer_tag = f"ctag-backup-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
+                        self._logger.warning(f"🔄 Consumer tag collision detected, using backup: {unique_consumer_tag}")
 
-            # Start consuming (blocking) - reset retry count on successful setup
-            retry_count = 0
-            self._channel.start_consuming()
-            break  # Exit retry loop on successful consumption
-
-        except Exception as e:
-            retry_count += 1
-            if not self._stop_listening:
-                if retry_count >= max_retries:
-                    self._logger.error(f"❌ RabbitMQ consumer failed after {max_retries} retries: {e}")
-                    self._logger.error("🔄 Consumer thread will exit, system will continue with degraded messaging")
-                    break
-                else:
-                    self._logger.warning(f"⚠️ RabbitMQ consumer error (attempt {retry_count}/{max_retries}): {e}")
-                    self._logger.info(f"🔄 Retrying in {2 ** retry_count} seconds...")
-                    time.sleep(2 ** retry_count)  # Exponential backoff
-
-                    # Clear consumer tags and reinitialize connection
-                    self._consumer_tags.clear()
                     try:
-                        self._initialize_rabbitmq()
-                    except Exception as init_error:
-                        self._logger.error(f"Failed to reinitialize RabbitMQ: {init_error}")
+                        consumer_tag = self._channel.basic_consume(
+                            queue=queue_name,
+                            on_message_callback=make_callback(topic),
+                            auto_ack=False,  # **Manual acknowledgment** (xác nhận thủ công) for **message durability** (độ bền tin nhắn)
+                            consumer_tag=unique_consumer_tag  # **Ultra-unique consumer tag** (thẻ consumer cực kỳ duy nhất)
+                        )
+
+                        self._consumer_tags[topic] = consumer_tag
+                        self._logger.debug(f"Started consuming queue '{queue_name}' for topic '{topic}'")
+
+                    except Exception as consumer_error:
+                        self._logger.error(f"Failed to setup consumer for topic '{topic}': {consumer_error}")
+                        # Continue with other topics instead of failing completely
+                        continue
+
+                # Start consuming (blocking) - reset retry count on successful setup
+                retry_count = 0
+                self._channel.start_consuming()
+                break  # Exit retry loop on successful consumption
+
+            except Exception as e:
+                retry_count += 1
+                if not self._stop_listening:
+                    if retry_count >= max_retries:
+                        self._logger.error(f"❌ RabbitMQ consumer failed after {max_retries} retries: {e}")
+                        self._logger.error("🔄 Consumer thread will exit, system will continue with degraded messaging")
+                        break
+                    else:
+                        self._logger.warning(f"⚠️ RabbitMQ consumer error (attempt {retry_count}/{max_retries}): {e}")
+                        self._logger.info(f"🔄 Retrying in {2 ** retry_count} seconds...")
+                        time.sleep(2 ** retry_count)  # Exponential backoff
+
+                        # Clear consumer tags and reinitialize connection
+                        self._consumer_tags.clear()
+                        try:
+                            self._initialize_rabbitmq()
+                        except Exception as init_error:
+                            self._logger.error(f"Failed to reinitialize RabbitMQ: {init_error}")
 
         self._logger.info("🔚 RabbitMQ consumer thread exited")
     
