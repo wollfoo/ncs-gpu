@@ -2276,8 +2276,10 @@ class ResourceControlFactory:
 
 class ResourceCoordinator:
     """
-    Điều phối viên trung tâm cho tất cả chiến lược theo blueprint redesign.
+    Điều phối viên trung tâm cho 6 unified strategies theo blueprint redesign.
     Phân biệt giữa direct execution và plugin delegation.
+    
+    Strategies: CPU, GPU (with thermal), Network, Disk I/O, Cache, Memory
     """
     
     def __init__(self, config: Dict[str, Any], logger: logging.Logger):
@@ -2316,7 +2318,7 @@ class ResourceCoordinator:
             StrategyType.MEMORY: MemoryCloakStrategy(config, logger, self.resource_managers.get('memory'), self.resource_managers.get('cache'))
         }
         
-        self.logger.info("✅ ResourceCoordinator khởi tạo 6 unified strategies thành công")
+        self.logger.info("✅ ResourceCoordinator khởi tạo 6 unified strategies thành công (thermal integrated trong GPU)")
     
     def apply_strategy(self, strategy_type: str, process: Any) -> bool:
         """
@@ -2356,9 +2358,10 @@ class ResourceCoordinator:
         
         # Áp dụng chiến lược phù hợp
         if is_gpu:
-            # GPU process: áp dụng GPU + các chiến lược chung
+            # GPU process: áp dụng GPU (with integrated thermal) + các chiến lược chung
+            # ✅ UNIFIED: Thermal management được integrate trong StrategyType.GPU
             strategies_to_apply = [
-                StrategyType.GPU,
+                StrategyType.GPU,  # Includes integrated thermal management
                 StrategyType.NETWORK,
                 StrategyType.DISK_IO,
                 StrategyType.CACHE,
@@ -2542,14 +2545,14 @@ class CloakStrategyFactory:
             'disk_io': StrategyType.DISK_IO,
             'cache': StrategyType.CACHE,
             'memory': StrategyType.MEMORY,
-            'thermal_control': StrategyType.THERMAL_CONTROL,  # ✅ NEW
+            # ✅ REMOVED: 'thermal_control' - unified vào GpuCloakStrategy
             'cpu_cloaking': StrategyType.CPU,
             'gpu_cloaking': StrategyType.GPU,
             'network_cloaking': StrategyType.NETWORK,
             'disk_io_cloaking': StrategyType.DISK_IO,
             'cache_cloaking': StrategyType.CACHE,
             'memory_cloaking': StrategyType.MEMORY,
-            'thermal_cloaking': StrategyType.THERMAL_CONTROL  # ✅ NEW
+            # ✅ REMOVED: 'thermal_cloaking' - unified vào GpuCloakStrategy
         }
         
         if strategy_name in strategy_mapping:
@@ -2576,9 +2579,10 @@ class CloakStrategyFactory:
     @staticmethod
     def get_available_strategies() -> List[str]:
         """
-        Lấy danh sách strategies có sẵn cho tương thích ngược.
+        Lấy danh sách 6 unified strategies có sẵn cho tương thích ngược.
+        Thermal management được integrate trong GPU strategy.
         
-        :return: List các strategy names
+        :return: List các strategy names (6 strategies)
         """
         from .cloak_strategies import StrategyType
         

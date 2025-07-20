@@ -414,8 +414,9 @@ class ResourceManager(IResourceManager):
             
             # ✅ PROCESS TYPE SPECIFIC: Different strategies for CPU vs GPU
             if process_type == 'GPU':
-                # GPU processes typically need more aggressive resource control
-                return base_strategies + ['thermal_control']  # Add thermal management
+                # GPU processes: thermal management integrated directly trong gpu_cloaking
+                # ✅ UNIFIED: ThermalControlStrategy removed - thermal control is built into GpuCloakStrategy
+                return base_strategies  # thermal management fully integrated trong gpu_cloaking
             elif process_type == 'CPU':
                 # CPU processes may need different priority on certain resources
                 return base_strategies
@@ -479,7 +480,7 @@ class ResourceManager(IResourceManager):
                 'disk_io': self._check_disk_io_availability(), 
                 'cache': self._check_cache_availability(),
                 'memory': self._check_memory_availability(),
-                'thermal_control': self.is_gpu_initialized()  # GPU thermal control
+                # ✅ REMOVED: 'thermal_control' - thermal management integrated trong gpu_cloaking
             }
             
             return availability_checks.get(strategy_name, False)

