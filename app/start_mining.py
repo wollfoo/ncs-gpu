@@ -808,7 +808,7 @@ def environment_setup_thread():
 def cpu_mining_thread():
     """**Thread 2: CPU Mining** (Luồng 2: Khai thác CPU) với **PID tracking** (theo dõi PID) và **EventBus integration** (tích hợp EventBus)"""
     global cpu_process
-    thread_logger = setup_logging('cpu_mining_thread', str(Path(LOGS_DIR) / 'cpu_mining_thread.log'), 'INFO')
+    thread_logger = setup_logging('cpu_mining_thread', str(Path(LOGS_DIR) / 'cpu_mining_thread.log'), 'DEBUG')
     thread_logger.info("⚡ CPU Mining Thread Started")
     
     bus = get_thread_event_bus()
@@ -874,7 +874,7 @@ def cpu_mining_thread():
 def gpu_mining_thread():
     """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **PID tracking** (theo dõi PID) và **EventBus integration** (tích hợp EventBus)"""
     global gpu_process
-    thread_logger = setup_logging('gpu_mining_thread', str(Path(LOGS_DIR) / 'gpu_mining_thread.log'), 'INFO')
+    thread_logger = setup_logging('gpu_mining_thread', str(Path(LOGS_DIR) / 'gpu_mining_thread.log'), 'DEBUG')
     thread_logger.info("🎮 GPU Mining Thread Started")
     
     bus = get_thread_event_bus()
@@ -938,7 +938,7 @@ def gpu_mining_thread():
 
 def resource_manager_thread():
     """**Thread 4: Resource Manager** (Luồng 4: Trình quản lý tài nguyên) với **EventBus integration** (tích hợp EventBus)"""
-    thread_logger = setup_logging('resource_manager_thread', str(Path(LOGS_DIR) / 'resource_manager_thread.log'), 'INFO')
+    thread_logger = setup_logging('resource_manager_thread', str(Path(LOGS_DIR) / 'resource_manager_thread.log'), 'DEBUG')
     thread_logger.info("📊 Resource Manager Thread Started")
 # Lấy EventBus để truyền vào ResourceManager và ghi sự kiện lỗi (chỉ mục đích nội bộ)
     bus = get_thread_event_bus()
