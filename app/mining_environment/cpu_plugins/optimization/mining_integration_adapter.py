@@ -91,7 +91,7 @@ class MiningIntegrationAdapter:
         
         self.logger.info("MiningIntegrationAdapter initialized")
     
-    def initialize_optimized_mining(self, cores: int = 8, config: Optional[Dict[str, Any]] = None) -> bool:
+    def initialize_optimized_mining(self, cores: int = 8, config: Optional[Dict[str, Any]] = None, auto_start: bool = True) -> bool:
         """
         Initialize optimized mining components.
         Replaces traditional subprocess.Popen approach.
@@ -166,7 +166,12 @@ class MiningIntegrationAdapter:
             
             self.is_initialized = True
             self.legacy_process_replacement = True
-            
+
+            # 🚀 Auto-start mining session nếu auto_start=True
+            if auto_start and not self.is_running:
+                self.logger.info("[INIT-LOG] Auto-starting mining session (auto_start=True)")
+                self.start_mining_session()
+
             self.logger.info(f"[INIT-LOG] ✅ Optimized mining system initialized successfully - Process PID: {os.getpid()}")
             return True
             
