@@ -1089,22 +1089,24 @@ class ResourceManager(IResourceManager):
                             else:
                                 self.logger.debug(f"♻️ [Worker] Cache hit for strategy: {strat}_{process_type}")
 
-                            # ✅ ENHANCED STRATEGY APPLICATION: Apply each strategy with return value validation
-                            if s and hasattr(s, 'apply'):
-                                # ✅ NON-BLOCKING apply with timeout using ThreadPoolExecutor
+                            # ✅ ENHANCED STRATEGY APPLICATION: delegate to ResourceCoordinator if plugin system required
+                            from mining_environment.scripts.resource_control import ResourceCoordinator
+
+                            apply_success = False  # default
+                            if s:
                                 try:
-                                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                                        future = executor.submit(s.apply, p)
-                                        apply_success = future.result(timeout=5)  # 5-second timeout
-                                except concurrent.futures.TimeoutError:
-                                    self.logger.warning(f"⏰ [Strategy] {strat} timeout for PID={pid}")
+                                    if getattr(s, "requires_plugin_system", False):
+                                        # Dùng ResourceCoordinator để áp dụng (bao gồm plugin delegation)
+                                        rc = ResourceCoordinator(self.config, self.logger)
+                                        strategy_key = getattr(s, "strategy_type", strat)
+                                        apply_success = rc.apply_strategy(strategy_key, p)
+                                    else:
+                                        # Direct apply như cũ
+                                        if hasattr(s, "apply"):
+                                            apply_success = s.apply(p)
+                                except Exception as _coord_err:
+                                    self.logger.error(f"❌ Delegation error for strategy {strat}: {_coord_err}")
                                     apply_success = False
-                                if apply_success:
-                                    strategy_results['applied'].append(strat)
-                                    self.logger.info(f"✅ [Strategy] {strat} applied successfully for PID={pid}")
-                                else:
-                                    strategy_results['failed'].append(strat)
-                                    self.logger.warning(f"❌ [Strategy] {strat} application failed for PID={pid} (returned False)")
                             else:
                                 strategy_results['failed'].append(strat)
                                 self.logger.warning(f"❌ [Strategy] {strat} not applicable for PID={pid}")
