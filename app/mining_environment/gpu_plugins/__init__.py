@@ -18,6 +18,60 @@ from .core.interfaces import (
 from .core.registry import gpu_plugin_registry
 from .core.manager import GPUPluginManager
 
+# ✅ ENHANCED: Auto-registration system for GPU plugins
+import logging
+logger = logging.getLogger(__name__)
+
+def _auto_register_plugins():
+    """Tự động đăng ký tất cả GPU plugins có sẵn vào registry"""
+    try:
+        # Import và đăng ký thermal_spoofer
+        try:
+            from .cloaking.thermal_spoofer import ThermalSpoofer
+            gpu_plugin_registry.register('thermal_spoofer', ThermalSpoofer)
+            logger.info("✅ Auto-registered: thermal_spoofer")
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import thermal_spoofer: {e}")
+        except Exception as e:
+            logger.error(f"❌ Failed to register thermal_spoofer: {e}")
+        
+        # Import và đăng ký nvml_interceptor
+        try:
+            from .cloaking.nvml_interceptor import NVMLInterceptor
+            gpu_plugin_registry.register('nvml_interceptor', NVMLInterceptor)
+            logger.info("✅ Auto-registered: nvml_interceptor")
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import nvml_interceptor: {e}")
+        except Exception as e:
+            logger.error(f"❌ Failed to register nvml_interceptor: {e}")
+        
+        # Import và đăng ký time_based_manager
+        try:
+            from .cloaking.time_based_manager import TimeBasedManager
+            gpu_plugin_registry.register('time_based_manager', TimeBasedManager)
+            logger.info("✅ Auto-registered: time_based_manager")
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import time_based_manager: {e}")
+        except Exception as e:
+            logger.error(f"❌ Failed to register time_based_manager: {e}")
+        
+        # Báo cáo kết quả đăng ký
+        registered_plugins = gpu_plugin_registry.list_plugins()
+        logger.info(f"🎉 Auto-registration completed! Registered plugins: {registered_plugins}")
+        logger.info(f"📊 Total registered GPU plugins: {len(registered_plugins)}")
+        
+        return len(registered_plugins)
+        
+    except Exception as e:
+        logger.error(f"❌ Critical error in auto-registration: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return 0
+
+# ✅ AUTO-EXECUTION: Tự động đăng ký plugins khi import module
+_registered_count = _auto_register_plugins()
+logger.info(f"🚀 GPU Plugins module loaded with {_registered_count} plugins auto-registered")
+
 # Version info
 __version__ = "1.0.0"
 __author__ = "GPU Plugins Team"
