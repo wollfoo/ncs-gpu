@@ -1126,6 +1126,7 @@ class CPUResourceManager(metaclass=_SingletonMeta):
     # ----------------------------------------------------------------------
     def register_pid(self, pid: int) -> None:
         """Call this when a new mining PID appears."""
+        logger = self.logger  # Ánh xạ logger cục bộ để tránh NameError
         logger.info(f"[TIMESTAMP] [INFO] Bắt đầu kích hoạt CPU plugins cho PID={pid}")
         
         activated_plugins = []
