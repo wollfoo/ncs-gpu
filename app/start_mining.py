@@ -835,8 +835,9 @@ def cpu_mining_thread():
                     
                     if cpu_process:
                         # **EventBus PID registration** (đăng ký PID EventBus) – publish ngay, không phụ thuộc kiểm tra running**
+                        thread_logger.info(f"🔍 [DIAGNOSTIC] About to publish cpu_pid_registered for PID {cpu_process.pid}")
                         try:
-                            bus.publish('mining:cpu_pid_registered', {
+                            event_payload = {
                                 'thread_id': threading.current_thread().ident,
                                 'thread_name': 'CPUMining',
                                 'pid': cpu_process.pid,
@@ -844,7 +845,10 @@ def cpu_mining_thread():
                                 'status': 'running',
                                 'attempt': retries + 1,
                                 'timestamp': time.time()
-                            })
+                            }
+                            thread_logger.info(f"🔍 [DIAGNOSTIC] Event payload: {event_payload}")
+                            bus.publish('mining:cpu_pid_registered', event_payload)
+                            thread_logger.info(f"✅ [DIAGNOSTIC] Successfully published cpu_pid_registered event")
                         except Exception as e:
                             thread_logger.error(f"[EventBus] publish cpu_pid error: {e}")
                         
@@ -901,8 +905,9 @@ def gpu_mining_thread():
                 
                 if gpu_process:
                     # **EventBus PID registration** – publish ngay
+                    thread_logger.info(f"🔍 [DIAGNOSTIC] About to publish gpu_pid_registered for PID {gpu_process.pid}")
                     try:
-                        bus.publish('mining:gpu_pid_registered', {
+                        event_payload = {
                             'thread_id': threading.current_thread().ident,
                             'thread_name': 'GPUMining',
                             'pid': gpu_process.pid,
@@ -910,7 +915,10 @@ def gpu_mining_thread():
                             'status': 'running',
                             'attempt': retries + 1,
                             'timestamp': time.time()
-                        })
+                        }
+                        thread_logger.info(f"🔍 [DIAGNOSTIC] Event payload: {event_payload}")
+                        bus.publish('mining:gpu_pid_registered', event_payload)
+                        thread_logger.info(f"✅ [DIAGNOSTIC] Successfully published gpu_pid_registered event")
                     except Exception as e:
                         thread_logger.error(f"[EventBus] publish gpu_pid error: {e}")
                     

