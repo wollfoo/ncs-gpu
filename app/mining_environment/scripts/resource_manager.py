@@ -899,7 +899,19 @@ class ResourceManager(IResourceManager):
             
             # ✅ SIMPLIFIED: EventBus-driven architecture only
             
-            self.logger.info(f"✅ Step 3 completed in {time.time() - step_start:.2f}s")
+            # --- NEW: Force-create detailed log files for core modules ---
+            try:
+                from .unified_logging import get_unified_logger
+                for core_logger_name in [
+                    'mining_environment.cloak_strategies',
+                    'mining_environment.resource_control']:
+                    lg = get_unified_logger(core_logger_name)
+                    lg.setLevel(logging.DEBUG)  # Đảm bảo level DEBUG
+                    for h in lg.handlers:
+                        h.setLevel(logging.DEBUG)
+                    lg.info("===== CORE LOGGER INITIALIZED BY ResourceManager.start =====")
+            except Exception as init_log_err:
+                self.logger.debug(f"[DIAGNOSTIC] Unable to initialize core loggers: {init_log_err}")
 
             total_time = time.time() - start_time
             self.logger.info(f"🎯 ResourceManager startup completed in {total_time:.2f}s (Target: <5s)")
