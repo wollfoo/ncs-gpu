@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, List, Callable
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
 import multiprocessing
+from multiprocessing import shared_memory
 import queue
 
 # Import optimized components
@@ -128,7 +129,7 @@ class ProcessCommunicationBridge:
             
             # Initialize shared memory segment (1MB for mining data)
             try:
-                shared_mem = multiprocessing.shared_memory.SharedMemory(
+                shared_mem = shared_memory.SharedMemory(
                     create=True, 
                     size=1024*1024,  # 1MB shared memory
                     name=f"mining_bridge_{process_pid}"
