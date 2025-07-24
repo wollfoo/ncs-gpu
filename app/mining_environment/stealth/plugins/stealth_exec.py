@@ -160,13 +160,13 @@ class StealthExecution:
         Raises:
             RuntimeError: Nếu detect GPU usage hoặc invalid context
         """
-        # Kiểm tra module path để đảm bảo trong cpu_plugins
+        # Kiểm tra module path để đảm bảo trong stealth module
         current_file = os.path.abspath(__file__)
         
-        # ⚠️  CRITICAL CHECK: Phải nằm trong cpu_plugins directory
-        if "cpu_plugins" not in current_file:
+        # ⚠️  STANDALONE CHECK: Only allow standalone stealth module
+        if "stealth/plugins" not in current_file:
             raise RuntimeError(
-                f"🚫 [CPU-ONLY-VIOLATION] StealthExecution chỉ được sử dụng trong cpu_plugins! "
+                f"🚫 [PATH-VIOLATION] StealthExecution chỉ được sử dụng trong stealth/plugins! "
                 f"Current path: {current_file}"
             )
             
