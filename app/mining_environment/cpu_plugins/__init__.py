@@ -17,8 +17,8 @@ from .core import (
 # Xuất các plugin tối ưu hóa
 from .optimization import CpuThrottlePlugin
 
-# Xuất các plugin che giấu
-from .cloaking import StealthExecutionPlugin
+# Stealth plugins moved to mining_environment.stealth module
+# from .cloaking import StealthExecutionPlugin  # REMOVED
 
 # Xuất các tiện ích
 from .utils import (
@@ -45,7 +45,7 @@ __all__ = [
     
     # Plugins
     'CpuThrottlePlugin',
-    'StealthExecutionPlugin',
+    # 'StealthExecutionPlugin',  # REMOVED - use mining_environment.stealth
     
     # Utils
     'HardwareDetector',
