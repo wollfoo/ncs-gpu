@@ -83,9 +83,9 @@ def start_worker():
     if _WORKER_STARTED.is_set():
         return
     _WORKER_STARTED.set()
-        logger.debug("Starting PIDLoggerWorker thread")
+    logger.debug("Starting PIDLoggerWorker thread")
     threading.Thread(target=_writer_loop, daemon=True, name="PIDLoggerWorker").start()
 
 def log_pid(pid: int, is_cpu: bool):
-        logger.debug(f"Logging PID {pid} (is_cpu={is_cpu})")
+    logger.debug(f"Logging PID {pid} (is_cpu={is_cpu})")
     enqueue_pid(pid, "cpu" if is_cpu else "gpu")
