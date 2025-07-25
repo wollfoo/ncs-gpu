@@ -53,6 +53,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ------------------  (2)  Cài đặt hệ thống cơ bản ------------------------
 RUN set -eux; \
+    # Vô hiệu hoá tạm kho CUDA tránh lỗi mirror sync (File has unexpected size)
+    rm -f /etc/apt/sources.list.d/cuda*.list || true ; \
     apt-get update --allow-insecure-repositories; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
     apt-get update; \
