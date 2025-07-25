@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04 AS base    
+FROM nvcr.io/nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04
 
 
 # =============================================================================
@@ -54,16 +54,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ------------------  (2)  Cài đặt hệ thống cơ bản ------------------------
 RUN set -eux; \
-    # Đảm bảo repositories Ubuntu chính (main, universe) sẵn sàng trước khi cài đặt các gói phụ thuộc như erlang-*
-    # Nếu sources.list bị tối giản trong image CUDA, thêm thủ công kho chuẩn Ubuntu
-    # Thêm kho universe nếu chưa tồn tại (ở base image CUDA thường bị tối giản)
-    grep -E '^[^#].*universe' /etc/apt/sources.list || \
-        (echo "deb http://archive.ubuntu.com/ubuntu $(lsb_release -cs) universe" >> /etc/apt/sources.list && \
-         echo "deb http://archive.ubuntu.com/ubuntu $(lsb_release -cs)-updates universe" >> /etc/apt/sources.list); \
-    sed -i '/^#.*deb.*universe/s/^# //g' /etc/apt/sources.list; \
-    apt-get update --allow-insecure-repositories; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
-    apt-get update --allow-insecure-repositories || apt-get update; \
+    apt-get update --allow-releaseinfo-change || true; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg || true; \
+    apt-get update --allow-releaseinfo-change || true; \
     apt-get install -y --no-install-recommends \
         apt-utils sudo nano wget file python3 python3-pip curl git \
         libssl-dev libeigen3-dev libnuma-dev stunnel4 \
