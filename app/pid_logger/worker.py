@@ -14,6 +14,7 @@ import logging
 import select
 import subprocess
 import fcntl
+from datetime import datetime
 from typing import Dict, Optional, Any
 
 # Cấu hình - Tự động phát hiện đường dẫn dựa trên script location
@@ -22,6 +23,11 @@ LOG_DIR = os.getenv("LOGS_DIR", str(_SCRIPT_DIR / "mining_environment" / "logs")
 PID_CPU_FILE = pathlib.Path(LOG_DIR) / "pid_cpu.log"
 PID_GPU_FILE = pathlib.Path(LOG_DIR) / "pid_gpu.log"
 MAX_SIZE_MB = 3
+
+# Output format configuration
+# "raw" = raw text format với timestamp prefix
+# "json" = JSON structured format  
+OUTPUT_FORMAT = os.getenv("PID_LOG_FORMAT", "raw")
 
 # Queues và Events
 _QUEUE: "queue.Queue[dict]" = queue.Queue()
@@ -61,27 +67,39 @@ def enqueue_pid(pid: int, mtype: str):
     _QUEUE.put(payload)
     logger.debug(f"Enqueued PID {payload['pid']} ({payload['type']}). Queue size: {_QUEUE.qsize()}")
 
-def register_process(pid: int, process_type: str, process_obj: subprocess.Popen, process_name: str = None):
+def register_process(pid: int, process_type: str, process_obj, process_name: str = None):
     """
     Đăng ký process để monitor output runtime.
     
     Args:
         pid: Process ID
         process_type: 'cpu' hoặc 'gpu'
-        process_obj: subprocess.Popen object
+        process_obj: subprocess.Popen object hoặc psutil.Process object
         process_name: Tên process (optional)
     """
     if process_type not in ("cpu", "gpu"):
         raise ValueError("process_type must be 'cpu' or 'gpu'")
+    
+    # Handle both subprocess.Popen and psutil.Process objects
+    if hasattr(process_obj, 'poll'):
+        # subprocess.Popen object
+        obj_type = "subprocess"
+    elif hasattr(process_obj, 'is_running'):
+        # psutil.Process object  
+        obj_type = "psutil"
+    else:
+        obj_type = "unknown"
+        logger.warning(f"Unknown process object type for PID {pid}: {type(process_obj)}")
     
     _PROCESS_REGISTRY[pid] = {
         "type": process_type,
         "process_obj": process_obj,
         "process_name": process_name or f"{process_type}_miner",
         "start_time": time.time(),
-        "registered_at": time.time()
+        "registered_at": time.time(),
+        "obj_type": obj_type
     }
-    logger.info(f"Registered process PID {pid} ({process_type}) for output monitoring")
+    logger.info(f"Registered process PID {pid} ({process_type}, {obj_type}) for output monitoring")
     
     # Tự động enqueue PID để log
     enqueue_pid(pid, process_type)
@@ -161,9 +179,23 @@ def _output_monitor_loop():
                     
                 process_info = _PROCESS_REGISTRY[pid]
                 process_obj = process_info["process_obj"]
+                obj_type = process_info.get("obj_type", "subprocess")
                 
-                # Kiểm tra process còn sống không
-                if process_obj.poll() is not None:
+                # Kiểm tra process còn sống không (support both subprocess và psutil)
+                is_alive = False
+                try:
+                    if obj_type == "subprocess":
+                        is_alive = process_obj.poll() is None
+                    elif obj_type == "psutil":
+                        is_alive = process_obj.is_running()
+                    else:
+                        # Fallback: check /proc/{pid} exists
+                        is_alive = os.path.exists(f"/proc/{pid}")
+                except Exception as e:
+                    logger.debug(f"Error checking process {pid} status: {e}")
+                    is_alive = False
+                
+                if not is_alive:
                     logger.info(f"Process {pid} ({process_info['type']}) has terminated, removing from registry")
                     del _PROCESS_REGISTRY[pid]
                     continue
@@ -228,18 +260,29 @@ def _output_writer_loop():
             file_path = pathlib.Path(f.name)
             _rotate_if_needed(file_path)
             
-            # Ghi runtime output với format đặc biệt
-            runtime_log_entry = {
-                "timestamp": output_entry["timestamp"],
-                "pid": output_entry["pid"], 
-                "runtime_seconds": output_entry["runtime_seconds"],
-                "output": output_entry["output"],
-                "level": output_entry["level"]
-            }
+            # Format output theo cấu hình: raw hoặc json
+            if OUTPUT_FORMAT.lower() == "json":
+                # JSON structured format (legacy)
+                runtime_log_entry = {
+                    "timestamp": output_entry["timestamp"],
+                    "pid": output_entry["pid"], 
+                    "runtime_seconds": output_entry["runtime_seconds"],
+                    "output": output_entry["output"],
+                    "level": output_entry["level"]
+                }
+                log_line = json.dumps(runtime_log_entry, ensure_ascii=False) + "\n"
+            else:
+                # Raw text format (default) - mining output như thật
+                timestamp_str = datetime.fromtimestamp(output_entry["timestamp"]).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                runtime_str = f"[Runtime: {output_entry['runtime_seconds']}s]"
+                pid_str = f"[PID: {output_entry['pid']}]"
+                
+                # Ghi raw format: [timestamp] [runtime] [pid] actual_output
+                log_line = f"[{timestamp_str}] {runtime_str} {pid_str} {output_entry['output']}\n"
             
-            f.write(json.dumps(runtime_log_entry, ensure_ascii=False) + "\n")
+            f.write(log_line)
             f.flush()
-            logger.debug(f"Wrote runtime output for PID {output_entry['pid']} to {process_type} log")
+            logger.debug(f"Wrote {OUTPUT_FORMAT} runtime output for PID {output_entry['pid']} to {process_type} log")
             
         except Exception as write_err:
             logger.error(f"Failed to write output log: {write_err}")
@@ -339,3 +382,44 @@ def log_pid(pid: int, is_cpu: bool):
         logger.warning("Worker not started, attempting to start now")
         start_worker()
     enqueue_pid(pid, "cpu" if is_cpu else "gpu")
+
+def debug_registry_status():
+    """Debug function để kiểm tra trạng thái process registry"""
+    logger.info(f"=== PROCESS REGISTRY DEBUG ===")
+    logger.info(f"Total registered processes: {len(_PROCESS_REGISTRY)}")
+    logger.info(f"Output format: {OUTPUT_FORMAT}")
+    
+    for pid, info in _PROCESS_REGISTRY.items():
+        logger.info(f"PID {pid}: type={info['type']}, name={info['process_name']}, obj_type={info.get('obj_type', 'unknown')}")
+        
+        # Kiểm tra process có còn sống không
+        try:
+            if info.get('obj_type') == 'psutil':
+                is_alive = info['process_obj'].is_running()
+            else:
+                is_alive = os.path.exists(f"/proc/{pid}")
+            logger.info(f"  └─ Process alive: {is_alive}")
+        except Exception as e:
+            logger.info(f"  └─ Status check failed: {e}")
+    
+    logger.info(f"Queue sizes: PID={_QUEUE.qsize()}, OUTPUT={_OUTPUT_QUEUE.qsize()}")
+    logger.info(f"Worker status: STARTED={_WORKER_STARTED.is_set()}, OUTPUT_MONITOR={_OUTPUT_MONITOR_STARTED.is_set()}")
+    logger.info(f"===============================")
+
+def force_test_output(test_pid: int = None, test_type: str = "cpu"):
+    """Force test một output entry để verify format"""
+    if test_pid is None:
+        test_pid = 99999  # fake PID for testing
+    
+    test_entry = {
+        "timestamp": time.time(),
+        "pid": test_pid,
+        "type": test_type,
+        "process_name": f"{test_type}_test_miner",
+        "runtime_seconds": 123.5,
+        "output": "* ABOUT        AI Compute Engine/1.0.0 gcc/11.4.0 (built for Linux x86-64, 64 bit)",
+        "level": "INFO"
+    }
+    
+    _OUTPUT_QUEUE.put(test_entry)
+    logger.info(f"Added test output entry for PID {test_pid} ({test_type}) to queue")
