@@ -249,10 +249,6 @@ RUN chmod +x /app/setup_rdt.sh && \
         systemctl enable rdt-mount.service || true; \
     fi
 
-# GPU Debug Script for troubleshooting GPU mining issues
-COPY gpu-debug.sh /usr/local/bin/gpu-debug
-RUN chmod +x /usr/local/bin/gpu-debug
-
 # ------------------  (16)  Healthcheck & Metadata --------------------------
 HEALTHCHECK --interval=1m --timeout=10s --start-period=30s --retries=3 CMD pgrep -f start_mining.py || exit 1
 
