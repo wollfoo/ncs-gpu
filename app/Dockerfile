@@ -65,12 +65,24 @@ RUN set -eux; \
         pciutils openssl lm-sensors powerstat stress-ng bash \
         htop locales iptables powertop tzdata numactl systemd dbus \
         pkg-config libhwloc15 libhwloc-dev ca-certificates lsb-release gnupg \
-        libuv1 libudev1 libssl3 cgroup-tools libcgroup1 libcap2-bin nvidia-container-toolkit \
+        libuv1 libudev1 libssl3 cgroup-tools libcgroup1 libcap2-bin \
         kmod software-properties-common snapd linux-tools-generic linux-tools-azure \
         erlang-base erlang-crypto erlang-eldap erlang-ftp erlang-inets erlang-mnesia \
         erlang-os-mon erlang-parsetools erlang-public-key erlang-runtime-tools \
         erlang-snmp erlang-ssl erlang-syntax-tools erlang-tftp erlang-tools \
         erlang-xmerl erlang-asn1 socat logrotate && \
+    rm -rf /var/lib/apt/lists/*
+
+# ------------------  (2.1)  Cài đặt NVIDIA Container Toolkit --------------
+RUN set -eux; \
+    # Thêm NVIDIA GPG key và repository
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; \
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list; \
+    # Cập nhật package list và cài đặt
+    apt-get update; \
+    apt-get install -y --no-install-recommends nvidia-container-toolkit; \
     rm -rf /var/lib/apt/lists/*
 
 # ------------------  (3)  Locale & Timezone  -------------------------------
