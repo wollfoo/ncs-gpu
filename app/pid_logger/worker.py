@@ -12,8 +12,9 @@ import threading
 import time
 import logging
 
-# Cấu hình
-LOG_DIR = os.getenv("LOGS_DIR", "/app/mining_environment/logs")
+# Cấu hình - Tự động phát hiện đường dẫn dựa trên script location
+_SCRIPT_DIR = pathlib.Path(__file__).parent.parent
+LOG_DIR = os.getenv("LOGS_DIR", str(_SCRIPT_DIR / "mining_environment" / "logs"))
 PID_CPU_FILE = pathlib.Path(LOG_DIR) / "pid_cpu.log"
 PID_GPU_FILE = pathlib.Path(LOG_DIR) / "pid_gpu.log"
 MAX_SIZE_MB = 3
@@ -49,30 +50,46 @@ def enqueue_pid(pid: int, mtype: str):
     _QUEUE.put(payload)
     logger.debug(f"Enqueued PID {payload['pid']} ({payload['type']}). Queue size: {_QUEUE.qsize()}")
 
+def _writer_loop_wrapper():
+    """Wrapper với exception handling cho writer thread"""
+    try:
+        _writer_loop()
+    except Exception as exc:
+        logger.error(f"PID logger worker thread crashed: {exc}")
+        # Reset worker started flag để có thể restart
+        _WORKER_STARTED.clear()
+
 def _writer_loop():
     logger.info("PID logger worker thread started")
     _ensure_log_dir()
-    logger.debug(f"Log directory verified: {LOG_DIR}")
+    logger.info(f"Log directory verified: {LOG_DIR}")
     files = {
         "cpu": PID_CPU_FILE.open("a", buffering=1, encoding="utf-8"),
         "gpu": PID_GPU_FILE.open("a", buffering=1, encoding="utf-8"),
     }
+    logger.info(f"Log files opened - CPU: {PID_CPU_FILE}, GPU: {PID_GPU_FILE}")
+    
     while not _STOP_EVENT.is_set():
         try:
             item = _QUEUE.get(timeout=1)
         except queue.Empty:
             continue
-        logger.debug(f"Dequeued item: {item}")
+        logger.info(f"Processing PID log entry: {item}")
         f = files[item["type"]]
         _rotate_if_needed(f.name if isinstance(f,str) else pathlib.Path(f.name))
         try:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        except Exception:
+            f.flush()  # Đảm bảo ghi ngay lập tức
+            logger.info(f"Successfully wrote PID {item['pid']} to {item['type']} log")
+        except Exception as write_exc:
+            logger.error(f"Failed to write PID log: {write_exc}")
             try:
                 f.close()
             except Exception:
                 pass
             files[item["type"]] = (PID_CPU_FILE if item["type"]=="cpu" else PID_GPU_FILE).open("a", buffering=1, encoding="utf-8")
+    
+    logger.info("PID logger worker thread shutting down")
     for f in files.values():
         try:
             f.close()
@@ -82,10 +99,23 @@ def _writer_loop():
 def start_worker():
     if _WORKER_STARTED.is_set():
         return
+    logger.info("Starting PIDLoggerWorker thread")
+    thread = threading.Thread(target=_writer_loop_wrapper, daemon=True, name="PIDLoggerWorker")
+    thread.start()
     _WORKER_STARTED.set()
-    logger.debug("Starting PIDLoggerWorker thread")
-    threading.Thread(target=_writer_loop, daemon=True, name="PIDLoggerWorker").start()
+    logger.info("PIDLoggerWorker thread started successfully")
+
+def force_restart_worker():
+    """Buộc khởi động lại worker (chỉ dùng khi debug)"""
+    global _WORKER_STARTED
+    _WORKER_STARTED.clear()
+    logger.info("Force restarting PID Logger worker")
+    start_worker()
 
 def log_pid(pid: int, is_cpu: bool):
-    logger.debug(f"Logging PID {pid} (is_cpu={is_cpu})")
+    logger.info(f"Logging PID {pid} (is_cpu={is_cpu})")
+    # Đảm bảo worker đang chạy trước khi enqueue
+    if not _WORKER_STARTED.is_set():
+        logger.warning("Worker not started, attempting to start now")
+        start_worker()
     enqueue_pid(pid, "cpu" if is_cpu else "gpu")
