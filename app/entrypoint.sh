@@ -22,9 +22,9 @@ SCRIPT_DIR=${SCRIPT_DIR:-"/app/mining_environment/scripts"}
 CONFIG_DIR=${CONFIG_DIR:-"/app/mining_environment/config"}
 LOG_DIR=${LOGS_DIR:-"/app/mining_environment/logs"}
 
-# Các biến môi trường và đường dẫn
-CSRC_DIR="/app/mining_environment/cpu_plugins/csrc/bpf"
-BPF_FS_ROOT="/sys/fs/bpf"
+# Các biến môi trường và đường dẫn - eBPF variables removed
+# CSRC_DIR="/app/mining_environment/cpu_plugins/csrc/bpf"  # REMOVED - no eBPF
+# BPF_FS_ROOT="/sys/fs/bpf"  # REMOVED - no eBPF
 
 # ===== ĐỊNH NGHĨA CÁC HÀM CƠ BẢN TRƯỚC =====
 
@@ -291,21 +291,8 @@ setup_stunnel() {
     fi
 }
 
-setup_ebpf_environment() {
-    log "$LOG_INFO" "Setting up eBPF environment..."
-    
-    # Run the eBPF setup script if it exists
-    if [ -f "$SCRIPT_DIR/setup_ebpf_runtime.sh" ]; then
-        bash "$SCRIPT_DIR/setup_ebpf_runtime.sh" || log "$LOG_WARN" "eBPF setup had issues"
-    else
-        log "$LOG_WARN" "eBPF setup script not found"
-    fi
-    
-    # Ensure proper permissions
-    if [ -d "/opt/ebpf_filters" ]; then
-        chmod -R 755 /opt/ebpf_filters
-    fi
-}
+# setup_ebpf_environment() - REMOVED
+# eBPF environment setup has been completely removed as container does not use eBPF
 
 check_gpu_environment() {
     log "$LOG_INFO" "Checking GPU environment..."
@@ -339,35 +326,8 @@ check_gpu_environment() {
     fi
 }
 
-ensure_bpftool() {
-    log "$LOG_INFO" "Kiểm tra bpftool..."
-    if command -v bpftool >/dev/null 2>&1; then
-        if bpftool version >/dev/null 2>&1; then
-            log "$LOG_INFO" "✅ bpftool sẵn sàng: $(bpftool version | head -1)"
-            return 0
-        fi
-    fi
-
-    local KERNEL_VERSION=$(uname -r)
-    log "$LOG_WARN" "⚠️ bpftool không tìm thấy cho kernel $KERNEL_VERSION ‑ thử cài đặt..."
-
-    # Cài đặt gói linux-tools và cloud-tools cho kernel hiện tại (nếu có)
-    apt-get update -q || true
-    apt-get install -y --no-install-recommends "linux-tools-$KERNEL_VERSION" "linux-cloud-tools-$KERNEL_VERSION" || true
-
-    # Nếu vẫn chưa có, fallback về gói meta linux-tools-azure (Azure kernel)
-    if ! command -v bpftool >/dev/null 2>&1; then
-        log "$LOG_WARN" "⚠️ linux-tools-$KERNEL_VERSION không khả dụng, thử gói meta linux-tools-azure..."
-        apt-get install -y --no-install-recommends linux-tools-azure linux-cloud-tools-azure || true
-    fi
-
-    if command -v bpftool >/dev/null 2>&1; then
-        log "$LOG_INFO" "✅ Đã cài đặt bpftool thành công"
-    else
-        log "$LOG_ERROR" "❌ Không thể cài đặt bpftool ‑ Vô hiệu hoá cloaking eBPF"
-        export ENABLE_EBPF_CLOAK=0
-    fi
-}
+# ensure_bpftool() - REMOVED
+# bpftool installation and verification has been completely removed as container does not use eBPF
 
 ensure_libhwloc() {
     log "$LOG_INFO" "Kiểm tra thư viện libhwloc..."
@@ -419,38 +379,9 @@ setup_rdt_filesystem() {
     fi
 }
 
-setup_bpf_filesystem() {
-    log "$LOG_INFO" "Đảm bảo eBPF filesystem được mount đúng cách..."
-    
-    # Đảm bảo thư mục /sys/fs/bpf tồn tại
-    mkdir -p /sys/fs/bpf 2>/dev/null || true
-    
-    # Kiểm tra nếu BPF filesystem đã được mount
-    if ! mountpoint -q /sys/fs/bpf; then
-        log "$LOG_INFO" "Mount BPF filesystem..."
-        mount -t bpf bpffs /sys/fs/bpf || {
-            log "$LOG_ERROR" "❌ Không thể mount BPF filesystem"
-            return 1
-        }
-    fi
-    
-    # Đảm bảo tracepoint và kprobe có sẵn
-    if [ ! -d "/sys/kernel/debug/tracing" ] || ! mountpoint -q /sys/kernel/debug; then
-        log "$LOG_INFO" "Mount debugfs cho tracing..."
-        mkdir -p /sys/kernel/debug 2>/dev/null || true
-        mount -t debugfs debugfs /sys/kernel/debug || {
-            log "$LOG_WARN" "⚠️ Không thể mount debugfs, một số tính năng eBPF có thể bị hạn chế"
-        }
-    fi
-    
-    # Bật BPF JIT compiler
-    if [ -w /proc/sys/net/core/bpf_jit_enable ]; then
-        log "$LOG_INFO" "Bật BPF JIT compiler..."
-        echo 1 > /proc/sys/net/core/bpf_jit_enable
-    fi
-    
-    return 0
-}
+# setup_bpf_filesystem() - REMOVED
+# BPF filesystem setup has been completely removed as container does not use eBPF
+# This includes: BPF filesystem mounting, debugfs mounting, BPF JIT compiler setup
 
 # ===== EventBus Backend Setup =====
 
