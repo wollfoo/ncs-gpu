@@ -49,11 +49,6 @@ from mining_environment.stealth.core.stealth_activation_manager import initializ
 # Enhanced PID Logger với Real Process Output Monitor
 from pid_logger import start_worker, log_pid, register_process
 
-# **Import** (nhập khẩu) **Mining Performance Logger** (trình ghi nhật ký hiệu suất khai thác – theo dõi và ghi lại các chỉ số)
-
-# ❌ REMOVED: create_clean_gpu_environment() function
-# This function is now redundant since stealth_inference_cuda.py
-# handles environment cleanup internally with more precise control
 
 from mining_environment.logging.mining_performance_logger import (
     register_mining_process,
