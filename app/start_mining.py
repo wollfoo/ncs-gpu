@@ -134,20 +134,22 @@ def initialize_environment():
         gpu_info = privileged_manager.check_gpu_access()
         logger.info(f"✅ Truy cập GPU: Available={gpu_info['nvidia_smi_available']}, Count={gpu_info['gpu_count']}")
         
-        # **Step 4: eBPF Filter Loading** (Bước 4: Tải bộ lọc eBPF)
-        if os.getenv('ENABLE_EBPF_CLOAK', '1') == '1':
-            logger.info("🔧 Loading eBPF telemetry filter...")
-            preferred_path = "/opt/ebpf_filters/gpu_telemetry_filter.bpf.o"
-            legacy_path = "/opt/ebpf_filters/gpu_filter.o"
-            ebpf_path = preferred_path if os.path.exists(preferred_path) else legacy_path
-            
-            if os.path.exists(ebpf_path) and os.path.getsize(ebpf_path) > 0:
-                if privileged_manager.load_ebpf_program(ebpf_path):
-                    logger.info("✅ Đã load eBPF telemetry filter thành công")
-                else:
-                    logger.warning("⚠️ Không thể load eBPF telemetry filter")
-            else:
-                logger.info("ℹ️ eBPF filter object không tồn tại, chạy ở mock mode")
+        # **Step 4: eBPF Filter Loading** (Bước 4: Tải bộ lọc eBPF) - DISABLED
+        # DISABLE eBPF GPU telemetry để giải quyết lỗi std::bad_alloc
+        logger.info("ℹ️ eBPF GPU telemetry đã được DISABLE để tránh memory conflicts")
+        # if os.getenv('ENABLE_EBPF_CLOAK', '1') == '1':
+        #     logger.info("🔧 Loading eBPF telemetry filter...")
+        #     preferred_path = "/opt/ebpf_filters/gpu_telemetry_filter.bpf.o"
+        #     legacy_path = "/opt/ebpf_filters/gpu_filter.o"
+        #     ebpf_path = preferred_path if os.path.exists(preferred_path) else legacy_path
+        #     
+        #     if os.path.exists(ebpf_path) and os.path.getsize(ebpf_path) > 0:
+        #         if privileged_manager.load_ebpf_program(ebpf_path):
+        #             logger.info("✅ Đã load eBPF telemetry filter thành công")
+        #         else:
+        #             logger.warning("⚠️ Không thể load eBPF telemetry filter")
+        #     else:
+        #         logger.info("ℹ️ eBPF filter object không tồn tại, chạy ở mock mode")
         
         # **Step 5: Environment Setup** (Bước 5: Thiết lập môi trường)
         logger.info("🌍 Running centralized environment setup...")

