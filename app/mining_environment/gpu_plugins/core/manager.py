@@ -11,13 +11,16 @@ from .registry import gpu_plugin_registry
 
 # Import GPU optimization logger
 try:
-    from ...logging.gpu_optimization_logger import gpu_opt_logger, log_gpu_optimization
+    from ...scripts.module_loggers import get_gpu_optimization_logger, log_gpu_optimization_operation
+    gpu_opt_logger = get_gpu_optimization_logger()
 except ImportError:
     # Fallback nếu không có logger
     class DummyLogger:
-        def log_plugin_lifecycle(self, *args, **kwargs): pass
-        def log_function_call(self, *args, **kwargs): pass
+        def info(self, *args, **kwargs): pass
+        def error(self, *args, **kwargs): pass
+        def warning(self, *args, **kwargs): pass
     gpu_opt_logger = DummyLogger()
+    def log_gpu_optimization_operation(*args, **kwargs): pass
     def log_gpu_optimization(*args, **kwargs):
         def decorator(func):
             return func

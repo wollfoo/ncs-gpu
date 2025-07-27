@@ -6,16 +6,16 @@ from ..core.interfaces import IGPUCloakService
 
 # Import GPU cloaking logger
 try:
-    from ...logging.gpu_cloaking_logger import gpu_cloak_logger, log_gpu_cloaking
+    from ...scripts.module_loggers import get_gpu_cloaking_logger, log_gpu_cloaking_operation
+    gpu_cloak_logger = get_gpu_cloaking_logger()
 except ImportError:
     # Fallback nếu không có logger
     class DummyLogger:
-        def log_thermal_spoofing(self, *args, **kwargs): pass
+        def info(self, *args, **kwargs): pass
+        def error(self, *args, **kwargs): pass
+        def warning(self, *args, **kwargs): pass
     gpu_cloak_logger = DummyLogger()
-    def log_gpu_cloaking(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
+    def log_gpu_cloaking_operation(*args, **kwargs): pass
 
 logger = logging.getLogger(__name__)
 
