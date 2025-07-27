@@ -131,8 +131,8 @@ def _read_process_output_via_proc(pid: int) -> Optional[str]:
         # Priority 1: Đọc từ wrapper output logs (stealth wrapper có thể ghi output riêng)
         wrapper_log_paths = []
         if process_type == "cpu":
+            # CPU stealth wrapper removed - only check general CPU logs
             wrapper_log_paths = [
-                f"{LOG_DIR}/stealth_ml_inference_{pid}.log",
                 f"{LOG_DIR}/ml_inference_{pid}.log", 
                 f"{LOG_DIR}/cpu_mining_output.log"
             ]

