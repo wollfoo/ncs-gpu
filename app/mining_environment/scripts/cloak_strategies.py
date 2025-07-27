@@ -178,38 +178,8 @@ class CloakStrategy(ABC):
         }
 
 ###############################################################################
-#               CPU STRATEGY: CpuCloakStrategy - REMOVED                     #
+#                              GPU STRATEGIES                                  #
 ###############################################################################
-
-# ✅ CPU CLOAKING STRATEGY REMOVED: All CPU cloaking functionality eliminated
-# Only GPU cloaking strategies remain active for crypto mining operations
-
-class CpuCloakStrategy(CloakStrategy):
-    """✅ CPU CLOAKING DISABLED: Stub class for compatibility only"""
-    
-    strategy_type = StrategyType.CPU
-    requires_plugin_system = False  # Disabled
-    is_primary_strategy = False      # Disabled
-    coordination_priority = 0        # Disabled
-    
-    def __init__(self, config: Dict[str, Any], logger: logging.Logger, resource_manager: Any = None):
-        """✅ CPU CLOAKING DISABLED: Minimal stub initialization"""
-        self.logger = logger
-        self.config = config
-        self.logger.info("⚠️ [CPU Cloaking] DISABLED - GPU-only mode active")
-        
-    def apply(self, process: Any) -> bool:
-        """✅ CPU CLOAKING DISABLED: Always returns False"""
-        self.logger.info(f"⚠️ [CPU Cloaking] Disabled for PID={process.pid} - GPU-only mode")
-        return False
-
-    def pre_apply_check(self, process: Any) -> bool:
-        """✅ CPU CLOAKING DISABLED: Always returns False"""
-        return False
-
-    def post_apply_verification(self, process: Any) -> bool:
-        """✅ CPU CLOAKING DISABLED: Always returns False"""
-        return False
 
 ###############################################################################
 #                 GPU STRATEGY: GpuCloakStrategy                              #
