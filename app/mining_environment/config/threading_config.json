@@ -1,22 +1,17 @@
 {
     "use_gpu": true,
     "processes": {
-        "CPU": "cpu-inference",
         "GPU": "inference-gpu"
     },
-    "cpu_rate_limit": 25,
     "gpu_rate_limit": 20,
     "cache_enabled": true,
     "enable_compression": true,
     "enable_encryption": true,
-    "cpu_bundle_size": 8,
     "gpu_bundle_size": 16,
     "bundle_interval": {
-        "CPU": 1.0,
         "GPU": 3.0
     },
     "max_net_packets": {
-        "CPU": 1000,
         "GPU": 3000
     }
 }
