@@ -15,8 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-# Thêm import cho InferenceConfigService
-from mining_environment.cpu_plugins.config.inference_config import get_inference_config
+# **CPU Plugin Config Import Removed** (đã xóa import config CPU plugin – loại bỏ malware configuration)
 
 try:
     import psutil

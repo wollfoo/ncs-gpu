@@ -22,20 +22,12 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import psutil
-# **Import** (nhập khẩu) **cloaking utilities** (tiện ích che giấu – ẩn danh hóa tiến trình) cho **ml-inference process stealth** (chế độ ẩn danh của tiến trình suy luận máy học)
-from mining_environment.cpu_plugins.cloaking_lib.utils import (
-    get_process_by_cmdline,
-    spoof_cmdline,
-    restore_cmdline,
-    create_stealth_subprocess,
-)
+# **CPU Plugin Import Removed** (đã xóa import plugin CPU – loại bỏ malware cloaking utilities)
 
 # **Import** (nhập khẩu) các **module** (mô-đun – thành phần chức năng) từ **library** (thư viện) mining_environment
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts.module_loggers import (
-    get_cpu_plugin_logger, 
     get_gpu_plugin_logger,
-    log_cpu_plugin_operation,
     log_gpu_plugin_operation
 )
 from mining_environment.scripts import setup_env
@@ -90,10 +82,8 @@ except Exception as _dbg_err:
     logger.warning(f'DEBUG booster init failed: {_dbg_err}')
 # ---------- END BOOSTER ----------
 
-# **Dedicated Module Loggers** (Logger mô-đun chuyên dụng)
-cpu_miner_logger = setup_logging('cpu_miner', str(Path(LOGS_DIR) / 'cpu_miner.log'), 'INFO')
+# **Dedicated Module Loggers** (Logger mô-đun chuyên dụng) - CPU loggers removed
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')
-cpu_plugin_logger = setup_logging('cpu_plugin', str(Path(LOGS_DIR) / 'cpu_plugin.log'), 'INFO')
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 
 stop_event = threading.Event()

