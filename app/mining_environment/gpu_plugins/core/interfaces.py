@@ -88,31 +88,9 @@ class IGPUCloakService(IGPUPlugin):
         """
         pass
 
-class IGPUTelemetryFilter(IGPUPlugin):
-    """Interface cho GPU telemetry filtering"""
-    
-    @abstractmethod
-    def start_filtering(self) -> bool:
-        """Bắt đầu lọc telemetry
-        
-        Returns:
-            bool: True nếu bắt đầu thành công
-        """
-        pass
-    
-    @abstractmethod
-    def stop_filtering(self) -> None:
-        """Dừng lọc telemetry"""
-        pass
-    
-    @abstractmethod
-    def update_filter_rules(self, rules: Dict[str, Any]) -> None:
-        """Cập nhật rules cho filter
-        
-        Args:
-            rules: Dictionary chứa các rules mới
-        """
-        pass
+# IGPUTelemetryFilter has been removed - telemetry functionality deprecated
+# class IGPUTelemetryFilter(IGPUPlugin):
+#     """Interface cho GPU telemetry filtering - DEPRECATED"""
 
 class IGPUHookManager(IGPUPlugin):
     """Interface cho GPU hook management"""

@@ -107,48 +107,13 @@ class PrivilegedOperationManager:
             
         return result
     
-    @retry_on_failure(max_retries=3, delay=1.0)
     def load_ebpf_program(self, bpf_obj_path: str) -> bool:
         """
-        Load eBPF program vào kernel
+        Load eBPF program - DEPRECATED/REMOVED
+        eBPF functionality has been removed from this application
         """
-        try:
-            # 1) Kiểm tra file object tồn tại
-            if not Path(bpf_obj_path).exists():
-                self.logger.warning(f"eBPF object not found: {bpf_obj_path}")
-                return False
-
-            # 2) Đảm bảo bpftool có trong PATH
-            if shutil.which("bpftool") is None:
-                self.logger.warning("bpftool không tìm thấy trong PATH – bỏ qua load eBPF (mock mode)")
-                return False
-
-            # 3) Đảm bảo bpffs đã được mount
-            if not os.path.ismount("/sys/fs/bpf"):
-                self.logger.debug("/sys/fs/bpf chưa được mount – thử mount bpffs")
-                mount_res = self._run_command(["mount", "-t", "bpf", "bpf", "/sys/fs/bpf"], check=False)
-                if mount_res.returncode != 0 and mount_res.stderr.strip():
-                    self.logger.warning(f"Không thể mount bpffs: {mount_res.stderr.strip()} – chạy mock mode")
-                    return False
-
-            # 4) Thực thi lệnh load; nếu path pin đã tồn tại thì coi như thành công
-            result = self._run_command([
-                "bpftool", "prog", "load", bpf_obj_path, "/sys/fs/bpf/gpu_filter"
-            ], check=False)
-
-            if result.returncode == 0:
-                return True
-
-            # Nếu lỗi do path đã tồn tại, vẫn coi là thành công (đã được load trước đó)
-            if "File exists" in (result.stderr or ""):
-                self.logger.info("eBPF filter đã được load từ trước – bỏ qua")
-                return True
-
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Failed to load eBPF program: {e}")
-            return False
+        self.logger.warning("eBPF functionality has been completely removed from this application")
+        return False
     
     def create_namespace_isolation(self, command: List[str]) -> subprocess.Popen:
         """

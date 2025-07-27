@@ -17,10 +17,6 @@ plugins:
     fake_memory_used: 100
     lib_path: /opt/hooks/libgpuhook.so
     
-  ebpf_filter:
-    enabled: true
-    mock_mode: auto
-    config_path: /app/mining_environment/gpu_plugins/ebpf/config/ebpf_config.json
 
 global:
   log_level: INFO

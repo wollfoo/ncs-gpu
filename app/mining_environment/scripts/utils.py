@@ -12,13 +12,10 @@ from typing import Any, Dict, Optional
 # ---------------------------------------------------------------------------
 # Helper ghi log JSON cho tính năng GPU
 # ---------------------------------------------------------------------------
-try:
-    # Import nội bộ cùng package mining_environment.scripts
-    from .gpu_feature_logger import log_gpu_feature  # type: ignore
-except ImportError:  # Khi chạy unit test có thể chưa build module
-    def log_gpu_feature(*_args, **_kwargs):  # type: ignore
-        """Stub logger (bỏ qua khi module gốc chưa sẵn)."""
-        pass
+# Telemetry functionality has been removed
+def log_gpu_feature(*_args, **_kwargs):  # type: ignore
+    """Telemetry logging functionality has been removed"""
+    pass
 
 ###############################################################################
 #                           DECORATOR retry (đồng bộ)                          #

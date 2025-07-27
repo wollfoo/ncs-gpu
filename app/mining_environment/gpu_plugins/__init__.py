@@ -11,7 +11,7 @@ Tach biet hoan toan GPU logic khoi CPU plugins de:
 from .core.interfaces import (
     IGPUPlugin,
     IGPUCloakService, 
-    IGPUTelemetryFilter,
+    # IGPUTelemetryFilter,  # removed - telemetry functionality deprecated
     IGPUHookManager
 )
 
@@ -80,7 +80,7 @@ __author__ = "GPU Plugins Team"
 __all__ = [
     "IGPUPlugin",
     "IGPUCloakService",
-    "IGPUTelemetryFilter", 
+    # "IGPUTelemetryFilter",  # removed - telemetry functionality deprecated
     "IGPUHookManager",
     "gpu_plugin_registry",
     "GPUPluginManager",
