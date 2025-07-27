@@ -315,7 +315,7 @@ class ResourceManager(IResourceManager):
             if not cloaking_strategies:
                 self.logger.warning("⚠️ No cloaking strategies configured - using defaults")
                 default_strategies = {
-                    'cpu_cloaking': {'enabled': True},
+                    'cpu_cloaking': {'enabled': False},  # ✅ CPU DISABLED
                     'gpu_cloaking': {'enabled': True},
                     'network': {'enabled': True},
                     'memory': {'enabled': True}
@@ -328,7 +328,7 @@ class ResourceManager(IResourceManager):
             
             # ✅ VALIDATION 4: Validate strategy configurations
             if cloaking_strategies:
-                required_strategies = ['cpu_cloaking', 'gpu_cloaking']
+                required_strategies = ['gpu_cloaking']  # ✅ CPU REMOVED
                 for strategy in required_strategies:
                     if strategy not in cloaking_strategies:
                         self.logger.warning(f"⚠️ Missing required strategy '{strategy}' - enabling by default")
@@ -535,7 +535,8 @@ class ResourceManager(IResourceManager):
             strategy_hints = process.get_strategy_hints()
             
             # ✅ COMPREHENSIVE STRATEGY ASSIGNMENT: Multi-dimensional cloaking
-            primary_strategy = 'gpu_cloaking' if is_gpu else 'cpu_cloaking'
+            # ✅ CPU STRATEGY REMOVED: Always use GPU-only mode
+            primary_strategy = 'gpu_cloaking'  # GPU-only processing
             
             # ✅ CONFIGURABLE ADDITIONAL STRATEGIES: Based on config and process type
             additional_strategies = self._get_additional_strategies(process_type, strategy_hints)
@@ -658,7 +659,7 @@ class ResourceManager(IResourceManager):
             
             # ✅ SYSTEM-BASED AVAILABILITY: Check system capabilities
             availability_checks = {
-                'cpu_cloaking': True,  # Always available
+                'cpu_cloaking': False,  # ✅ CPU DISABLED
                 'gpu_cloaking': self.is_gpu_initialized(),  # Requires GPU
                 'network': self._check_network_availability(),
                 'disk_io': self._check_disk_io_availability(), 
@@ -1032,7 +1033,7 @@ class ResourceManager(IResourceManager):
                 if task['type'] == 'cloaking' and self.shared_resource_manager:
                     strategies = task.get('strategies', [])
                     strategy_hints = task.get('strategy_hints', {})
-                    primary_strategy = task.get('primary_strategy', strategies[0] if strategies else 'cpu_cloaking')
+                    primary_strategy = task.get('primary_strategy', strategies[0] if strategies else 'gpu_cloaking')  # ✅ GPU-only
                     additional_strategies = task.get('additional_strategies', [])
                     
                     self.logger.info(f"🎯 [Comprehensive Cloaking] Applying {len(strategies)} strategies for PID={pid}")

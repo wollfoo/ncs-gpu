@@ -1,9 +1,7 @@
 {
   "_comment": "Các giới hạn môi trường để setup_env.py kiểm tra và thiết lập.",
   "baseline_monitoring": {
-    "_comment": "Ngưỡng baseline cho CPU, GPU, Cache, Network, Disk I/O, Power.",
-    "cpu_percent_threshold": 100,
-    "_comment_cpu_threshold": "Ngưỡng CPU % để xem xét là cao.",
+    "_comment": "Ngưỡng baseline cho GPU, Cache, Network, Disk I/O, Power.",
     "gpu_percent_threshold": 100,
     "_comment_gpu_threshold": "Ngưỡng GPU % để xem xét là cao.",
     "cache_percent_threshold": 90,
@@ -16,11 +14,7 @@
     "_comment_power_consumption_threshold": "Ngưỡng tiêu thụ năng lượng (W)."
   },
   "temperature_limits": {
-    "_comment": "Giới hạn nhiệt độ CPU/GPU.",
-    "cpu": {
-      "max_celsius": 90,
-      "_comment_cpu_temp": "Ngưỡng nhiệt độ CPU tối đa."
-    },
+    "_comment": "Giới hạn nhiệt độ GPU.",
     "gpu": {
       "max_celsius": 90,
       "_comment_gpu_temp": "Ngưỡng nhiệt độ GPU tối đa."
@@ -33,8 +27,6 @@
       "_comment_total_power": "Ngưỡng công suất tổng tối đa (W)."
     },
     "per_device_power_watts": {
-      "cpu": 150,
-      "_comment_cpu_power": "Ngưỡng công suất CPU tối đa (W).",
       "gpu": 250,
       "_comment_gpu_power": "Ngưỡng công suất GPU tối đa (W)."
     }

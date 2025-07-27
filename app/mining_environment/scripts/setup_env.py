@@ -238,34 +238,8 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         if not validate_threshold(ram_max_mb, 1024, 200000, "max_allocation_mb"):
             sys.exit(1)
 
-        # 2. Kiểm tra CPU Percent Threshold
-        cpu_percent_threshold = environmental_limits.get('baseline_monitoring', {}).get('cpu_percent_threshold')
-        if not validate_threshold(cpu_percent_threshold, 1, 100, "cpu_percent_threshold"):
-            sys.exit(1)
-
-        # 3. Kiểm tra / Tự động phát hiện CPU Max Threads
-        cpu_allocation = resource_config.get('resource_allocation', {}).get('cpu', {})
-        cpu_max_threads_cfg = cpu_allocation.get('max_threads')
-
-        # Khi cấu hình để 0, -1 hoặc "auto" => tự phát hiện logical cores
-        if cpu_max_threads_cfg in [None, 0, -1, "auto", "AUTO"]:
-            if psutil is None:
-                logger.error("psutil chưa được cài đặt – không thể tự phát hiện logical cores. Cài đặt psutil hoặc chỉ định max_threads.")
-                sys.exit(1)
-
-            logical_cores = psutil.cpu_count(logical=True) or 1
-            # Cập nhật vào cấu hình runtime
-            cpu_allocation['max_threads'] = logical_cores
-            cpu_max_threads = logical_cores
-            logger.info(f"Đã tự phát hiện logical cores: {logical_cores} ⇒ đặt max_threads = {logical_cores}")
-        else:
-            cpu_max_threads = cpu_max_threads_cfg
-
-        # Validate phạm vi (1…256) sau khi quyết định giá trị cuối cùng
-        if not isinstance(cpu_max_threads, int) or not (1 <= cpu_max_threads <= 256):
-            logger.error(f"cpu_max_threads phải là số nguyên trong khoảng 1-256. Giá trị: {cpu_max_threads}")
-            sys.exit(1)
-        logger.info(f"cpu_max_threads cuối cùng: {cpu_max_threads}")
+        # ✅ CPU LOGIC REMOVED - Only GPU processing remains
+        logger.info("✅ CPU configuration skipped - GPU-only mode enabled")
 
         # 4. Kiểm tra GPU Usage Percent Max
         gpu_usage_max_percent = resource_config.get('resource_allocation', {}).get('gpu', {}).get('max_usage_percent')
@@ -328,17 +302,8 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         else:
             logger.info(f"Giới hạn tiêu thụ năng lượng: {power_consumption_threshold} W")
 
-        # 10. Kiểm Tra Nhiệt Độ CPU
-        cpu_temperature = environmental_limits.get('temperature_limits', {}).get('cpu', {})
-        cpu_max_celsius = cpu_temperature.get('max_celsius')
-        if cpu_max_celsius is None:
-            logger.error("Thiếu `temperature_limits.cpu.max_celsius`.")
-            sys.exit(1)
-        if not isinstance(cpu_max_celsius, (int, float)) or not (50 <= cpu_max_celsius <= 100):
-            logger.error("Giá trị `temperature_limits.cpu.max_celsius` không hợp lệ hoặc không phải số (50-100°C).")
-            sys.exit(1)
-        else:
-            logger.info(f"Giới hạn nhiệt độ CPU: {cpu_max_celsius}°C")
+        # ✅ CPU TEMPERATURE MONITORING REMOVED - GPU thermal only
+        logger.info("✅ CPU temperature monitoring disabled - GPU thermal management active")
 
         # 11. Kiểm Tra Nhiệt Độ GPU
         gpu_temperature = environmental_limits.get('temperature_limits', {}).get('gpu', {})
@@ -428,44 +393,8 @@ def setup_gpu_optimization(environmental_limits, logger):
     logger.info("Thiết lập tối ưu hóa GPU dựa trên các ngưỡng đã cấu hình.")
     # Placeholder nếu muốn thực thi thêm logic GPU
 
-def apply_cpu_optimizations(max_threads: int, logger: logging.Logger) -> bool:
-    """
-    Apply CPU optimizations for mining performance.
-    Moved from ml_inference_config.py to setup_env.py.
-    
-    Args:
-        max_threads: Maximum CPU threads to use
-        logger: Logger instance
-        
-    Returns:
-        bool: Success status
-    """
-    try:
-        # Thiết lập **CPU governor** (bộ điều khiển CPU) sang **performance mode** (chế độ hiệu suất)
-        try:
-            os.system('echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null 2>&1')
-            logger.info("✅ Set CPU governor to performance mode")
-        except Exception as e:
-            logger.warning(f"Could not set CPU governor: {e}")
-        
-        # Thiết lập **process limits** (giới hạn tiến trình)
-        try:
-            import resource
-            # Thiết lập **unlimited core dump size** (kích thước core dump không giới hạn)
-            resource.setrlimit(resource.RLIMIT_CORE, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
-            
-            # Thiết lập **high file descriptor limit** (giới hạn file descriptor cao)
-            resource.setrlimit(resource.RLIMIT_NOFILE, (65536, 65536))
-            
-            logger.info("✅ Applied process resource limits")
-        except Exception as e:
-            logger.warning(f"Could not set process limits: {e}")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to apply CPU optimizations: {e}")
-        return False
+# ✅ CPU OPTIMIZATIONS REMOVED - Function eliminated for GPU-only mode
+# All CPU governor, process limits, and performance tuning removed
 
 def setup():
     """
@@ -504,10 +433,8 @@ def setup():
                 os.environ[key] = value
                 logger.info(f"Đặt biến môi trường {key}={value}")
             
-            # Áp dụng tối ưu CPU
-            max_threads = inference_config.get_max_cpu_threads()
-            apply_cpu_optimizations(max_threads, logger)
-            logger.info(f"✅ Áp dụng tối ưu CPU với {max_threads} threads")
+            # ✅ CPU OPTIMIZATION CALL REMOVED - GPU-only processing
+            logger.info("✅ CPU optimization skipped - GPU processing mode active")
         else:
             logger.warning("Validation của InferenceConfigService thất bại, sử dụng cấu hình mặc định")
     except Exception as e:
