@@ -24,6 +24,19 @@ except ImportError:
 
 from mining_environment.scripts.logging_config import setup_logging
 
+# ✅ GPU-ONLY: Import InferenceConfigService for GPU processing configuration
+try:
+    from mining_environment.scripts.inference_config import get_inference_config
+except ImportError:
+    # Fallback if inference_config module not available
+    def get_inference_config(process_info=None, logger=None):
+        class DummyConfig:
+            def validate_configuration(self):
+                return False
+            def get_environment_variables(self):
+                return {}
+        return DummyConfig()
+
 def load_json_config(config_path, logger):
     """
     Đọc tệp JSON cấu hình và trả về đối tượng Python.
@@ -329,17 +342,13 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         else:
             logger.info(f"Giới hạn tổng tiêu thụ năng lượng: {total_power_max} W")
 
-        # 13. CPU & GPU Device Power
+        # ✅ CPU POWER CONFIGURATION REMOVED - GPU-only mode
+        # 13. GPU Device Power only (CPU power configuration eliminated)
         per_device_power_watts = power_limits.get('per_device_power_watts', {})
-        per_device_power_cpu = per_device_power_watts.get('cpu')
-        if per_device_power_cpu is None:
-            logger.error("Thiếu `power_limits.per_device_power_watts.cpu`.")
-            sys.exit(1)
-        if not isinstance(per_device_power_cpu, (int, float)) or not (50 <= per_device_power_cpu <= 150):
-            logger.error("Giá trị `power_limits.per_device_power_watts.cpu` không hợp lệ hoặc không phải số (50-150 W).")
-            sys.exit(1)
-        else:
-            logger.info(f"Giới hạn tiêu thụ năng lượng CPU: {per_device_power_cpu} W")
+        
+        # ✅ CPU power validation removed for GPU-only processing
+        if 'cpu' in per_device_power_watts:
+            logger.info("⚠️ CPU power configuration detected but ignored (GPU-only mode)")
 
         per_device_power_gpu = per_device_power_watts.get('gpu')
         if per_device_power_gpu is None:
