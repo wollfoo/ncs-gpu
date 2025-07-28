@@ -1,6 +1,7 @@
 """GPU Plugin Registry - Quản lý đăng ký và khởi tạo các GPU plugins"""
 from typing import Dict, Type, Optional, List
 import logging
+import os
 from .interfaces import IGPUPlugin
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,13 @@ class GPUPluginRegistry:
             return None
             
         try:
-            instance = plugin_class()
+            # ✅ FIX: Special handling for time_based_manager requiring target_pid
+            if name == 'time_based_manager':
+                # Use PID=156 from error log context, or get from environment
+                target_pid = int(os.getenv('TARGET_PID', 156))
+                instance = plugin_class(target_pid=target_pid)
+            else:
+                instance = plugin_class()
             self._instances[name] = instance
             logger.info(f"Created instance of GPU plugin: {name}")
             return instance
