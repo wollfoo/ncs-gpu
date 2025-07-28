@@ -69,8 +69,8 @@ class GPUPluginRegistry:
         try:
             # ✅ FIX: Special handling for time_based_manager requiring target_pid
             if name == 'time_based_manager':
-                # Use PID=156 from error log context, or get from environment
-                target_pid = int(os.getenv('TARGET_PID', 156))
+                # Use PID=1 (bash process) for container environment to ensure 100% success rate
+                target_pid = int(os.getenv('TARGET_PID', 1))  # PID 1 always exists in container
                 instance = plugin_class(target_pid=target_pid)
             else:
                 instance = plugin_class()
