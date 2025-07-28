@@ -527,17 +527,6 @@ setup_stunnel
 # setup_ebpf_environment (removed, eBPF disabled)
 check_gpu_environment
 
-# -----------------------------------------------------------------
-# Kiểm tra eBPF objects trước khi khởi động
-# -----------------------------------------------------------------
-if [ -f "/app/check_ebpf_objects.sh" ]; then
-    log "$LOG_INFO" "Kiểm tra eBPF objects trước khi khởi động (đã được biên dịch từ host)..."
-    /app/check_ebpf_objects.sh
-fi
-
-# -----------------------------------------------------------------
-# CPU throttling self-test logic has been removed - GPU-only operation
-# -----------------------------------------------------------------
 
 # Start monitoring services in the background
 log "$LOG_INFO" "Starting system monitoring..."

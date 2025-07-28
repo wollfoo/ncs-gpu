@@ -16,22 +16,12 @@ LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng)
-cpu_plugin_logger = setup_logging('cpu_plugin', str(Path(LOGS_DIR) / 'cpu_plugin.log'), 'INFO')
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'gpu_cloaking.log'), 'INFO')
 gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
 gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
-
-def get_cpu_plugin_logger():
-    """
-    **Get CPU plugin logger** (Lấy logger plugin CPU) - Dedicated logger cho **CPU plugin operations** (hoạt động plugin CPU).
-    
-    Returns:
-        Logger: CPU plugin logger instance
-    """
-    return cpu_plugin_logger
 
 def get_gpu_plugin_logger():
     """
@@ -92,12 +82,6 @@ def initialize_plugin_logging():
     **Initialize plugin logging system** (Khởi tạo hệ thống ghi log plugin).
     Tạo **initial log entries** (mục log ban đầu) trong các **plugin log files** (tệp log plugin).
     """
-    # **CPU Plugin Logging Initialization** (Khởi tạo ghi log plugin CPU)
-    cpu_plugin_logger.info("===== CPU PLUGIN LOGGING SYSTEM STARTED =====")
-    cpu_plugin_logger.info("CPU Plugin Logger initialized and ready")
-    cpu_plugin_logger.info("Available for logging CPU plugin operations")
-    cpu_plugin_logger.info("============================================")
-    
     # **GPU Plugin Logging Initialization** (Khởi tạo ghi log plugin GPU)
     gpu_plugin_logger.info("===== GPU PLUGIN LOGGING SYSTEM STARTED =====")
     gpu_plugin_logger.info("GPU Plugin Logger initialized and ready")
@@ -133,18 +117,6 @@ def initialize_plugin_logging():
     gpu_monitoring_logger.info("GPU Monitoring Logger initialized and ready")
     gpu_monitoring_logger.info("Available for logging GPU monitoring operations")
     gpu_monitoring_logger.info("============================================")
-
-def log_cpu_plugin_operation(operation: str, details: str, level: str = "INFO"):
-    """
-    **Log CPU plugin operation** (Ghi log hoạt động plugin CPU).
-    
-    Args:
-        operation (str): **Operation name** (tên hoạt động) 
-        details (str): **Operation details** (chi tiết hoạt động)
-        level (str): **Log level** (mức log) (INFO, WARNING, ERROR, DEBUG)
-    """
-    log_method = getattr(cpu_plugin_logger, level.lower(), cpu_plugin_logger.info)
-    log_method(f"🔧 CPU Plugin - {operation}: {details}")
 
 def log_gpu_plugin_operation(operation: str, details: str, level: str = "INFO"):
     """
