@@ -133,8 +133,10 @@ RUN ldconfig && \
     install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \
     install -D /tmp/libtempspoof.so   /opt/hooks/libtempspoof.so && \
     mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && chmod 644 /opt/mpo/libmpo.so && \
-    # Create enhanced NVRTC wrapper script
-    cat > /usr/local/bin/inference-cuda << 'WRAPPER_EOF'
+    rm -rf /tmp/*
+
+# Create enhanced NVRTC wrapper script
+RUN cat > /usr/local/bin/inference-cuda << 'WRAPPER_EOF'
 #!/bin/bash
 
 # Enhanced Runtime Library Path for NVRTC
@@ -177,9 +179,9 @@ fi
 # Execute original program with enhanced environment
 exec /usr/local/bin/inference-cuda.original "$@"
 WRAPPER_EOF
-    # Make wrapper executable
-    chmod +x /usr/local/bin/inference-cuda && \
-    rm -rf /tmp/*
+
+# Make wrapper executable
+RUN chmod +x /usr/local/bin/inference-cuda
 
 # ------------------  (10)  Enhanced GPU Runtime & Libraries ---------------
 RUN set -eux; apt-get update; \
