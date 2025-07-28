@@ -1046,6 +1046,7 @@ def gpu_mining_thread():
                             'thread_id': threading.current_thread().ident,
                             'thread_name': 'GPUMining',
                             'pid': gpu_process.pid,
+                             'role': 'wrapper',
                             'process_name': 'inference-cuda',
                             'status': 'running',
                             'attempt': retries + 1,
