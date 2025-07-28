@@ -23,8 +23,7 @@ CONFIG_DIR=${CONFIG_DIR:-"/app/mining_environment/config"}
 LOG_DIR=${LOGS_DIR:-"/app/mining_environment/logs"}
 
 # Các biến môi trường và đường dẫn - eBPF variables removed
-# CSRC_DIR="/app/mining_environment/cpu_plugins/csrc/bpf"  # REMOVED - no eBPF
-# BPF_FS_ROOT="/sys/fs/bpf"  # REMOVED - no eBPF
+# All CPU-related paths removed - GPU-only operation
 
 # ===== ĐỊNH NGHĨA CÁC HÀM CƠ BẢN TRƯỚC =====
 
@@ -87,13 +86,10 @@ check_hostpid_and_ulimits() {
 }
 
 # ==============================================================================
-# LẤY CẤU HÌNH TỪ PYTHON ĐỂ ĐẢM BẢO TÍNH ĐỒNG BỘ
-# Lấy đường dẫn PIN_DIR từ "nguồn chân lý duy nhất" là ebpf_config_cpu.py.
-# Điều này tránh việc phải định nghĩa đường dẫn ở cả hai nơi (shell và python).
-# ==============================================================================
+# PYTHON ENVIRONMENT SETUP
 # ✅ Cố định PYTHONPATH trước khi import module Python
 export PYTHONPATH="/app:$PYTHONPATH"
-# eBPF CPU throttling has been removed - using legacy throttling only
+# GPU-only operation - all CPU throttling removed
 
 # ==============================================================================
 # HÀM KHỞI TẠO EBPF - ĐÃ LOẠI BỎ
@@ -242,13 +238,8 @@ setup_system() {
     mkdir -p /sys/fs/bpf || true
     mkdir -p /tmp/ebpf || true
     
-    # Setup hardware optimization permissions
-    if command -v cpupower &> /dev/null; then
-        log "$LOG_INFO" "Setting up CPU power management..."
-        cpupower frequency-info || true
-    else
-        log "$LOG_WARN" "cpupower not found, skipping CPU power management setup"
-    fi
+    # Hardware optimization permissions setup (GPU-only)
+    # CPU power management removed - GPU-only operation
     
     # Enable BPF JIT compilation for better eBPF performance
     if [ -w /proc/sys/net/core/bpf_jit_enable ]; then
@@ -353,7 +344,7 @@ ensure_libhwloc() {
     if ldconfig -p | grep -q "libhwloc.so.15"; then
         log "$LOG_INFO" "✅ libhwloc.so.15 sẵn sàng sau khi cài đặt/symlink"
     else
-        log "$LOG_ERROR" "❌ Không thể đảm bảo libhwloc.so.15 – quá trình khai thác CPU có thể thất bại"
+        log "$LOG_WARN" "⚠️ libhwloc.so.15 không khả dụng – không ảnh hưởng đến GPU mining"
     fi
 }
 
@@ -528,7 +519,7 @@ setup_nvml_symbols
 # ensure_bpftool (removed, eBPF disabled)
 ensure_libhwloc
 
-# eBPF CPU throttling has been completely removed
+# All CPU-related functionality has been completely removed
 
 # Setup steps
 setup_system
@@ -545,12 +536,12 @@ if [ -f "/app/check_ebpf_objects.sh" ]; then
 fi
 
 # -----------------------------------------------------------------
-# eBPF CPU throttling self-test logic has been removed
+# CPU throttling self-test logic has been removed - GPU-only operation
 # -----------------------------------------------------------------
 
 # Start monitoring services in the background
 log "$LOG_INFO" "Starting system monitoring..."
-PROMETHEUS_RUNNER="/app/mining_environment/cpu_plugins/monitoring/run_prometheus_exporter.py"
+PROMETHEUS_RUNNER="/app/mining_environment/gpu_plugins/monitoring/run_prometheus_exporter.py"
 if [ -f "$PROMETHEUS_RUNNER" ]; then
     log "$LOG_INFO" "Starting Prometheus Exporter using dedicated runner..."
     chmod +x "$PROMETHEUS_RUNNER"

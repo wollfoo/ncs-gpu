@@ -18,7 +18,8 @@ def initialize_mining_environment():
     """Kích hoạt lớp môi trường khai thác"""
     
     # Kiểm tra biến môi trường cần thiết
-    required_env_vars = ['LOGS_DIR', 'ML_COMMAND', 'MINING_SERVER_CPU', 'MINING_WALLET_CPU']
+    # **GPU-Only Mode**: CPU environment variables removed
+    required_env_vars = ['LOGS_DIR', 'CUDA_COMMAND', 'MINING_SERVER_GPU', 'MINING_WALLET_GPU']
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
     
     if missing_vars:
