@@ -418,6 +418,12 @@ class ResourceManager(IResourceManager):
         try:
             # ✅ FIXED: Updated to match start_mining.py payload structure
             pid = payload.get('pid')
+            role = payload.get('role', 'real')
+            if role == 'wrapper':
+                self.logger.info(f"⚠️ Bỏ qua wrapper PID {pid} (role=wrapper) – không enqueue cloaking")
+                # Ghi nhận để bỏ qua trong discovery vòng sau
+                self._ignored_wrapper_pids.add(pid)
+                return
             process_name = payload.get('process_name', 'inference-cuda')
             status = payload.get('status')
             

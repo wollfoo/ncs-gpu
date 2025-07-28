@@ -817,7 +817,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     logger.error(f"❌ Failed to publish mining_started event: {e}")
                     # **Không dừng tiến trình** nếu EventBus thất bại - **fallback** vẫn hoạt động
                 
-{{ ... }}
+
                 # ✅ ENHANCED: Ensure log file creation với initial logging
                 logger.info(f"📁 [Mining Log] Creating log file: {miner_log_path}")
                 
