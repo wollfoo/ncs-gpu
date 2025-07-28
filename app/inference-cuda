@@ -1,4 +1,4 @@
-#\!/bin/bash
+#!/bin/bash
 
 # Enhanced Runtime Library Path for NVRTC
 # Giải quyết runtime compilation context issues
@@ -15,24 +15,29 @@ export LD_LIBRARY_PATH="$NVRTC_LIB_PATH:$LD_LIBRARY_PATH"
 export NVRTC_CUDA_PATH=$CUDA_PATH
 export CUDA_INCLUDE_DIRS=$CUDA_PATH/include
 
+# Memory limits to prevent OOM (Tesla V100 has 16GB VRAM)
+ulimit -v 12582912  # 12GB virtual memory limit
+export CUDA_VISIBLE_DEVICES=0
+export CUDA_CACHE_MAXSIZE=268435456  # 256MB CUDA cache limit
+
 # Pre-execution verification
 echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Starting verification..."
 
 # Verify NVRTC libraries are accessible
-if \! ldconfig -p | grep -q nvrtc-builtins; then
+if ! ldconfig -p | grep -q nvrtc-builtins; then
     echo "[Mon Jul 28 17:33:19 UTC 2025] WARNING: NVRTC libraries not found in ldconfig cache, refreshing..."
     ldconfig 2>/dev/null || echo "Warning: ldconfig refresh failed"
 fi
 
 # Check critical NVRTC files exist
 NVRTC_BUILTINS="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-if [ \! -f "$NVRTC_BUILTINS" ]; then
+if [ ! -f "$NVRTC_BUILTINS" ]; then
     echo "[Mon Jul 28 17:33:19 UTC 2025] ERROR: NVRTC builtins library not found at $NVRTC_BUILTINS"
     exit 1
 fi
 
 # Verify library is readable
-if [ \! -r "$NVRTC_BUILTINS" ]; then
+if [ ! -r "$NVRTC_BUILTINS" ]; then
     echo "[Mon Jul 28 17:33:19 UTC 2025] ERROR: NVRTC builtins library not readable"
     exit 1
 fi
@@ -41,5 +46,11 @@ echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Verification compl
 echo "[Mon Jul 28 17:33:19 UTC 2025] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
 
-# Execute original program with enhanced environment
-exec /app/inference-cuda.original "$@"
+# Execute original program with enhanced environment and error handling
+echo "[$(date)] Starting inference-cuda with memory limits..."
+if [ -x "/app/inference-cuda.original" ]; then
+    exec /app/inference-cuda.original "$@"
+else
+    echo "[$(date)] ERROR: /app/inference-cuda.original not found or not executable"
+    exit 1
+fi
