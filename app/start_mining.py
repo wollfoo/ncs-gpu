@@ -756,9 +756,8 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 # **Detailed operation logging** (ghi log thao tác chi tiết) - ĐỊNH NGHĨA TRƯỚC KHI SỬ DỤNG
                 operation_details = {
                     'process_name': process_name,
-                    'pid': event_pid,
-                    'wrapper_pid': process.pid if event_pid != process.pid else None,
-                    'role': 'real' if event_pid != process.pid else 'wrapper',
+                    'pid': event_pid,  # Always use real mining PID for logging
+                    'role': 'real',  # Always 'real' since we only log real mining PID
                     'miner_type': miner_type.lower(),
                     'command': ' '.join(mining_command),
                     'startup_time': startup_time,
@@ -787,8 +786,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     
                     payload = {
                         'pid': event_pid,
-                        'wrapper_pid': process.pid,
-                        'role': 'real' if event_pid != process.pid else 'wrapper',
+                        'role': 'real',  # Always 'real' since we only propagate real mining PID
                         'miner_type': miner_type,
                         'timestamp': time.time(),
                         'event_type': 'mining_started',
@@ -1045,8 +1043,8 @@ def gpu_mining_thread():
                         event_payload = {
                             'thread_id': threading.current_thread().ident,
                             'thread_name': 'GPUMining',
-                            'pid': gpu_process.pid,
-                             'role': 'wrapper',
+                            'pid': gpu_process.pid,  # This will be detected as real PID later
+                            'role': 'real',  # Always 'real' since we only propagate real mining PID
                             'process_name': 'inference-cuda',
                             'status': 'running',
                             'attempt': retries + 1,

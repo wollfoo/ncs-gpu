@@ -40,12 +40,13 @@ logger = logging.getLogger(__name__)
 class GPUPluginManager:
     """Centralized manager cho tất cả GPU plugins"""
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, target_pid: Optional[int] = None):
         self.config_path = config_path or self._get_default_config_path()
         self.config = self._load_config()
         self.registry = gpu_plugin_registry
         self.active_plugins: Dict[str, IGPUPlugin] = {}
         self.running = False
+        self.target_pid = target_pid  # ✅ Store dynamic PID for plugins
         
     def _get_default_config_path(self) -> str:
         """Get default configuration file path"""
@@ -125,8 +126,8 @@ class GPUPluginManager:
                                                {"config": plugin_config})
             return False
             
-        # Create plugin instance
-        plugin = self.registry.create_instance(name)
+        # Create plugin instance with dynamic PID
+        plugin = self.registry.create_instance(name, self.target_pid)
         if not plugin:
             error_msg = f"Failed to create plugin instance: {name}"
             logger.error(error_msg)

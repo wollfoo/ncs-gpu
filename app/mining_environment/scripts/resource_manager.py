@@ -252,8 +252,6 @@ class ResourceManager(IResourceManager):
         self._stop_flag = False
 
         # Danh sách process + lock
-        # ✅ NEW: Danh sách PID wrapper cần bỏ qua (để tránh cloaking nhầm)
-        self._ignored_wrapper_pids: set[int] = set()
         self.mining_processes_lock = threading.RLock()
         self.mining_processes: List[MiningProcess] = []
 
@@ -418,17 +416,17 @@ class ResourceManager(IResourceManager):
     def _on_gpu_mining_event(self, payload: Dict[str, Any]) -> None:
         """Handle GPU mining events - PID Propagation Flow Step 2 - **UPDATED FOR NEW EVENT FORMAT** (cập nhật cho định dạng sự kiện mới)"""
         try:
-            # ✅ FIXED: Updated to match start_mining.py payload structure
+            # ✅ SIMPLIFIED: Always expect real mining PID (wrapper_pid removed from start_mining.py)
             pid = payload.get('pid')
             role = payload.get('role', 'real')
-            if role == 'wrapper':
-                self.logger.info(f"⚠️ Bỏ qua wrapper PID {pid} (role=wrapper) – không enqueue cloaking")
-                # Ghi nhận để bỏ qua trong discovery vòng sau
-                self._ignored_wrapper_pids.add(pid)
-                return
             process_name = payload.get('process_name', 'inference-cuda')
             status = payload.get('status')
             
+            # ✅ VALIDATION: Ensure we have real mining PID
+            if not pid:
+                self.logger.warning("⚠️ No PID in mining event payload - skipping")
+                return
+                
             if pid and status == 'running':
                 self.logger.info(f"🎮 ResourceManager received GPU PID registered: PID={pid}")
                 self.logger.debug(f"[DEBUG] GPU event payload: {payload}")

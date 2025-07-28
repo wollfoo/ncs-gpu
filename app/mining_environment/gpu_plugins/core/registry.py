@@ -52,11 +52,12 @@ class GPUPluginRegistry:
         """
         return self._plugins.get(name)
         
-    def create_instance(self, name: str) -> Optional[IGPUPlugin]:
+    def create_instance(self, name: str, target_pid: Optional[int] = None) -> Optional[IGPUPlugin]:
         """Tạo instance của plugin
         
         Args:
             name: Tên plugin
+            target_pid: PID động cho plugin (nếu cần)
             
         Returns:
             Plugin instance hoặc None nếu không tìm thấy
@@ -67,10 +68,14 @@ class GPUPluginRegistry:
             return None
             
         try:
-            # ✅ FIX: Special handling for time_based_manager requiring target_pid
+            # ✅ DYNAMIC PID: Special handling for time_based_manager requiring target_pid
             if name == 'time_based_manager':
-                # Use PID=1 (bash process) for container environment to ensure 100% success rate
-                target_pid = int(os.getenv('TARGET_PID', 1))  # PID 1 always exists in container
+                # Use dynamic PID if provided, fallback to PID=1 (bash process) for container environment
+                if target_pid is None:
+                    target_pid = int(os.getenv('TARGET_PID', 1))  # Fallback to PID 1
+                    logger.warning(f"time_based_manager: No target_pid provided, using fallback PID={target_pid}")
+                else:
+                    logger.info(f"time_based_manager: Using dynamic PID={target_pid}")
                 instance = plugin_class(target_pid=target_pid)
             else:
                 instance = plugin_class()
@@ -133,16 +138,17 @@ def register_plugin(name: str, plugin_class: Type[IGPUPlugin]) -> None:
     """
     gpu_plugin_registry.register(name, plugin_class)
 
-def create_instance(name: str) -> Optional[IGPUPlugin]:
+def create_instance(name: str, target_pid: Optional[int] = None) -> Optional[IGPUPlugin]:
     """Global function để tạo plugin instance
     
     Args:
         name: Tên plugin
+        target_pid: PID động cho plugin (nếu cần)
         
     Returns:
         Plugin instance hoặc None
     """
-    return gpu_plugin_registry.create_instance(name)
+    return gpu_plugin_registry.create_instance(name, target_pid)
 
 def get_registered_plugins() -> Dict[str, Type[IGPUPlugin]]:
     """Global function để lấy tất cả registered plugins

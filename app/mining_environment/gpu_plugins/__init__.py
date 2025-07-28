@@ -104,16 +104,17 @@ __all__ = [
     "apply_gpu_strategies"
 ]
 
-def create_gpu_manager(config_path=None):
+def create_gpu_manager(config_path=None, target_pid=None):
     """Convenience function de tao GPU Plugin Manager
     
     Args:
         config_path: Duong dan toi config file (optional)
+        target_pid: PID động cho các plugin (optional)
         
     Returns:
         GPUPluginManager instance
     """
-    return GPUPluginManager(config_path)
+    return GPUPluginManager(config_path, target_pid)
 
 def get_plugin_registry():
     """Lay global GPU plugin registry
@@ -154,7 +155,7 @@ def apply_gpu_strategies(pid, strategies=None):
         # ✅ STEP 1: GPU Manager Initialization with validation
         gpu_manager = None
         try:
-            gpu_manager = create_gpu_manager()
+            gpu_manager = create_gpu_manager(target_pid=pid)  # ✅ DYNAMIC PID: Truyền target_pid động
             logger.info("✅ [Step 1/5] GPU Plugin Manager initialized successfully")
         except Exception as e:
             logger.error(f"❌ [CRITICAL] GPU Manager initialization failed: {e}")
