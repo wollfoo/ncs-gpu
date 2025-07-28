@@ -47,8 +47,8 @@ def _auto_register_plugins():
         
         # Import và đăng ký time_based_manager
         try:
-            from .cloaking.time_based_manager import TimeBasedManager
-            gpu_plugin_registry.register('time_based_manager', TimeBasedManager)
+            from .cloaking.time_based_manager import GPUCloakingManager
+            gpu_plugin_registry.register('time_based_manager', GPUCloakingManager)
             logger.info("✅ Auto-registered: time_based_manager")
         except ImportError as e:
             logger.warning(f"⚠️ Could not import time_based_manager: {e}")
@@ -69,21 +69,7 @@ def _auto_register_plugins():
         return 0
 
 # ========== 🔧 LAYER 3: Plugin Registry Update ==========
-
-# ✅ LAYER 3: Manual registration for time_based_manager plugin
-try:
-    from .cloaking.time_based_manager import GPUCloakingManager
-    
-    # Register time_based_manager plugin using the class directly
-    from .core.registry import register_plugin
-    register_plugin('time_based_manager', GPUCloakingManager)
-    
-    logger.info("✅ [LAYER3] time_based_manager plugin registered successfully")
-    
-except ImportError as e:
-    logger.error(f"❌ [LAYER3] Failed to import time_based_manager: {e}")
-except Exception as e:
-    logger.error(f"❌ [LAYER3] Failed to register time_based_manager: {e}")
+# Manual registration removed - using auto-registration only to avoid duplicates
 
 # ✅ AUTO-EXECUTION: Tự động đăng ký plugins khi import module
 _registered_count = _auto_register_plugins()
