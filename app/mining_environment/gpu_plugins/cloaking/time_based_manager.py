@@ -378,3 +378,12 @@ class GPUCloakingManager:
             return False
         except PermissionError:
             return True  # Process exists but we don't have permission 
+# ✅ FIX: Export TimeBasedManager class alias
+TimeBasedManager = GPUCloakingManager
+
+# ✅ FIX: Add missing log_gpu_cloaking function at module level
+def log_gpu_cloaking(*args, **kwargs):
+    """Module-level log_gpu_cloaking function"""
+    logger.info("[GPU_CLOAKING] " + " ".join(map(str, args)))
+
+print("✅ [TIME_BASED_MANAGER_FIX] Added TimeBasedManager alias and log_gpu_cloaking")

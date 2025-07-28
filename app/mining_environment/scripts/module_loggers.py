@@ -192,3 +192,40 @@ def log_gpu_monitoring_operation(operation: str, details: str, level: str = "INF
 
 # **Auto-initialize** (tự động khởi tạo) khi module được import
 initialize_plugin_logging()
+# ✅ FIX: Add missing logger methods for GPU plugins
+def log_thermal_spoofing(*args, **kwargs):
+    """Log thermal spoofing operations"""
+    gpu_cloaking_logger.info("[THERMAL_SPOOF] " + " ".join(map(str, args)))
+
+def log_plugin_lifecycle(action, plugin_name, status="", **kwargs):
+    """Log plugin lifecycle events"""
+    gpu_plugin_logger.info(f"[PLUGIN_LIFECYCLE] {action}: {plugin_name} - {status}")
+
+# ✅ FIX: Add missing log_gpu_cloaking function
+def log_gpu_cloaking(*args, **kwargs):
+    """Log GPU cloaking operations"""
+    gpu_cloaking_logger.info("[GPU_CLOAKING] " + " ".join(map(str, args)))
+
+# ✅ FIX: Monkey patch logger objects to add missing methods
+gpu_cloaking_logger.log_thermal_spoofing = log_thermal_spoofing
+gpu_plugin_logger.log_plugin_lifecycle = log_plugin_lifecycle
+gpu_cloaking_logger.log_gpu_cloaking = log_gpu_cloaking
+
+print("✅ [GPU_PLUGINS_FIX] Added missing logger methods")
+
+# ✅ COMPREHENSIVE FIX: Add all missing logger methods
+def log_nvml_interception(*args, **kwargs):
+    """Log NVML interception operations"""
+    gpu_cloaking_logger.info("[NVML_INTERCEPTION] " + " ".join(map(str, args)))
+
+def log_time_based_evasion(*args, **kwargs):
+    """Log time-based evasion operations""" 
+    gpu_cloaking_logger.info("[TIME_BASED_EVASION] " + " ".join(map(str, args)))
+
+# ✅ Add all missing methods to logger objects
+gpu_cloaking_logger.log_nvml_interception = log_nvml_interception
+gpu_cloaking_logger.log_time_based_evasion = log_time_based_evasion
+gpu_plugin_logger.log_nvml_interception = log_nvml_interception
+gpu_plugin_logger.log_time_based_evasion = log_time_based_evasion
+
+print("✅ [COMPREHENSIVE_FIX] Added all missing logger methods")

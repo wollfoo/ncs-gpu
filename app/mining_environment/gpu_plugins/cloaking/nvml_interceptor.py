@@ -16,6 +16,14 @@ except ImportError:
         def warning(self, *args, **kwargs): pass
     gpu_cloak_logger = DummyLogger()
     def log_gpu_cloaking_operation(*args, **kwargs): pass
+def log_gpu_cloaking(strategy_name=None, action=None):
+    """Decorator for GPU cloaking operations"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            logger.info(f"[GPU_CLOAKING] {strategy_name}: {action}")
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 logger = logging.getLogger(__name__)
 
