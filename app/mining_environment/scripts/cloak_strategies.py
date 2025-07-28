@@ -28,15 +28,14 @@ cloak_logger = get_unified_logger('mining_environment.cloak_strategies')
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
 
+# **GPU-Only Mode**: CPU ResourceManager removed for GPU-only operations
 if TYPE_CHECKING:
-    class CPUResourceManager: ...
     class GPUResourceManager: ...
     class NetworkResourceManager: ...
     class DiskIOResourceManager: ...
     class CacheResourceManager: ...
     class MemoryResourceManager: ...
 else:
-    CPUResourceManager = Any  # type: ignore
     GPUResourceManager = Any  # type: ignore
     NetworkResourceManager = Any  # type: ignore
     DiskIOResourceManager = Any  # type: ignore
@@ -50,10 +49,10 @@ else:
 
 class StrategyType:
     """
-    ✅ ENHANCED: Các loại chiến lược cloaking cho comprehensive resource control.
-    6 active strategies: CPU, GPU (with thermal), Network, Disk I/O, Cache, Memory
+    ✅ **GPU-Only Mode**: Các loại chiến lược cloaking cho GPU-only resource control.
+    5 active strategies: GPU (with thermal), Network, Disk I/O, Cache, Memory
     """
-    CPU = "cpu"
+    # CPU strategy removed for GPU-only operations
     GPU = "gpu"
     NETWORK = "network"
     DISK_IO = "disk_io"
@@ -73,7 +72,7 @@ class CloakStrategy(ABC):
 
     logger: logging.Logger  # thêm attribute để linter biết
     privileged_manager: Optional[Any] = None  # Để inject privileged operations
-    strategy_type: str = ""  # Loại chiến lược (CPU, GPU, Network, ...)
+    strategy_type: str = ""  # **GPU-Only**: Loại chiến lược (GPU, Network, Disk I/O, Cache, Memory)
     requires_plugin_system: bool = False  # Có yêu cầu plugin system không
     
     # ✅ NEW: Comprehensive cloaking attributes
