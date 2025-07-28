@@ -102,7 +102,7 @@ def create_enhanced_gpu_environment():
     cuda_optimizations = {
         'CUDA_LAUNCH_TIMEOUT': '30',
         'CUDA_DEVICE_MAX_CONNECTIONS': '1',
-        'CUDA_VISIBLE_DEVICES': '0',
+        # CUDA_VISIBLE_DEVICES removed - let CUDA runtime auto-detect all GPUs
         'CUDA_CACHE_DISABLE': '1',
         'NVIDIA_DRIVER_CAPABILITIES': 'compute',
         # Additional GPU-specific optimizations

@@ -17,7 +17,7 @@ export CUDA_INCLUDE_DIRS=$CUDA_PATH/include
 
 # Memory limits to prevent OOM (Tesla V100 has 16GB VRAM)
 ulimit -v 12582912  # 12GB virtual memory limit
-export CUDA_VISIBLE_DEVICES=0
+# CUDA_VISIBLE_DEVICES removed - let application auto-detect all available GPUs
 export CUDA_CACHE_MAXSIZE=268435456  # 256MB CUDA cache limit
 
 # Pre-execution verification
