@@ -1,6 +1,7 @@
 #!/bin/bash
-# fix_nvrtc_symlinks.sh - Script tự động sửa NVRTC symbolic links
+# fix_nvrtc_symlinks.sh - Script tự động cấu hình NVRTC libraries và ldconfig
 # Tích hợp vào GPU plugins system cho automatic runtime fix
+# Phương pháp: ldconfig method thay vì symbolic links (an toàn và hiệu quả hơn)
 # Sử dụng: ./fix_nvrtc_symlinks.sh [--check-only] [--verbose] [--silent]
 
 set -euo pipefail
@@ -69,138 +70,173 @@ error() {
 }
 
 check_nvrtc_libraries() {
-    # Tìm đường dẫn thực tế của NVRTC library
-    local actual_target="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-    local fallback_target="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-    local target_lib=""
+    # Tìm thư mục chứa NVRTC libraries
+    local actual_dir="/usr/local/cuda-12.0/targets/x86_64-linux/lib"
+    local fallback_dir="/usr/local/cuda/targets/x86_64-linux/lib"
+    local nvrtc_lib_dir=""
     
-    # Xác định đường dẫn chính xác
-    if [[ -f "$actual_target" ]]; then
-        target_lib="$actual_target"
-    elif [[ -f "$fallback_target" ]]; then
-        target_lib="$fallback_target"
+    # Xác định thư mục chứa libraries
+    if [[ -d "$actual_dir" && -f "$actual_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        nvrtc_lib_dir="$actual_dir"
+    elif [[ -d "$fallback_dir" && -f "$fallback_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        nvrtc_lib_dir="$fallback_dir"
     else
-        error "NVRTC library not found in expected locations"
-        error "  Checked: $actual_target"
-        error "  Checked: $fallback_target"
+        error "NVRTC library directory not found in expected locations"
+        error "  Checked: $actual_dir"
+        error "  Checked: $fallback_dir"
         return 1
     fi
     
-    local base_path="/usr/local/cuda/lib64"
-    local required_link="$base_path/libnvrtc-builtins.so.12.0"
-    local system_link="/usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0"
+    log "Checking NVRTC libraries via ldconfig method..."
+    log "Using library directory: $nvrtc_lib_dir"
     
-    log "Checking NVRTC libraries..."
-    log "Using target library: $target_lib"
+    success "Found NVRTC library directory: $nvrtc_lib_dir"
     
-    success "Found target library: $target_lib"
-    
-    # Check required symbolic link
-    if [[ -L "$required_link" ]]; then
-        local link_target=$(readlink "$required_link")
-        if [[ "$link_target" == "$target_lib" ]]; then
-            success "Required symbolic link exists and is correct: $required_link"
+    # Check if ldconfig configuration exists
+    local ldconfig_file="/etc/ld.so.conf.d/cuda-nvrtc.conf"
+    if [[ -f "$ldconfig_file" ]]; then
+        local configured_path=$(cat "$ldconfig_file")
+        if [[ "$configured_path" == "$nvrtc_lib_dir" ]]; then
+            success "ldconfig configuration exists and is correct: $ldconfig_file"
         else
-            warning "Required symbolic link exists but points to wrong target: $required_link -> $link_target"
-            warning "Expected target: $target_lib"
+            warning "ldconfig configuration exists but points to wrong directory: $configured_path"
+            warning "Expected directory: $nvrtc_lib_dir"
             return 2
         fi
-    elif [[ -f "$required_link" ]]; then
-        warning "Required file exists but is not a symbolic link: $required_link"
-        return 2
     else
-        warning "Required symbolic link missing: $required_link"
+        warning "ldconfig configuration missing: $ldconfig_file"
         return 2
     fi
     
-    # Check system-wide symbolic link
-    if [[ -L "$system_link" ]]; then
-        local system_target=$(readlink "$system_link")
-        if [[ "$system_target" == "$target_lib" ]]; then
-            success "System-wide symbolic link exists and is correct: $system_link"
-        else
-            warning "System-wide symbolic link exists but points to wrong target: $system_link -> $system_target"
-            return 3
-        fi
+    # Check if libraries are in ldconfig cache
+    if ldconfig -p | grep -q nvrtc-builtins; then
+        success "NVRTC libraries found in ldconfig cache"
+        local cache_entries=$(ldconfig -p | grep nvrtc-builtins | wc -l)
+        log "Found $cache_entries NVRTC entries in ldconfig cache"
     else
-        warning "System-wide symbolic link missing: $system_link"
+        warning "NVRTC libraries not found in ldconfig cache"
         return 3
+    fi
+    
+    # Verify actual library files exist
+    if [[ -f "$nvrtc_lib_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        success "NVRTC library file exists: $nvrtc_lib_dir/libnvrtc-builtins.so.12.0.140"
+    else
+        error "NVRTC library file missing: $nvrtc_lib_dir/libnvrtc-builtins.so.12.0.140"
+        return 4
     fi
     
     return 0
 }
 
-create_nvrtc_symlinks() {
-    # Tìm đường dẫn thực tế của NVRTC library (giống check_nvrtc_libraries)
-    local actual_target="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-    local fallback_target="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-    local target_lib=""
+create_nvrtc_ldconfig() {
+    # Tìm thư mục chứa NVRTC libraries (giống check_nvrtc_libraries)
+    local actual_dir="/usr/local/cuda-12.0/targets/x86_64-linux/lib"
+    local fallback_dir="/usr/local/cuda/targets/x86_64-linux/lib"
+    local nvrtc_lib_dir=""
     
-    # Xác định đường dẫn chính xác
-    if [[ -f "$actual_target" ]]; then
-        target_lib="$actual_target"
-    elif [[ -f "$fallback_target" ]]; then
-        target_lib="$fallback_target"
+    # Xác định thư mục chứa libraries
+    if [[ -d "$actual_dir" && -f "$actual_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        nvrtc_lib_dir="$actual_dir"
+    elif [[ -d "$fallback_dir" && -f "$fallback_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        nvrtc_lib_dir="$fallback_dir"
     else
-        error "NVRTC library not found in expected locations during fix"
+        error "NVRTC library directory not found in expected locations during fix"
         return 1
     fi
     
-    local base_path="/usr/local/cuda/lib64"
-    local required_link="$base_path/libnvrtc-builtins.so.12.0"
-    local system_link="/usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0"
+    local ldconfig_file="/etc/ld.so.conf.d/cuda-nvrtc.conf"
     
-    log "Creating NVRTC symbolic links..."
-    log "Source library: $target_lib"
+    log "Configuring NVRTC libraries via ldconfig method..."
+    log "Library directory: $nvrtc_lib_dir"
     
-    # Tạo thư mục CUDA lib64 nếu chưa có
-    mkdir -p "$base_path"
-    
-    # Create CUDA lib64 symbolic link trỏ đến file thực tế
-    if [[ ! -L "$required_link" ]] || [[ "$(readlink "$required_link")" != "$target_lib" ]]; then
-        log "Creating CUDA lib64 symbolic link..."
-        ln -sf "$target_lib" "$required_link"
-        success "Created: $required_link -> $target_lib"
-    fi
-    
-    # Create system-wide symbolic link
-    if [[ ! -L "$system_link" ]] || [[ "$(readlink "$system_link")" != "$target_lib" ]]; then
-        log "Creating system-wide symbolic link..."
-        mkdir -p /usr/lib/x86_64-linux-gnu
-        ln -sf "$target_lib" "$system_link"
-        success "Created: $system_link -> $target_lib"
-    fi
-    
-    # Update ldconfig cache
-    log "Updating ldconfig cache..."
-    ldconfig 2>/dev/null || {
-        warning "ldconfig update failed, but symbolic links were created"
+    # Tạo/cập nhật ldconfig configuration
+    log "Creating ldconfig configuration: $ldconfig_file"
+    echo "$nvrtc_lib_dir" > "$ldconfig_file" || {
+        error "Failed to create ldconfig configuration file"
+        return 1
     }
-    success "NVRTC symbolic link fix completed"
+    success "Created ldconfig configuration: $ldconfig_file"
+    
+    # Cập nhật ldconfig cache
+    log "Updating ldconfig cache..."
+    ldconfig || {
+        error "ldconfig update failed"
+        return 1
+    }
+    success "ldconfig cache updated successfully"
+    
+    # Kiểm tra xem libraries đã được nhận diện chưa
+    if ldconfig -p | grep -q nvrtc-builtins; then
+        success "NVRTC libraries found in ldconfig cache"
+        local cache_entries=$(ldconfig -p | grep nvrtc-builtins | wc -l)
+        log "Found $cache_entries NVRTC entries in cache"
+    else
+        warning "NVRTC libraries not found in ldconfig cache after update"
+        return 2
+    fi
+    
+    success "NVRTC ldconfig configuration completed successfully"
+}
+
+# Keep original function name for backward compatibility
+create_nvrtc_symlinks() {
+    create_nvrtc_ldconfig
 }
 
 verify_fix() {
-    log "Verifying fix..."
+    log "Verifying ldconfig-based NVRTC fix..."
     
-    # Check with ldconfig
-    if ldconfig -p | grep -q "libnvrtc-builtins.so.12.0"; then
-        success "libnvrtc-builtins.so.12.0 found in ldconfig cache"
+    # Check ldconfig configuration file
+    local ldconfig_file="/etc/ld.so.conf.d/cuda-nvrtc.conf"
+    if [[ -f "$ldconfig_file" ]]; then
+        local configured_path=$(cat "$ldconfig_file")
+        success "ldconfig configuration exists: $ldconfig_file"
+        log "Configured path: $configured_path"
     else
-        error "libnvrtc-builtins.so.12.0 NOT found in ldconfig cache"
+        error "ldconfig configuration missing: $ldconfig_file"
         return 1
     fi
     
-    # Show ldconfig output for nvrtc libraries
+    # Check if NVRTC libraries are in ldconfig cache
+    if ldconfig -p | grep -q nvrtc-builtins; then
+        success "NVRTC libraries found in ldconfig cache"
+        local cache_count=$(ldconfig -p | grep nvrtc-builtins | wc -l)
+        log "Found $cache_count NVRTC entries in cache"
+    else
+        error "NVRTC libraries NOT found in ldconfig cache"
+        return 1
+    fi
+    
+    # Verify actual library files exist
+    local nvrtc_dir=$(cat "$ldconfig_file")
+    if [[ -f "$nvrtc_dir/libnvrtc-builtins.so.12.0.140" ]]; then
+        success "NVRTC library file exists: $nvrtc_dir/libnvrtc-builtins.so.12.0.140"
+    else
+        error "NVRTC library file missing: $nvrtc_dir/libnvrtc-builtins.so.12.0.140"
+        return 1
+    fi
+    
+    # Show detailed ldconfig output
     echo
-    echo "NVRTC libraries in ldconfig cache:"
+    echo "=== NVRTC Libraries in ldconfig cache ==="
     ldconfig -p | grep nvrtc || echo "  (none found)"
     
-    # Show symbolic links
+    # Show library directory contents
     echo
-    echo "NVRTC symbolic links:"
-    ls -la /usr/local/cuda/lib64/libnvrtc-builtins.so.12.* 2>/dev/null || echo "  (none found in CUDA lib64)"
-    ls -la /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.* 2>/dev/null || echo "  (none found in system lib)"
+    echo "=== NVRTC Library Directory Contents ==="
+    ls -la "$nvrtc_dir"/libnvrtc*.so* 2>/dev/null || echo "  (no NVRTC libraries found)"
     
+    # Test environment variable as backup
+    echo
+    echo "=== Environment Variable Backup ==="
+    if [[ "$LD_LIBRARY_PATH" == *"$nvrtc_dir"* ]]; then
+        success "LD_LIBRARY_PATH includes NVRTC directory"
+    else
+        warning "LD_LIBRARY_PATH does not include NVRTC directory (may need manual export)"
+    fi
+    
+    success "✅ ldconfig-based NVRTC verification completed"
     return 0
 }
 

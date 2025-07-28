@@ -176,41 +176,39 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 # Simplified CUDA library path - production only
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-# ------------------  NVRTC Symbolic Link Fix (Corrected Path) ---------------------
-# Fix: Tạo symbolic link cho libnvrtc-builtins.so.12.0 → actual file location
-# Nguyên nhân: NVRTC tìm file trong /usr/lib/x86_64-linux-gnu/ nhưng file thực tế ở /usr/local/cuda-12.0/targets/x86_64-linux/lib/
+# ------------------  NVRTC Library Path Fix (ldconfig Method) ---------------------
+# Fix: Cấu hình ldconfig để system tự động tìm NVRTC libraries
+# Lợi ích: Không cần symbolic links, system-wide, persistent, đơn giản hơn
 RUN set -eux; \
-    echo "🔧 [NVRTC-BUILD-FIX] Checking and creating NVRTC symbolic links..."; \
-    # Định vị file NVRTC builtins thực tế
-    NVRTC_ACTUAL_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"; \
-    NVRTC_FALLBACK_PATH="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"; \
-    # Xác định đường dẫn chính xác
-    if [ -f "$NVRTC_ACTUAL_PATH" ]; then \
-        NVRTC_SOURCE="$NVRTC_ACTUAL_PATH"; \
-        echo "[NVRTC-BUILD-FIX] Found NVRTC library at: $NVRTC_SOURCE"; \
-    elif [ -f "$NVRTC_FALLBACK_PATH" ]; then \
-        NVRTC_SOURCE="$NVRTC_FALLBACK_PATH"; \
-        echo "[NVRTC-BUILD-FIX] Using fallback path: $NVRTC_SOURCE"; \
+    echo "🔧 [NVRTC-LDCONFIG-FIX] Configuring NVRTC library paths via ldconfig..."; \
+    # Định vị thư mục chứa NVRTC libraries thực tế
+    NVRTC_ACTUAL_DIR="/usr/local/cuda-12.0/targets/x86_64-linux/lib"; \
+    NVRTC_FALLBACK_DIR="/usr/local/cuda/targets/x86_64-linux/lib"; \
+    NVRTC_LIB_DIR=""; \
+    # Xác định thư mục chứa libraries
+    if [ -d "$NVRTC_ACTUAL_DIR" ] && [ -f "$NVRTC_ACTUAL_DIR/libnvrtc-builtins.so.12.0.140" ]; then \
+        NVRTC_LIB_DIR="$NVRTC_ACTUAL_DIR"; \
+        echo "[NVRTC-LDCONFIG-FIX] Found NVRTC libraries in: $NVRTC_LIB_DIR"; \
+    elif [ -d "$NVRTC_FALLBACK_DIR" ] && [ -f "$NVRTC_FALLBACK_DIR/libnvrtc-builtins.so.12.0.140" ]; then \
+        NVRTC_LIB_DIR="$NVRTC_FALLBACK_DIR"; \
+        echo "[NVRTC-LDCONFIG-FIX] Using fallback directory: $NVRTC_LIB_DIR"; \
     else \
-        echo "[NVRTC-BUILD-FIX] ❌ NVRTC library not found in expected locations"; \
+        echo "[NVRTC-LDCONFIG-FIX] ❌ NVRTC library directory not found in expected locations"; \
         exit 1; \
     fi; \
-    # Tạo system-wide symbolic link trỏ đến file thực tế
-    echo "[NVRTC-BUILD-FIX] Creating system-wide symbolic link"; \
-    mkdir -p /usr/lib/x86_64-linux-gnu && \
-    ln -sf "$NVRTC_SOURCE" /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
-    # Tạo thêm symbolic link trong /usr/local/cuda/lib64 để compatibility
-    mkdir -p /usr/local/cuda/lib64 && \
-    ln -sf "$NVRTC_SOURCE" /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0.140 && \
-    ln -sf libnvrtc-builtins.so.12.0.140 /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0; \
+    # Cấu hình ldconfig để system tự động tìm libraries
+    echo "[NVRTC-LDCONFIG-FIX] Adding $NVRTC_LIB_DIR to ldconfig search paths"; \
+    echo "$NVRTC_LIB_DIR" > /etc/ld.so.conf.d/cuda-nvrtc.conf; \
     # Cập nhật ldconfig cache
-    ldconfig 2>/dev/null || echo "[NVRTC-BUILD-FIX] ldconfig update skipped"; \
-    # Verification - kiểm tra symbolic link được tạo thành công
-    echo "[NVRTC-BUILD-FIX] Verification:"; \
-    ls -la /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
-    ls -la /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0* 2>/dev/null || echo "CUDA lib64 links optional"; \
-    readlink /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
-    echo "✅ [NVRTC-BUILD-FIX] Build-time fix completed with correct paths"
+    ldconfig; \
+    # Verification - kiểm tra ldconfig đã nhận diện được libraries
+    echo "[NVRTC-LDCONFIG-FIX] Verification:"; \
+    ldconfig -p | grep nvrtc-builtins && echo "✅ NVRTC libraries found in ldconfig cache" || echo "⚠️ NVRTC not in cache, checking manually..."; \
+    ls -la "$NVRTC_LIB_DIR"/libnvrtc-builtins.so* || echo "❌ Libraries not found"; \
+    echo "✅ [NVRTC-LDCONFIG-FIX] ldconfig configuration completed"
+
+# Backup environment variable cho compatibility
+ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}"
 
 ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 
