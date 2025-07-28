@@ -228,4 +228,23 @@ gpu_cloaking_logger.log_time_based_evasion = log_time_based_evasion
 gpu_plugin_logger.log_nvml_interception = log_nvml_interception
 gpu_plugin_logger.log_time_based_evasion = log_time_based_evasion
 
+# ========== 🔧 LAYER 2: Logger Method Addition ==========
+
+def enhanced_log_plugin_lifecycle(plugin_name, action, status, metadata=None):
+    """Enhanced log_plugin_lifecycle method for all GPU loggers"""
+    message = f"[PLUGIN_LIFECYCLE] {plugin_name} - {action}: {status}"
+    if metadata:
+        message += f" | metadata: {metadata}"
+    return message
+
+# ✅ LAYER 2: Add log_plugin_lifecycle method to all GPU loggers
+gpu_optimization_logger.log_plugin_lifecycle = lambda plugin_name, action, status, metadata=None: gpu_optimization_logger.info(enhanced_log_plugin_lifecycle(plugin_name, action, status, metadata))
+gpu_plugin_logger.log_plugin_lifecycle = lambda plugin_name, action, status, metadata=None: gpu_plugin_logger.info(enhanced_log_plugin_lifecycle(plugin_name, action, status, metadata))  
+gpu_cloaking_logger.log_plugin_lifecycle = lambda plugin_name, action, status, metadata=None: gpu_cloaking_logger.info(enhanced_log_plugin_lifecycle(plugin_name, action, status, metadata))
+gpu_monitoring_logger.log_plugin_lifecycle = lambda plugin_name, action, status, metadata=None: gpu_monitoring_logger.info(enhanced_log_plugin_lifecycle(plugin_name, action, status, metadata))
+
+# ✅ LAYER 2: Add log_function_call method to GPU optimization logger
+gpu_optimization_logger.log_function_call = lambda function_name, status, metadata=None: gpu_optimization_logger.info(f"[FUNCTION_CALL] {function_name}: {status}" + (f" | {metadata}" if metadata else ""))
+
+print("✅ [LAYER2] Added log_plugin_lifecycle and log_function_call methods to all GPU loggers")
 print("✅ [COMPREHENSIVE_FIX] Added all missing logger methods")

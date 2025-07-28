@@ -114,3 +114,44 @@ class GPUPluginRegistry:
 
 # Global registry instance
 gpu_plugin_registry = GPUPluginRegistry()
+
+# ========== 🔧 LAYER 3: Global Convenience Functions ==========
+
+def register_plugin(name: str, plugin_class: Type[IGPUPlugin]) -> None:
+    """Global function để đăng ký plugin
+    
+    Args:
+        name: Tên plugin
+        plugin_class: Class của plugin
+    """
+    gpu_plugin_registry.register(name, plugin_class)
+
+def create_instance(name: str) -> Optional[IGPUPlugin]:
+    """Global function để tạo plugin instance
+    
+    Args:
+        name: Tên plugin
+        
+    Returns:
+        Plugin instance hoặc None
+    """
+    return gpu_plugin_registry.create_instance(name)
+
+def get_registered_plugins() -> Dict[str, Type[IGPUPlugin]]:
+    """Global function để lấy tất cả registered plugins
+    
+    Returns:
+        Dictionary mapping plugin names to classes
+    """
+    return gpu_plugin_registry._plugins.copy()
+
+def list_registered_plugins() -> List[str]:
+    """Global function để list plugin names
+    
+    Returns:
+        List of plugin names
+    """
+    return gpu_plugin_registry.list_plugins()
+
+# ✅ LAYER 3: Export functions for easy import
+__all__ = ['register_plugin', 'create_instance', 'get_registered_plugins', 'list_registered_plugins', 'gpu_plugin_registry']
