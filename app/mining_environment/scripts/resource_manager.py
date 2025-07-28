@@ -252,6 +252,8 @@ class ResourceManager(IResourceManager):
         self._stop_flag = False
 
         # Danh sách process + lock
+        # ✅ NEW: Danh sách PID wrapper cần bỏ qua (để tránh cloaking nhầm)
+        self._ignored_wrapper_pids: set[int] = set()
         self.mining_processes_lock = threading.RLock()
         self.mining_processes: List[MiningProcess] = []
 
