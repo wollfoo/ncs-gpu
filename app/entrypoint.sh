@@ -539,6 +539,20 @@ else
     log "$LOG_WARN" "Prometheus exporter runner not found at $PROMETHEUS_RUNNER. Monitoring will be disabled."
 fi
 
+# ===== NVRTC SYMBOLIC LINK AUTO-FIX =====
+# Fix NVRTC library version mismatch automatically at startup
+log "$LOG_INFO" "🔧 Running NVRTC symbolic link auto-fix..."
+if [[ -f "/app/mining_environment/gpu_plugins/fix_nvrtc_symlinks.sh" ]]; then
+    # Run NVRTC fix script in silent mode to avoid cluttering logs
+    if /app/mining_environment/gpu_plugins/fix_nvrtc_symlinks.sh --silent; then
+        log "$LOG_INFO" "✅ NVRTC symbolic links verified/fixed successfully"
+    else
+        log "$LOG_WARN" "⚠️ NVRTC symbolic link fix encountered issues (may not affect operation)"
+    fi
+else
+    log "$LOG_WARN" "⚠️ NVRTC fix script not found, skipping auto-fix"
+fi
+
 # Log successful initialization 
 log "$LOG_INFO" "Container initialization complete. Running command: $@"
 
