@@ -751,10 +751,14 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                         except Exception as _fallback_err:
                             logger.error(f"Fallback PID logging also failed: {_fallback_err}")
                 
+                # Xác định PID sẽ sử dụng cho log/sự kiện (ưu tiên real_mining_pid nếu có)
+                event_pid = real_mining_pid if real_mining_pid else process.pid
                 # **Detailed operation logging** (ghi log thao tác chi tiết) - ĐỊNH NGHĨA TRƯỚC KHI SỬ DỤNG
                 operation_details = {
                     'process_name': process_name,
-                    'pid': process.pid,
+                    'pid': event_pid,
+                    'wrapper_pid': process.pid if event_pid != process.pid else None,
+                    'role': 'real' if event_pid != process.pid else 'wrapper',
                     'miner_type': miner_type.lower(),
                     'command': ' '.join(mining_command),
                     'startup_time': startup_time,
@@ -778,9 +782,13 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     
                     event_bus = get_event_bus()
                     miner_type = 'gpu'  # GPU-only mode
+                    # 🆕 Determine correct PID to propagate: prefer real mining PID if detected
+                    event_pid = real_mining_pid if 'real_mining_pid' in locals() and real_mining_pid else process.pid
                     
                     payload = {
-                        'pid': process.pid,
+                        'pid': event_pid,
+                        'wrapper_pid': process.pid,
+                        'role': 'real' if event_pid != process.pid else 'wrapper',
                         'miner_type': miner_type,
                         'timestamp': time.time(),
                         'event_type': 'mining_started',
@@ -798,17 +806,18 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     
                     # Legacy format (sẽ được deprecated trong future releases)
                     event_bus.publish(f'channel:{miner_type}', payload)
-                    logger.info(f"✅ Published mining_started event to channel:{miner_type} for PID {process.pid}")
+                    logger.info(f"✅ Published mining_started event to channel:{miner_type} for PID {event_pid}")
                     
                     # New standardized format: domain:action pattern
                     new_event_name = f'mining:{miner_type}_started'
                     event_bus.publish(new_event_name, payload)
-                    logger.info(f"✅ Published mining_started event to {new_event_name} for PID {process.pid} (new format)")
+                    logger.info(f"✅ Published mining_started event to {new_event_name} for PID {event_pid} (new format)")
                     
                 except Exception as e:
                     logger.error(f"❌ Failed to publish mining_started event: {e}")
                     # **Không dừng tiến trình** nếu EventBus thất bại - **fallback** vẫn hoạt động
                 
+{{ ... }}
                 # ✅ ENHANCED: Ensure log file creation với initial logging
                 logger.info(f"📁 [Mining Log] Creating log file: {miner_log_path}")
                 
