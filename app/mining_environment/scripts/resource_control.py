@@ -371,7 +371,7 @@ class GPUResourceManager:
         try:
             if not self.gpu_initialized:
                 self.logger.error("GPUResourceManager chưa init. Không thể lấy nhiệt độ GPU.")
-            return None
+                return None
             handle = self.get_handle(gpu_index)
             if not handle:
                 self.logger.error(f"Không thể lấy handle cho GPU={gpu_index}.")
