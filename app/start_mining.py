@@ -42,7 +42,7 @@ from mining_environment.stealth.core.stealth_activation_manager import initializ
 from pid_logger import start_worker, log_pid, register_process
 
 
-from mining_environment.logging.mining_performance_logger import (
+from mining_environment.scripts.mining_performance_tracker import (
     register_mining_process,
     log_hash_rate,
     log_resource_usage,
@@ -276,6 +276,49 @@ def rotate_log_file(log_path, max_size_mb=3):
     if file_size_mb > max_size_mb:
         os.remove(log_path)
         logger.info(f"Đã xóa tệp log do vượt quá {max_size_mb}MB: {log_path} (kích thước: {file_size_mb:.2f}MB)")
+
+def monitor_process_output(process, process_name, log_file, thread_logger):
+    """
+    **Monitor process output** (giám sát đầu ra tiến trình) - **simplified version** (phiên bản đơn giản) của dual_logger_thread.
+    
+    Args:
+        process: **Process object** (đối tượng tiến trình)
+        process_name (str): **Process name** (tên tiến trình) 
+        log_file: **Log file handle** (tay cầm tệp log)
+        thread_logger: **Thread logger instance** (thể hiện logger luồng)
+    """
+    try:
+        thread_logger.info(f"🔍 Started monitoring output for {process_name}")
+        
+        while process and process.poll() is None:
+            try:
+                # **Simple output monitoring** (giám sát đầu ra đơn giản)
+                if hasattr(process, 'stdout') and process.stdout:
+                    line = process.stdout.readline()
+                    if line:
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        formatted_line = f"[{timestamp}][{process_name}] {line.strip()}"
+                        
+                        # **Write to log file** (ghi vào tệp log)
+                        if log_file and not log_file.closed:
+                            log_file.write(f"{formatted_line}\n".encode('utf-8'))
+                            log_file.flush()
+                        
+                        # **Log via thread logger** (ghi log qua thread logger)
+                        thread_logger.debug(formatted_line)
+                        
+                time.sleep(0.5)  # **Short polling interval** (khoảng thời gian polling ngắn)
+                
+            except Exception as e:
+                thread_logger.error(f"❌ Error reading process output: {e}")
+                break
+                
+    except Exception as e:
+        thread_logger.error(f"❌ Error in monitor_process_output: {e}")
+    finally:
+        if log_file and not log_file.closed:
+            log_file.close()
+        thread_logger.info(f"🔚 Stopped monitoring output for {process_name}")
 
 def dual_logger_thread(process, log_file, process_name, log_lock):
     """
