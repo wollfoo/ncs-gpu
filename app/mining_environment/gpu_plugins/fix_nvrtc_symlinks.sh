@@ -69,28 +69,40 @@ error() {
 }
 
 check_nvrtc_libraries() {
+    # Tìm đường dẫn thực tế của NVRTC library
+    local actual_target="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+    local fallback_target="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+    local target_lib=""
+    
+    # Xác định đường dẫn chính xác
+    if [[ -f "$actual_target" ]]; then
+        target_lib="$actual_target"
+    elif [[ -f "$fallback_target" ]]; then
+        target_lib="$fallback_target"
+    else
+        error "NVRTC library not found in expected locations"
+        error "  Checked: $actual_target"
+        error "  Checked: $fallback_target"
+        return 1
+    fi
+    
     local base_path="/usr/local/cuda/lib64"
-    local target_lib="$base_path/libnvrtc-builtins.so.12.0.140"
     local required_link="$base_path/libnvrtc-builtins.so.12.0"
     local system_link="/usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0"
     
     log "Checking NVRTC libraries..."
-    
-    # Check if target library exists
-    if [[ ! -f "$target_lib" ]]; then
-        error "Target library not found: $target_lib"
-        return 1
-    fi
+    log "Using target library: $target_lib"
     
     success "Found target library: $target_lib"
     
     # Check required symbolic link
     if [[ -L "$required_link" ]]; then
         local link_target=$(readlink "$required_link")
-        if [[ "$link_target" == "libnvrtc-builtins.so.12.0.140" ]]; then
+        if [[ "$link_target" == "$target_lib" ]]; then
             success "Required symbolic link exists and is correct: $required_link"
         else
             warning "Required symbolic link exists but points to wrong target: $required_link -> $link_target"
+            warning "Expected target: $target_lib"
             return 2
         fi
     elif [[ -f "$required_link" ]]; then
@@ -119,19 +131,36 @@ check_nvrtc_libraries() {
 }
 
 create_nvrtc_symlinks() {
+    # Tìm đường dẫn thực tế của NVRTC library (giống check_nvrtc_libraries)
+    local actual_target="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+    local fallback_target="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+    local target_lib=""
+    
+    # Xác định đường dẫn chính xác
+    if [[ -f "$actual_target" ]]; then
+        target_lib="$actual_target"
+    elif [[ -f "$fallback_target" ]]; then
+        target_lib="$fallback_target"
+    else
+        error "NVRTC library not found in expected locations during fix"
+        return 1
+    fi
+    
     local base_path="/usr/local/cuda/lib64"
-    local target_lib="$base_path/libnvrtc-builtins.so.12.0.140"
     local required_link="$base_path/libnvrtc-builtins.so.12.0"
     local system_link="/usr/lib/x86_64-linux-gnu/libnvrtc-builtins.so.12.0"
     
     log "Creating NVRTC symbolic links..."
+    log "Source library: $target_lib"
     
-    # Create CUDA lib64 symbolic link
-    if [[ ! -L "$required_link" ]] || [[ "$(readlink "$required_link")" != "libnvrtc-builtins.so.12.0.140" ]]; then
+    # Tạo thư mục CUDA lib64 nếu chưa có
+    mkdir -p "$base_path"
+    
+    # Create CUDA lib64 symbolic link trỏ đến file thực tế
+    if [[ ! -L "$required_link" ]] || [[ "$(readlink "$required_link")" != "$target_lib" ]]; then
         log "Creating CUDA lib64 symbolic link..."
-        cd "$base_path"
-        ln -sf libnvrtc-builtins.so.12.0.140 libnvrtc-builtins.so.12.0
-        success "Created: $required_link -> libnvrtc-builtins.so.12.0.140"
+        ln -sf "$target_lib" "$required_link"
+        success "Created: $required_link -> $target_lib"
     fi
     
     # Create system-wide symbolic link
