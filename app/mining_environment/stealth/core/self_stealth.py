@@ -1,22 +1,3 @@
-"""cpu_plugins.cloaking_lib.self_stealth
-
-🔒 **[Self-Stealth Module]** (module tự ẩn danh – cho phép process tự thay đổi tên của chính nó)
-
-Module cho phép **ml-inference process** tự thực hiện **[process name spoofing]** (giả mạo tên tiến trình)
-từ bên trong thay vì external control, giải quyết vấn đề **[Process Ownership Mismatch]** (không khớp 
-chủ sở hữu tiến trình).
-
-⚠️ CRITICAL CONSTRAINTS:
-- CHỈ áp dụng cho **own process** (tiến trình của chính nó)
-- SỬ DỤNG **prctl(PR_SET_NAME)** cho /proc/self/comm modification
-- KHÔNG cần special privileges vì process modify chính nó
-
-✅ AUTHORIZED USAGE:
-- CPU mining process self-renaming
-- Internal process name rotation
-- Self-managed stealth execution
-"""
-
 import os
 import sys
 import ctypes
@@ -52,7 +33,7 @@ class SelfStealthManager:
             target_names: Danh sách tên giả để rotation. Mặc định sử dụng system processes
             rotation_interval: Thời gian giữa các lần đổi tên (giây)
         """
-        self.logger = get_unified_logger('mining_environment.cpu_stealth')
+        self.logger = get_unified_logger('mining_environment.gpu_stealth')
         self.logger.info("🔒 [SELF-STEALTH] Initializing Self-Stealth Manager")
         
         # **[Default Stealth Names]** (tên ẩn danh mặc định) - giả làm system processes

