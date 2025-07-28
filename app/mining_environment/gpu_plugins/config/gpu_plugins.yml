@@ -13,7 +13,7 @@ plugins:
     
   nvml_interceptor:
     enabled: true
-    fake_utilization: 2
+    fake_utilization: 20
     fake_memory_used: 100
     lib_path: /opt/hooks/libgpuhook.so
     
