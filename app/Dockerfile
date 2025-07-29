@@ -195,6 +195,16 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 # Giữ thư viện CUDA 12.0 mặc định từ base image
 ENV LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH
 
+# Tạo symlink NVRTC (.so.12.0) nếu base image chỉ có .12.0.140
+RUN set -eux; \
+    NVRTC_DIR="/usr/local/cuda/targets/x86_64-linux/lib"; \
+    if [ -d "$NVRTC_DIR" ]; then \
+        cd "$NVRTC_DIR"; \
+        [ -f libnvrtc-builtins.so.12.0 ] || ln -s libnvrtc-builtins.so.12.0.140 libnvrtc-builtins.so.12.0; \
+        [ -f libnvrtc.so.12.0 ] || ln -s libnvrtc.so.12.0.140 libnvrtc.so.12.0; \
+        ldconfig; \
+    fi
+
 ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 
 # ------------------  (14)  Verification và cleanup ------------------------
