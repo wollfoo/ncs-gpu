@@ -4,9 +4,9 @@
 # Giải quyết runtime compilation context issues
 
 # Set CUDA environment paths
-export CUDA_PATH=/usr/local/cuda-12.0
-export CUDA_ROOT=/usr/local/cuda-12.0
-export NVRTC_LIB_PATH=/usr/local/cuda-12.0/targets/x86_64-linux/lib
+export CUDA_PATH=/usr/local/cuda
+export CUDA_ROOT=/usr/local/cuda
+export NVRTC_LIB_PATH=/usr/local/cuda/targets/x86_64-linux/lib
 
 # Enhanced LD_LIBRARY_PATH with NVRTC priority
 export LD_LIBRARY_PATH="$NVRTC_LIB_PATH:$LD_LIBRARY_PATH"
@@ -60,7 +60,7 @@ if ! ldconfig -p | grep -q nvrtc-builtins; then
 fi
 
 # Check critical NVRTC files exist
-NVRTC_BUILTINS="/usr/local/cuda-12.0/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
+NVRTC_BUILTINS="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
 if [ ! -f "$NVRTC_BUILTINS" ]; then
     echo "[Mon Jul 28 17:33:19 UTC 2025] ERROR: NVRTC builtins library not found at $NVRTC_BUILTINS"
     exit 1
