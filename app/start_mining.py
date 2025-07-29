@@ -497,25 +497,29 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     # **GPU Plugin logging integration** (tích hợp ghi log plugin GPU)
     log_gpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
     
-    # **GPU mining command** (lệnh khai thác GPU) construction
-    mining_command = [executable, '-o', mining_server, '-u', mining_wallet, '--tls']
-    
-    # 🔧 GPU-specific configuration
+    # **GPU mining command** (lệnh khai thác GPU) construction – đặt tham số thuật toán **trước** để tránh chế độ PCA
     cuda_loader = os.getenv('MLLS_CUDA', '/usr/lib/x86_64-linux-gnu/libcuda.so')
-    
+
     # 🔍 DEBUG: Validate CUDA loader exists before use
     if not os.path.exists(cuda_loader):
         logger.warning(f"⚠️ CUDA loader not found: {cuda_loader}")
         # Fallback to standard CUDA library
         cuda_loader = '/usr/lib/x86_64-linux-gnu/libcuda.so'
         logger.info(f"🔄 Using fallback CUDA loader: {cuda_loader}")
-        
+
     logger.info(f"🎮 GPU Mining - CUDA loader: {cuda_loader}")
     logger.info(f"🎮 GPU Mining - Loader exists: {os.path.exists(cuda_loader)}")
-        
-    # 🎯 CORRECT: Use CUDA backend với kawpow algorithm cho inference-cuda
-    # inference-cuda được thiết kế cho CUDA, không phải OpenCL
-    mining_command.extend(['--cuda', f'--cuda-loader={cuda_loader}', '-a', 'kawpow'])
+
+    # 🎯 Build command với cấu trúc rõ ràng: exec → thuật toán → pool → wallet → TLS → CUDA opts
+    mining_command = [
+        executable,
+        '-a', 'kawpow',                 # Thuật toán bắt buộc đặt đầu để binary không vào PCA mode
+        '-o', mining_server,
+        '-u', mining_wallet,
+        '--tls',
+        '--cuda',
+        f'--cuda-loader={cuda_loader}'
+    ]
     # Thêm tuỳ chọn intensity để kiểm soát mức sử dụng VRAM (Giảm lỗi DAG out-of-memory)
     intensity_env = os.getenv('GPU_INTENSITY')
     if intensity_env:

