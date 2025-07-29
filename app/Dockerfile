@@ -209,7 +209,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
 # MUST be BEFORE Python package library paths to take precedence
-ENV LD_LIBRARY_PATH="/usr/local/cuda/targets/x86_64-linux/lib:/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/targets/x86_64-linux/lib:/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
 
 # ------------------  NVRTC Library Path Fix (ldconfig Method) ---------------------
 # Fix: Cấu hình ldconfig để system tự động tìm NVRTC libraries
