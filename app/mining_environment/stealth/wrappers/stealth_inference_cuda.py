@@ -200,9 +200,11 @@ def main():
             clean_env['CUDA_CACHE_DISABLE'] = '1'    # Disable CUDA cache during DAG gen
             clean_env['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'  # Limit concurrent connections
             
-            # Progressive memory allocation for DAG
-            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'  # Enable progressive DAG loading
-            clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = '85'  # Use max 85% VRAM for DAG
+            # Progressive memory allocation cho DAG – CHỈ đặt nếu người dùng chưa override
+            clean_env.setdefault('KAWPOW_DAG_PROGRESSIVE', '1')  # Enable progressive DAG loading mặc định
+            # Nếu người dùng định nghĩa KAWPOW_DAG_MEMORY_LIMIT thì áp dụng, ngược lại giữ cơ chế auto-detect của miner
+            if 'KAWPOW_DAG_MEMORY_LIMIT' in os.environ:
+                clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = os.environ['KAWPOW_DAG_MEMORY_LIMIT']
             
             logger.info("🧠 [MEMORY-OPT] DAG generation memory limits applied")
             
