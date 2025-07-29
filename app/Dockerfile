@@ -172,13 +172,13 @@ RUN set -eux; \
 # Strategy: Force LD_LIBRARY_PATH priority + verify NVRTC compatibility
 
 # Force system CUDA 12.0 libraries to take precedence over Python packages
-ENV CUDA_PATH=/usr/local/cuda-12.0 \
-    CUDA_ROOT=/usr/local/cuda-12.0 \
+ENV CUDA_PATH=/usr/local/cuda \
+    CUDA_ROOT=/usr/local/cuda \
     CUDA_VERSION=12.0 \
     CUDA_VERSION_MAJOR=12 \
     CUDA_VERSION_MINOR=0 \
     # Force NVRTC to use system libraries
-    CUDA_NVRTC_LIBRARY_DIR=/usr/local/cuda-12.0/targets/x86_64-linux/lib \
+    CUDA_NVRTC_LIBRARY_DIR=/usr/local/cuda/targets/x86_64-linux/lib \
     # Prevent Python CUDA packages from taking precedence
     PYTHONDONTWRITEBYTECODE=1
 
@@ -209,7 +209,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
 # MUST be BEFORE Python package library paths to take precedence
-ENV LD_LIBRARY_PATH="/usr/local/cuda-12.0/targets/x86_64-linux/lib:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/targets/x86_64-linux/lib:/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
 
 # ------------------  NVRTC Library Path Fix (ldconfig Method) ---------------------
 # Fix: Cấu hình ldconfig để system tự động tìm NVRTC libraries
