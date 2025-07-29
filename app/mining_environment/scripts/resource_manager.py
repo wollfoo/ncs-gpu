@@ -877,7 +877,7 @@ class ResourceManager(IResourceManager):
             # Ultra-fast main loop với minimal monitoring
             self.logger.info("🔄 Entering minimal main monitoring loop...")
             last_discovery_time = time.time()
-            discovery_interval = 30  # Run Process Discovery every 30 seconds
+            discovery_interval = 60  # Run Process Discovery every 60 seconds
             
             while not self._stop_flag:
                 current_time = time.time()
