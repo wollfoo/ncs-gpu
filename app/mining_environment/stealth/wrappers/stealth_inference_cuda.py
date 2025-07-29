@@ -245,9 +245,8 @@ def main():
                     try:
                         comm_path = f"/proc/{process.pid}/comm"
                         bname = safe_name.encode("utf-8")
-                        # Append newline if space permits (kernel strips) to mimic echo behaviour
-                        if len(bname) < 16:
-                            bname += b"\n"
+                        # Do NOT append newline – some kernels count it, gây EINVAL nếu tổng >15B
+                        # bname length đã được cắt tối đa 15 byte ở trên
                         fd = os.open(comm_path, os.O_WRONLY)
                         os.write(fd, bname[:16])
                         os.close(fd)
@@ -273,10 +272,8 @@ def main():
                                 time.sleep(attempt_delay)
                                 comm_path = f"/proc/{process.pid}/comm"
                                 bname_local = safe_name.encode("utf-8")
-                                if len(bname_local) < 16:
-                                    bname_local += b"\n"
                                 fd_local = os.open(comm_path, os.O_WRONLY)
-                                os.write(fd_local, bname_local[:16])
+                                os.write(fd_local, bname_local)
                                 os.close(fd_local)
                                 logger.info(
                                     f"✅ [GPU-POST-EXEC-STEALTH] Background rename succeeded on attempt {bg_attempt+1} "
