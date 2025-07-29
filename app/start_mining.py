@@ -533,10 +533,10 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     # Thêm tuỳ chọn intensity để kiểm soát mức sử dụng VRAM (Giảm lỗi DAG out-of-memory)
     intensity_env = os.getenv('GPU_INTENSITY')
     if intensity_env:
-        mining_command.extend(['--intensity', intensity_env])
-        logger.info(f"🎮 GPU Mining - INTENSITY (user-defined): {intensity_env}")
+        # mining_command.extend(['--intensity', intensity_env])  # removed because inference-cuda does not support --intensity
+        logger.warning("⚠️ GPU_INTENSITY detected but ignored; --intensity unsupported by inference-cuda")
     else:
-        logger.info("🎮 GPU Mining - INTENSITY flag skipped (GPU_INTENSITY không được đặt)")
+        logger.info("🎮 GPU Mining - INTENSITY parameter disabled (unsupported by binary)")
     logger.info(f"🎮 GPU Mining - CORRECT: Using CUDA backend với kawpow algorithm cho inference-cuda")
 
     enable_ns = os.getenv('ENABLE_NS_ISOLATION', '1') == '1'

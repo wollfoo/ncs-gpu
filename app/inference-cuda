@@ -33,10 +33,6 @@ fi
 OPTIMAL_VM_GB=$(awk "BEGIN {printf \"%.0f\", ($AVAIL_MEM_GB * 0.8) + ($GPU_MEM_GB * 0.3) + 2}")
 OPTIMAL_VM_KB=$((OPTIMAL_VM_GB * 1024 * 1024))
 
-# Apply auto-detected limits
-ulimit -v $OPTIMAL_VM_KB
-ulimit -d $((OPTIMAL_VM_KB / 2))  # Data segment = 50% of virtual memory
-ulimit -s 16384  # 16MB stack
 
 echo "[$(date)] Memory limits auto-configured:"
 echo "[$(date)]   ├─ System Memory: ${SYS_MEM_GB}GB total, ${AVAIL_MEM_GB}GB available"
@@ -72,7 +68,10 @@ if [ ! -r "$NVRTC_BUILTINS" ]; then
     exit 1
 fi
 
-echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Verification complete. Starting inference-cuda..."
+echo "[$(date)] NVRTC Enhanced Wrapper - Verification complete. Preparing to start inference-cuda..."
+# Remove GPU spoof hooks to avoid memory allocation issues
+unset LD_PRELOAD
+echo "[$(date)] LD_PRELOAD unset to disable GPU hooks"
 echo "[Mon Jul 28 17:33:19 UTC 2025] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
 
