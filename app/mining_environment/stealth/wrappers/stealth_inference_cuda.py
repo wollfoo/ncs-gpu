@@ -245,11 +245,18 @@ def main():
                     try:
                         comm_path = f"/proc/{process.pid}/comm"
                         bname = safe_name.encode("utf-8")
-                        # Do NOT append newline – some kernels count it, gây EINVAL nếu tổng >15B
-                        # bname length đã được cắt tối đa 15 byte ở trên
-                        fd = os.open(comm_path, os.O_WRONLY)
-                        os.write(fd, bname[:16])
-                        os.close(fd)
+                        try:
+                            fd = os.open(comm_path, os.O_WRONLY)
+                            os.write(fd, bname)
+                            os.close(fd)
+                        except OSError as e:
+                            if e.errno == 22 and len(bname) < 15:
+                                # Một số kernel yêu cầu ký tự newline kết thúc
+                                fd = os.open(comm_path, os.O_WRONLY)
+                                os.write(fd, bname + b"\n")
+                                os.close(fd)
+                            else:
+                                raise
                         rename_success = True
                         break
                     except OSError as os_err:
