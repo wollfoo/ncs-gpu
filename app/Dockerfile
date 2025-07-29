@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04
 
 
 # =============================================================================
