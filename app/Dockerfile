@@ -98,9 +98,9 @@ WORKDIR /app
 
 # ===== CUDA VERSION SYNCHRONIZATION FIX =====
 # Copy requirements file with CUDA 12.0 compatible packages
-COPY requirements_fixed.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 
-# ----- CUDA-compatible Python dependencies installation -----
+# ----- Python dependencies installation (PyTorch-free) -----
 RUN set -eux; \
     if ! command -v pip3 >/dev/null 2>&1; then \
         apt-get update && \
@@ -108,11 +108,8 @@ RUN set -eux; \
     fi; \
     python3 -m pip install --upgrade pip; \
     ln -sf $(which python3) /usr/bin/python || true; \
-    # Install PyTorch with specific CUDA compatibility FIRST
-    pip3 install --no-cache-dir --break-system-packages \
-        torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2+cu118 \
-        --index-url https://download.pytorch.org/whl/cu118; \
-    # Then install remaining requirements
+    # Install requirements without PyTorch (not needed for mining)
+    # Mining uses system CUDA 12.0 via inference-cuda binary directly
     pip3 install --no-cache-dir --break-system-packages --ignore-installed -r requirements.txt && \
     rm -rf /var/lib/apt/lists/* /root/.cache
 
