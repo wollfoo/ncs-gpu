@@ -12,11 +12,6 @@ joblib
 numpy
 cryptography
 
-# ===== PYTORCH REMOVAL - NOT NEEDED FOR MINING =====
-# Analysis: Codebase does not use PyTorch anywhere
-# Mining uses pure CUDA via inference-cuda binary, not Python ML libraries
-# Removing PyTorch prevents CUDA version conflicts entirely
-
 aiofiles
 aiorwlock
 pynvml==11.4.1
