@@ -1104,8 +1104,6 @@ def main():
     # ------------------------------------------------------------------
     # 2️⃣ Khởi tạo EventBus cho giao tiếp PID / ResourceManager
     # ------------------------------------------------------------------
-    bus = get_thread_event_bus()
-    logger.info("✅ Thread communication EventBus initialized")
     # 🚀 Khởi động PID Logger worker với error handling và verification
     try:
         from pid_logger import _WORKER_STARTED
@@ -1335,13 +1333,6 @@ def main():
                 })
             else:
                 logger.info(f"✅ {thread_name} thread stopped gracefully")
-    
-    # **Stop EventBus** (dừng EventBus)
-    try:
-        bus.stop()
-        logger.info("✅ EventBus stopped successfully")
-    except Exception as e:
-        logger.error(f"❌ Error stopping EventBus: {e}")
     
     # **Step 5**: Stealth system cleanup
     logger.info("📋 Step 5/5: Cleaning up stealth activation system...")
