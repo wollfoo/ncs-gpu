@@ -1,4 +1,3 @@
-
 """
 start_mining.py
 
