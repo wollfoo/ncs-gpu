@@ -620,9 +620,9 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 print(f"\033[92m{startup_msg}\033[0m", flush=True)  # Green startup message
                 
                 # Process registration removed - simplified process management
-                    
-                    # Enhanced PID Logger: Detect Real Mining PID (for stealth wrapper case)
-                    try:
+                
+                # Enhanced PID Logger: Detect Real Mining PID (for stealth wrapper case)
+                try:
                         process_type = "gpu"  # GPU-only mode
                         
                         # Wait for stealth wrapper to spawn child process
