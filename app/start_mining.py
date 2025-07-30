@@ -1239,28 +1239,72 @@ def main():
     )
     mining_threads.append(('GPU Mining', gpu_thread, True))
     
-    # **Sequential Thread Startup** (Khởi động luồng tuần tự) với **dependency management** (quản lý phụ thuộc)
-    logger.info("🚀 Starting threads in dependency order...")
-    
-    started_threads = []
-    for thread_type, thread, enabled in mining_threads:
-        if enabled:
+    def parallel_thread_startup(mining_threads):
+        """
+        **Parallel Thread Startup** (khởi động luồng song song) với 
+        **barrier synchronization** (đồng bộ hóa rào cản)
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
+        # **Count enabled threads** (đếm luồng được kích hoạt)
+        enabled_threads = [(t_type, t, enabled) for t_type, t, enabled in mining_threads if enabled]
+        thread_count = len(enabled_threads)
+        
+        if thread_count == 0:
+            logger.warning("⚠️ No threads enabled for startup")
+            return []
+        
+        # **Barrier synchronization** (đồng bộ hóa rào cản)
+        startup_barrier = threading.Barrier(thread_count + 1)  # +1 for main thread
+        startup_results = {}
+        
+        def start_thread_with_barrier(thread_info):
+            """Start thread and wait at barrier"""
+            thread_type, thread, enabled = thread_info
             try:
                 thread.start()
-                started_threads.append((thread_type, thread))
-                logger.info(f"✅ {thread_type} Thread started (ID: {thread.ident})")
-                
-                # **Startup delay** (độ trễ khởi động) để **sequential initialization** (khởi tạo tuần tự)
-                time.sleep(1.0)
-                
+                logger.info(f"🚀 {thread_type} Thread starting (ID: {thread.ident})")
+                startup_barrier.wait()  # **Wait for all threads**
+                return (thread_type, thread, "success")
             except Exception as e:
-                logger.error(f"❌ Failed to start {thread_type} Thread: {e}")
-        else:
-            logger.info(f"⏸️ {thread_type} Thread disabled by configuration")
+                logger.error(f"❌ {thread_type} Thread startup failed: {e}")
+                try:
+                    startup_barrier.wait()  # **Still participate in barrier**
+                except:
+                    pass
+                return (thread_type, None, f"error: {e}")
+        
+        logger.info(f"🚀 Starting {thread_count} threads in parallel...")
+        started_threads = []
+        
+        # **Parallel execution** (thực thi song song)
+        with ThreadPoolExecutor(max_workers=thread_count) as executor:
+            # Submit all thread startups
+            futures = {executor.submit(start_thread_with_barrier, info): info 
+                      for info in enabled_threads}
+            
+            # **Main thread joins barrier** (luồng chính tham gia rào cản)
+            startup_barrier.wait()
+            logger.info("✅ All threads synchronized at startup barrier")
+            
+            # **Collect results** (thu thập kết quả)
+            for future in as_completed(futures):
+                thread_type, thread, status = future.result()
+                if status == "success" and thread:
+                    started_threads.append((thread_type, thread))
+                    logger.info(f"✅ {thread_type} Thread ready")
+                elif "error:" in status:
+                    logger.error(f"❌ Failed to start {thread_type} Thread: {status}")
+        
+        return started_threads
     
-    # **Thread Health Verification** (Xác minh sức khỏe luồng) với **DirectPIDRegistry monitoring** (giám sát DirectPIDRegistry)
+    # **Execute parallel startup** (thực thi khởi động song song)
+    started_threads = parallel_thread_startup(mining_threads)
+    
+    # **Fast Thread Health Verification** (Xác minh sức khỏe luồng nhanh)
     logger.info("🔍 Verifying threads health...")
-    time.sleep(5)  # Cho phép threads khởi tạo hoàn tất
+    time.sleep(1)  # **Reduced from 5s to 1s** (giảm từ 5s xuống 1s)
     
     # **GPU-Only DirectPIDRegistry Status** (trạng thái DirectPIDRegistry GPU duy nhất)
     thread_status = {
