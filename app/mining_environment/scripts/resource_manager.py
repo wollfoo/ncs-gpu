@@ -564,10 +564,6 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ [IMMEDIATE-CLOAKING] Failed to trigger immediate cloaking: {e}")
             # **Continue processing** (tiếp tục xử lý) - don't fail the entire registration
-                        'severity': 'high'
-                    })
-            except Exception as pub_error:
-                self.logger.error(f"Failed to publish error event: {pub_error}")
 
     def enqueue_cloaking(self, process: MiningProcess) -> None:
         """
