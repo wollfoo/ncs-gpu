@@ -1041,26 +1041,6 @@ def gpu_mining_thread():
                     thread_logger.error(f"🔍 [DEBUG] GPU process is None - start_mining_process failed")
                 
                 if gpu_process:
-                    # **EventBus PID registration** – publish ngay
-                    thread_logger.info(f"🔍 [DIAGNOSTIC] About to publish gpu_pid_registered for PID {gpu_process.pid}")
-                    try:
-                        event_payload = {
-                            'thread_id': threading.current_thread().ident,
-                            'thread_name': 'GPUMining',
-                            'pid': gpu_process.pid,  # This will be detected as real PID later
-                            'role': 'real',  # Always 'real' since we only propagate real mining PID
-                            'process_name': 'inference-cuda',
-                            'status': 'running',
-                            'attempt': retries + 1,
-                            'timestamp': time.time()
-                        }
-                        thread_logger.info(f"🔍 [DIAGNOSTIC] Event payload: {event_payload}")
-                        bus.publish('mining:gpu_pid_registered', event_payload)
-                        thread_logger.info(f"✅ [DIAGNOSTIC] Successfully published gpu_pid_registered event")
-                    except Exception as e:
-                        thread_logger.error(f"[EventBus] publish gpu_pid error: {e}")
-                    
-                    # **🔧 FIX: Start GPU process output monitoring thread** (khởi tạo luồng giám sát đầu ra GPU)
                     try:
                         log_file_path = f"/app/mining_environment/logs/{os.getenv('GPU_PROCESS_NAME', 'inference-cuda')}_output.log"
                         gpu_log_file = open(log_file_path, 'ab')  # Open file handle for monitor thread
