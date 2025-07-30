@@ -932,6 +932,7 @@ def gpu_mining_thread():
     # Môi trường đã được thiết lập đồng bộ trong main(); lấy privileged_manager_global
     global privileged_manager_global
     privileged_manager = privileged_manager_global
+    thread_logger.info(f"🔍 GPU Thread - privileged_manager_global status: {privileged_manager_global is not None}")
     if privileged_manager is None:
         thread_logger.error("❌ Environment chưa sẵn sàng - dừng GPU mining thread")
         return  # GPU optional, không set stop_event
@@ -1038,11 +1039,14 @@ def resource_manager_thread():
 
 def environment_setup_thread():
     """**Thread 1: Environment Setup** (Luồng 1: Thiết lập môi trường) với **thread-safe operations** (thao tác an toàn luồng)"""
+    global privileged_manager_global
     thread_logger = setup_logging('env_setup_thread', str(Path(LOGS_DIR) / 'env_setup_thread.log'), 'INFO')
     thread_logger.info("🌍 Environment Setup Thread Started")
     try:
         thread_logger.info("🔧 Starting environment initialization...")
         privileged_manager = initialize_environment()
+        privileged_manager_global = privileged_manager  # ✅ FIX: Assign to global variable
+        thread_logger.info(f"🔧 Environment setup completed - privileged_manager_global assigned: {privileged_manager_global is not None}")
         env_setup_complete_event.set()
         thread_logger.info("✅ Environment Setup Thread completed successfully")
         return privileged_manager
@@ -1070,7 +1074,7 @@ def main():
         if env_setup_failed_event.is_set():
             logger.error("❌ Không thể thiết lập môi trường.")
             return
-        privileged_manager_global = None  # Đã được set trong thread nếu thành công
+        # ✅ FIX: Remove incorrect assignment - privileged_manager_global already set in thread
         logger.info("✅ Thiết lập môi trường hoàn tất")
     except Exception as e:
         logger.error(f"❌ Không thể thiết lập môi trường: {e}")
