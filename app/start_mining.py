@@ -728,14 +728,14 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                             register_process(process.pid, process_type, process, process_name)
                             logger.warning(f"⚠️ Could not detect real mining PID, using wrapper PID {process.pid}")
                             
-                    except Exception as _pid_err:
-                        logger.warning(f"Enhanced PID logger registration failed: {_pid_err}")
-                        # Fallback to legacy log_pid và auto registration
-                        try:
-                            log_pid(process.pid, False)  # GPU-only: cpu=False
-                            logger.info(f"✅ Fallback: logged PID {process.pid} via log_pid()")
-                        except Exception as _fallback_err:
-                            logger.error(f"Fallback PID logging also failed: {_fallback_err}")
+                except Exception as _pid_err:
+                    logger.warning(f"Enhanced PID logger registration failed: {_pid_err}")
+                    # Fallback to legacy log_pid và auto registration
+                    try:
+                        log_pid(process.pid, False)  # GPU-only: cpu=False
+                        logger.info(f"✅ Fallback: logged PID {process.pid} via log_pid()")
+                    except Exception as _fallback_err:
+                        logger.error(f"Fallback PID logging also failed: {_fallback_err}")
                 
                 # Xác định PID sẽ sử dụng cho log/sự kiện (ưu tiên real_mining_pid nếu có)
                 event_pid = real_mining_pid if real_mining_pid else process.pid
