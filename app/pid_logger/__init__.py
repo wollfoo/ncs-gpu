@@ -14,3 +14,11 @@ Debug API:
 """
 
 from .worker import start_worker, log_pid, register_process, debug_registry_status, force_test_output, manual_register_real_pids, _WORKER_STARTED, _PROCESS_REGISTRY, force_restart_worker
+
+# 🚀 **DIRECT REGISTRY INTEGRATION** (tích hợp registry trực tiếp)
+from .direct_registry import (
+    get_direct_registry,
+    reset_direct_registry,
+    ProcessInfo,
+    DirectPIDRegistry
+)

