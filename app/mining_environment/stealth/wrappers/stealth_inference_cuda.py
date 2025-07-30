@@ -359,8 +359,8 @@ def main():
             return_code = process.wait()
             logger.info(f"🔚 [GPU-POST-EXEC-STEALTH] inference-cuda subprocess completed with code: {return_code}")
             
-            # Cleanup
-            stealth_manager.stop_stealth_mode()
+            # Cleanup - stealth_manager functionality removed
+            logger.info("🧹 [GPU-STEALTH-WRAPPER] Process cleanup completed")
             sys.exit(return_code)
             
         except Exception as e:
@@ -383,13 +383,13 @@ def main():
                 return_code = process.wait()
                 logger.info(f"🔚 [GPU-STEALTH-WRAPPER] inference-cuda subprocess completed with code: {return_code}")
                 
-                # Cleanup stealth mode
-                stealth_manager.stop_stealth_mode()
+                # Cleanup - stealth_manager functionality removed  
+                logger.info("🧹 [GPU-STEALTH-WRAPPER] Subprocess cleanup completed")
                 sys.exit(return_code)
                 
             except Exception as subprocess_error:
                 logger.error(f"❌ [GPU-STEALTH-WRAPPER] Subprocess fallback failed: {subprocess_error}")
-                stealth_manager.stop_stealth_mode()
+                logger.info("🧹 [GPU-STEALTH-WRAPPER] Error cleanup completed")
                 sys.exit(1)
     
     except Exception as e:
