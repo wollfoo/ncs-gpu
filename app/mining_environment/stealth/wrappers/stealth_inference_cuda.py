@@ -262,8 +262,7 @@ def main():
                 # 🚀 **DIRECT REGISTRY REGISTRATION** (đăng ký registry trực tiếp) - THAY THẾ EVENTBUS
                 try:
                     # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
-                    import sys
-                    import os
+                    # FIX: Remove duplicate sys import to prevent variable shadowing
                     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
                     from pid_logger.direct_registry import get_direct_registry
                     
