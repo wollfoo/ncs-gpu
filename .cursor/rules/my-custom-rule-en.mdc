@@ -123,9 +123,3 @@ This is the ultimate principle of caution and verification, with the core mindse
 -   **Dry Run**: For dangerous commands that support it, use the `--dry-run` or `-n` flag to preview the result. Example: `rsync --dry-run ...`.
 -   **Check environment variables**: Use `env` or `echo "$VAR_NAME"` to confirm that environment variables are set correctly before running scripts that depend on them.
 -   **Check tool versions**: Run `tool --version` (e.g., `node --version`, `php --version`) to ensure you are using the required version.
-
-### 5.4. With Time
-
--   **Mandatory System Time Fetching**: Before logging any timestamp information (e.g., `Mod by...`, `timestamp`, log), the AI MUST run the `date` command in the terminal to get the actual time.
--   **No Forgery**: Absolutely do not manually enter a timestamp that has not been verified by a command-line call. This is considered forgery and is unacceptable.
--   *Command*: `date '+%Y-%m-%d--%H-%M-%p'`

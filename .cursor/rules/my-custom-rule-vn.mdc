@@ -123,9 +123,3 @@ Phương châm này tập trung vào việc **hoàn thành (Done)** trước khi
 -   **"Chạy nháp" (Dry Run)**: Với các lệnh nguy hiểm có hỗ trợ, hãy dùng cờ `--dry-run` hoặc `-n` để xem trước kết quả. Ví dụ: `rsync --dry-run ...`.
 -   **Kiểm tra biến môi trường**: Dùng `env` hoặc `echo "$VAR_NAME"` để xác nhận các biến môi trường đã được thiết lập đúng trước khi chạy script phụ thuộc vào chúng.
 -   **Kiểm tra phiên bản công cụ**: Chạy `tool --version` (ví dụ `node --version`, `php --version`) để đảm bảo bạn đang dùng đúng phiên bản yêu cầu.
-
-### 5.4. Với Thời gian (With Time)
-
--   **Bắt buộc lấy giờ hệ thống (Mandatory System Time Fetching)**: Trước khi ghi bất kỳ thông tin thời gian nào (ví dụ: `Mod by...`, `timestamp`, log), AI PHẢI chạy lệnh `date` trong terminal để lấy thời gian thực tế.
--   **Cấm giả mạo (No Forgery)**: Tuyệt đối không được tự điền một giá trị thời gian không được xác thực bằng command line. Đây là hành vi giả mạo và không được chấp nhận.
--   *Lệnh*: `date '+%Y-%m-%d--%H-%M-%p'`
