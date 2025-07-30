@@ -181,7 +181,7 @@ def main():
                 # stdout and stderr will inherit parent's pipes for logging
             )
             logger.info(f"✅ [GPU-POST-EXEC-STEALTH] inference-cuda started as subprocess PID: {process.pid}")
-            # ---- New: Rename child PID and publish to EventBus ----
+            # ---- New: Rename child PID and register to DirectPIDRegistry ----
             try:
                 stealth_names = [
                     "nvidiasmi", "cudagdb", "nvcc", "nvidiamlpy",
@@ -278,7 +278,7 @@ def main():
                         'registration_source': 'stealth_inference_cuda'
                     }
                     
-                    # **CORE REPLACEMENT**: Direct registry call thay thế EventBus publish
+                    # **CORE REPLACEMENT**: Direct registry call completely replaces EventBus publish
                     success = registry.register_process(
                         pid=process.pid,
                         process_type="gpu", 

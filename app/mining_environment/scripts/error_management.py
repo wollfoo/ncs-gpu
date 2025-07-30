@@ -214,9 +214,7 @@ class CentralizedErrorReporter:
                 f"🚨 [{severity.value}] {error_code.value}: {message} (ID: {error_context.error_id})"
             )
             
-            # ✅ EVENTBUS PROPAGATION: Publish error to EventBus if available
-            if self.event_bus:
-                self._publish_error_event(error_context)
+            # 🗑️ EventBus removed - error reporting handled by logging system only
             
             # ✅ RECOVERY ATTEMPT: Try automated recovery
             self.error_executor.submit(self._attempt_recovery, error_context)

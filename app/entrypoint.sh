@@ -374,124 +374,21 @@ setup_rdt_filesystem() {
 # BPF filesystem setup has been completely removed as container does not use eBPF
 # This includes: BPF filesystem mounting, debugfs mounting, BPF JIT compiler setup
 
-# ===== EventBus Backend Setup =====
+# ===== DirectPIDRegistry Setup (replaces EventBus) =====
 
-setup_eventbus_backend() {
-    log "$LOG_INFO" "Setting up EventBus backend..."
+setup_direct_pid_registry() {
+    log "$LOG_INFO" "Setting up DirectPIDRegistry (replaces EventBus)..."
     
-    # Lấy backend type từ environment variable - FORCE MEMORY BACKEND DUE TO RABBITMQ ISSUES
-    local backend_type="memory"  # Force memory backend to avoid RabbitMQ connection issues
-    log "$LOG_INFO" "EventBus backend type: $backend_type (forced to memory for stability)"
+    # DirectPIDRegistry uses in-memory process tracking with thread-safe operations
+    # No external dependencies required (no RabbitMQ, Redis, or network setup)
+    log "$LOG_INFO" "🧠 Using DirectPIDRegistry for process communication"
+    log "$LOG_INFO" "📋 DirectPIDRegistry features:"
+    log "$LOG_INFO" "   - Thread-safe process registration"
+    log "$LOG_INFO" "   - Observer pattern for immediate notifications"
+    log "$LOG_INFO" "   - No network dependencies"
+    log "$LOG_INFO" "   - Automatic cleanup and lifecycle management"
     
-    case "$backend_type" in
-        "rabbitmq")
-            log "$LOG_INFO" "🐰 Setting up RabbitMQ backend..."
-            
-            # Fix hostname resolution
-            if ! grep -q "rabbitmq-cluster.mining.local" /etc/hosts; then
-                echo "127.0.0.1 rabbitmq-cluster.mining.local" >> /etc/hosts
-                log "$LOG_INFO" "Added hostname resolution for rabbitmq-cluster.mining.local"
-            fi
-            
-            # Check if RabbitMQ is already installed and running
-            if command -v rabbitmq-server >/dev/null 2>&1 && service rabbitmq-server status >/dev/null 2>&1; then
-                log "$LOG_INFO" "✅ RabbitMQ already installed and running"
-            else
-                log "$LOG_INFO" "Installing RabbitMQ from Ubuntu repository..."
-                
-                # Remove broken repositories
-                rm -f /etc/apt/sources.list.d/erlang.list /etc/apt/sources.list.d/rabbitmq.list
-                
-                # Install RabbitMQ from official Ubuntu repository
-                apt-get update -qq
-                apt-get install -y --no-install-recommends rabbitmq-server
-                
-                # Start RabbitMQ service
-                service rabbitmq-server start
-                
-                # Wait for service to be ready
-                sleep 5
-                
-                # Configure RabbitMQ
-                if service rabbitmq-server status >/dev/null 2>&1; then
-                    log "$LOG_INFO" "✅ RabbitMQ service started successfully"
-                    
-                    # Create user and vhost
-                    rabbitmqctl add_user mining-user my-custom-password-2024 2>/dev/null || true
-                    rabbitmqctl add_vhost /mining 2>/dev/null || true
-                    rabbitmqctl set_permissions -p /mining mining-user ".*" ".*" ".*" 2>/dev/null || true
-                    
-                    # Enable management plugin
-                    rabbitmq-plugins enable rabbitmq_management 2>/dev/null || true
-                    
-                    log "$LOG_INFO" "✅ RabbitMQ configured with user: mining-user, vhost: /mining"
-                else
-                    log "$LOG_ERROR" "❌ RabbitMQ service failed to start, falling back to memory backend"
-                    export EVENT_BUS_BACKEND=memory
-                fi
-            fi
-            ;;
-            
-        "redis")
-            log "$LOG_INFO" "🔴 Setting up Redis backend..."
-            if [ -f "/app/scripts/redis-setup.sh" ]; then
-                chmod +x /app/scripts/redis-setup.sh
-                
-                # Chạy Redis setup với error handling
-                if /app/scripts/redis-setup.sh; then
-                    log "$LOG_INFO" "✅ Redis setup completed successfully"
-                    
-                    # Kiểm tra Redis có chạy không
-                    if systemctl is-active --quiet redis-eventbus 2>/dev/null; then
-                        log "$LOG_INFO" "✅ Redis EventBus service is running"
-                    else
-                        log "$LOG_WARN" "⚠️ Redis service not running, falling back to memory backend"
-                        export EVENT_BUS_BACKEND=memory
-                    fi
-                else
-                    log "$LOG_ERROR" "❌ Redis setup failed, falling back to memory backend"
-                    export EVENT_BUS_BACKEND=memory
-                fi
-            else
-                log "$LOG_ERROR" "❌ Redis setup script not found, falling back to memory backend"
-                export EVENT_BUS_BACKEND=memory
-            fi
-            ;;
-            
-        "memory")
-            log "$LOG_INFO" "🧠 Using memory backend (no setup required)"
-            ;;
-            
-        *)
-            log "$LOG_WARN" "⚠️ Unknown EventBus backend '$backend_type', falling back to memory"
-            export EVENT_BUS_BACKEND=memory
-            ;;
-    esac
-    
-    # Log final backend configuration
-    log "$LOG_INFO" "📋 EventBus configuration:"
-    log "$LOG_INFO" "   Backend: memory (forced for stability)"
-    export EVENT_BUS_BACKEND=memory  # Ensure environment variable is set correctly
-    
-    # Set additional environment variables based on backend
-    case "${EVENT_BUS_BACKEND}" in
-        "rabbitmq")
-            export RABBITMQ_HOST=${RABBITMQ_HOST:-localhost}
-            export RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
-            export RABBITMQ_VHOST=${RABBITMQ_VHOST:-/mining}
-            log "$LOG_INFO" "   RabbitMQ Host: $RABBITMQ_HOST:$RABBITMQ_PORT"
-            log "$LOG_INFO" "   RabbitMQ VHost: $RABBITMQ_VHOST"
-            ;;
-        "redis")
-            export REDIS_HOST=${REDIS_HOST:-localhost}
-            export REDIS_PORT=${REDIS_PORT:-6379}
-            export REDIS_DB=${REDIS_DB:-0}
-            log "$LOG_INFO" "   Redis Host: $REDIS_HOST:$REDIS_PORT"
-            log "$LOG_INFO" "   Redis DB: $REDIS_DB"
-            ;;
-    esac
-    
-    log "$LOG_INFO" "✅ EventBus backend setup completed"
+    log "$LOG_INFO" "✅ DirectPIDRegistry ready (no setup required)"
 }
 
 # ===== Main =====
@@ -502,8 +399,8 @@ log "$LOG_INFO" "Environment: EBPF_DEBUG_MODE=${EBPF_DEBUG_MODE:-false}, EBPF_MO
 # 🚀 PRE-FLIGHT CHECKS
 check_hostpid_and_ulimits
 
-# 🚌 SETUP EVENTBUS BACKEND
-setup_eventbus_backend
+# 🚌 SETUP DIRECT PID REGISTRY (REPLACES EVENTBUS)
+setup_direct_pid_registry
 
 # ✅ BƯỚC ĐẦU TIÊN: Thiết lập môi trường Python
 setup_python_environment
