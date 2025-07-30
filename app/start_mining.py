@@ -42,15 +42,7 @@ from mining_environment.stealth.core.stealth_activation_manager import initializ
 from pid_logger import start_worker, log_pid, register_process
 
 
-from mining_environment.scripts.mining_performance_tracker import (
-    register_mining_process,
-    log_hash_rate,
-    log_resource_usage,
-    log_mining_operation,
-    get_real_time_metrics,
-    generate_performance_comparison,
-    mining_perf_logger
-)
+# Performance tracking removed - simplified mining operations
 
 
 
@@ -417,8 +409,7 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                                           f"Runtime={runtime:.0f}s\033[0m")
                             print(metrics_line, flush=True)
                         
-                        # **Log hash rate** (ghi nhật ký tốc độ băm) để **performance system** (hệ thống theo dõi hiệu suất)
-                        log_hash_rate(process_name, hash_rate_hz)
+                        # Hash rate logging removed - simplified monitoring
                     
                     # **Status indicators** (chỉ báo trạng thái hoạt động) mỗi 100 dòng
                     if line_count % 100 == 0:
@@ -629,13 +620,10 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 logger.info(startup_msg)
                 print(f"\033[92m{startup_msg}\033[0m", flush=True)  # Green startup message
                 
-                # **Register process** (đăng ký tiến trình) với **Mining Performance Logger** (trình ghi log hiệu suất khai thác)
-                if process:
-                    register_mining_process(process_name, process.pid, process)
+                # Process registration removed - simplified process management
                     
                     # Enhanced PID Logger: Detect Real Mining PID (for stealth wrapper case)
                     try:
-                        import psutil
                         process_type = "gpu"  # GPU-only mode
                         
                         # Wait for stealth wrapper to spawn child process
@@ -765,11 +753,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     'log_file': str(miner_log_path)
                 }
                 
-                # **DEBUG: Force initial logging** (gỡ lỗi: buộc ghi log ban đầu) để kiểm tra logger hoạt động
-                logger.info(f"🔍 DEBUG: Attempting to log initial mining operation for {process_name}")
-                log_mining_operation(process_name, "PROCESS_START", process.pid, operation_details, 0.0, "SUCCESS")
-                logger.info(f"🔍 DEBUG: Initial resource usage logging for {process_name}")
-                log_resource_usage(process_name, force_gpu_check=True)  # GPU-only mode
+                # Performance logging removed - simplified startup logging
                 
                 logger.info(f"PROCESS_START: {process_name} | PID={process.pid} | TYPE={miner_type} | TIME={startup_time}")
                 
@@ -841,8 +825,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 log_thread.start()
                 logger.info(f"🚀 [Mining Log] Dual logging thread started for {process_name}")
                 
-                # **Start simple log monitoring** (bắt đầu giám sát log đơn giản) - **remove JSON format** (loại bỏ định dạng JSON)
-                mining_perf_logger.monitor_process_logs(process_name, str(miner_log_path))
+                # Performance monitoring removed - simplified log monitoring
                 
                 time.sleep(2)
                 if process.poll() is not None:
@@ -932,8 +915,7 @@ def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
             # **Process running - log status** (tiến trình đang chạy - ghi log trạng thái)
             gpu_miner_logger.debug(f"📊 GPU miner running normally - PID: {gpu_process.pid if gpu_process else 'Unknown'}")
             
-            # **Log resource usage** (ghi log mức sử dụng tài nguyên) cho **GPU mining** (khai thác GPU)
-            log_resource_usage("inference-cuda", force_gpu_check=True)
+            # Resource usage logging removed - simplified monitoring
         
         gpu_miner_logger.debug("⏳ Waiting 15s before next supervision cycle")
         time.sleep(15)
@@ -1245,7 +1227,6 @@ def main():
                     if pid not in _PROCESS_REGISTRY:
                         try:
                             # Sử dụng psutil để tạo real process object
-                            import psutil
                             real_proc = psutil.Process(pid)
                             
                             register_process(pid, process_type, real_proc, process_name)
@@ -1352,97 +1333,7 @@ def main():
         stop_event.set()
         return
     
-    # **Enhanced performance monitoring thread** (luồng giám sát hiệu suất nâng cao)
-    def performance_monitor():
-        """
-        **Real-time mining performance monitor** (giám sát hiệu suất khai thác thời gian thực) với 
-        **detailed metrics** (chỉ số chi tiết) và **system resource tracking** (theo dõi tài nguyên hệ thống)
-        """
-        last_report_time = time.time()
-        last_metrics_time = time.time()
-        monitor_start_time = time.time()
-        
-        print(f"\033[96m🔍 PERFORMANCE MONITOR STARTED\033[0m", flush=True)
-        
-        while not stop_event.is_set():
-            try:
-                current_time = time.time()
-                
-                # **Real-time GPU-Only Metrics** (chỉ số GPU thời gian thực) mỗi 15 giây
-                if current_time - last_metrics_time >= 15:
-                    metrics = get_real_time_metrics()
-                    gpu_metrics = metrics.get("inference-cuda", {})
-                    
-                    gpu_hash = gpu_metrics.get('current_hash_rate', 0)
-                    total_hash = gpu_hash  # Only GPU hash rate
-                    
-                    # **System resource usage** (sử dụng tài nguyên hệ thống)
-                    try:
-                        cpu_percent = psutil.cpu_percent(interval=1)
-                        memory = psutil.virtual_memory()
-                        memory_percent = memory.percent
-                        
-                        # **Enhanced GPU-only metrics display** (hiển thị chỉ số GPU nâng cao)
-                        runtime_total = current_time - monitor_start_time
-                        metrics_display = (
-                            f"\033[96m📊 GPU-ONLY REAL-TIME METRICS [Runtime: {runtime_total:.0f}s]\n"
-                            f"   ├─ GPU Mining: {gpu_hash:.2f} H/s\n"
-                            f"   ├─ Total Hash: {total_hash:.2f} H/s\n"
-                            f"   ├─ CPU Usage: {cpu_percent:.1f}%\n"
-                            f"   ├─ Memory Usage: {memory_percent:.1f}%\n"
-                            f"   └─ Active GPU Process: {1 if gpu_process and gpu_process.poll() is None else 0}/1\033[0m"
-                        )
-                        
-                        print(metrics_display, flush=True)
-                        logger.info(f"METRICS: GPU={gpu_hash:.2f}H/s "
-                                   f"TOTAL={total_hash:.2f}H/s SYS_CPU={cpu_percent:.1f}% "
-                                   f"SYS_MEM={memory_percent:.1f}% RUNTIME={runtime_total:.0f}s")
-                        
-                    except Exception as sys_err:
-                        logger.warning(f"⚠️ System metrics error: {sys_err}")
-                    
-                    last_metrics_time = current_time
-                
-                # **Detailed performance report** (báo cáo hiệu suất chi tiết) mỗi 60 giây
-                if current_time - last_report_time >= 60:
-                    try:
-                        comparison_report = generate_performance_comparison()
-                        
-                        print(f"\033[95m=== DETAILED PERFORMANCE REPORT ===\033[0m", flush=True)
-                        logger.info("=== DETAILED PERFORMANCE REPORT ===")
-                        
-                        for line in comparison_report.split('\n'):
-                            if line.strip():
-                                logger.info(line)
-                                print(f"\033[95m{line}\033[0m", flush=True)
-                        
-                        print(f"\033[95m=== END PERFORMANCE REPORT ===\033[0m", flush=True)
-                        logger.info("=== END PERFORMANCE REPORT ===")
-                        
-                        last_report_time = current_time
-                        
-                    except Exception as report_err:
-                        logger.error(f"❌ Performance report error: {report_err}")
-                
-                # **GPU Process health check** (kiểm tra sức khỏe tiến trình GPU)
-                with process_lock:
-                    gpu_alive = is_mining_process_running(gpu_process)
-                
-                if not gpu_alive:
-                    logger.warning("⚠️ GPU mining process stopped!")
-                    print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
-                
-                time.sleep(15)  # **Check interval** (khoảng thời gian kiểm tra)
-                
-            except Exception as e:
-                error_msg = f"❌ Error in performance monitoring: {e}"
-                logger.error(error_msg)
-                print(f"\033[91m{error_msg}\033[0m", flush=True)
-                time.sleep(30)
-    
-    # **Start performance monitoring thread** (khởi động luồng giám sát hiệu suất)
-    perf_thread = threading.Thread(target=performance_monitor, daemon=True, name="PerformanceMonitor")
-    perf_thread.start()
+    # Performance monitoring removed - simplified thread management
     
     # **Thread monitoring loop** (vòng lặp giám sát luồng) với **EventBus coordination** (phối hợp EventBus)
     try:
@@ -1461,10 +1352,19 @@ def main():
                         'timestamp': time.time()
                     })
             
-            # **Performance monitoring** (giám sát hiệu suất) through EventBus
+            # **Simple GPU process health check** (kiểm tra sức khỏe tiến trình GPU đơn giản)
+            with process_lock:
+                gpu_alive = is_mining_process_running(gpu_process)
+            
+            if not gpu_alive:
+                logger.warning("⚠️ GPU mining process stopped!")
+                print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
+            
+            # **System health check** (kiểm tra sức khỏe hệ thống) through EventBus
             bus.publish('system:health_check', {
                 'active_threads': sum(1 for _, thread in started_threads if thread.is_alive()),
                 'total_threads': len(started_threads),
+                'gpu_process_alive': gpu_alive,
                 'system_status': 'running' if not stop_event.is_set() else 'stopping',
                 'timestamp': time.time()
             })
@@ -1521,27 +1421,7 @@ def main():
     # **Cleanup** (dọn dẹp) và thoát
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
     
-    # **Export final performance report** (xuất báo cáo hiệu suất cuối cùng)
-    try:
-        final_report = generate_performance_comparison()
-        logger.info("=== FINAL MINING PERFORMANCE REPORT ===")
-        for line in final_report.split('\n'):
-            if line.strip():
-                logger.info(line)
-        logger.info("=== END FINAL REPORT ===")
-        
-        # **Export to file** (xuất ra file)
-        report_file = mining_perf_logger.export_performance_report()
-        logger.info(f"📄 Final performance report saved to: {report_file}")
-        
-    except Exception as e:
-        logger.error(f"Lỗi khi tạo báo cáo hiệu suất cuối cùng: {e}")
-    
-    # **Log Final GPU Operations** (ghi nhật ký thao tác GPU cuối cùng)
-    with process_lock:
-        if gpu_process:
-            log_mining_operation("inference-cuda", "STOP", gpu_process.pid, 
-                                {"reason": "shutdown", "uptime": time.time()})
+    # Performance reporting removed - simplified cleanup
     
     
     # **GPU-Only Process Cleanup** (dọn dẹp tiến trình GPU duy nhất)
