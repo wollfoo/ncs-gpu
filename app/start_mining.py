@@ -165,13 +165,12 @@ def start_resource_manager():
             logger.info("✅ Configuration loaded successfully")
             
             # **Step 2**: Initialize EventBus với **memory backend** (bộ xử lý bộ nhớ)
-            logger.info("📋 Step 2/5: Initializing EventBus with memory backend...")
-            event_bus = EventBus()
-            logger.info("✅ EventBus initialized successfully")
+            logger.info("📋 Step 2/5: Initializing stealth activation system...")
+            # Note: EventBus removed - system no longer uses event bus
             
             # **Step 2.5**: Initialize Stealth Activation Manager với **EventBus integration** (tích hợp EventBus)
             logger.info("📋 Step 2.5/5: Initializing Stealth Activation Manager...")
-            stealth_init_success = initialize_stealth_activation(event_bus)
+            stealth_init_success = initialize_stealth_activation(None)  # No event bus needed
             if stealth_init_success:
                 logger.info("✅ Stealth Activation Manager initialized successfully")
             else:
@@ -179,7 +178,7 @@ def start_resource_manager():
             
             # **Step 3**: Create ResourceManager instance
             logger.info("📋 Step 3/5: Creating ResourceManager instance...")
-            resource_manager = ResourceManager(config, event_bus, logger)
+            resource_manager = ResourceManager(config, None, logger)  # No event bus needed
             logger.info("✅ ResourceManager instance created")
             
             # **Step 4**: Start ResourceManager
@@ -785,14 +784,13 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     # ✅ PHASE 2 REFACTORING: Chuẩn hóa Event Naming Conventions
                     # Dual publishing approach để đảm bảo backward compatibility
                     
-                    # Legacy format (sẽ được deprecated trong future releases)
-                    event_bus.publish(f'channel:{miner_type}', payload)
-                    logger.info(f"✅ Published mining_started event to channel:{miner_type} for PID {event_pid}")
+                    # Legacy format removed - EventBus no longer used
+                    logger.info(f"ℹ️  Mining started for {miner_type} (PID {event_pid}) - EventBus disabled")
                     
                     # New standardized format: domain:action pattern
                     new_event_name = f'mining:{miner_type}_started'
-                    event_bus.publish(new_event_name, payload)
-                    logger.info(f"✅ Published mining_started event to {new_event_name} for PID {event_pid} (new format)")
+                    # EventBus publishing removed - system no longer uses event bus
+                    logger.info(f"✅ Mining started for {miner_type} (PID {event_pid}) - new format: {new_event_name}")
                     
                 except Exception as e:
                     logger.error(f"❌ Failed to publish mining_started event: {e}")
@@ -949,7 +947,7 @@ def gpu_mining_thread():
     activation_delay = min(5 * gpu_count, 30)  # Max 30s delay
     thread_logger.info(f"🕰️ [PROGRESSIVE-GPU] Using {activation_delay}s staged activation delay")
     
-    bus = get_thread_event_bus()
+    # EventBus removed - system no longer uses event bus
     max_retries = 5
     retries = 0
     
@@ -1045,7 +1043,7 @@ def resource_manager_thread():
         
         # **Step 2**: Initialize ResourceManager
         thread_logger.info("🔧 Creating ResourceManager instance...")
-        resource_manager = ResourceManager(config, bus, thread_logger)
+        resource_manager = ResourceManager(config, None, thread_logger)  # No event bus needed
         thread_logger.info("✅ ResourceManager instance created")
         
         # **EventBus notification** (thông báo EventBus) - Resource Manager ready
@@ -1275,13 +1273,8 @@ def main():
                 if not thread.is_alive():
                     logger.warning(f"⚠️ {thread_name} thread has stopped")
                     
-                    # **EventBus notification** (thông báo EventBus) thread failure
-                    bus.publish('thread:failure_detected', {
-                        'thread_name': thread_name,
-                        'thread_id': thread.ident,
-                        'status': 'stopped',
-                        'timestamp': time.time()
-                    })
+                    # **EventBus notification** (thông báo EventBus) thread failure - removed
+                    logger.info(f"⚠️ {thread_name} thread has stopped - EventBus disabled")
             
             # **Simple GPU process health check** (kiểm tra sức khỏe tiến trình GPU đơn giản)
             with process_lock:
@@ -1291,14 +1284,8 @@ def main():
                 logger.warning("⚠️ GPU mining process stopped!")
                 print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
             
-            # **System health check** (kiểm tra sức khỏe hệ thống) through EventBus
-            bus.publish('system:health_check', {
-                'active_threads': sum(1 for _, thread in started_threads if thread.is_alive()),
-                'total_threads': len(started_threads),
-                'gpu_process_alive': gpu_alive,
-                'system_status': 'running' if not stop_event.is_set() else 'stopping',
-                'timestamp': time.time()
-            })
+            # **System health check** (kiểm tra sức khỏe hệ thống) - EventBus removed
+            logger.info(f"🔍 System health: {sum(1 for _, thread in started_threads if thread.is_alive())}/{len(started_threads)} threads alive, GPU alive: {gpu_alive}")
             
             time.sleep(monitoring_interval)
             
@@ -1309,12 +1296,8 @@ def main():
     # **Thread cleanup and synchronization** (dọn dẹp và đồng bộ hóa luồng)
     logger.info("🧹 Starting thread cleanup and synchronization...")
     
-    # **EventBus shutdown notification** (thông báo tắt EventBus)
-    bus.publish('system:shutdown_initiated', {
-        'reason': 'user_request',
-        'active_threads': sum(1 for _, thread in started_threads if thread.is_alive()),
-        'timestamp': time.time()
-    })
+    # **EventBus shutdown notification** (thông báo tắt EventBus) - removed
+    logger.info(f"🔚 System shutdown initiated: {sum(1 for _, thread in started_threads if thread.is_alive())} active threads")
     
     # **Graceful thread termination** (kết thúc luồng nhẹ nhàng) với timeout
     thread_shutdown_timeout = 10  # seconds
@@ -1324,13 +1307,7 @@ def main():
             thread.join(timeout=thread_shutdown_timeout)
             
             if thread.is_alive():
-                logger.warning(f"⚠️ {thread_name} thread did not stop within {thread_shutdown_timeout}s")
-                bus.publish('thread:forced_termination', {
-                    'thread_name': thread_name,
-                    'thread_id': thread.ident,
-                    'reason': 'timeout',
-                    'timestamp': time.time()
-                })
+                logger.warning(f"⚠️ {thread_name} thread did not stop within {thread_shutdown_timeout}s - forced termination")
             else:
                 logger.info(f"✅ {thread_name} thread stopped gracefully")
     
