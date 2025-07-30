@@ -97,32 +97,9 @@ class StealthActivationManager:
             return False
     
     def _initialize_external_stealth(self) -> bool:
-        """Initialize external stealth system (StealthExecution)."""
-        try:
-            if StealthExecution:
-                self.logger.info("🔧 [STEALTH-ACTIVATION] Initializing external stealth system...")
-                
-                self.external_stealth = StealthExecution(
-                    logger=self.logger,
-                    debug_mode=True
-                )
-                
-                if self.external_stealth.start():
-                    self.external_stealth_enabled = True
-                    self.logger.info("✅ [STEALTH-ACTIVATION] External stealth system active")
-                    return True
-                else:
-                    self.logger.warning("⚠️ [STEALTH-ACTIVATION] External stealth failed to start")
-                    self.external_stealth = None
-                    return False
-            else:
-                self.logger.warning("⚠️ [STEALTH-ACTIVATION] StealthExecution not available")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"❌ [STEALTH-ACTIVATION] External stealth initialization error: {e}")
-            self.external_stealth = None
-            return False
+        """External stealth system removed - using gpu_plugins/cloaking/ instead."""
+        self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ system")
+        return True
     
     def _setup_eventbus_subscriptions(self):
         """Setup EventBus subscriptions for PID registration events."""
