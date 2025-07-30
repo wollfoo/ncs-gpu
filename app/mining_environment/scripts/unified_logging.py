@@ -61,11 +61,8 @@ class UnifiedLoggerManager:
             'file': 'resource_control.log',
             'description': 'Low-level resource control operations'
         },
-        'mining_environment.event_bus': {
-            'level': logging.INFO,
-            'file': 'event_bus.log',
-            'description': 'Event bus communication'
-        }
+        # 🗑️ EventBus logger removed - replaced by DirectPIDRegistry
+        # DirectPIDRegistry uses existing loggers for communication tracking
     }
     
     def __new__(cls) -> 'UnifiedLoggerManager':
