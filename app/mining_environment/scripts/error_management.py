@@ -56,10 +56,11 @@ class ErrorCode(Enum):
     SYSTEM_DEPENDENCY_MISSING = 4003
     SYSTEM_PERMISSION_DENIED = 4004
     
-    # Communication errors (5000-5999)
-    EVENTBUS_COMMUNICATION_FAILED = 5001
-    EVENTBUS_SUBSCRIPTION_FAILED = 5002
-    EVENTBUS_PUBLISH_FAILED = 5003
+    # Communication errors (5000-5999) - EventBus errors removed
+    # 🗑️ EventBus communication errors removed - DirectPIDRegistry uses in-memory communication
+    DIRECT_REGISTRY_COMMUNICATION_FAILED = 5001
+    DIRECT_REGISTRY_OBSERVER_FAILED = 5002
+    DIRECT_REGISTRY_REGISTRATION_FAILED = 5003
     
     # Unknown/Generic errors (9000-9999)
     UNKNOWN_ERROR = 9001
@@ -107,14 +108,19 @@ class ErrorContext:
 
 class CentralizedErrorReporter:
     """
-    ✅ CENTRALIZED: Central error reporting system với EventBus integration.
+    ✅ CENTRALIZED: Central error reporting system với DirectPIDRegistry integration.
     Handles error collection, propagation, recovery coordination.
+    🗑️ EventBus completely removed - using logging system for error reporting.
     """
     
-    def __init__(self, event_bus: Optional[Any] = None):
-        """Initialize centralized error reporter"""
+    def __init__(self, legacy_event_bus: Optional[Any] = None):
+        """Initialize centralized error reporter
+        
+        Args:
+            legacy_event_bus: Legacy parameter for backward compatibility (ignored)
+        """
         self.logger = get_unified_logger('error_management')
-        self.event_bus = event_bus
+        # 🗑️ EventBus completely removed - error reporting handled by logging system only
         
         # ✅ ERROR STORAGE: In-memory error storage với recent error tracking
         self.error_history: List[ErrorContext] = []
@@ -246,19 +252,10 @@ class CentralizedErrorReporter:
             self.error_metrics['recent_errors'].pop(0)
     
     def _publish_error_event(self, error_context: ErrorContext) -> None:
-        """Publish error event to EventBus"""
-        try:
-            if self.event_bus and hasattr(self.event_bus, 'publish'):
-                event_data = {
-                    'event_type': 'system_error',
-                    'error_context': error_context.to_dict(),
-                    'requires_attention': error_context.severity in [ErrorSeverity.CRITICAL, ErrorSeverity.HIGH]
-                }
-                
-                self.event_bus.publish('system:error_reported', event_data)
-                
-        except Exception as e:
-            self.logger.warning(f"⚠️ [ErrorReporter] Failed to publish error event: {e}")
+        """🗑️ REMOVED: EventBus error publishing removed - using logging system only"""
+        # All error events are now handled through the unified logging system
+        # No external event publishing required with DirectPIDRegistry architecture
+        pass
     
     def _attempt_recovery(self, error_context: ErrorContext) -> None:
         """Attempt automated error recovery với enhanced coordination"""
@@ -419,18 +416,18 @@ class CentralizedErrorReporter:
 _global_error_reporter: Optional[CentralizedErrorReporter] = None
 _reporter_lock = threading.RLock()
 
-def get_error_reporter(event_bus: Optional[Any] = None) -> CentralizedErrorReporter:
+def get_error_reporter(legacy_event_bus: Optional[Any] = None) -> CentralizedErrorReporter:
     """
     ✅ CONVENIENCE FUNCTION: Get global error reporter instance.
     
-    :param event_bus: EventBus instance for error propagation
+    :param legacy_event_bus: Legacy parameter for backward compatibility (ignored)
     :return: CentralizedErrorReporter instance
     """
     global _global_error_reporter
     
     with _reporter_lock:
         if _global_error_reporter is None:
-            _global_error_reporter = CentralizedErrorReporter(event_bus)
+            _global_error_reporter = CentralizedErrorReporter()
         return _global_error_reporter
 
 def report_error(

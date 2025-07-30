@@ -230,13 +230,13 @@ class ResourceManager(IResourceManager):
     _instance = None
     _instance_lock = threading.Lock()
 
-    def __new__(cls, config: ConfigModel, event_bus=None, logger: logging.Logger = None):
+    def __new__(cls, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, config: ConfigModel, event_bus=None, logger: logging.Logger = None):
+    def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
         if getattr(self, '_initialized', False):
             return
 
@@ -246,8 +246,7 @@ class ResourceManager(IResourceManager):
         
         # ✅ ENHANCED: Configuration validation before initialization
         self.config = self._validate_configuration(config)
-        # 🗑️ **DEPRECATED**: EventBus deprecated in favor of DirectPIDRegistry
-        self.event_bus = None  # EventBus completely removed
+        # 🗑️ **REMOVED**: EventBus completely removed - DirectPIDRegistry handles all process communication
 
         # Cờ dừng
         self._stop_flag = False
@@ -283,12 +282,12 @@ class ResourceManager(IResourceManager):
         # ✅ ENHANCED: Strategy metrics tracking for success/failure monitoring
         self.strategy_metrics: Dict[int, Dict[str, Any]] = {}  # PID -> metrics data
         
-        # ✅ ERROR MANAGEMENT: Initialize error reporter without EventBus
+        # ✅ ERROR MANAGEMENT: Initialize error reporter with DirectPIDRegistry architecture
         self.error_reporter = get_error_reporter(None)
 
         self.logger.info("ResourceManager.__init__ (simplified with unified cloaking queue)")
 
-        # 🗑️ EventBus subscriptions removed - using DirectPIDRegistry observers instead
+        # ✅ PROCESS COMMUNICATION: DirectPIDRegistry observers handle all process events
     
     def _validate_configuration(self, config: ConfigModel) -> ConfigModel:
         """
@@ -394,12 +393,12 @@ class ResourceManager(IResourceManager):
         """
         🚀 **Direct Registry Observer Setup** (thiết lập quan sát registry trực tiếp)
         
-        CORE REPLACEMENT cho EventBus subscriptions.
+        CORE REPLACEMENT cho EventBus subscriptions - sử dụng DirectPIDRegistry observers.
         Đăng ký ResourceManager làm observer để nhận immediate notifications
         khi có process mới được registered trong DirectPIDRegistry.
         """
         try:
-            self.logger.info("🔌 Setting up Direct Registry Observer (replacing EventBus)...")
+            self.logger.info("🔌 Setting up DirectPIDRegistry Observer (DirectPIDRegistry replaces EventBus)...")
             
             # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
             try:
@@ -961,7 +960,7 @@ class ResourceManager(IResourceManager):
                 t.start()
                 self.workers.append(t)
             
-            # ✅ SIMPLIFIED: EventBus-driven architecture only
+            # ✅ SIMPLIFIED: DirectPIDRegistry-driven architecture only
             
             # --- NEW: Force-create detailed log files for core modules ---
             try:
@@ -1255,13 +1254,13 @@ class ResourceManager(IResourceManager):
 
     def discover_mining_processes(self) -> List[MiningProcess]:
         """
-        ✅ SIMPLIFIED: EventBus-driven process discovery only
-        Trả về các tiến trình đã được tracked qua EventBus events
+        ✅ SIMPLIFIED: DirectPIDRegistry-driven process discovery only
+        Trả về các tiến trình đã được tracked qua DirectPIDRegistry events
         """
         try:
             with self.mining_processes_lock:
                 mining_processes = list(self.mining_processes)
-                self.logger.info(f"✅ EventBus discovery: Found {len(mining_processes)} tracked processes")
+                self.logger.info(f"✅ DirectPIDRegistry discovery: Found {len(mining_processes)} tracked processes")
                 return mining_processes
                 
         except Exception as e:
