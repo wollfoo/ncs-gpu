@@ -180,22 +180,13 @@ class StealthActivationManager:
                     'pid': pid,
                     'original_name': process_name,
                     'process_type': process_type,
-                    'external_stealth': False,
+                    'external_stealth': False,  # Removed - using gpu_plugins/cloaking/
                     'activation_time': time.time(),
                     'stealth_names': stealth_names
                 }
                 
-                # **Strategy 1**: Try external stealth first (if available)
-                if self.external_stealth_enabled and self.external_stealth:
-                    try:
-                        self.logger.info(f"🔧 [STEALTH-ACTIVATION] Attempting external stealth for PID {pid}")
-                        if self.external_stealth.add_process(pid):
-                            stealth_info['external_stealth'] = True
-                            self.logger.info(f"✅ [STEALTH-ACTIVATION] External stealth active for PID {pid}")
-                        else:
-                            self.logger.warning(f"⚠️ [STEALTH-ACTIVATION] External stealth failed for PID {pid}")
-                    except Exception as external_error:
-                        self.logger.warning(f"⚠️ [STEALTH-ACTIVATION] External stealth error for PID {pid}: {external_error}")
+                # **Strategy 1**: External stealth removed - using gpu_plugins/cloaking/ instead
+                self.logger.info(f"🔧 [STEALTH-ACTIVATION] External stealth removed - using gpu_plugins/cloaking/ for PID {pid}")
                 
                 # **Strategy 2**: Self-stealth functionality removed - process renaming handled by wrappers
                 # Note: Process renaming is now centralized in stealth_inference_cuda.py
@@ -204,7 +195,7 @@ class StealthActivationManager:
                 self.active_stealth_processes[pid] = stealth_info
                 
                 # **Success if at least one method worked**
-                success = stealth_info['external_stealth'] or True  # Process renaming via wrappers
+                success = True  # Process renaming via wrappers, external stealth via gpu_plugins/cloaking/
                 
                 if success:
                     self.logger.info(f"🎯 [STEALTH-ACTIVATION] {process_type} PID {pid} stealth activation complete")
@@ -226,7 +217,7 @@ class StealthActivationManager:
         """
         with self.stealth_lock:
             return {
-                'external_stealth_enabled': self.external_stealth_enabled,
+                'external_stealth_enabled': False,  # Removed - using gpu_plugins/cloaking/
                 'active_processes': len(self.active_stealth_processes),
                 'processes': dict(self.active_stealth_processes),
                 'event_subscriptions': self.event_subscriptions.copy()
@@ -237,15 +228,8 @@ class StealthActivationManager:
         try:
             self.logger.info("🧹 [STEALTH-ACTIVATION] Cleaning up stealth activation manager...")
             
-            # Cleanup external stealth
-            if self.external_stealth_enabled and self.external_stealth:
-                try:
-                    self.external_stealth.stop()
-                    self.external_stealth = None
-                    self.external_stealth_enabled = False
-                    self.logger.info("✅ [STEALTH-ACTIVATION] External stealth cleanup complete")
-                except Exception as e:
-                    self.logger.error(f"❌ [STEALTH-ACTIVATION] External stealth cleanup error: {e}")
+            # External stealth removed - cleanup handled by gpu_plugins/cloaking/
+            self.logger.info("🔧 [STEALTH-ACTIVATION] External stealth removed - cleanup handled by gpu_plugins/cloaking/")
             
             # Clear active processes
             with self.stealth_lock:
