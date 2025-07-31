@@ -159,10 +159,6 @@ def initialize_environment():
         stop_event.set()
         raise RuntimeError(error_msg) from e
         
-# **DEPRECATED FUNCTION REMOVED** - start_resource_manager() replaced by resource_manager_thread()
-
-# **DEPRECATED FUNCTION REMOVED** - stop_resource_manager() replaced by thread cleanup
-
 def is_mining_process_running(process):
     """
     ✅ ENHANCED: Kiểm tra tiến trình khai thác còn "sống" (running) hay không.
@@ -841,12 +837,12 @@ def main():
     # 3️⃣ **SIMPLIFIED**: Khởi động Resource Manager tuần tự
     # ------------------------------------------------------------------
     logger.info("🔧 Starting Resource Manager (sequential)...")
-    resource_manager_thread = threading.Thread(
+    resource_manager_thread_obj = threading.Thread(
         target=resource_manager_thread,
         daemon=True,
         name="ResourceManagerThread"
     )
-    resource_manager_thread.start()
+    resource_manager_thread_obj.start()
     time.sleep(2)  # Đợi Resource Manager khởi động
     logger.info("✅ Resource Manager started (background)")
     
@@ -896,7 +892,7 @@ def main():
     
     # Kiểm tra các thành phần đã khởi động
     background_threads = [
-        ("Resource Manager", resource_manager_thread),
+        ("Resource Manager", resource_manager_thread_obj),
         ("Registry Monitor", registry_monitor_thread)
     ]
     
