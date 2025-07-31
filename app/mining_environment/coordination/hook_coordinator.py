@@ -191,3 +191,4 @@ if __name__ == "__main__":
     
     # Clean up
     coordinator.cleanup_pid(test_pid)
+    
