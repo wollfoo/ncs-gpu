@@ -28,10 +28,12 @@ if command -v nvidia-smi &> /dev/null; then
     GPU_MEM_GB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{sum+=$1} END {print int(sum/1024)}')
 fi
 
-# Calculate optimal virtual memory limit
-# Formula: 80% available system memory + 30% GPU memory + 2GB overhead
-OPTIMAL_VM_GB=$(awk "BEGIN {printf \"%.0f\", ($AVAIL_MEM_GB * 0.8) + ($GPU_MEM_GB * 0.3) + 2}")
+# Calculate optimal virtual memory limit 
+# PHASE 1 FIX: Giảm từ 80% xuống 60% available memory cho GPU workload để tránh fragmentation
+OPTIMAL_VM_GB=$(awk "BEGIN {printf \"%.0f\", ($AVAIL_MEM_GB * 0.6) + ($GPU_MEM_GB * 0.2) + 4}")
 OPTIMAL_VM_KB=$((OPTIMAL_VM_GB * 1024 * 1024))
+
+echo "[$(date)] 🧠 [PHASE1-FIX] Memory allocation strategy: Conservative 60% system + 20% GPU + 4GB safety margin"
 
 
 echo "[$(date)] Memory limits auto-configured:"
@@ -42,9 +44,30 @@ echo "[$(date)]   ├─ Data Segment Limit: $((OPTIMAL_VM_GB/2))GB ($(ulimit -d
 echo "[$(date)]   └─ Stack Limit: 16MB ($(ulimit -s) KB)"
 
 # CUDA_VISIBLE_DEVICES removed - let application auto-detect all available GPUs
-# Optimize CUDA cache based on available memory
-CUDA_CACHE_SIZE=$((AVAIL_MEM_GB * 1024 * 1024 * 10))  # 10MB per GB available
-export CUDA_CACHE_MAXSIZE=$CUDA_CACHE_SIZE
+# PHASE 1 FIX: Enhanced CUDA memory management để tránh St9bad_alloc
+export CUDA_CACHE_DISABLE=1                    # Disable CUDA cache during memory-intensive operations
+export CUDA_LAUNCH_BLOCKING=1                  # Synchronous CUDA calls để tránh race conditions
+export CUDA_DEVICE_MAX_CONNECTIONS=1           # Limit concurrent connections
+export CUDA_MEMORY_POOL_SIZE=0                 # Disable memory pooling để tránh fragmentation
+export CUDA_MEMORY_POOL_RESET_THRESHOLD=0      # No reset threshold
+export CUDA_MEMORY_POOL_GROWTH_RATE=0          # No pool growth
+
+echo "[$(date)] 🧠 [PHASE1-FIX] CUDA memory management: Cache disabled, blocking enabled, pooling disabled"
+
+# ====================================
+# PHASE 1: GPU Hook Management - NGAY LẬP TỨC
+# Tắt GPU hooks trước PCA computation để tránh St9bad_alloc
+# ====================================
+
+# Tắt GPU hooks trước PCA computation
+unset LD_PRELOAD
+export DISABLE_GPU_HOOKS=1
+export THERMAL_SPOOF_DISABLED=1
+export GPU_HOOK_DISABLED=1
+export NVML_HOOK_DISABLED=1
+
+echo "[$(date)] 🚨 [PHASE1-FIX] GPU hooks disabled for stable memory allocation"
+echo "[$(date)] 🔧 [PHASE1-FIX] DISABLE_GPU_HOOKS=1, THERMAL_SPOOF_DISABLED=1"
 
 # Pre-execution verification
 echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Starting verification..."
@@ -69,9 +92,22 @@ if [ ! -r "$NVRTC_BUILTINS" ]; then
 fi
 
 echo "[$(date)] NVRTC Enhanced Wrapper - Verification complete. Preparing to start inference-cuda..."
-# Remove GPU spoof hooks to avoid memory allocation issues
+
+# ====================================
+# ENHANCED GPU Hook Disabling - Đảm bảo hoàn toàn tắt hooks
+# ====================================
+
+# Disable GPU interference hooks completely (hoàn toàn tắt hooks can thiệp GPU)
 unset LD_PRELOAD
-echo "[$(date)] LD_PRELOAD unset to disable GPU hooks"
+export LD_PRELOAD=""
+
+# Additional hook prevention measures (biện pháp ngăn chặn hook bổ sung)
+export NO_GPU_HOOKS=1
+export CUDA_HOOK_DISABLE=1
+export MPO_DISABLE=1
+
+echo "[$(date)] 🔧 [PHASE1-FIX] LD_PRELOAD completely unset to disable GPU hooks"
+echo "[$(date)] 🛡️ [PHASE1-FIX] Additional hook prevention measures activated"
 echo "[Mon Jul 28 17:33:19 UTC 2025] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
 
