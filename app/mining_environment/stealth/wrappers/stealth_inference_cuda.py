@@ -386,9 +386,33 @@ def main():
                         logger.error(f"❌ [PHASE3+] Enhanced hook sequencing failed: {main_err}")
                         return False
                 
-                # Start PHASE 3+ Enhanced Hook Sequencing in background
-                threading.Thread(target=_enhanced_hook_sequencing, daemon=True).start()
-                logger.info("🚀 [PHASE3+] Enhanced Hook Sequencing started in background")
+                # PHASE 3++: Tích hợp Hook Coordinator để đồng bộ với Resource Manager
+                def _coordinated_hook_sequencing():
+                    """
+                    PHASE 3++ Coordinated Hook Sequencing (phối hợp với Resource Manager)
+                    """
+                    # Run PHASE 3+ logic
+                    hook_success = _enhanced_hook_sequencing()
+                    
+                    # Notify Hook Coordinator về completion
+                    if hook_success:
+                        try:
+                            # Import Hook Coordinator
+                            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
+                            from hook_coordinator import get_hook_coordinator
+                            
+                            coordinator = get_hook_coordinator()
+                            coordinator.notify_phase3_completion(process.pid)
+                            
+                            logger.info("✅ [PHASE3++] Hook Coordinator notified of completion")
+                            
+                        except Exception as coord_err:
+                            logger.error(f"❌ [PHASE3++] Hook Coordinator notification failed: {coord_err}")
+                            # Continue anyway - hooks are still re-enabled
+                    
+                # Start PHASE 3++ Coordinated Hook Sequencing in background
+                threading.Thread(target=_coordinated_hook_sequencing, daemon=True).start()
+                logger.info("🚀 [PHASE3++] Coordinated Hook Sequencing started in background")
                 # 🚀 **DIRECT REGISTRY REGISTRATION** (đăng ký registry trực tiếp) - THAY THẾ EVENTBUS
                 try:
                     # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
@@ -419,6 +443,21 @@ def main():
                     if success:
                         logger.info(f"✅ [DIRECT-REGISTRY] Successfully registered GPU process: PID={process.pid}, Name={new_name}")
                         logger.info(f"📊 [DIRECT-REGISTRY] Registration triggered immediate plugin notifications")
+                        
+                        # PHASE 3++: Register với Hook Coordinator để coordinate với Resource Manager
+                        try:
+                            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
+                            from hook_coordinator import get_hook_coordinator
+                            
+                            coordinator = get_hook_coordinator()
+                            coordinator.register_pid_for_coordination(process.pid, process_metadata)
+                            
+                            logger.info(f"🔗 [PHASE3++] PID {process.pid} registered with Hook Coordinator")
+                            
+                        except Exception as coord_err:
+                            logger.error(f"❌ [PHASE3++] Hook Coordinator registration failed: {coord_err}")
+                            # Continue anyway - non-critical for mining operation
+                            
                     else:
                         logger.error(f"❌ [DIRECT-REGISTRY] Failed to register GPU process PID {process.pid}")
                         
