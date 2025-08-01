@@ -1040,11 +1040,21 @@ class ResourceControlFactory:
 
         for name, manager_class in manager_classes.items():
             try:
-                logger.info(f"Đang khởi tạo {name} manager...")
+                logger.info(f"🔧 [FACTORY] Đang khởi tạo {name} manager...")
                 manager_instance = manager_class(config, logger)
                 resource_managers[name] = manager_instance
-                logger.info(f"{name.capitalize()} manager đã được khởi tạo thành công.")
+                
+                # ✅ ENHANCED GPU LOGGING: Chi tiết thông tin GPU manager
+                if name == 'gpu':
+                    gpu_count = manager_instance.get_gpu_count() if hasattr(manager_instance, 'get_gpu_count') else 0
+                    nvml_status = manager_instance.is_nvml_initialized() if hasattr(manager_instance, 'is_nvml_initialized') else False
+                    logger.info(f"🎮 [GPU MANAGER] ✅ ACTIVE: GPUs={gpu_count}, NVML={nvml_status}")
+                    logger.info(f"🎮 [GPU MANAGER] 📊 STATUS: Initialization SUCCESS, Ready for cloaking operations")
+                
+                logger.info(f"✅ [FACTORY] {name.capitalize()} manager đã được khởi tạo thành công.")
             except Exception as e:
+                if name == 'gpu':
+                    logger.error(f"❌ [GPU MANAGER] CRITICAL: GPU manager initialization FAILED: {e}")
                 logger.error(f"Lỗi khi khởi tạo {name} manager: {e}", exc_info=True)
 
             # (tiếp tục vòng lặp để khởi tạo các manager khác)

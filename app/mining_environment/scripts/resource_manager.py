@@ -981,6 +981,10 @@ class ResourceManager(IResourceManager):
             self.logger.info("⚡ Step 2/3: Fast SharedResourceManager (lazy init)...")
             try:
                 self.shared_resource_manager = SharedResourceManager(self.config, self.logger, resource_managers)
+                
+                # ✅ INITIALIZE GPU MONITORING: Khởi tạo GPU monitoring system
+                self._initialize_gpu_monitoring(resource_managers)
+                
                 self.logger.info(f"✅ Step 2 completed in {time.time() - step_start:.2f}s")
             except Exception as e:
                 self.logger.warning(f"SharedResourceManager init failed: {e} - continuing without shared resources")
@@ -1036,7 +1040,9 @@ class ResourceManager(IResourceManager):
             # Ultra-fast main loop với minimal monitoring
             self.logger.info("🔄 Entering minimal main monitoring loop...")
             last_discovery_time = time.time()
+            last_health_check_time = time.time()
             discovery_interval = 60  # Run Process Discovery every 60 seconds
+            health_check_interval = 30  # Run GPU health check every 30 seconds
             
             while not self._stop_flag:
                 current_time = time.time()
@@ -1046,6 +1052,11 @@ class ResourceManager(IResourceManager):
                     self.logger.info("🔍 [PERIODIC DISCOVERY] Running periodic process discovery...")
                     self._discover_and_register_existing_processes()
                     last_discovery_time = current_time
+                
+                # ✅ PERIODIC GPU HEALTH CHECK: Kiểm tra sức khỏe GPU định kỳ
+                if current_time - last_health_check_time >= health_check_interval:
+                    self._periodic_gpu_health_check()
+                    last_health_check_time = current_time
                 
                 time.sleep(1.0)  # Basic monitoring interval
 
@@ -1383,6 +1394,99 @@ class ResourceManager(IResourceManager):
             self.logger.warning(f"Priority cho '{process_name}' không phải int => gán=1.")
             return 1
         return pri_val
+
+    def _initialize_gpu_monitoring(self, resource_managers: Dict[str, Any]) -> None:
+        """
+        **Initialize GPU Monitoring System** (khởi tạo hệ thống giám sát GPU)
+        
+        Args:
+            resource_managers: Dictionary of resource managers từ Factory
+        """
+        try:
+            # ✅ IMPORT GPU MONITOR: Import GPU monitoring system
+            from .gpu_resource_monitor import initialize_gpu_monitoring
+            
+            # ✅ GET GPU MANAGER: Lấy GPU manager instance
+            gpu_manager = resource_managers.get('gpu')
+            if not gpu_manager:
+                self.logger.warning("⚠️ [GPU MONITOR] No GPU manager found - skipping monitoring initialization")
+                return
+            
+            # ✅ MONITORING CONFIG: Cấu hình monitoring
+            monitoring_config = {
+                'auto_start_monitoring': True,
+                'health_check_interval_seconds': 30,
+                'history_retention_hours': 24,
+                'max_history_records': 1000
+            }
+            
+            # ✅ INITIALIZE MONITOR: Khởi tạo monitor
+            self.gpu_monitor = initialize_gpu_monitoring(gpu_manager, monitoring_config)
+            
+            self.logger.info("🎮 [GPU MONITOR] GPU monitoring system initialized successfully")
+            self.logger.info(f"📊 [GPU MONITOR] Health check interval: {monitoring_config['health_check_interval_seconds']}s")
+            
+        except ImportError as e:
+            self.logger.warning(f"⚠️ [GPU MONITOR] Could not import GPU monitoring system: {e}")
+        except Exception as e:
+            self.logger.error(f"❌ [GPU MONITOR] Failed to initialize GPU monitoring: {e}")
+
+    def _periodic_gpu_health_check(self) -> None:
+        """
+        **Periodic GPU Health Check** (kiểm tra sức khỏe GPU định kỳ)
+        
+        Được gọi trong main monitoring loop để thực hiện health checks
+        """
+        try:
+            if hasattr(self, 'gpu_monitor') and self.gpu_monitor:
+                # ✅ PERFORM HEALTH CHECK: Thực hiện health check
+                health_metrics = self.gpu_monitor.perform_health_check()
+                
+                # ✅ LOG CRITICAL ISSUES: Log các vấn đề nghiêm trọng
+                if not health_metrics.manager_active:
+                    self.logger.error("🚨 [GPU HEALTH] CRITICAL: GPU Manager is not active!")
+                elif not health_metrics.nvml_initialized:
+                    self.logger.warning("⚠️ [GPU HEALTH] WARNING: NVML is not initialized")
+                elif health_metrics.temperature_celsius > 80:
+                    self.logger.warning(f"🌡️ [GPU HEALTH] WARNING: High temperature: {health_metrics.temperature_celsius}°C")
+                elif health_metrics.cloaking_success_rate < 90:
+                    self.logger.warning(f"📉 [GPU HEALTH] WARNING: Low success rate: {health_metrics.cloaking_success_rate:.1f}%")
+                else:
+                    # ✅ PERIODIC SUCCESS LOG: Log thành công định kỳ (mỗi 10 lần)
+                    if self.gpu_monitor.manager_status.total_operations % 10 == 0:
+                        self.logger.info(f"✅ [GPU HEALTH] All systems healthy - {health_metrics.processes_cloaked} processes cloaked")
+                
+        except Exception as e:
+            self.logger.error(f"❌ [GPU HEALTH] Health check failed: {e}")
+
+    def register_process_for_monitoring(self, pid: int, process_info: Dict[str, Any]) -> None:
+        """
+        **Register Process for GPU Monitoring** (đăng ký tiến trình cho giám sát GPU)
+        
+        Args:
+            pid: Process ID
+            process_info: Thông tin tiến trình
+        """
+        try:
+            if hasattr(self, 'gpu_monitor') and self.gpu_monitor:
+                self.gpu_monitor.register_cloaked_process(pid, process_info)
+                self.logger.info(f"📋 [GPU MONITOR] Process PID={pid} registered for monitoring")
+        except Exception as e:
+            self.logger.error(f"❌ [GPU MONITOR] Failed to register process PID={pid}: {e}")
+
+    def unregister_process_from_monitoring(self, pid: int) -> None:
+        """
+        **Unregister Process from GPU Monitoring** (hủy đăng ký tiến trình khỏi giám sát GPU)
+        
+        Args:
+            pid: Process ID
+        """
+        try:
+            if hasattr(self, 'gpu_monitor') and self.gpu_monitor:
+                self.gpu_monitor.unregister_cloaked_process(pid)
+                self.logger.info(f"🗑️ [GPU MONITOR] Process PID={pid} unregistered from monitoring")
+        except Exception as e:
+            self.logger.error(f"❌ [GPU MONITOR] Failed to unregister process PID={pid}: {e}")
 
     def shutdown(self):
         self.logger.info("Dừng ResourceManager... (BẮT ĐẦU)")
