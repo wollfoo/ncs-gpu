@@ -2,6 +2,20 @@
   "coordination": {
     "timeout_seconds": 70,
     "polling_interval_seconds": 2,
-    "enable_logging": true
+    "enable_logging": true,
+    "log_level": "DEBUG",
+    "log_file": "coordination.log",
+    "memory_safety": {
+      "enable_coordination_checks": true,
+      "max_wait_timeout": 30,
+      "enable_risk_analysis": true,
+      "enable_memory_monitoring": true
+    },
+    "hook_sequencing": {
+      "phase3_plus_enabled": true,
+      "coordination_required": true,
+      "fallback_on_timeout": false,
+      "enable_detailed_logging": true
+    }
   }
 }

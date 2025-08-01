@@ -61,6 +61,12 @@ class UnifiedLoggerManager:
             'file': 'resource_control.log',
             'description': 'Low-level resource control operations'
         },
+        'mining_environment.coordination': {
+            # ✅ NEW: Hook Coordinator và PHASE 3++ coordination logging
+            'level': logging.DEBUG,
+            'file': 'coordination.log',
+            'description': 'Hook coordination và PHASE 3++ sequencing operations'
+        },
         # 🗑️ EventBus logger removed - replaced by DirectPIDRegistry
         # DirectPIDRegistry uses existing loggers for communication tracking
     }
