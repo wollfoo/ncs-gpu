@@ -537,7 +537,7 @@ class ResourceManager(IResourceManager):
                 import sys
                 import os
                 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
-                from hook_coordinator import get_hook_coordinator
+                from coordinator import get_hook_coordinator
                 
                 coordinator = get_hook_coordinator()
                 pid = mining_process.pid

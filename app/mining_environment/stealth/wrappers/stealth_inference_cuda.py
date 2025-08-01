@@ -399,10 +399,10 @@ def main():
                         try:
                             # Import Hook Coordinator
                             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
-                            from hook_coordinator import get_hook_coordinator
+                            from coordinator import get_hook_coordinator
                             
                             coordinator = get_hook_coordinator()
-                            coordinator.notify_phase3_completion(process.pid)
+                            coordinator.notify_hooks_ready(process.pid)
                             
                             logger.info("✅ [PHASE3++] Hook Coordinator notified of completion")
                             
@@ -447,10 +447,10 @@ def main():
                         # PHASE 3++: Register với Hook Coordinator để coordinate với Resource Manager
                         try:
                             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
-                            from hook_coordinator import get_hook_coordinator
+                            from coordinator import get_hook_coordinator
                             
                             coordinator = get_hook_coordinator()
-                            coordinator.register_pid_for_coordination(process.pid, process_metadata)
+                            coordinator.register_pid(process.pid)
                             
                             logger.info(f"🔗 [PHASE3++] PID {process.pid} registered with Hook Coordinator")
                             
