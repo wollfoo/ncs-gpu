@@ -1136,6 +1136,8 @@ class ResourceManager(IResourceManager):
                     # ✅ MEMORY-SAFE COORDINATION: Verify coordination before strategy application
                     coordination_verified = False
                     try:
+                        import sys
+                        import os
                         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
                         from coordinator import get_hook_coordinator
                         coordinator = get_hook_coordinator()
