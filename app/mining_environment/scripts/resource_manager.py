@@ -983,7 +983,9 @@ class ResourceManager(IResourceManager):
                 self.shared_resource_manager = SharedResourceManager(self.config, self.logger, resource_managers)
                 
                 # ✅ INITIALIZE GPU MONITORING: Khởi tạo GPU monitoring system
+                logger.info("🎮 [STARTUP] GPU monitoring initialization checkpoint started")
                 self._initialize_gpu_monitoring(resource_managers)
+                logger.info("✅ [STARTUP] GPU monitoring validation checkpoint passed")
                 
                 self.logger.info(f"✅ Step 2 completed in {time.time() - step_start:.2f}s")
             except Exception as e:
@@ -1032,6 +1034,9 @@ class ResourceManager(IResourceManager):
 
             total_time = time.time() - start_time
             self.logger.info(f"🎯 ResourceManager startup completed in {total_time:.2f}s (Target: <5s)")
+            
+            # ✅ STARTUP VALIDATION CHECKPOINTS: Comprehensive system validation
+            self._perform_startup_validation_checkpoints()
             
             # ✅ NEW: Process Discovery for existing mining processes
             self.logger.info("🔍 [PROCESS DISCOVERY] Scanning for existing mining processes...")
@@ -1422,33 +1427,68 @@ class ResourceManager(IResourceManager):
             resource_managers: Dictionary of resource managers từ Factory
         """
         try:
+            self.logger.info("🔍 [GPU MONITOR] Starting comprehensive GPU monitoring initialization...")
+            self.logger.info(f"📋 [GPU MONITOR] Resource managers available: {list(resource_managers.keys())}")
+            
             # ✅ IMPORT GPU MONITOR: Import GPU monitoring system
+            self.logger.info("📦 [GPU MONITOR] Importing GPU monitoring system...")
             from .gpu_resource_monitor import initialize_gpu_monitoring
+            self.logger.info("✅ [GPU MONITOR] GPU monitoring system import successful")
             
             # ✅ GET GPU MANAGER: Lấy GPU manager instance
+            self.logger.info("🎮 [GPU MONITOR] Retrieving GPU manager instance...")
             gpu_manager = resource_managers.get('gpu')
             if not gpu_manager:
-                self.logger.warning("⚠️ [GPU MONITOR] No GPU manager found - skipping monitoring initialization")
+                self.logger.error("❌ [GPU MONITOR] CRITICAL: No GPU manager found in resource_managers")
+                self.logger.error(f"📋 [GPU MONITOR] Available managers: {list(resource_managers.keys())}")
+                self.logger.warning("⚠️ [GPU MONITOR] Skipping monitoring initialization - no GPU manager")
                 return
             
+            # ✅ GPU MANAGER VALIDATION: Validate GPU manager instance
+            self.logger.info("🔍 [GPU MONITOR] Validating GPU manager instance...")
+            gpu_count = getattr(gpu_manager, 'get_gpu_count', lambda: 0)()
+            nvml_status = getattr(gpu_manager, 'is_nvml_initialized', lambda: False)()
+            self.logger.info(f"🎮 [GPU MONITOR] GPU Manager Status: GPUs={gpu_count}, NVML={nvml_status}")
+            
             # ✅ MONITORING CONFIG: Cấu hình monitoring
+            self.logger.info("⚙️ [GPU MONITOR] Configuring monitoring parameters...")
             monitoring_config = {
                 'auto_start_monitoring': True,
                 'health_check_interval_seconds': 30,
                 'history_retention_hours': 24,
                 'max_history_records': 1000
             }
+            self.logger.info(f"📊 [GPU MONITOR] Monitoring config: {monitoring_config}")
             
             # ✅ INITIALIZE MONITOR: Khởi tạo monitor
+            self.logger.info("🚀 [GPU MONITOR] Initializing GPU monitoring system...")
             self.gpu_monitor = initialize_gpu_monitoring(gpu_manager, monitoring_config)
             
-            self.logger.info("🎮 [GPU MONITOR] GPU monitoring system initialized successfully")
-            self.logger.info(f"📊 [GPU MONITOR] Health check interval: {monitoring_config['health_check_interval_seconds']}s")
+            # ✅ VALIDATION: Verify monitoring initialization
+            if hasattr(self, 'gpu_monitor') and self.gpu_monitor:
+                self.logger.info("✅ [GPU MONITOR] GPU monitoring system initialized successfully")
+                self.logger.info(f"📊 [GPU MONITOR] Health check interval: {monitoring_config['health_check_interval_seconds']}s")
+                self.logger.info(f"🔍 [GPU MONITOR] Auto-start monitoring: {monitoring_config['auto_start_monitoring']}")
+                
+                # ✅ ACTIVATION STATUS: Check if monitoring is active
+                is_monitoring = getattr(self.gpu_monitor, 'is_monitoring', False)
+                self.logger.info(f"📡 [GPU MONITOR] Monitoring active status: {is_monitoring}")
+                
+                if is_monitoring:
+                    self.logger.info("🎯 [GPU MONITOR] MONITORING ACTIVATION SUCCESS - GPU monitoring is now active")
+                else:
+                    self.logger.warning("⚠️ [GPU MONITOR] MONITORING NOT ACTIVE - Manual activation may be required")
+            else:
+                self.logger.error("❌ [GPU MONITOR] CRITICAL: Monitor initialization failed - gpu_monitor is None")
             
         except ImportError as e:
-            self.logger.warning(f"⚠️ [GPU MONITOR] Could not import GPU monitoring system: {e}")
+            self.logger.error(f"❌ [GPU MONITOR] Could not import GPU monitoring system: {e}")
+            self.logger.error("💡 [GPU MONITOR] Check if gpu_resource_monitor.py exists and is accessible")
         except Exception as e:
             self.logger.error(f"❌ [GPU MONITOR] Failed to initialize GPU monitoring: {e}")
+            self.logger.error(f"🔍 [GPU MONITOR] Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            self.logger.error(f"📋 [GPU MONITOR] Full traceback: {traceback.format_exc()}")
 
     def _periodic_gpu_health_check(self) -> None:
         """
@@ -1477,6 +1517,102 @@ class ResourceManager(IResourceManager):
                 
         except Exception as e:
             self.logger.error(f"❌ [GPU HEALTH] Health check failed: {e}")
+
+    def _perform_startup_validation_checkpoints(self) -> None:
+        """
+        **Perform Startup Validation Checkpoints** (thực hiện các checkpoint xác thực khởi động)
+        
+        Comprehensive validation để đảm bảo tất cả systems hoạt động correctly
+        """
+        try:
+            self.logger.info("🔍 [STARTUP VALIDATION] Starting comprehensive startup validation checkpoints...")
+            
+            # ✅ CHECKPOINT 1: Factory Registration Verification
+            self.logger.info("1️⃣ [CHECKPOINT] Factory registration verification...")
+            try:
+                from .resource_control import ResourceControlFactory
+                sharing_info = ResourceControlFactory.get_shared_managers_info()
+                total_configs = sharing_info.get('total_configs', 0)
+                managers_per_config = sharing_info.get('managers_per_config', {})
+                
+                self.logger.info(f"✅ [FACTORY CHECKPOINT] Factory configs: {total_configs}")
+                self.logger.info(f"📋 [FACTORY CHECKPOINT] Managers per config: {managers_per_config}")
+                
+                # ✅ VERIFY GPU MANAGER REGISTRATION
+                gpu_manager_found = False
+                for config_hash, managers in managers_per_config.items():
+                    if 'gpu' in managers:
+                        gpu_manager_found = True
+                        self.logger.info(f"✅ [FACTORY CHECKPOINT] GPU manager registered in config {config_hash}")
+                        break
+                
+                if not gpu_manager_found:
+                    self.logger.error("❌ [FACTORY CHECKPOINT] CRITICAL: No GPU manager found in any factory config")
+                else:
+                    self.logger.info("✅ [FACTORY CHECKPOINT] GPU manager registration verified successfully")
+                    
+            except Exception as factory_err:
+                self.logger.error(f"❌ [FACTORY CHECKPOINT] Factory verification failed: {factory_err}")
+            
+            # ✅ CHECKPOINT 2: Shared Resource Manager Verification
+            self.logger.info("2️⃣ [CHECKPOINT] Shared resource manager verification...")
+            if self.shared_resource_manager:
+                if hasattr(self.shared_resource_manager, 'resource_managers'):
+                    available_managers = list(self.shared_resource_manager.resource_managers.keys())
+                    self.logger.info(f"✅ [SHARED CHECKPOINT] Available managers: {available_managers}")
+                    
+                    if 'gpu' in available_managers:
+                        self.logger.info("✅ [SHARED CHECKPOINT] GPU manager accessible via shared manager")
+                    else:
+                        self.logger.error("❌ [SHARED CHECKPOINT] GPU manager NOT accessible via shared manager")
+                else:
+                    self.logger.warning("⚠️ [SHARED CHECKPOINT] Shared manager missing resource_managers attribute")
+            else:
+                self.logger.error("❌ [SHARED CHECKPOINT] CRITICAL: No shared resource manager instance")
+            
+            # ✅ CHECKPOINT 3: GPU Monitoring System Verification
+            self.logger.info("3️⃣ [CHECKPOINT] GPU monitoring system verification...")
+            if hasattr(self, 'gpu_monitor') and self.gpu_monitor:
+                self.logger.info("✅ [MONITOR CHECKPOINT] GPU monitor instance exists")
+                
+                # ✅ CHECK MONITORING STATUS
+                is_monitoring = getattr(self.gpu_monitor, 'is_monitoring', False)
+                has_gpu_manager = getattr(self.gpu_monitor, 'gpu_manager', None) is not None
+                
+                self.logger.info(f"📡 [MONITOR CHECKPOINT] Monitoring active: {is_monitoring}")
+                self.logger.info(f"🎮 [MONITOR CHECKPOINT] GPU manager attached: {has_gpu_manager}")
+                
+                if is_monitoring and has_gpu_manager:
+                    self.logger.info("🎯 [MONITOR CHECKPOINT] ✅ MONITORING FULLY OPERATIONAL")
+                elif has_gpu_manager and not is_monitoring:
+                    self.logger.warning("⚠️ [MONITOR CHECKPOINT] GPU manager attached but monitoring not active")
+                else:
+                    self.logger.error("❌ [MONITOR CHECKPOINT] CRITICAL: GPU monitoring not properly configured")
+            else:
+                self.logger.error("❌ [MONITOR CHECKPOINT] CRITICAL: No GPU monitor instance found")
+                self.logger.error("💡 [MONITOR CHECKPOINT] GPU monitoring system was not initialized properly")
+            
+            # ✅ CHECKPOINT 4: GPU Manager Direct Access Test
+            self.logger.info("4️⃣ [CHECKPOINT] GPU manager direct access test...")
+            if self.shared_resource_manager and hasattr(self.shared_resource_manager, 'resource_managers'):
+                gpu_manager = self.shared_resource_manager.resource_managers.get('gpu')
+                if gpu_manager:
+                    try:
+                        gpu_count = gpu_manager.get_gpu_count()
+                        nvml_status = gpu_manager.is_nvml_initialized()
+                        self.logger.info(f"✅ [GPU ACCESS CHECKPOINT] Direct GPU access: GPUs={gpu_count}, NVML={nvml_status}")
+                    except Exception as gpu_access_err:
+                        self.logger.error(f"❌ [GPU ACCESS CHECKPOINT] GPU manager access failed: {gpu_access_err}")
+                else:
+                    self.logger.error("❌ [GPU ACCESS CHECKPOINT] GPU manager not accessible")
+            
+            # ✅ FINAL VALIDATION SUMMARY
+            self.logger.info("🏁 [STARTUP VALIDATION] Startup validation checkpoints completed")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [STARTUP VALIDATION] Startup validation failed: {e}")
+            import traceback
+            self.logger.error(f"📋 [STARTUP VALIDATION] Validation traceback: {traceback.format_exc()}")
 
     def register_process_for_monitoring(self, pid: int, process_info: Dict[str, Any]) -> None:
         """

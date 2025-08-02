@@ -1029,6 +1029,7 @@ class ResourceControlFactory:
             
             # ✅ CREATE: New managers if none exist for this config
             logger.info(f"⚙️ [Factory] Creating new resource managers (hash: {config_hash})")
+            logger.info(f"🏭 [FACTORY] ResourceControlFactory initialization started")
         resource_managers = {}
         manager_classes = {
             'gpu': GPUResourceManager,
@@ -1068,6 +1069,8 @@ class ResourceControlFactory:
         ResourceControlFactory._shared_managers[config_hash] = resource_managers
         logger.info(f"✅ [Factory] Tất cả resource managers đã được khởi tạo và cached (hash: {config_hash}).")
         logger.info(f"📊 [Factory] Total shared instances: {len(ResourceControlFactory._shared_managers)}")
+        logger.info(f"📋 [FACTORY] Available managers: {list(resource_managers.keys())}")
+        logger.info(f"🎮 [FACTORY] GPU manager registered: {'gpu' in resource_managers}")
         return resource_managers
 
     @staticmethod
