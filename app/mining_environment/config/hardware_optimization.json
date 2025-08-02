@@ -88,7 +88,9 @@
             "gpu_usage_limit": 75,
             "power_limit": 80,
             "noise_level": "silent",
-            "description": "Maximum stealth with reduced performance"
+            "memory_conservative": true,
+            "intensity_cap": 12000000,
+            "description": "Maximum stealth with reduced performance and memory-safe operation"
         },
         "balanced_mode": {
             "gpu_usage_limit": 90,

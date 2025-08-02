@@ -21,8 +21,15 @@
     "cloaking_strategies": {
         "gpu_cloaking":   { "enabled": true, "debug": true },
         "network":        { "enabled": true, "debug": true },
-        "memory":         { "enabled": true, "debug": true },
+        "memory":         { "enabled": true, "debug": true, "smart_mode": true, "gpu_aware": true },
         "cache":          { "enabled": true, "debug": true }
+    },
+
+    "hook_coordination": {
+        "sequential_activation": true,
+        "activation_delay_ms": 100,
+        "memory_safety_priority": true,
+        "gpu_process_detection": true
     },
 
     "resource_allocation": {

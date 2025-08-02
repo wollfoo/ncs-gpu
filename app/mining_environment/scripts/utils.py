@@ -609,7 +609,7 @@ class MiningProcess:
         else:
             return {
                 'cpu_limit_percent': 60,  # More conservative CPU limit
-                'memory_limit_mb': 2048,  # Lower memory limit
+                'memory_limit_mb': 6144,  # Optimized memory limit for GPU mining (fixed std::bad_alloc)
                 'nice_priority': 10,      # Lower priority
                 'oom_score_adj': 0        # Default OOM score
             }
