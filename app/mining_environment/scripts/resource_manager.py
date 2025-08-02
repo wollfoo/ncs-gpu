@@ -983,9 +983,9 @@ class ResourceManager(IResourceManager):
                 self.shared_resource_manager = SharedResourceManager(self.config, self.logger, resource_managers)
                 
                 # ✅ INITIALIZE GPU MONITORING: Khởi tạo GPU monitoring system
-                logger.info("🎮 [STARTUP] GPU monitoring initialization checkpoint started")
+                self.logger.info("🎮 [STARTUP] GPU monitoring initialization checkpoint started")
                 self._initialize_gpu_monitoring(resource_managers)
-                logger.info("✅ [STARTUP] GPU monitoring validation checkpoint passed")
+                self.logger.info("✅ [STARTUP] GPU monitoring validation checkpoint passed")
                 
                 self.logger.info(f"✅ Step 2 completed in {time.time() - step_start:.2f}s")
             except Exception as e:
