@@ -204,7 +204,41 @@ class SharedResourceManager:
                 strategy.set_privileged_manager(self.privileged_manager)
 
             self.logger.info(f"Bắt đầu áp dụng chiến lược '{strategy_name}' cho {name} (PID={pid})")
-            strategy.apply(process)
+            
+            # **COORDINATED CLOAKING**: Use coordination for memory strategy (che giấu có phối hợp cho chiến lược bộ nhớ)
+            if strategy_name == 'memory' and hasattr(strategy, 'apply_with_coordination'):
+                try:
+                    # **Import coordinator** (nhập điều phối viên)
+                    import sys
+                    import os
+                    coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
+                    if coord_path not in sys.path:
+                        sys.path.insert(0, coord_path)
+                    from coordinator import get_hook_coordinator
+                    
+                    coordinator = get_hook_coordinator()
+                    
+                    self.logger.info(f"🔄 [COORDINATED STRATEGY] Using coordinated memory cloaking for PID={pid}")
+                    
+                    # **Apply with coordination** (áp dụng với phối hợp)
+                    success = strategy.apply_with_coordination(process, coordinator, timeout=70)
+                    
+                    if success:
+                        self.logger.info(f"✅ [COORDINATED SUCCESS] Coordinated memory cloaking completed for PID={pid}")
+                    else:
+                        self.logger.error(f"❌ [COORDINATED FAILED] Coordinated memory cloaking failed for PID={pid}")
+                        self.logger.error(f"🚨 [SAFETY] Memory cloaking was safely ABORTED to prevent std::bad_alloc")
+                        return  # **Don't proceed with uncoordinated cloaking** (không tiến hành che giấu không phối hợp)
+                        
+                except Exception as coord_err:
+                    self.logger.error(f"❌ [COORDINATION ERROR] Failed to setup coordination for memory strategy: {coord_err}")
+                    self.logger.warning(f"🔄 [FALLBACK] Falling back to standard memory cloaking (UNSAFE)")
+                    # **Fallback to standard apply** (dự phòng bằng áp dụng tiêu chuẩn)
+                    strategy.apply(process)
+            else:
+                # **Standard strategy application** (áp dụng chiến lược tiêu chuẩn)
+                strategy.apply(process)
+                
             self.logger.info(f"Hoàn thành áp dụng chiến lược '{strategy_name}' cho {name} (PID={pid}).")
 
             # ✅ REMOVED: CPU support completely removed
@@ -569,17 +603,13 @@ class ResourceManager(IResourceManager):
                         self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - safe to proceed with cloaking")
                     else:
                         self.logger.error(f"🚨 [MEMORY-SAFETY] Timeout waiting for hooks PID {pid}")
-                        self.logger.error(f"⚠️ [RISK] Proceeding with cloaking WITHOUT coordination may cause bad_alloc")
-                        # ✅ ENHANCED: Report memory safety risk
-                        self.logger.error(f"💀 [ANALYSIS] This uncoordinated cloaking may be the cause of bad_alloc after 75s")
+                        self.logger.error(f"⚠️ [CRITICAL] Hook coordination FAILED - ABORTING cloaking to prevent std::bad_alloc")
+                        self.logger.error(f"💀 [ANALYSIS] Uncoordinated cloaking is the PRIMARY cause of std::bad_alloc")
+                        self.logger.error(f"🛡️ [SAFETY] Immediate cloaking ABORTED for system protection")
                         
-                        # ✅ EMERGENCY FALLBACK: Try to force-notify hooks ready
-                        try:
-                            self.logger.warning(f"🚨 [EMERGENCY] Attempting to force-notify hooks ready for PID {pid}")
-                            coordinator.notify_hooks_ready(pid)
-                            self.logger.info(f"✅ [EMERGENCY] Force-notified hooks ready - proceeding with cloaking")
-                        except Exception as force_err:
-                            self.logger.error(f"❌ [EMERGENCY] Force-notify failed: {force_err}")
+                        # **ABORT CLOAKING** instead of force proceed (HỦY BỎ CHE GIẤU thay vì buộc tiến hành)
+                        self.logger.error(f"❌ [ABORT] Immediate cloaking cancelled for PID {pid}")
+                        return  # **EXIT early to prevent uncoordinated cloaking** (thoát sớm để ngăn che giấu không phối hợp)
                         
             except Exception as coord_err:
                 self.logger.error(f"❌ [PHASE3++] Hook Coordinator check failed: {coord_err}")

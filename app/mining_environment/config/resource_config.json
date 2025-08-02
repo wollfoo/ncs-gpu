@@ -47,7 +47,7 @@
 
     "resource_allocation": {
         "ram": {
-            "max_allocation_mb": 131072
+            "max_allocation_mb": 98304
         },
         "gpu": {
             "max_usage_percent": [90,90],

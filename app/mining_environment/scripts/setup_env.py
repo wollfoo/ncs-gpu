@@ -37,6 +37,100 @@ except ImportError:
                 return {}
         return DummyConfig()
 
+def validate_memory_config(config, logger):
+    """
+    **Memory Configuration Validation** (xác thực cấu hình bộ nhớ – kiểm tra tính hợp lệ thiết lập bộ nhớ)
+    
+    Validates memory allocation settings against system capacity to prevent
+    configuration overflow errors that lead to std::bad_alloc.
+    
+    Args:
+        config: Resource configuration dictionary (từ điển cấu hình tài nguyên)
+        logger: Logging instance (thể hiện ghi nhật ký)
+        
+    Raises:
+        ValueError: If memory configuration exceeds system limits (nếu cấu hình bộ nhớ vượt giới hạn hệ thống)
+        SystemError: If psutil unavailable (nếu psutil không khả dụng)
+    """
+    if not psutil:
+        logger.error("❌ psutil not available - cannot validate memory configuration")
+        raise SystemError("psutil required for memory validation")
+    
+    try:
+        # **System Memory Detection** (phát hiện bộ nhớ hệ thống)
+        system_memory = psutil.virtual_memory()
+        available_ram = system_memory.total  # Total RAM in bytes (tổng RAM tính bằng byte)
+        available_ram_gb = available_ram / (1024 ** 3)  # Convert to GB (chuyển đổi sang GB)
+        
+        logger.info(f"🔍 [MEMORY VALIDATION] System RAM detected: {available_ram_gb:.1f}GB")
+        
+        # **Configuration Analysis** (phân tích cấu hình)
+        resource_allocation = config.get('resource_allocation', {})
+        ram_config = resource_allocation.get('ram', {})
+        max_allocation_mb = ram_config.get('max_allocation_mb', 0)
+        
+        if max_allocation_mb == 0:
+            logger.info("ℹ️ [MEMORY VALIDATION] No max_allocation_mb configured - using system defaults")
+            return True
+            
+        # **Convert MB to bytes for comparison** (chuyển đổi MB sang byte để so sánh)
+        configured_ram = max_allocation_mb * 1024 * 1024
+        configured_ram_gb = configured_ram / (1024 ** 3)
+        
+        logger.info(f"🔍 [MEMORY VALIDATION] Configured allocation: {configured_ram_gb:.1f}GB")
+        
+        # **Critical Validation: Overflow Check** (kiểm tra tràn quan trọng)
+        if configured_ram > available_ram:
+            error_msg = (f"💀 [CRITICAL] Memory allocation ({configured_ram_gb:.1f}GB) "
+                        f"exceeds system capacity ({available_ram_gb:.1f}GB)")
+            logger.error(error_msg)
+            raise ValueError(f"Memory allocation overflow: {configured_ram_gb:.1f}GB > {available_ram_gb:.1f}GB")
+        
+        # **Safety Margin Validation** (xác thực biên an toàn)
+        safety_threshold = 0.85  # 85% safety threshold (ngưỡng an toàn 85%)
+        safe_allocation = available_ram * safety_threshold
+        safe_allocation_gb = safe_allocation / (1024 ** 3)
+        
+        if configured_ram > safe_allocation:
+            warning_msg = (f"⚠️ [WARNING] Memory allocation ({configured_ram_gb:.1f}GB) "
+                          f"close to system limits. Safe limit: {safe_allocation_gb:.1f}GB")
+            logger.warning(warning_msg)
+            logger.warning("🚨 [RISK] This configuration may cause memory pressure and std::bad_alloc")
+        
+        # **RAM Threshold Validation** (xác thực ngưỡng RAM)
+        baseline_thresholds = config.get('baseline_thresholds', {})
+        ram_usage_percent = baseline_thresholds.get('ram_usage_percent', 90)
+        
+        if ram_usage_percent > 85:
+            logger.warning(f"⚠️ [THRESHOLD] RAM threshold {ram_usage_percent}% > 85% - recommend lowering to 75%")
+            
+        # **Memory Limit Validation** (xác thực giới hạn bộ nhớ)
+        cloaking_strategies = config.get('cloaking_strategies', {})
+        memory_cloaking = cloaking_strategies.get('memory', {})
+        memory_limit_mb = memory_cloaking.get('memory_limit_mb', 0)
+        
+        if memory_limit_mb > 0:
+            memory_limit_gb = memory_limit_mb / 1024
+            logger.info(f"🔍 [MEMORY VALIDATION] Memory cloaking limit: {memory_limit_gb:.1f}GB")
+            
+            # Check if memory limit + allocation exceeds system capacity
+            total_allocation = configured_ram + (memory_limit_mb * 1024 * 1024)
+            total_allocation_gb = total_allocation / (1024 ** 3)
+            
+            if total_allocation > available_ram:
+                error_msg = (f"💀 [CRITICAL] Combined allocation ({total_allocation_gb:.1f}GB) "
+                           f"exceeds system capacity ({available_ram_gb:.1f}GB)")
+                logger.error(error_msg)
+                raise ValueError(f"Combined memory allocation overflow: {total_allocation_gb:.1f}GB > {available_ram_gb:.1f}GB")
+        
+        logger.info("✅ [MEMORY VALIDATION] Memory configuration validation passed")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [MEMORY VALIDATION] Validation failed: {e}")
+        raise
+
+
 def load_json_config(config_path, logger):
     """
     Đọc tệp JSON cấu hình và trả về đối tượng Python.
@@ -426,6 +520,20 @@ def setup():
     environmental_limits = load_json_config(environmental_limits_path, logger)
     resource_config = load_json_config(resource_config_path, logger)
 
+    # **Memory Configuration Validation** (xác thực cấu hình bộ nhớ)
+    logger.info("🔍 [SETUP] Starting memory configuration validation...")
+    try:
+        validate_memory_config(resource_config, logger)
+        logger.info("✅ [SETUP] Memory configuration validation completed successfully")
+    except (ValueError, SystemError) as e:
+        logger.error(f"❌ [SETUP] Memory configuration validation failed: {e}")
+        logger.error("🚨 [CRITICAL] System cannot start with invalid memory configuration")
+        logger.error("💡 [SOLUTION] Please fix memory settings in resource_config.json")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"❌ [SETUP] Unexpected error during memory validation: {e}")
+        sys.exit(1)
+    
     # Xác thực
     validate_configs(resource_config, system_params, environmental_limits, logger)
 

