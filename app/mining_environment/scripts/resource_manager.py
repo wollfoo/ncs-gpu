@@ -1673,6 +1673,269 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ [GPU MONITOR] Failed to unregister process PID={pid}: {e}")
 
+    # ===== PROGRESSIVE MEMORY ALLOCATION SYSTEM =====
+    
+    def allocate_memory_progressive(self, required_mb: int) -> Dict[str, Any]:
+        """
+        **Progressive Memory Allocation** (cấp phát bộ nhớ tiến tiến)
+        
+        Allocate memory progressively with safety checks based on current memory pressure.
+        This prevents memory exhaustion that leads to std::bad_alloc.
+        
+        Args:
+            required_mb: Required memory in MB (bộ nhớ yêu cầu tính bằng MB)
+            
+        Returns:
+            Dict with allocation result: {
+                'success': bool,
+                'allocated_mb': int,
+                'strategy': str,
+                'memory_pressure': float,
+                'safety_action': str
+            }
+        """
+        try:
+            # **Get current memory pressure** (lấy áp lực bộ nhớ hiện tại)
+            memory_info = psutil.virtual_memory()
+            current_usage = memory_info.percent
+            available_mb = memory_info.available / (1024 * 1024)
+            
+            self.logger.info(f"🔍 [PROGRESSIVE ALLOCATION] Request: {required_mb}MB, Current usage: {current_usage:.1f}%")
+            
+            # **Critical threshold check** (kiểm tra ngưỡng quan trọng)
+            if current_usage > 85:
+                self.logger.warning(f"🚨 [MEMORY PRESSURE] Critical threshold exceeded: {current_usage:.1f}% > 85%")
+                return self.reduce_memory_footprint(required_mb)
+            
+            # **Conservative allocation zone** (vùng cấp phát thận trọng)
+            elif current_usage > 75:
+                self.logger.warning(f"⚠️ [MEMORY PRESSURE] Conservative zone: {current_usage:.1f}% > 75%")
+                return self.allocate_conservative(required_mb)
+            
+            # **Normal allocation zone** (vùng cấp phát bình thường)
+            else:
+                self.logger.info(f"✅ [MEMORY PRESSURE] Normal zone: {current_usage:.1f}% ≤ 75%")
+                return self.allocate_normal(required_mb)
+                
+        except Exception as e:
+            self.logger.error(f"❌ [PROGRESSIVE ALLOCATION] Error during progressive allocation: {e}")
+            return {
+                'success': False,
+                'allocated_mb': 0,
+                'strategy': 'error',
+                'memory_pressure': 0.0,
+                'safety_action': f'allocation_failed: {e}'
+            }
+    
+    def reduce_memory_footprint(self, required_mb: int) -> Dict[str, Any]:
+        """
+        **Reduce Memory Footprint** (giảm dung lượng bộ nhớ)
+        
+        Emergency memory management when system pressure > 85%.
+        Attempts to free memory before allocation.
+        
+        Args:
+            required_mb: Required memory in MB (bộ nhớ yêu cầu)
+            
+        Returns:
+            Dict with reduction result (từ điển với kết quả giảm)
+        """
+        try:
+            memory_before = psutil.virtual_memory()
+            self.logger.warning(f"🚨 [MEMORY REDUCTION] Emergency mode activated: {memory_before.percent:.1f}%")
+            
+            # **Step 1: Drop system caches** (bước 1: xóa cache hệ thống)
+            if hasattr(self.shared_resource_manager, 'resource_managers'):
+                cache_manager = self.shared_resource_manager.resource_managers.get('cache')
+                if cache_manager and hasattr(cache_manager, 'drop_caches'):
+                    cache_dropped = cache_manager.drop_caches()
+                    if cache_dropped:
+                        self.logger.info("🧹 [MEMORY REDUCTION] System caches dropped")
+            
+            # **Step 2: Force garbage collection** (bước 2: buộc thu gom rác)
+            import gc
+            collected = gc.collect()
+            self.logger.info(f"🗑️ [MEMORY REDUCTION] Garbage collection: {collected} objects collected")
+            
+            # **Step 3: Check if sufficient memory freed** (bước 3: kiểm tra nếu đủ bộ nhớ được giải phóng)
+            memory_after = psutil.virtual_memory()
+            memory_freed_mb = (memory_before.used - memory_after.used) / (1024 * 1024)
+            
+            self.logger.info(f"📊 [MEMORY REDUCTION] Freed: {memory_freed_mb:.1f}MB, Usage: {memory_after.percent:.1f}%")
+            
+            # **Step 4: Decide allocation strategy** (bước 4: quyết định chiến lược cấp phát)
+            if memory_after.percent < 80:  # Significant improvement
+                self.logger.info("✅ [MEMORY REDUCTION] Sufficient memory freed - proceeding with conservative allocation")
+                return self.allocate_conservative(required_mb)
+            else:
+                # **Emergency allocation with severe reduction** (cấp phát khẩn cấp với giảm nghiêm trọng)
+                emergency_mb = min(required_mb * 0.5, memory_after.available / (1024 * 1024) * 0.1)
+                self.logger.warning(f"🆘 [MEMORY REDUCTION] Emergency allocation: {emergency_mb:.1f}MB (reduced from {required_mb}MB)")
+                
+                return {
+                    'success': True,
+                    'allocated_mb': int(emergency_mb),
+                    'strategy': 'emergency_reduced',
+                    'memory_pressure': memory_after.percent,
+                    'safety_action': f'reduced_allocation_from_{required_mb}MB_to_{emergency_mb:.1f}MB'
+                }
+                
+        except Exception as e:
+            self.logger.error(f"❌ [MEMORY REDUCTION] Error during memory reduction: {e}")
+            return {
+                'success': False,
+                'allocated_mb': 0,
+                'strategy': 'reduction_failed',
+                'memory_pressure': 100.0,
+                'safety_action': f'reduction_failed: {e}'
+            }
+    
+    def allocate_conservative(self, required_mb: int) -> Dict[str, Any]:
+        """
+        **Conservative Memory Allocation** (cấp phát bộ nhớ thận trọng)
+        
+        Conservative allocation strategy when memory pressure is 75-85%.
+        Allocates 80% of requested memory with safety margins.
+        
+        Args:
+            required_mb: Required memory in MB (bộ nhớ yêu cầu)
+            
+        Returns:
+            Dict with allocation result (từ điển với kết quả cấp phát)
+        """
+        try:
+            memory_info = psutil.virtual_memory()
+            
+            # **Conservative allocation: 80% of requested** (cấp phát thận trọng: 80% yêu cầu)
+            conservative_mb = int(required_mb * 0.8)
+            available_mb = memory_info.available / (1024 * 1024)
+            
+            # **Safety check: ensure allocation doesn't exceed 10% of available** (kiểm tra an toàn)
+            max_safe_mb = int(available_mb * 0.1)
+            final_allocation = min(conservative_mb, max_safe_mb)
+            
+            self.logger.info(f"⚖️ [CONSERVATIVE ALLOCATION] Requested: {required_mb}MB → Allocated: {final_allocation}MB")
+            self.logger.info(f"📊 [CONSERVATIVE ALLOCATION] Available: {available_mb:.1f}MB, Safety limit: {max_safe_mb}MB")
+            
+            return {
+                'success': True,
+                'allocated_mb': final_allocation,
+                'strategy': 'conservative',
+                'memory_pressure': memory_info.percent,
+                'safety_action': f'reduced_to_80%_with_safety_limit'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ [CONSERVATIVE ALLOCATION] Error during conservative allocation: {e}")
+            return {
+                'success': False,
+                'allocated_mb': 0,
+                'strategy': 'conservative_failed',
+                'memory_pressure': 0.0,
+                'safety_action': f'conservative_failed: {e}'
+            }
+    
+    def allocate_normal(self, required_mb: int) -> Dict[str, Any]:
+        """
+        **Normal Memory Allocation** (cấp phát bộ nhớ bình thường)
+        
+        Normal allocation strategy when memory pressure < 75%.
+        Allocates full requested memory with basic safety checks.
+        
+        Args:
+            required_mb: Required memory in MB (bộ nhớ yêu cầu)
+            
+        Returns:
+            Dict with allocation result (từ điển với kết quả cấp phát)
+        """
+        try:
+            memory_info = psutil.virtual_memory()
+            available_mb = memory_info.available / (1024 * 1024)
+            
+            # **Normal allocation with safety margin** (cấp phát bình thường với biên an toàn)
+            if required_mb <= available_mb * 0.2:  # Request ≤ 20% of available
+                allocated_mb = required_mb
+                safety_action = 'full_allocation_within_safety_margin'
+            else:
+                # **Large request: cap at 15% of available memory** (yêu cầu lớn: giới hạn 15% bộ nhớ khả dụng)
+                allocated_mb = int(available_mb * 0.15)
+                safety_action = f'capped_at_15%_available_memory'
+            
+            self.logger.info(f"✅ [NORMAL ALLOCATION] Requested: {required_mb}MB → Allocated: {allocated_mb}MB")
+            self.logger.info(f"📊 [NORMAL ALLOCATION] Available: {available_mb:.1f}MB, Usage: {memory_info.percent:.1f}%")
+            
+            return {
+                'success': True,
+                'allocated_mb': allocated_mb,
+                'strategy': 'normal',
+                'memory_pressure': memory_info.percent,
+                'safety_action': safety_action
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ [NORMAL ALLOCATION] Error during normal allocation: {e}")
+            return {
+                'success': False,
+                'allocated_mb': 0,
+                'strategy': 'normal_failed',
+                'memory_pressure': 0.0,
+                'safety_action': f'normal_failed: {e}'
+            }
+    
+    def monitor_memory_pressure(self) -> Dict[str, Any]:
+        """
+        **Memory Pressure Monitoring** (giám sát áp lực bộ nhớ)
+        
+        Continuous monitoring of system memory pressure with early warnings.
+        Called periodically to detect memory pressure trends.
+        
+        Returns:
+            Dict with monitoring data (từ điển với dữ liệu giám sát)
+        """
+        try:
+            memory_info = psutil.virtual_memory()
+            usage_percent = memory_info.percent
+            available_gb = memory_info.available / (1024 ** 3)
+            
+            # **Determine pressure level** (xác định mức độ áp lực)
+            if usage_percent > 85:
+                pressure_level = 'CRITICAL'
+                action_required = 'IMMEDIATE'
+                self.logger.error(f"🚨 [MEMORY PRESSURE] CRITICAL: {usage_percent:.1f}% - Immediate action required")
+            elif usage_percent > 75:
+                pressure_level = 'HIGH'
+                action_required = 'SOON'
+                self.logger.warning(f"⚠️ [MEMORY PRESSURE] HIGH: {usage_percent:.1f}% - Action needed soon")
+            elif usage_percent > 65:
+                pressure_level = 'MODERATE'
+                action_required = 'MONITOR'
+                self.logger.info(f"ℹ️ [MEMORY PRESSURE] MODERATE: {usage_percent:.1f}% - Continue monitoring")
+            else:
+                pressure_level = 'LOW'
+                action_required = 'NONE'
+                self.logger.debug(f"✅ [MEMORY PRESSURE] LOW: {usage_percent:.1f}% - System healthy")
+            
+            return {
+                'timestamp': time.time(),
+                'usage_percent': usage_percent,
+                'available_gb': available_gb,
+                'pressure_level': pressure_level,
+                'action_required': action_required,
+                'total_gb': memory_info.total / (1024 ** 3),
+                'used_gb': memory_info.used / (1024 ** 3)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ [MEMORY PRESSURE] Error during monitoring: {e}")
+            return {
+                'timestamp': time.time(),
+                'usage_percent': 0.0,
+                'available_gb': 0.0,
+                'pressure_level': 'ERROR',
+                'action_required': 'CHECK_SYSTEM',
+                'error': str(e)
+            }
+
     def shutdown(self):
         self.logger.info("Dừng ResourceManager... (BẮT ĐẦU)")
 

@@ -124,6 +124,13 @@ def validate_memory_config(config, logger):
                 raise ValueError(f"Combined memory allocation overflow: {total_allocation_gb:.1f}GB > {available_ram_gb:.1f}GB")
         
         logger.info("✅ [MEMORY VALIDATION] Memory configuration validation passed")
+        
+        # **Progressive Allocation Recommendation** (khuyến nghị cấp phát tiến tiến)
+        logger.info("💡 [PROGRESSIVE ALLOCATION] System supports progressive memory allocation:")
+        logger.info("   ├─ Normal allocation: <75% memory usage")
+        logger.info("   ├─ Conservative allocation: 75-85% memory usage") 
+        logger.info("   └─ Emergency reduction: >85% memory usage")
+        
         return True
         
     except Exception as e:
