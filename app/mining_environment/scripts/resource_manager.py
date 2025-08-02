@@ -1180,13 +1180,32 @@ class ResourceManager(IResourceManager):
                         # ✅ ENHANCED DEBUG: Log current coordinator state
                         self.logger.debug(f"🔍 [DEBUG] Coordinator state: {getattr(coordinator, 'hooks_ready', {})}")
                         
-                        # ✅ AUTO-REGISTRATION FALLBACK: Register PID if not already registered
+                        # ✅ ENHANCED AUTO-REGISTRATION: Proactive registration với thread synchronization
                         if pid not in getattr(coordinator, 'hooks_ready', {}):
-                            self.logger.warning(f"⚠️ [AUTO-REGISTER] PID {pid} not in coordinator - auto-registering")
-                            coordinator.register_pid(pid)
-                            # Try to force-notify as ready since ResourceManager is active
-                            coordinator.notify_hooks_ready(pid)
-                            self.logger.info(f"✅ [AUTO-REGISTER] PID {pid} registered and marked ready")
+                            self.logger.warning(f"⚠️ [ENHANCED-AUTO-REGISTER] PID {pid} not in coordinator - proactive registration")
+                            
+                            # Enhanced registration với retry mechanism
+                            registration_success = False
+                            for attempt in range(3):
+                                try:
+                                    coordinator.register_pid(pid)
+                                    coordinator.notify_hooks_ready(pid)
+                                    
+                                    # Verify registration success
+                                    if coordinator.check_hooks_ready(pid):
+                                        registration_success = True
+                                        self.logger.info(f"✅ [ENHANCED-AUTO-REGISTER] PID {pid} successfully registered (attempt {attempt + 1})")
+                                        break
+                                    else:
+                                        self.logger.warning(f"⚠️ [ENHANCED-AUTO-REGISTER] Registration verification failed for PID {pid} (attempt {attempt + 1})")
+                                        time.sleep(0.5)  # Brief wait before retry
+                                        
+                                except Exception as e:
+                                    self.logger.error(f"❌ [ENHANCED-AUTO-REGISTER] Registration attempt {attempt + 1} failed: {e}")
+                                    time.sleep(0.5)
+                            
+                            if not registration_success:
+                                self.logger.error(f"❌ [ENHANCED-AUTO-REGISTER] Failed to register PID {pid} after 3 attempts")
                         
                         if coordinator.check_hooks_ready(pid):
                             coordination_verified = True

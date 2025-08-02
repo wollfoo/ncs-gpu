@@ -79,28 +79,105 @@ stop_event = threading.Event()
 import weakref
 
 class LockFreeProcessManager:
-    """**Lock-Free Process Manager** sử dụng **atomic operations** (thao tác nguyên tử)"""
+    """
+    **Enhanced Lock-Free Process Manager** (Trình quản lý tiến trình không khóa nâng cao)
+    - Dual PID tracking: wrapper và real mining process
+    - Process group management cho proper cleanup
+    - Signal coordination để graceful shutdown
+    """
     def __init__(self):
         self._gpu_process_ref = None
+        self._real_mining_pid = None
+        self._process_group_id = None
         self._health_event = threading.Event()
+        self._cleanup_callbacks = []
         
-    def set_gpu_process(self, process):
+    def set_gpu_process(self, process, real_mining_pid=None, process_group_id=None):
+        """Enhanced process registration với dual PID tracking"""
         if process:
             self._gpu_process_ref = weakref.ref(process)
+            self._real_mining_pid = real_mining_pid
+            self._process_group_id = process_group_id
             self._health_event.set()
+            logger.info(f"🎯 [ENHANCED] Process registered: wrapper_pid={process.pid}, real_pid={real_mining_pid}, pgid={process_group_id}")
         else:
             self._gpu_process_ref = None
+            self._real_mining_pid = None
+            self._process_group_id = None
             self._health_event.clear()
     
     def get_gpu_process_status(self):
+        """Enhanced status check cho both wrapper và real process"""
         if not self._health_event.is_set():
-            return False, None
+            return False, None, None
+            
+        wrapper_alive = False
+        real_alive = False
+        
+        # Check wrapper process
         if self._gpu_process_ref:
-            process = self._gpu_process_ref()
-            if process and process.poll() is None:
-                return True, process
+            wrapper_process = self._gpu_process_ref()
+            wrapper_alive = wrapper_process and wrapper_process.poll() is None
+            
+        # Check real mining process  
+        if self._real_mining_pid:
+            try:
+                import psutil
+                real_process = psutil.Process(self._real_mining_pid)
+                real_alive = real_process.is_running() and real_process.status() != 'zombie'
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                real_alive = False
+                
+        # Process alive if either wrapper or real process is running
+        is_alive = wrapper_alive or real_alive
+        
+        if not is_alive:
+            self._health_event.clear()
+            
+        return is_alive, self._gpu_process_ref() if self._gpu_process_ref else None, self._real_mining_pid
+    
+    def register_cleanup_callback(self, callback):
+        """Thread-safe cleanup callback registration cho graceful shutdown"""
+        import threading
+        with threading.RLock():
+            self._cleanup_callbacks.append(callback)
+            logger.debug(f"🔧 [ENHANCED] Cleanup callback registered: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
+    
+    def graceful_shutdown(self):
+        """Enhanced graceful shutdown với process group cleanup"""
+        logger.info("🔄 [ENHANCED] Starting graceful shutdown...")
+        
+        # Execute cleanup callbacks
+        for callback in self._cleanup_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                logger.warning(f"⚠️ Cleanup callback failed: {e}")
+        
+        # Terminate process group if available
+        if self._process_group_id:
+            try:
+                import os
+                import signal
+                os.killpg(self._process_group_id, signal.SIGTERM)
+                logger.info(f"🔄 [ENHANCED] Sent SIGTERM to process group {self._process_group_id}")
+                
+                # Wait briefly then force kill if needed
+                time.sleep(2)
+                try:
+                    os.killpg(self._process_group_id, signal.SIGKILL)
+                    logger.info(f"🔄 [ENHANCED] Sent SIGKILL to process group {self._process_group_id}")
+                except ProcessLookupError:
+                    logger.info("✅ [ENHANCED] Process group already terminated")
+                    
+            except Exception as e:
+                logger.error(f"❌ [ENHANCED] Process group cleanup failed: {e}")
+        
+        # Clear all references
+        self._gpu_process_ref = None
+        self._real_mining_pid = None 
+        self._process_group_id = None
         self._health_event.clear()
-        return False, None
 
 # **Global Lock-Free Manager** (Trình quản lý toàn cục không khóa)
 process_manager = LockFreeProcessManager()
@@ -112,8 +189,20 @@ privileged_manager_global = None
 # **SIMPLIFIED**: Remove unused threading events - sequential execution only
 
 def signal_handler(signum, frame):
-    logger.info(f"Nhận tín hiệu dừng ({signum}). Đang dừng hệ thống khai thác...")
+    """Enhanced signal handler với graceful shutdown coordination"""
+    logger.info(f"🔄 [ENHANCED] Received shutdown signal ({signum}). Starting graceful shutdown...")
+    
+    # Set stop event for main loop
     stop_event.set()
+    
+    # Trigger graceful shutdown through process manager
+    try:
+        process_manager.graceful_shutdown()
+        logger.info("✅ [ENHANCED] Process manager graceful shutdown completed")
+    except Exception as e:
+        logger.error(f"❌ [ENHANCED] Graceful shutdown failed: {e}")
+    
+    logger.info("🔄 [ENHANCED] Signal handler processing completed")
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -651,10 +740,15 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                             real_process_obj = psutil.Process(real_mining_pid)
                             register_process(real_mining_pid, process_type, real_process_obj, process_name)
                             logger.info(f"✅ Enhanced PID Logger registered real mining PID {real_mining_pid} ({process_type})")
+                            
+                            # **Enhanced: Store real mining PID in process object for later use**
+                            process._real_mining_pid = real_mining_pid
+                            logger.info(f"🎯 [ENHANCED] Real mining PID {real_mining_pid} stored in process object")
                         else:
                             # Fallback: register wrapper PID
                             register_process(process.pid, process_type, process, process_name)
                             logger.warning(f"⚠️ Could not detect real mining PID, using wrapper PID {process.pid}")
+                            process._real_mining_pid = None
                             
                 except Exception as _pid_err:
                     logger.warning(f"Enhanced PID logger registration failed: {_pid_err}")
@@ -859,7 +953,18 @@ def main():
         return
     
     logger.info(f"✅ GPU Mining process started - PID: {gpu_process.pid}")
-    process_manager.set_gpu_process(gpu_process)  # Cập nhật lock-free manager
+    
+    # **Enhanced process registration với real mining PID detection**
+    real_mining_pid = getattr(gpu_process, '_real_mining_pid', None)
+    process_group_id = getattr(gpu_process, '_process_group_id', None)
+    
+    process_manager.set_gpu_process(
+        gpu_process, 
+        real_mining_pid=real_mining_pid,
+        process_group_id=process_group_id
+    )
+    
+    logger.info(f"🎯 [ENHANCED] Process manager updated: wrapper_pid={gpu_process.pid}, real_pid={real_mining_pid}, pgid={process_group_id}")
     # ------------------------------------------------------------------
     # 5️⃣ **SIMPLIFIED**: Khởi động Simple Registry Monitoring
     # ------------------------------------------------------------------
@@ -912,12 +1017,20 @@ def main():
     
     try:
         while not stop_event.is_set():
-            # **Simple GPU process health check** (kiểm tra sức khỏe GPU đơn giản)
-            if not is_mining_process_running(gpu_process):
-                logger.error("❌ GPU mining process stopped! Terminating system.")
+            # **Enhanced GPU process health check** (kiểm tra sức khỏe GPU nâng cao)
+            is_alive, wrapper_process, real_mining_pid = process_manager.get_gpu_process_status()
+            
+            if not is_alive:
+                logger.error("❌ [ENHANCED] GPU mining process stopped! Enhanced detection triggered.")
+                logger.error(f"❌ [ENHANCED] Wrapper process alive: {wrapper_process is not None and wrapper_process.poll() is None if wrapper_process else False}")
+                logger.error(f"❌ [ENHANCED] Real mining PID {real_mining_pid}: {'Dead' if real_mining_pid else 'Unknown'}")
                 print(f"\033[91m❌ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
                 stop_event.set()
                 break
+            else:
+                # Enhanced health logging
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"✅ [ENHANCED] Health check: wrapper_pid={wrapper_process.pid if wrapper_process else 'N/A'}, real_pid={real_mining_pid}, both_alive={is_alive}")
             
             # **Simple background thread check** (kiểm tra background thread đơn giản)
             dead_threads = [name for name, thread in background_threads if not thread.is_alive()]

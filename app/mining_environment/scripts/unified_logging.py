@@ -21,8 +21,9 @@ class UnifiedLoggerManager:
     _instance: Optional['UnifiedLoggerManager'] = None
     _lock = threading.RLock()
     
-    # ✅ STANDARDIZED: Common log format cho all modules
-    STANDARD_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
+    # ✅ ENHANCED: PID-aware log format cho process tracking
+    STANDARD_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - [PID:%(process)d] - %(message)s'
+    ENHANCED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - [PID:%(process)d|TID:%(thread)d] - %(message)s'
     DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
     
     # ✅ HIERARCHY: Logger name hierarchy cho organized logging
@@ -148,8 +149,9 @@ class UnifiedLoggerManager:
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setLevel(logging.WARNING)  # Only warnings+ to console
             
-            # ✅ STANDARDIZED FORMATTING
-            formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
+            # ✅ ENHANCED PID-AWARE FORMATTING
+            # Use enhanced format for process tracking
+            formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
             file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
             
