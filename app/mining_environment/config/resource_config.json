@@ -33,7 +33,7 @@
             "debug": true, 
             "smart_mode": true, 
             "gpu_aware": true,
-            "memory_limit_mb": 6144
+            "memory_limit_mb": 0
         },
         "cache":          { "enabled": true, "debug": true }
     },
@@ -100,7 +100,7 @@
 
     "baseline_thresholds": {
         "gpu_usage_percent": 90,
-        "ram_usage_percent": 90,
+        "ram_usage_percent": 75,
         "disk_io_usage_mbps": 90,
         "network_usage_mbps": 90
     },
@@ -148,7 +148,7 @@
         "os_name": "Ubuntu",
         "os_version": "22.04 LTS",
         "resource_limits": {
-            "ram_usage_percent": 90.0,
+            "ram_usage_percent": 75.0,
             "gpu_usage_percent": 90.0,
             "network_bandwidth_mbps": 500.0,
             "storage_usage_percent": 90.0

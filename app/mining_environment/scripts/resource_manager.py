@@ -565,7 +565,7 @@ class ResourceManager(IResourceManager):
                     self.logger.info(f"⏳ [PHASE3++] Waiting for hook coordination before cloaking...")
                     
                     # ✅ CRITICAL: Wait for hooks với timeout để tránh memory conflicts
-                    if coordinator.wait_for_hooks_ready(pid, timeout=30):
+                    if coordinator.wait_for_hooks_ready(pid, timeout=70):
                         self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - safe to proceed with cloaking")
                     else:
                         self.logger.error(f"🚨 [MEMORY-SAFETY] Timeout waiting for hooks PID {pid}")

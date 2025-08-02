@@ -144,6 +144,7 @@ if coordinator.wait_for_hooks_ready(pid, timeout=70):  # Tăng từ 30s → 70s
 "ram_usage_percent": 75  // Giảm từ 90% → 75% để có safety margin
 ```
 
+
 ### **STRUCTURAL (Cơ cấu)** - Ngăn ngừa tái diễn:
 
 #### **4. Memory Configuration Validation**:
