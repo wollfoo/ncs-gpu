@@ -1,32 +1,22 @@
+# ✅ CORE GPU MINING DEPENDENCIES (Dependencies cốt lõi khai thác GPU)
+pynvml==11.4.1
+psutil
+cryptography
+
+# ✅ SYSTEM UTILITIES (Tiện ích hệ thống)
+pyyaml>=6.0,<7.0
+pycryptodome
+
+# ✅ UTILITY LIBRARIES (Thư viện tiện ích) - Need verification
 retrying
 GPUtil
-scikit-learn
-flask
-celery
-requests
 pyelftools
 loguru
-psutil
-tensorflow
-joblib
-numpy
-cryptography
 aiofiles
 aiorwlock
-pynvml==11.4.1
 readerwriterlock
 ratelimiter
-openai
-pandas
 pydantic
-grpcio 
-grpcio-tools
-dependency-injector
-uvicorn
-aiohttp
-pycryptodome
-pyyaml>=6.0,<7.0
-prometheus-client>=0.16.0,<0.17.0
 
 # Thư viện Python cho xử lý hệ thống
 importlib-metadata>=4.12.0
