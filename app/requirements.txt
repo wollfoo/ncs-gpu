@@ -11,7 +11,6 @@ tensorflow
 joblib
 numpy
 cryptography
-
 aiofiles
 aiorwlock
 pynvml==11.4.1
@@ -26,17 +25,6 @@ dependency-injector
 uvicorn
 aiohttp
 pycryptodome
-azure-identity
-azure-mgmt-resource
-azure-mgmt-resourcegraph
-azure-mgmt-network
-azure-mgmt-security
-azure-loganalytics
-azure-mgmt-loganalytics
-azure-monitor-query 
-azure-mgmt-machinelearningservices
-azure-ai-ml
-azure-ai-anomalydetector
 pyyaml>=6.0,<7.0
 prometheus-client>=0.16.0,<0.17.0
 
@@ -52,11 +40,3 @@ types-regex>=2022.10.31.3
 # libbpf-python sẽ được cài qua apt
 pyroute2
 
-# 🗑️ EventBus dependencies removed - replaced by DirectPIDRegistry
-# DirectPIDRegistry uses in-memory thread-safe operations with no external dependencies
-
-# Development dependencies
-# pytest>=7.0.0
-# pytest-cov>=4.0.0
-# black>=22.0.0
-# flake8>=6.0.0
