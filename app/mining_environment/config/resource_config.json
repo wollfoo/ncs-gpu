@@ -19,9 +19,22 @@
     },
 
     "cloaking_strategies": {
-        "gpu_cloaking":   { "enabled": true, "debug": true },
+        "gpu_cloaking":   { 
+            "enabled": true, 
+            "debug": true, 
+            "stealth_mode": true,
+            "adaptive_throttling": true,
+            "smart_power_scaling": true,
+            "emergency_fallback": true
+        },
         "network":        { "enabled": true, "debug": true },
-        "memory":         { "enabled": true, "debug": true, "smart_mode": true, "gpu_aware": true },
+        "memory":         { 
+            "enabled": true, 
+            "debug": true, 
+            "smart_mode": true, 
+            "gpu_aware": true,
+            "memory_limit_mb": 6144
+        },
         "cache":          { "enabled": true, "debug": true }
     },
 

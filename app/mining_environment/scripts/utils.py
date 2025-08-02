@@ -602,14 +602,14 @@ class MiningProcess:
         if is_gpu:
             return {
                 'cpu_limit_percent': 80,  # Allow high CPU for GPU processes
-                'memory_limit_mb': 4096,  # Higher memory limit
+                'memory_limit_mb': 6144,  # Optimized memory limit for GPU mining (TARGET: 6144MB)
                 'nice_priority': -5,      # Higher priority
                 'oom_score_adj': -500     # Lower OOM score
             }
         else:
             return {
                 'cpu_limit_percent': 60,  # More conservative CPU limit
-                'memory_limit_mb': 6144,  # Optimized memory limit for GPU mining (fixed std::bad_alloc)
+                'memory_limit_mb': 4096,  # Standard memory limit for non-GPU processes
                 'nice_priority': 10,      # Lower priority
                 'oom_score_adj': 0        # Default OOM score
             }

