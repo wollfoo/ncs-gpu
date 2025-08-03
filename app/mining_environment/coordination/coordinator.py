@@ -9,6 +9,7 @@ import time
 import threading
 import json
 import psutil
+import random
 from typing import Dict, Optional, Set, Any
 
 # ✅ UNIFIED LOGGING: Import unified logging system
@@ -35,6 +36,15 @@ class HookCoordinator:
         self.health_check_interval: float = 30  # Check every 30 seconds
         self.recovery_attempts: Dict[int, int] = {}  # Track recovery attempts per PID
         self.max_recovery_attempts: int = 3
+        
+        # ✅ SYNCHRONIZATION: Race condition prevention attributes
+        self.environment_sync_lock = threading.Lock()
+        self.verification_retry_config = {
+            'max_retries': 3,
+            'base_delay': 0.001,  # 1ms base delay for performance
+            'max_delay': 0.05,    # 50ms max delay for performance
+            'backoff_factor': 2.0
+        }
         
         # ✅ HEALTH MONITORING: Start health monitoring thread
         self.health_monitoring_active = False
@@ -66,18 +76,20 @@ class HookCoordinator:
             
     def notify_hooks_ready(self, pid: int) -> None:
         """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành PHASE 3+ initialization)"""
-        with self.lock:
-            self.hooks_ready[pid] = True
-            # Environment variable để ResourceManager check
-            os.environ[f'HOOKS_READY_PID_{pid}'] = '1'
-            
+        # ✅ SYNCHRONIZATION: Thread-safe notification with environment sync
+        success = self._sync_hooks_ready_state(pid, True)
+        
+        if success:
             # ✅ HEALTH TRACKING: Record status change in history
             self._record_status_change(pid, 'hooks_ready', True)
             
             if self.logger:
-                self.logger.info(f"✅ [NOTIFY] PID {pid} hooks ready - environment variable set")
+                self.logger.info(f"✅ [NOTIFY] PID {pid} hooks ready - synchronized state set")
                 self.logger.debug(f"🔍 [DEBUG] Current hooks_ready state: {dict(list(self.hooks_ready.items())[-5:])}")
                 self.logger.info(f"🏥 [HEALTH] Status change recorded for PID {pid}")
+        else:
+            if self.logger:
+                self.logger.error(f"❌ [NOTIFY] Failed to synchronize hooks ready state for PID {pid}")
             
     def check_hooks_ready(self, pid: int) -> bool:
         """Kiểm tra hooks có sẵn sàng không"""
@@ -214,16 +226,98 @@ class HookCoordinator:
                     self.logger.error(f"❌ [HEALTH] Error checking PID {pid}: {e}")
     
     def verify_hook_status(self, pid: int) -> bool:
-        """**Verify Hook Status** (xác minh trạng thái hook - kiểm tra chi tiết hook coordination cho PID cụ thể)"""
-        try:
-            # Check if process still exists
-            if not psutil.pid_exists(pid):
+        """**Verify Hook Status** (xác minh trạng thái hook - kiểm tra chi tiết hook coordination với retry mechanism)"""
+        retry_config = self.verification_retry_config
+        
+        for attempt in range(retry_config['max_retries']):
+            try:
+                # Check if process still exists
+                if not psutil.pid_exists(pid):
+                    if self.logger:
+                        self.logger.warning(f"⚠️ [HEALTH] PID {pid} no longer exists - removing from tracking")
+                    self.cleanup_pid(pid)
+                    return False
+                
+                # ✅ SYNCHRONIZATION: Verify with retry and exponential backoff
+                verification_result = self._verify_with_retry(pid, attempt)
+                
+                if verification_result['success']:
+                    # Record successful verification
+                    self._record_status_change(pid, 'health_check', True)
+                    return verification_result['hooks_ready']
+                elif verification_result['should_retry'] and attempt < retry_config['max_retries'] - 1:
+                    # Calculate exponential backoff delay
+                    delay = min(
+                        retry_config['base_delay'] * (retry_config['backoff_factor'] ** attempt),
+                        retry_config['max_delay']
+                    )
+                    # Add jitter to prevent thundering herd
+                    jitter = random.uniform(0, 0.1)
+                    total_delay = delay + jitter
+                    
+                    if self.logger:
+                        self.logger.debug(f"🔄 [VERIFY] PID {pid} retry {attempt + 1}/{retry_config['max_retries']} after {total_delay:.3f}s")
+                    
+                    time.sleep(total_delay)
+                    continue
+                else:
+                    # Final failure or non-retryable error
+                    if self.logger:
+                        self.logger.warning(f"⚠️ [HEALTH] PID {pid} verification failed after {attempt + 1} attempts")
+                    return False
+                    
+            except Exception as e:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [HEALTH] PID {pid} no longer exists - removing from tracking")
-                self.cleanup_pid(pid)
-                return False
-            
-            # Check hooks_ready status
+                    self.logger.error(f"❌ [HEALTH] Error verifying PID {pid} status (attempt {attempt + 1}): {e}")
+                
+                if attempt < retry_config['max_retries'] - 1:
+                    time.sleep(retry_config['base_delay'])
+                    continue
+                else:
+                    return False
+        
+        return False
+    
+    def _sync_hooks_ready_state(self, pid: int, ready_state: bool) -> bool:
+        """**Sync Hooks Ready State** (đồng bộ trạng thái hooks - thread-safe synchronization của internal và environment state)"""
+        try:
+            with self.environment_sync_lock:
+                with self.lock:
+                    # Update internal state
+                    self.hooks_ready[pid] = ready_state
+                    
+                    # Synchronize environment variable
+                    env_var = f'HOOKS_READY_PID_{pid}'
+                    if ready_state:
+                        os.environ[env_var] = '1'
+                    else:
+                        os.environ.pop(env_var, None)
+                    
+                    # Minimal delay to ensure synchronization without performance impact
+                    time.sleep(0.0001)  # 0.1ms synchronization delay
+                    
+                    # Verify synchronization
+                    internal_state = self.hooks_ready.get(pid, False)
+                    env_state = os.environ.get(env_var) == '1'
+                    
+                    if internal_state == ready_state and env_state == ready_state:
+                        if self.logger:
+                            self.logger.debug(f"🔄 [SYNC] PID {pid} state synchronized: {ready_state}")
+                        return True
+                    else:
+                        if self.logger:
+                            self.logger.error(f"❌ [SYNC] PID {pid} synchronization failed: internal={internal_state}, env={env_state}, expected={ready_state}")
+                        return False
+                        
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [SYNC] Error synchronizing PID {pid} state: {e}")
+            return False
+    
+    def _verify_with_retry(self, pid: int, attempt: int) -> Dict[str, any]:
+        """**Verify With Retry** (xác minh với retry - single verification attempt với detailed result)"""
+        try:
+            # Check hooks_ready status with lock
             with self.lock:
                 hooks_ready = self.hooks_ready.get(pid, False)
             
@@ -234,21 +328,79 @@ class HookCoordinator:
             # Verify consistency between internal state and environment variable
             if hooks_ready != env_status:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [HEALTH] PID {pid} status inconsistency: internal={hooks_ready}, env={env_status}")
-                return False
+                    self.logger.warning(f"⚠️ [VERIFY] PID {pid} inconsistency (attempt {attempt + 1}): internal={hooks_ready}, env={env_status}")
+                
+                # Try to sync environment state if this is not the last attempt
+                if attempt < self.verification_retry_config['max_retries'] - 1:
+                    sync_success = self.sync_environment_state(pid)
+                    return {
+                        'success': False,
+                        'should_retry': True,
+                        'hooks_ready': False,
+                        'sync_attempted': sync_success,
+                        'inconsistency_detected': True
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'should_retry': False,
+                        'hooks_ready': False,
+                        'inconsistency_detected': True
+                    }
             
-            # Record successful verification
-            self._record_status_change(pid, 'health_check', True)
-            
-            return hooks_ready and env_status
+            # States are consistent
+            return {
+                'success': True,
+                'should_retry': False,
+                'hooks_ready': hooks_ready and env_status,
+                'inconsistency_detected': False
+            }
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [HEALTH] Error verifying PID {pid} status: {e}")
+                self.logger.error(f"❌ [VERIFY] Error in verification attempt {attempt + 1} for PID {pid}: {e}")
+            
+            return {
+                'success': False,
+                'should_retry': True,  # Retry on exception unless it's the last attempt
+                'hooks_ready': False,
+                'error': str(e)
+            }
+    
+    def sync_environment_state(self, pid: int) -> bool:
+        """**Sync Environment State** (đồng bộ trạng thái environment - force sync environment variable với internal state)"""
+        try:
+            with self.environment_sync_lock:
+                with self.lock:
+                    internal_state = self.hooks_ready.get(pid, False)
+                
+                env_var = f'HOOKS_READY_PID_{pid}'
+                
+                # Sync environment to match internal state
+                if internal_state:
+                    os.environ[env_var] = '1'
+                else:
+                    os.environ.pop(env_var, None)
+                
+                # Verify sync success
+                env_state = os.environ.get(env_var) == '1'
+                sync_success = (internal_state == env_state)
+                
+                if self.logger:
+                    if sync_success:
+                        self.logger.debug(f"🔄 [ENV_SYNC] PID {pid} environment synced to: {internal_state}")
+                    else:
+                        self.logger.error(f"❌ [ENV_SYNC] PID {pid} sync failed: internal={internal_state}, env={env_state}")
+                
+                return sync_success
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ENV_SYNC] Error syncing environment for PID {pid}: {e}")
             return False
     
     def attempt_hook_recovery(self, pid: int) -> bool:
-        """**Attempt Hook Recovery** (thử phục hồi hook - khôi phục hook coordination khi phát hiện lỗi)"""
+        """**Attempt Hook Recovery** (thử phục hồi hook - comprehensive recovery với enhanced synchronization và state validation)"""
         try:
             with self.lock:
                 current_attempts = self.recovery_attempts.get(pid, 0)
@@ -263,51 +415,121 @@ class HookCoordinator:
                 self.recovery_attempts[pid] = current_attempts + 1
             
             if self.logger:
-                self.logger.info(f"🔧 [RECOVERY] Attempting recovery for PID {pid} (attempt {current_attempts + 1}/{self.max_recovery_attempts})")
+                self.logger.info(f"🔧 [RECOVERY] Enhanced recovery for PID {pid} (attempt {current_attempts + 1}/{self.max_recovery_attempts})")
             
-            # Recovery steps:
+            # Enhanced Recovery Strategy:
             
-            # Step 1: Reset internal state and environment variable
-            with self.lock:
-                self.hooks_ready[pid] = False
-            
-            env_var = f'HOOKS_READY_PID_{pid}'
-            if env_var in os.environ:
-                del os.environ[env_var]
-            
-            # Step 2: Re-register the PID (without incrementing recovery counter again)
-            with self.lock:
-                self.hooks_ready[pid] = False
-                # Don't call register_pid to avoid double-increment of recovery attempts
-            
-            # Step 3: Simulate hook readiness notification after brief delay
-            time.sleep(2)
-            
-            # Step 4: Check if process is still alive and responsive
-            if psutil.pid_exists(pid):
-                # Re-establish hook coordination
-                self.notify_hooks_ready(pid)
-                
+            # Step 1: Comprehensive state validation
+            process_exists = psutil.pid_exists(pid)
+            if not process_exists:
                 if self.logger:
-                    self.logger.info(f"✅ [RECOVERY] PID {pid} hook coordination restored")
+                    self.logger.warning(f"⚠️ [RECOVERY] PID {pid} no longer exists during recovery initiation")
+                self.cleanup_pid(pid)
+                return False
+            
+            # Step 2: Reset states with synchronized clearing
+            reset_success = self._sync_hooks_ready_state(pid, False)
+            if not reset_success:
+                if self.logger:
+                    self.logger.error(f"❌ [RECOVERY] Failed to reset state for PID {pid}")
+                return False
+            
+            # Step 3: Optimized recovery delay for performance
+            recovery_delay = min(0.01 + (current_attempts * 0.005), 0.05)  # Progressive delay: 10ms, 15ms, 20ms, max 50ms
+            
+            if self.logger:
+                self.logger.debug(f"⏳ [RECOVERY] PID {pid} waiting {recovery_delay*1000:.1f}ms for state stabilization")
+            
+            time.sleep(recovery_delay)
+            
+            # Step 4: Verify process is still responsive
+            if not psutil.pid_exists(pid):
+                if self.logger:
+                    self.logger.warning(f"⚠️ [RECOVERY] PID {pid} disappeared during recovery")
+                self.cleanup_pid(pid)
+                return False
+            
+            # Step 5: Re-establish hook coordination with enhanced sync
+            restore_success = self._sync_hooks_ready_state(pid, True)
+            
+            if restore_success:
+                # Step 6: Validate recovery success
+                validation_success = self._validate_recovery(pid)
                 
-                # Record successful recovery
-                self._record_status_change(pid, 'recovery_success', True)
-                
-                return True
+                if validation_success:
+                    if self.logger:
+                        self.logger.info(f"✅ [RECOVERY] PID {pid} hook coordination fully restored and validated")
+                    
+                    # Record successful recovery
+                    self._record_status_change(pid, 'recovery_success', True)
+                    
+                    # Reset recovery attempts on success
+                    with self.lock:
+                        self.recovery_attempts[pid] = 0
+                    
+                    return True
+                else:
+                    if self.logger:
+                        self.logger.error(f"❌ [RECOVERY] PID {pid} restoration failed validation")
+                    return False
             else:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [RECOVERY] PID {pid} no longer exists during recovery")
-                self.cleanup_pid(pid)
+                    self.logger.error(f"❌ [RECOVERY] Failed to restore hook state for PID {pid}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [RECOVERY] Recovery failed for PID {pid}: {e}")
+                self.logger.error(f"❌ [RECOVERY] Enhanced recovery failed for PID {pid}: {e}")
             
             # Record failed recovery
             self._record_status_change(pid, 'recovery_failed', False)
             
+            return False
+    
+    def _validate_recovery(self, pid: int) -> bool:
+        """**Validate Recovery** (xác thực phục hồi - comprehensive validation của recovery success)"""
+        try:
+            # Minimal wait for state stabilization
+            time.sleep(0.001)
+            
+            # Multi-layer validation
+            validations = []
+            
+            # Validation 1: Process existence
+            process_exists = psutil.pid_exists(pid)
+            validations.append(('process_exists', process_exists))
+            
+            # Validation 2: Internal state consistency
+            with self.lock:
+                internal_ready = self.hooks_ready.get(pid, False)
+            validations.append(('internal_state', internal_ready))
+            
+            # Validation 3: Environment variable consistency  
+            env_var = f'HOOKS_READY_PID_{pid}'
+            env_ready = os.environ.get(env_var) == '1'
+            validations.append(('env_state', env_ready))
+            
+            # Validation 4: State synchronization
+            state_sync = (internal_ready == env_ready == True)
+            validations.append(('state_sync', state_sync))
+            
+            # Validation 5: PID tracking consistency
+            with self.lock:
+                is_tracked = pid in self.active_processes
+            validations.append(('tracking_consistency', is_tracked))
+            
+            # Evaluate overall validation
+            all_valid = all(result for _, result in validations)
+            
+            if self.logger:
+                validation_status = ", ".join([f"{name}={result}" for name, result in validations])
+                self.logger.debug(f"🔍 [VALIDATION] PID {pid} recovery validation: {validation_status}")
+            
+            return all_valid
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [VALIDATION] Error validating recovery for PID {pid}: {e}")
             return False
     
     def _record_status_change(self, pid: int, event_type: str, success: bool) -> None:
