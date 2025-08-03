@@ -324,18 +324,20 @@ class HookCoordinator:
             str: Unique fingerprint string
         """
         try:
-            # ✅ NORMALIZE METADATA - Extract core identifying fields only
-            source = handoff_metadata.get('source', 'unknown')
-            
-            # ✅ FIX: Handle missing handoff_timestamp by using fallback hierarchy
-            timestamp = handoff_metadata.get('handoff_timestamp')
-            if timestamp is None:
-                # Fall back to original metadata timestamp
-                original_metadata = handoff_metadata.get('original_metadata', {})
-                timestamp = original_metadata.get('timestamp', handoff_metadata.get('timestamp', 0))
-            
-            # ✅ CONSISTENT IDENTIFICATION - Use stable core fields
+            # ✅ REDESIGNED: Focus on STABLE PROCESS IDENTITY, not handoff artifacts
+            # Extract stable process identification only
             process_info = handoff_metadata.get('original_metadata', handoff_metadata)
+            
+            # ✅ CORE PROCESS IDENTITY - These fields uniquely identify the process
+            registration_source = (process_info.get('registration_source') or 
+                                 handoff_metadata.get('registration_source', 'unknown'))
+            
+            # Use process creation timestamp, not handoff timing
+            process_timestamp = (process_info.get('timestamp') or 
+                               handoff_metadata.get('timestamp', 0))
+            
+            # ✅ NORMALIZE: Round to nearest second to eliminate timing variance
+            process_timestamp = round(process_timestamp) if process_timestamp else 0
             
             # Extract process identification consistently
             if isinstance(process_info, dict):
@@ -347,13 +349,13 @@ class HookCoordinator:
                 role = 'unknown'
                 stealth_name = 'unknown'
             
-            # ✅ NORMALIZED FINGERPRINT - Core stable fields only
+            # ✅ PROCESS-IDENTITY FINGERPRINT - Stable process characteristics only
             fingerprint_elements = [
-                str(source),
-                str(timestamp),
-                str(executable),
-                str(role),
-                str(stealth_name)
+                str(registration_source),  # How process was registered (stable)
+                str(process_timestamp),    # When process was created (stable, rounded)
+                str(executable),           # What executable is running (stable)
+                str(role),                # Process role (stable)
+                str(stealth_name)         # Process stealth identity (stable)
             ]
             
             # Generate consistent hash
@@ -361,7 +363,8 @@ class HookCoordinator:
             fingerprint = hashlib.md5(fingerprint_data.encode('utf-8')).hexdigest()
             
             if self.logger:
-                self.logger.debug(f"🔍 [ENHANCED-FINGERPRINT] Generated: {fingerprint} from: {fingerprint_data}")
+                self.logger.debug(f"🔍 [PROCESS-FINGERPRINT] Generated: {fingerprint} from: {fingerprint_data}")
+                self.logger.debug(f"🔍 [PROCESS-DEBUG] Registration: {registration_source}, Process time: {process_timestamp}, Role: {role}, Name: {stealth_name}")
             
             return fingerprint
             
@@ -892,7 +895,7 @@ class HookCoordinator:
             env_status = os.environ.get(env_var) == '1'
             
             # ✅ HANDOFF-AWARE TIMING: Allow grace period for recent handoffs
-            handoff_grace_period = 1.0  # 1-second grace period after handoff
+            handoff_grace_period = 2.0  # 2-second grace period after handoff (increased from 1.0s)
             is_recent_handoff = time_since_handoff < handoff_grace_period
             
             # Enhanced verification với handoff context
@@ -1113,7 +1116,7 @@ class HookCoordinator:
             stability_checks = {
                 'rapid_changes': len(recent_changes) > 3,  # More than 3 changes in 2 seconds
                 'state_oscillation': self._detect_state_oscillation(recent_changes),
-                'handoff_completion': context.get('time_since_handoff', 0) > 0.1  # At least 100ms since handoff
+                'handoff_completion': context.get('time_since_handoff', 0) > 0.05  # ✅ FIX: Reduced to 50ms for faster handoffs
             }
             
             # Overall stability
