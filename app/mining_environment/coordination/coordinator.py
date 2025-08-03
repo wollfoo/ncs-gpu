@@ -597,10 +597,45 @@ class HookCoordinator:
         
         for pid in processes_to_check:
             try:
+                # ✅ ENHANCED FIX: Skip health check for recent handoffs to prevent race conditions
+                with self.lock:
+                    last_handoff_time = self.handoff_timestamps.get(pid, 0)
+                
+                current_time = time.time()
+                time_since_handoff = current_time - last_handoff_time
+                # ✅ HEALTH_CHECK_PROTECTION_PERIOD: Enhanced protection for handoff coordination
+                handoff_protection_period = 5.0  # 5-second protection period for new handoffs (increased from 3.0s)
+                
+                if time_since_handoff < handoff_protection_period:
+                    if self.logger:
+                        self.logger.debug(f"⏳ [HEALTH] Skipping health check for PID {pid} - recent handoff "
+                                        f"({time_since_handoff:.2f}s ago, protection: {handoff_protection_period}s)")
+                    continue
+                
                 # Verify hook status for each PID
                 if not self.verify_hook_status(pid):
+                    # ✅ ENHANCED DIAGNOSIS: Add detailed context logging before error
+                    with self.lock:
+                        hooks_ready_state = self.hooks_ready.get(pid, False)
+                        sequence_number = self.handoff_sequence_numbers.get(pid, 0)
+                    
+                    env_var = f'HOOKS_READY_PID_{pid}'
+                    env_state = os.environ.get(env_var) == '1'
+                    
                     if self.logger:
-                        self.logger.error(f"🚨 [HEALTH] Hook coordination lost for PID {pid}")
+                        # ✅ ENHANCED LOGGING: Detailed state analysis for hook coordination errors
+                        with self.lock:
+                            recent_history = self.hook_status_history.get(pid, [])
+                            last_events = [event.get('event_type', 'unknown') for event in recent_history[-3:]] if recent_history else []
+                        
+                        process_status = "exists" if psutil.pid_exists(pid) else "missing"
+                        recovery_count = self.recovery_attempts.get(pid, 0)
+                        
+                        self.logger.error(f"🚨 [HEALTH] Hook coordination lost for PID {pid} - "
+                                        f"State Analysis: internal={hooks_ready_state}, env={env_state}, "
+                                        f"seq={sequence_number}, handoff_age={time_since_handoff:.2f}s, "
+                                        f"process={process_status}, recovery_attempts={recovery_count}, "
+                                        f"recent_events={last_events}, protection_window={handoff_protection_period}s")
                     
                     # Attempt recovery
                     self.attempt_hook_recovery(pid)
@@ -673,14 +708,29 @@ class HookCoordinator:
         """
         **Sync Hooks Ready State** (đồng bộ trạng thái hooks)
         
-        ✅ SOLUTION 2: ATOMIC STATE SYNCHRONIZATION với enhanced consistency validation
-        Thread-safe synchronization của internal và environment state với atomic operations.
+        ✅ PRIORITY 2: STATE SYNCHRONIZATION với comprehensive retry mechanism và exponential backoff
+        Enhanced thread-safe synchronization với systematic retry, state verification, và graceful error handling.
         """
-        max_attempts = 3
-        attempt = 0
+        # ✅ RETRY CONFIGURATION: Enhanced retry parameters for better reliability
+        max_retries = 3
+        base_delay = 0.1  # 100ms base delay
+        backoff_factor = 2  # Exponential backoff multiplier
+        max_delay = 1.0  # Maximum delay cap (1 second)
         
-        while attempt < max_attempts:
+        for attempt in range(max_retries):
             try:
+                # ✅ EXPONENTIAL BACKOFF: Calculate delay for current attempt
+                if attempt > 0:
+                    delay = min(base_delay * (backoff_factor ** (attempt - 1)), max_delay)
+                    # Add jitter to prevent thundering herd
+                    jitter = random.uniform(0, delay * 0.1)
+                    total_delay = delay + jitter
+                    
+                    if self.logger:
+                        self.logger.debug(f"🔄 [STATE-SYNC] PID {pid} retry {attempt + 1}/{max_retries} after {total_delay:.3f}s")
+                    
+                    time.sleep(total_delay)
+                
                 # ✅ ATOMIC OPERATION: Double-lock pattern for maximum consistency
                 with self.environment_sync_lock:
                     with self.lock:
@@ -689,127 +739,315 @@ class HookCoordinator:
                         env_var = f'HOOKS_READY_PID_{pid}'
                         previous_env_state = os.environ.get(env_var) == '1'
                         
-                        # Record synchronization attempt
+                        # Record synchronization attempt with retry context
                         sync_timestamp = time.time()
+                        sync_context = {
+                            'attempt': attempt + 1,
+                            'max_retries': max_retries,
+                            'pid': pid,
+                            'target_state': ready_state,
+                            'previous_internal': previous_internal_state,
+                            'previous_env': previous_env_state
+                        }
+                        
+                        if self.logger:
+                            self.logger.debug(f"🔄 [STATE-SYNC] PID {pid} synchronization attempt {attempt + 1}/{max_retries} - "
+                                            f"target: {ready_state}, current_internal: {previous_internal_state}, current_env: {previous_env_state}")
                         
                         try:
-                            # ✅ ATOMIC UPDATE: Update both states in controlled sequence
-                            # Step 1: Update internal state
-                            self.hooks_ready[pid] = ready_state
+                            # ✅ Step 1: Update internal state
+                            success = self._update_internal_state(pid, ready_state)
+                            if not success:
+                                raise Exception("Failed to update internal state")
                             
-                            # Step 2: Update environment variable atomically
-                            if ready_state:
-                                os.environ[env_var] = '1'
-                            else:
-                                os.environ.pop(env_var, None)
+                            # ✅ Step 2: Sync environment variable with verification
+                            success = self._sync_environment_variable(pid, ready_state)
+                            if not success:
+                                raise Exception("Failed to sync environment variable")
                             
-                            # Step 3: Minimal synchronization delay with CPU yield
-                            time.sleep(0.0001)  # 0.1ms for atomic operation completion
-                            
-                            # ✅ CONSISTENCY VALIDATION: Multi-layer verification
-                            validation_results = self._validate_atomic_sync(pid, ready_state, sync_timestamp)
-                            
-                            if validation_results['success']:
-                                # ✅ SUCCESS: Record successful atomic synchronization
-                                self._record_atomic_sync_success(pid, ready_state, sync_timestamp, attempt + 1)
+                            # ✅ Step 3: Verify state consistency between internal and external state
+                            if self._verify_state_consistency(pid):
+                                # ✅ SUCCESS: Record successful synchronization
+                                self._record_sync_success(pid, ready_state, sync_timestamp, sync_context)
                                 
                                 if self.logger:
-                                    self.logger.debug(f"🔄 [ATOMIC-SYNC] PID {pid} state synchronized atomically: {ready_state} "
-                                                    f"(attempt: {attempt + 1}, validation: {validation_results['details']})")
+                                    self.logger.info(f"✅ [STATE-SYNC] PID {pid} state synchronized successfully: {ready_state} "
+                                                   f"(attempt: {attempt + 1}, duration: {(time.time() - sync_timestamp)*1000:.1f}ms)")
                                 return True
                             else:
-                                # ❌ VALIDATION FAILED: Attempt rollback and retry
-                                if self.logger:
-                                    self.logger.warning(f"⚠️ [ATOMIC-SYNC] PID {pid} validation failed (attempt {attempt + 1}): "
-                                                      f"{validation_results['details']}")
+                                raise Exception("State consistency verification failed")
                                 
-                                # Rollback to previous state
-                                self.hooks_ready[pid] = previous_internal_state
-                                if previous_env_state:
-                                    os.environ[env_var] = '1'
-                                else:
-                                    os.environ.pop(env_var, None)
-                                
-                                # If this is the last attempt, fail
-                                if attempt == max_attempts - 1:
-                                    self._record_atomic_sync_failure(pid, ready_state, sync_timestamp, attempt + 1, validation_results)
-                                    return False
-                                
-                                # Otherwise, prepare for retry
-                                attempt += 1
-                                time.sleep(0.001 * (attempt))  # Progressive delay: 1ms, 2ms, 3ms
-                                continue
-                                
-                        except Exception as atomic_error:
-                            # ❌ ATOMIC OPERATION FAILED: Rollback and retry
+                        except Exception as sync_error:
+                            # ✅ ROLLBACK: Restore previous state on failure
+                            rollback_success = self._rollback_state(pid, previous_internal_state, previous_env_state, env_var)
+                            
                             if self.logger:
-                                self.logger.warning(f"⚠️ [ATOMIC-SYNC] Atomic operation failed for PID {pid} (attempt {attempt + 1}): {atomic_error}")
+                                self.logger.warning(f"⚠️ [STATE-SYNC] PID {pid} sync failed (attempt {attempt + 1}): {sync_error} "
+                                                 f"(rollback: {'success' if rollback_success else 'failed'})")
                             
-                            # Attempt to restore previous state
-                            try:
-                                self.hooks_ready[pid] = previous_internal_state
-                                if previous_env_state:
-                                    os.environ[env_var] = '1'
-                                else:
-                                    os.environ.pop(env_var, None)
-                            except Exception as rollback_error:
+                            # Record failure attempt
+                            self._record_sync_failure(pid, ready_state, sync_timestamp, sync_context, str(sync_error))
+                            
+                            # If this is the last attempt, fail permanently
+                            if attempt == max_retries - 1:
                                 if self.logger:
-                                    self.logger.error(f"❌ [ATOMIC-SYNC] Rollback failed for PID {pid}: {rollback_error}")
-                            
-                            if attempt == max_attempts - 1:
+                                    self.logger.error(f"❌ [STATE-SYNC] PID {pid} state sync failed after {max_retries} attempts: {sync_error}")
                                 return False
                             
-                            attempt += 1
-                            time.sleep(0.001 * (attempt))
+                            # Continue to next retry attempt
                             continue
                             
             except Exception as e:
+                # ✅ COMPREHENSIVE ERROR HANDLING: Handle unexpected errors
                 if self.logger:
-                    self.logger.error(f"❌ [ATOMIC-SYNC] Critical error in atomic sync for PID {pid} (attempt {attempt + 1}): {e}")
+                    self.logger.error(f"❌ [STATE-SYNC] Critical error in state sync for PID {pid} (attempt {attempt + 1}): {e}")
                 
-                if attempt == max_attempts - 1:
+                if attempt == max_retries - 1:
+                    if self.logger:
+                        self.logger.error(f"❌ [STATE-SYNC] State sync failed after {max_retries} attempts: {e}")
                     return False
-                    
-                attempt += 1
-                time.sleep(0.001 * (attempt))
+                
+                # Continue to next retry attempt even on critical errors
                 continue
         
-        # All attempts failed
+        # All retry attempts exhausted
         if self.logger:
-            self.logger.error(f"❌ [ATOMIC-SYNC] All {max_attempts} atomic sync attempts failed for PID {pid}")
+            self.logger.error(f"❌ [STATE-SYNC] All {max_retries} state sync attempts failed for PID {pid}")
         return False
+    
+    def _update_internal_state(self, pid: int, ready_state: bool) -> bool:
+        """
+        **Update Internal State** (cập nhật trạng thái internal)
+        
+        Safely update internal hooks_ready state with validation.
+        """
+        try:
+            self.hooks_ready[pid] = ready_state
+            
+            # Verify update was successful
+            actual_state = self.hooks_ready.get(pid, False)
+            if actual_state == ready_state:
+                if self.logger:
+                    self.logger.debug(f"🔄 [INTERNAL-UPDATE] PID {pid} internal state updated: {ready_state}")
+                return True
+            else:
+                if self.logger:
+                    self.logger.error(f"❌ [INTERNAL-UPDATE] PID {pid} state update failed - expected: {ready_state}, actual: {actual_state}")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [INTERNAL-UPDATE] Error updating internal state for PID {pid}: {e}")
+            return False
+    
+    def _sync_environment_variable(self, pid: int, ready_state: bool) -> bool:
+        """
+        **Sync Environment Variable** (đồng bộ biến môi trường)
+        
+        Update environment variable with fallback mechanism và verification.
+        """
+        try:
+            env_var = f'HOOKS_READY_PID_{pid}'
+            
+            # Update environment variable based on state
+            if ready_state:
+                os.environ[env_var] = '1'
+            else:
+                os.environ.pop(env_var, None)
+            
+            # ✅ VERIFICATION: Verify environment variable was set correctly
+            actual_env_state = os.environ.get(env_var) == '1'
+            if actual_env_state == ready_state:
+                if self.logger:
+                    self.logger.debug(f"🔄 [ENV-SYNC] PID {pid} environment variable synced: {ready_state}")
+                return True
+            else:
+                if self.logger:
+                    self.logger.error(f"❌ [ENV-SYNC] PID {pid} environment sync failed - expected: {ready_state}, actual: {actual_env_state}")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ENV-SYNC] Error syncing environment variable for PID {pid}: {e}")
+            return False
+    
+    def _verify_state_consistency(self, pid: int) -> bool:
+        """
+        **Verify State Consistency** (xác minh tính nhất quán trạng thái)
+        
+        Compare internal hooks_ready[pid] vs environment variable để ensure consistency.
+        """
+        try:
+            # Get internal state
+            internal_state = self.hooks_ready.get(pid, False)
+            
+            # Get environment variable state
+            env_var = f'HOOKS_READY_PID_{pid}'
+            env_state = os.environ.get(env_var) == '1'
+            
+            # Check consistency
+            is_consistent = (internal_state == env_state)
+            
+            if self.logger:
+                if is_consistent:
+                    self.logger.debug(f"✅ [CONSISTENCY] PID {pid} state consistent - internal: {internal_state}, env: {env_state}")
+                else:
+                    self.logger.warning(f"⚠️ [CONSISTENCY] PID {pid} state inconsistent - internal: {internal_state}, env: {env_state}")
+            
+            return is_consistent
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [CONSISTENCY] Error verifying state consistency for PID {pid}: {e}")
+            return False
+    
+    def _rollback_state(self, pid: int, previous_internal_state: bool, previous_env_state: bool, env_var: str) -> bool:
+        """
+        **Rollback State** (khôi phục trạng thái)
+        
+        Restore previous state on synchronization failure.
+        """
+        try:
+            rollback_success = True
+            
+            # Restore internal state
+            try:
+                self.hooks_ready[pid] = previous_internal_state
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"❌ [ROLLBACK] Failed to restore internal state for PID {pid}: {e}")
+                rollback_success = False
+            
+            # Restore environment variable
+            try:
+                if previous_env_state:
+                    os.environ[env_var] = '1'
+                else:
+                    os.environ.pop(env_var, None)
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"❌ [ROLLBACK] Failed to restore environment variable for PID {pid}: {e}")
+                rollback_success = False
+            
+            if self.logger:
+                if rollback_success:
+                    self.logger.debug(f"🔄 [ROLLBACK] PID {pid} state rollback successful")
+                else:
+                    self.logger.warning(f"⚠️ [ROLLBACK] PID {pid} partial rollback failure")
+            
+            return rollback_success
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ROLLBACK] Critical error during rollback for PID {pid}: {e}")
+            return False
+    
+    def _record_sync_success(self, pid: int, ready_state: bool, timestamp: float, context: Dict[str, Any]) -> None:
+        """
+        **Record Sync Success** (ghi lại thành công sync)
+        
+        Record successful state synchronization event với comprehensive context.
+        """
+        try:
+            sync_duration = time.time() - timestamp
+            success_record = {
+                'timestamp': timestamp,
+                'event_type': 'state_sync_success',
+                'success': True,
+                'ready_state': ready_state,
+                'attempt_number': context.get('attempt', 1),
+                'max_retries': context.get('max_retries', 3),
+                'sync_duration_ms': round(sync_duration * 1000, 2),
+                'previous_states': {
+                    'internal': context.get('previous_internal', False),
+                    'env': context.get('previous_env', False)
+                },
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            }
+            
+            with self.lock:
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(success_record)
+                    
+                    # Keep history manageable
+                    if len(self.hook_status_history[pid]) > 25:
+                        self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
+            
+            if self.logger:
+                self.logger.debug(f"📝 [SYNC-SUCCESS] Recorded successful sync for PID {pid} (attempt: {context.get('attempt', 1)})")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [SYNC-SUCCESS] Error recording sync success for PID {pid}: {e}")
+    
+    def _record_sync_failure(self, pid: int, ready_state: bool, timestamp: float, context: Dict[str, Any], error_msg: str) -> None:
+        """
+        **Record Sync Failure** (ghi lại thất bại sync)
+        
+        Record failed synchronization attempt với detailed error context.
+        """
+        try:
+            sync_duration = time.time() - timestamp
+            failure_record = {
+                'timestamp': timestamp,
+                'event_type': 'state_sync_failure',
+                'success': False,
+                'ready_state': ready_state,
+                'attempt_number': context.get('attempt', 1),
+                'max_retries': context.get('max_retries', 3),
+                'sync_duration_ms': round(sync_duration * 1000, 2),
+                'error_message': error_msg,
+                'previous_states': {
+                    'internal': context.get('previous_internal', False),
+                    'env': context.get('previous_env', False)
+                },
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            }
+            
+            with self.lock:
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(failure_record)
+                    
+                    # Keep history manageable
+                    if len(self.hook_status_history[pid]) > 25:
+                        self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
+            
+            if self.logger:
+                self.logger.debug(f"📝 [SYNC-FAILURE] Recorded sync failure for PID {pid} (attempt: {context.get('attempt', 1)})")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [SYNC-FAILURE] Error recording sync failure for PID {pid}: {e}")
     
     def _validate_atomic_sync(self, pid: int, expected_state: bool, sync_timestamp: float) -> Dict[str, Any]:
         """
         **Validate Atomic Sync** (xác thực atomic sync)
         
-        Comprehensive validation của atomic synchronization operation.
+        ✅ LEGACY SUPPORT: Maintained for compatibility with existing verification calls.
+        Now serves as a wrapper around the enhanced _verify_state_consistency method.
         
         Returns:
             Dict với success status và validation details
         """
         try:
-            # Multi-layer validation
-            validations = {}
+            # Multi-layer validation using enhanced consistency check
+            sync_duration = time.time() - sync_timestamp
             
-            # Validation 1: Internal state consistency
+            # Use enhanced consistency verification
+            is_consistent = self._verify_state_consistency(pid)
+            
+            # Additional validations for backward compatibility
             internal_state = self.hooks_ready.get(pid, False)
-            validations['internal_state'] = (internal_state == expected_state)
-            
-            # Validation 2: Environment variable consistency
             env_var = f'HOOKS_READY_PID_{pid}'
             env_state = os.environ.get(env_var) == '1'
-            validations['env_state'] = (env_state == expected_state)
             
-            # Validation 3: Cross-state consistency
-            validations['cross_state_sync'] = (internal_state == env_state)
-            
-            # Validation 4: Timing validation (operation completed within reasonable time)
-            sync_duration = time.time() - sync_timestamp
-            validations['timing'] = (sync_duration < 0.01)  # Should complete within 10ms
-            
-            # Validation 5: PID tracking consistency
-            validations['pid_tracking'] = (pid in self.active_processes)
+            validations = {
+                'internal_state': (internal_state == expected_state),
+                'env_state': (env_state == expected_state),
+                'cross_state_sync': is_consistent,
+                'timing': (sync_duration < 0.1),  # Increased to 100ms for retry scenarios
+                'pid_tracking': (pid in self.active_processes)
+            }
             
             # Overall success
             all_valid = all(validations.values())
@@ -824,6 +1062,8 @@ class HookCoordinator:
             }
             
         except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [VALIDATE-ATOMIC] Error in atomic sync validation for PID {pid}: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -831,45 +1071,47 @@ class HookCoordinator:
             }
     
     def _record_atomic_sync_success(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int) -> None:
-        """**Record Atomic Sync Success** (ghi lại thành công atomic sync)"""
+        """
+        **Record Atomic Sync Success** (ghi lại thành công atomic sync)
+        
+        ✅ LEGACY SUPPORT: Wrapper around enhanced sync success recording.
+        """
         try:
-            success_record = {
-                'timestamp': timestamp,
-                'event_type': 'atomic_sync_success',
-                'success': True,
-                'ready_state': ready_state,
-                'attempt_number': attempt_number,
-                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            # Use enhanced sync success recording with legacy compatibility
+            context = {
+                'attempt': attempt_number,
+                'max_retries': 3,  # Default for legacy calls
+                'previous_internal': False,  # Unknown for legacy calls
+                'previous_env': False  # Unknown for legacy calls
             }
             
-            with self.lock:
-                if pid in self.hook_status_history:
-                    self.hook_status_history[pid].append(success_record)
+            self._record_sync_success(pid, ready_state, timestamp, context)
                     
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording success for PID {pid}: {e}")
+                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording legacy success for PID {pid}: {e}")
     
     def _record_atomic_sync_failure(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int, validation_results: Dict[str, Any]) -> None:
-        """**Record Atomic Sync Failure** (ghi lại thất bại atomic sync)"""
+        """
+        **Record Atomic Sync Failure** (ghi lại thất bại atomic sync)
+        
+        ✅ LEGACY SUPPORT: Wrapper around enhanced sync failure recording.
+        """
         try:
-            failure_record = {
-                'timestamp': timestamp,
-                'event_type': 'atomic_sync_failure',
-                'success': False,
-                'ready_state': ready_state,
-                'attempt_number': attempt_number,
-                'validation_details': validation_results.get('details', {}),
-                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            # Use enhanced sync failure recording with legacy compatibility
+            context = {
+                'attempt': attempt_number,
+                'max_retries': 3,  # Default for legacy calls
+                'previous_internal': False,  # Unknown for legacy calls
+                'previous_env': False  # Unknown for legacy calls
             }
             
-            with self.lock:
-                if pid in self.hook_status_history:
-                    self.hook_status_history[pid].append(failure_record)
+            error_msg = f"Validation failed: {validation_results.get('details', 'Unknown error')}"
+            self._record_sync_failure(pid, ready_state, timestamp, context, error_msg)
                     
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording failure for PID {pid}: {e}")
+                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording legacy failure for PID {pid}: {e}")
     
     def _verify_with_retry(self, pid: int, attempt: int) -> Dict[str, any]:
         """
@@ -895,7 +1137,7 @@ class HookCoordinator:
             env_status = os.environ.get(env_var) == '1'
             
             # ✅ HANDOFF-AWARE TIMING: Allow grace period for recent handoffs
-            handoff_grace_period = 2.0  # 2-second grace period after handoff (increased from 1.0s)
+            handoff_grace_period = 3.0  # 3-second grace period after handoff (increased from 2.0s for enhanced stability)
             is_recent_handoff = time_since_handoff < handoff_grace_period
             
             # Enhanced verification với handoff context
@@ -1116,7 +1358,7 @@ class HookCoordinator:
             stability_checks = {
                 'rapid_changes': len(recent_changes) > 3,  # More than 3 changes in 2 seconds
                 'state_oscillation': self._detect_state_oscillation(recent_changes),
-                'handoff_completion': context.get('time_since_handoff', 0) > 0.05  # ✅ FIX: Reduced to 50ms for faster handoffs
+                'handoff_completion': context.get('time_since_handoff', 0) > 0.1  # ✅ ENHANCED: Increased to 100ms for stability with longer grace periods
             }
             
             # Overall stability
