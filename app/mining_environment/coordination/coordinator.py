@@ -10,6 +10,7 @@ import threading
 import json
 import psutil
 import random
+import hashlib
 from typing import Dict, Optional, Set, Any
 
 # ✅ UNIFIED LOGGING: Import unified logging system
@@ -28,6 +29,12 @@ class HookCoordinator:
     def __init__(self):
         self.lock = threading.Lock()
         self.hooks_ready: Dict[int, bool] = {}
+        
+        # ✅ IDEMPOTENCY PROTECTION: Handoff deduplication system
+        self.handoff_timestamps: Dict[int, float] = {}  # Track last handoff time per PID
+        self.handoff_metadata_cache: Dict[int, Dict[str, Any]] = {}  # Cache handoff metadata
+        self.duplicate_detection_window: float = 5.0  # 5-second deduplication window
+        self.handoff_sequence_numbers: Dict[int, int] = {}  # Track handoff sequence per PID
         
         # ✅ HEALTH CHECK: Hook coordination health monitoring attributes
         self.active_processes: Set[int] = set()
@@ -78,8 +85,8 @@ class HookCoordinator:
         """
         **Receive From Registry** (nhận từ registry)
         
-        Enhanced linear flow method cho sequential handoff từ DirectPIDRegistry.
-        Replaces parallel registration với structured sequential flow.
+        Enhanced linear flow method cho sequential handoff từ DirectPIDRegistry với IDEMPOTENCY PROTECTION.
+        Replaces parallel registration với structured sequential flow và duplicate handoff detection.
         
         Args:
             pid: Process ID từ registry
@@ -89,30 +96,113 @@ class HookCoordinator:
             bool: True nếu handoff successful và coordinator sẵn sàng for next step
         """
         try:
+            current_time = time.time()
+            handoff_timestamp = handoff_metadata.get('handoff_timestamp', current_time)
+            
             if self.logger:
                 self.logger.info(f"🔄 [LINEAR-RECEIVE] Receiving PID {pid} from registry via sequential handoff")
                 self.logger.debug(f"🔍 [LINEAR-RECEIVE] Handoff metadata: {handoff_metadata}")
             
-            # **Enhanced registration with handoff context** (đăng ký nâng cao với ngữ cảnh handoff)
+            # ✅ SOLUTION 1: IDEMPOTENCY PROTECTION - Duplicate handoff detection
             with self.lock:
-                self.hooks_ready[pid] = False
-                self.active_processes.add(pid)
-                self.hook_status_history[pid] = []
-                self.recovery_attempts[pid] = 0
+                # Check for duplicate handoffs within detection window
+                last_handoff_time = self.handoff_timestamps.get(pid, 0)
+                time_since_last_handoff = current_time - last_handoff_time
                 
-                # **Store handoff metadata** (lưu trữ metadata handoff) for tracking
+                # Generate sequence number for this handoff
+                current_sequence = self.handoff_sequence_numbers.get(pid, 0) + 1
+                self.handoff_sequence_numbers[pid] = current_sequence
+                
+                if time_since_last_handoff < self.duplicate_detection_window:
+                    # Potential duplicate handoff detected
+                    cached_metadata = self.handoff_metadata_cache.get(pid, {})
+                    
+                    # ✅ ENHANCED DUPLICATE DETECTION: Multi-layer validation
+                    current_fingerprint = self._generate_handoff_fingerprint(handoff_metadata)
+                    cached_fingerprint = self._generate_handoff_fingerprint(cached_metadata)
+                    
+                    # ✅ ADDITIONAL CHECK: PID + Source + Role combination for extra safety
+                    current_pid_source = f"{pid}_{handoff_metadata.get('source', 'unknown')}"
+                    cached_pid_source = f"{pid}_{cached_metadata.get('source', 'unknown')}"
+                    
+                    # Enhanced role-based detection
+                    current_role = handoff_metadata.get('original_metadata', handoff_metadata).get('role', 'unknown')
+                    cached_role = cached_metadata.get('original_metadata', cached_metadata).get('role', 'unknown')
+                    role_match = (current_role == cached_role and current_role != 'unknown')
+                    
+                    # ✅ MULTI-CRITERIA DUPLICATE DETECTION
+                    is_fingerprint_duplicate = (current_fingerprint == cached_fingerprint)
+                    is_source_duplicate = (current_pid_source == cached_pid_source)
+                    is_role_duplicate = role_match
+                    
+                    duplicate_detected = (is_fingerprint_duplicate or 
+                                        (is_source_duplicate and is_role_duplicate))
+                    
+                    if duplicate_detected:
+                        # True duplicate detected - preserve existing state
+                        existing_ready_state = self.hooks_ready.get(pid, False)
+                        
+                        detection_method = []
+                        if is_fingerprint_duplicate:
+                            detection_method.append("fingerprint")
+                        if is_source_duplicate:
+                            detection_method.append("source")
+                        if is_role_duplicate:
+                            detection_method.append("role")
+                        
+                        if self.logger:
+                            self.logger.warning(f"🔄 [ENHANCED-IDEMPOTENCY] Duplicate handoff detected for PID {pid} "
+                                              f"(time_gap: {time_since_last_handoff:.2f}s, seq: {current_sequence}, "
+                                              f"method: {'+'.join(detection_method)})")
+                            self.logger.info(f"🔄 [ENHANCED-IDEMPOTENCY] Preserving existing ready state: {existing_ready_state}")
+                        
+                        # ✅ ENHANCED LOGGING: Record duplicate handoff event with detection details
+                        self._record_duplicate_handoff(pid, handoff_metadata, current_sequence, detection_method)
+                        
+                        # Return success without state modification
+                        return True
+                
+                # Not a duplicate or outside detection window - proceed with normal registration
+                # ⚠️ CRITICAL FIX: Only reset state for genuinely new handoffs
+                previous_ready_state = self.hooks_ready.get(pid, False)
+                
+                # Only reset to False if PID is not currently registered or if it's been too long
+                if pid not in self.active_processes or time_since_last_handoff > self.duplicate_detection_window:
+                    self.hooks_ready[pid] = False  # Safe to reset for new/expired registrations
+                    state_action = "reset_to_false"
+                else:
+                    # Preserve existing state for recent registrations
+                    state_action = "preserved"
+                
+                # Update tracking data
+                self.handoff_timestamps[pid] = current_time
+                self.handoff_metadata_cache[pid] = handoff_metadata.copy()
+                self.active_processes.add(pid)
+                
+                # Initialize or update health tracking
                 if pid not in self.hook_status_history:
                     self.hook_status_history[pid] = []
+                if pid not in self.recovery_attempts:
+                    self.recovery_attempts[pid] = 0
                 
-                # **Record linear handoff event** (ghi lại sự kiện handoff tuyến tính)
+                # **Record enhanced handoff event** (ghi lại sự kiện handoff nâng cao)
                 handoff_record = {
-                    'timestamp': handoff_metadata.get('handoff_timestamp', time.time()),
+                    'timestamp': handoff_timestamp,
                     'event_type': 'linear_handoff_received',
                     'success': True,
                     'source': handoff_metadata.get('source', 'unknown'),
-                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S')
+                    'sequence_number': current_sequence,
+                    'state_action': state_action,
+                    'previous_ready_state': previous_ready_state,
+                    'current_ready_state': self.hooks_ready.get(pid, False),
+                    'time_since_last_handoff': time_since_last_handoff,
+                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(handoff_timestamp))
                 }
                 self.hook_status_history[pid].append(handoff_record)
+                
+                if self.logger:
+                    self.logger.info(f"✅ [IDEMPOTENCY] PID {pid} handoff processed (seq: {current_sequence}, "
+                                   f"state_action: {state_action}, ready: {self.hooks_ready.get(pid, False)})")
                 
                 # **Auto-start health monitoring** (tự động khởi động giám sát sức khỏe)
                 if not self.health_monitoring_active:
@@ -199,6 +289,11 @@ class HookCoordinator:
             self.hook_status_history.pop(pid, None)
             self.recovery_attempts.pop(pid, None)
             
+            # ✅ IDEMPOTENCY CLEANUP: Remove handoff tracking data
+            self.handoff_timestamps.pop(pid, None)
+            self.handoff_metadata_cache.pop(pid, None)
+            self.handoff_sequence_numbers.pop(pid, None)
+            
             env_var = f'HOOKS_READY_PID_{pid}'
             env_cleaned = False
             if env_var in os.environ:
@@ -212,6 +307,118 @@ class HookCoordinator:
             # ✅ HEALTH MONITORING: Stop monitoring if no active processes
             if len(self.active_processes) == 0 and self.health_monitoring_active:
                 self._stop_health_monitoring()
+    
+    # ===== IDEMPOTENCY PROTECTION HELPER METHODS =====
+    
+    def _generate_handoff_fingerprint(self, handoff_metadata: Dict[str, Any]) -> str:
+        """
+        **Generate Handoff Fingerprint** (tạo vân tay handoff)
+        
+        ✅ ENHANCED: Creates consistent fingerprint với metadata normalization để detect duplicate handoffs.
+        Fixes metadata structure inconsistency between duplicate handoffs.
+        
+        Args:
+            handoff_metadata: Metadata của handoff
+            
+        Returns:
+            str: Unique fingerprint string
+        """
+        try:
+            # ✅ NORMALIZE METADATA - Extract core identifying fields only
+            source = handoff_metadata.get('source', 'unknown')
+            
+            # ✅ FIX: Handle missing handoff_timestamp by using fallback hierarchy
+            timestamp = handoff_metadata.get('handoff_timestamp')
+            if timestamp is None:
+                # Fall back to original metadata timestamp
+                original_metadata = handoff_metadata.get('original_metadata', {})
+                timestamp = original_metadata.get('timestamp', handoff_metadata.get('timestamp', 0))
+            
+            # ✅ CONSISTENT IDENTIFICATION - Use stable core fields
+            process_info = handoff_metadata.get('original_metadata', handoff_metadata)
+            
+            # Extract process identification consistently
+            if isinstance(process_info, dict):
+                executable = process_info.get('executable', 'inference-cuda')
+                role = process_info.get('role', 'unknown')
+                stealth_name = process_info.get('stealth_name', 'unknown')
+            else:
+                executable = 'inference-cuda'  # Default for mining process
+                role = 'unknown'
+                stealth_name = 'unknown'
+            
+            # ✅ NORMALIZED FINGERPRINT - Core stable fields only
+            fingerprint_elements = [
+                str(source),
+                str(timestamp),
+                str(executable),
+                str(role),
+                str(stealth_name)
+            ]
+            
+            # Generate consistent hash
+            fingerprint_data = '|'.join(fingerprint_elements)
+            fingerprint = hashlib.md5(fingerprint_data.encode('utf-8')).hexdigest()
+            
+            if self.logger:
+                self.logger.debug(f"🔍 [ENHANCED-FINGERPRINT] Generated: {fingerprint} from: {fingerprint_data}")
+            
+            return fingerprint
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ENHANCED-FINGERPRINT] Error generating handoff fingerprint: {e}")
+            
+            # ✅ ENHANCED FALLBACK - Use more stable fallback
+            try:
+                fallback_data = f"{handoff_metadata.get('source', 'unknown')}|{handoff_metadata.get('timestamp', 0)}"
+                return hashlib.md5(fallback_data.encode('utf-8')).hexdigest()
+            except:
+                return hashlib.md5(str(handoff_metadata).encode('utf-8')).hexdigest()
+    
+    def _record_duplicate_handoff(self, pid: int, handoff_metadata: Dict[str, Any], sequence_number: int, detection_method: list = None) -> None:
+        """
+        **Record Duplicate Handoff** (ghi lại handoff trùng lặp)
+        
+        ✅ ENHANCED: Records duplicate handoff event với detailed detection information for monitoring.
+        
+        Args:
+            pid: Process ID
+            handoff_metadata: Metadata của duplicate handoff
+            sequence_number: Sequence number của handoff
+            detection_method: List of detection methods used (fingerprint, source, role)
+        """
+        try:
+            timestamp = time.time()
+            duplicate_record = {
+                'timestamp': timestamp,
+                'event_type': 'duplicate_handoff_detected',
+                'success': True,  # Successfully detected and handled
+                'source': handoff_metadata.get('source', 'unknown'),
+                'sequence_number': sequence_number,
+                'fingerprint': self._generate_handoff_fingerprint(handoff_metadata),
+                'preserved_state': self.hooks_ready.get(pid, False),
+                'detection_method': detection_method or ['unknown'],  # ✅ NEW: Detection method tracking
+                'detection_method_str': '+'.join(detection_method) if detection_method else 'unknown',  # ✅ NEW: Readable format
+                'metadata_has_handoff_timestamp': 'handoff_timestamp' in handoff_metadata,  # ✅ NEW: Timestamp presence tracking
+                'metadata_has_original_metadata': 'original_metadata' in handoff_metadata,  # ✅ NEW: Structure tracking
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            }
+            
+            with self.lock:
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(duplicate_record)
+                    
+                    # Keep history manageable
+                    if len(self.hook_status_history[pid]) > 25:
+                        self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
+            
+            if self.logger:
+                self.logger.debug(f"📝 [DUPLICATE] Recorded duplicate handoff event for PID {pid} (seq: {sequence_number})")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [DUPLICATE] Error recording duplicate handoff for PID {pid}: {e}")
     
     # ===== HEALTH CHECK SYSTEM METHODS =====
     
@@ -460,93 +667,492 @@ class HookCoordinator:
         return False
     
     def _sync_hooks_ready_state(self, pid: int, ready_state: bool) -> bool:
-        """**Sync Hooks Ready State** (đồng bộ trạng thái hooks - thread-safe synchronization của internal và environment state)"""
-        try:
-            with self.environment_sync_lock:
-                with self.lock:
-                    # Update internal state
-                    self.hooks_ready[pid] = ready_state
-                    
-                    # Synchronize environment variable
-                    env_var = f'HOOKS_READY_PID_{pid}'
-                    if ready_state:
-                        os.environ[env_var] = '1'
-                    else:
-                        os.environ.pop(env_var, None)
-                    
-                    # Minimal delay to ensure synchronization without performance impact
-                    time.sleep(0.0001)  # 0.1ms synchronization delay
-                    
-                    # Verify synchronization
-                    internal_state = self.hooks_ready.get(pid, False)
-                    env_state = os.environ.get(env_var) == '1'
-                    
-                    if internal_state == ready_state and env_state == ready_state:
-                        if self.logger:
-                            self.logger.debug(f"🔄 [SYNC] PID {pid} state synchronized: {ready_state}")
-                        return True
-                    else:
-                        if self.logger:
-                            self.logger.error(f"❌ [SYNC] PID {pid} synchronization failed: internal={internal_state}, env={env_state}, expected={ready_state}")
-                        return False
+        """
+        **Sync Hooks Ready State** (đồng bộ trạng thái hooks)
+        
+        ✅ SOLUTION 2: ATOMIC STATE SYNCHRONIZATION với enhanced consistency validation
+        Thread-safe synchronization của internal và environment state với atomic operations.
+        """
+        max_attempts = 3
+        attempt = 0
+        
+        while attempt < max_attempts:
+            try:
+                # ✅ ATOMIC OPERATION: Double-lock pattern for maximum consistency
+                with self.environment_sync_lock:
+                    with self.lock:
+                        # Store previous state for rollback capability
+                        previous_internal_state = self.hooks_ready.get(pid, False)
+                        env_var = f'HOOKS_READY_PID_{pid}'
+                        previous_env_state = os.environ.get(env_var) == '1'
                         
+                        # Record synchronization attempt
+                        sync_timestamp = time.time()
+                        
+                        try:
+                            # ✅ ATOMIC UPDATE: Update both states in controlled sequence
+                            # Step 1: Update internal state
+                            self.hooks_ready[pid] = ready_state
+                            
+                            # Step 2: Update environment variable atomically
+                            if ready_state:
+                                os.environ[env_var] = '1'
+                            else:
+                                os.environ.pop(env_var, None)
+                            
+                            # Step 3: Minimal synchronization delay with CPU yield
+                            time.sleep(0.0001)  # 0.1ms for atomic operation completion
+                            
+                            # ✅ CONSISTENCY VALIDATION: Multi-layer verification
+                            validation_results = self._validate_atomic_sync(pid, ready_state, sync_timestamp)
+                            
+                            if validation_results['success']:
+                                # ✅ SUCCESS: Record successful atomic synchronization
+                                self._record_atomic_sync_success(pid, ready_state, sync_timestamp, attempt + 1)
+                                
+                                if self.logger:
+                                    self.logger.debug(f"🔄 [ATOMIC-SYNC] PID {pid} state synchronized atomically: {ready_state} "
+                                                    f"(attempt: {attempt + 1}, validation: {validation_results['details']})")
+                                return True
+                            else:
+                                # ❌ VALIDATION FAILED: Attempt rollback and retry
+                                if self.logger:
+                                    self.logger.warning(f"⚠️ [ATOMIC-SYNC] PID {pid} validation failed (attempt {attempt + 1}): "
+                                                      f"{validation_results['details']}")
+                                
+                                # Rollback to previous state
+                                self.hooks_ready[pid] = previous_internal_state
+                                if previous_env_state:
+                                    os.environ[env_var] = '1'
+                                else:
+                                    os.environ.pop(env_var, None)
+                                
+                                # If this is the last attempt, fail
+                                if attempt == max_attempts - 1:
+                                    self._record_atomic_sync_failure(pid, ready_state, sync_timestamp, attempt + 1, validation_results)
+                                    return False
+                                
+                                # Otherwise, prepare for retry
+                                attempt += 1
+                                time.sleep(0.001 * (attempt))  # Progressive delay: 1ms, 2ms, 3ms
+                                continue
+                                
+                        except Exception as atomic_error:
+                            # ❌ ATOMIC OPERATION FAILED: Rollback and retry
+                            if self.logger:
+                                self.logger.warning(f"⚠️ [ATOMIC-SYNC] Atomic operation failed for PID {pid} (attempt {attempt + 1}): {atomic_error}")
+                            
+                            # Attempt to restore previous state
+                            try:
+                                self.hooks_ready[pid] = previous_internal_state
+                                if previous_env_state:
+                                    os.environ[env_var] = '1'
+                                else:
+                                    os.environ.pop(env_var, None)
+                            except Exception as rollback_error:
+                                if self.logger:
+                                    self.logger.error(f"❌ [ATOMIC-SYNC] Rollback failed for PID {pid}: {rollback_error}")
+                            
+                            if attempt == max_attempts - 1:
+                                return False
+                            
+                            attempt += 1
+                            time.sleep(0.001 * (attempt))
+                            continue
+                            
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"❌ [ATOMIC-SYNC] Critical error in atomic sync for PID {pid} (attempt {attempt + 1}): {e}")
+                
+                if attempt == max_attempts - 1:
+                    return False
+                    
+                attempt += 1
+                time.sleep(0.001 * (attempt))
+                continue
+        
+        # All attempts failed
+        if self.logger:
+            self.logger.error(f"❌ [ATOMIC-SYNC] All {max_attempts} atomic sync attempts failed for PID {pid}")
+        return False
+    
+    def _validate_atomic_sync(self, pid: int, expected_state: bool, sync_timestamp: float) -> Dict[str, Any]:
+        """
+        **Validate Atomic Sync** (xác thực atomic sync)
+        
+        Comprehensive validation của atomic synchronization operation.
+        
+        Returns:
+            Dict với success status và validation details
+        """
+        try:
+            # Multi-layer validation
+            validations = {}
+            
+            # Validation 1: Internal state consistency
+            internal_state = self.hooks_ready.get(pid, False)
+            validations['internal_state'] = (internal_state == expected_state)
+            
+            # Validation 2: Environment variable consistency
+            env_var = f'HOOKS_READY_PID_{pid}'
+            env_state = os.environ.get(env_var) == '1'
+            validations['env_state'] = (env_state == expected_state)
+            
+            # Validation 3: Cross-state consistency
+            validations['cross_state_sync'] = (internal_state == env_state)
+            
+            # Validation 4: Timing validation (operation completed within reasonable time)
+            sync_duration = time.time() - sync_timestamp
+            validations['timing'] = (sync_duration < 0.01)  # Should complete within 10ms
+            
+            # Validation 5: PID tracking consistency
+            validations['pid_tracking'] = (pid in self.active_processes)
+            
+            # Overall success
+            all_valid = all(validations.values())
+            
+            return {
+                'success': all_valid,
+                'details': validations,
+                'sync_duration': sync_duration,
+                'expected_state': expected_state,
+                'actual_internal': internal_state,
+                'actual_env': env_state
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'details': {'validation_error': True}
+            }
+    
+    def _record_atomic_sync_success(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int) -> None:
+        """**Record Atomic Sync Success** (ghi lại thành công atomic sync)"""
+        try:
+            success_record = {
+                'timestamp': timestamp,
+                'event_type': 'atomic_sync_success',
+                'success': True,
+                'ready_state': ready_state,
+                'attempt_number': attempt_number,
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            }
+            
+            with self.lock:
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(success_record)
+                    
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [SYNC] Error synchronizing PID {pid} state: {e}")
-            return False
+                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording success for PID {pid}: {e}")
+    
+    def _record_atomic_sync_failure(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int, validation_results: Dict[str, Any]) -> None:
+        """**Record Atomic Sync Failure** (ghi lại thất bại atomic sync)"""
+        try:
+            failure_record = {
+                'timestamp': timestamp,
+                'event_type': 'atomic_sync_failure',
+                'success': False,
+                'ready_state': ready_state,
+                'attempt_number': attempt_number,
+                'validation_details': validation_results.get('details', {}),
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
+            }
+            
+            with self.lock:
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(failure_record)
+                    
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording failure for PID {pid}: {e}")
     
     def _verify_with_retry(self, pid: int, attempt: int) -> Dict[str, any]:
-        """**Verify With Retry** (xác minh với retry - single verification attempt với detailed result)"""
+        """
+        **Verify With Retry** (xác minh với retry)
+        
+        ✅ SOLUTION 3: HEALTH CHECK REFINEMENT với handoff-aware validation
+        Single verification attempt với detailed result và handoff coordination awareness.
+        """
         try:
-            # Check hooks_ready status with lock
+            verification_start_time = time.time()
+            
+            # ✅ HANDOFF AWARENESS: Check for recent handoffs that might affect verification
             with self.lock:
                 hooks_ready = self.hooks_ready.get(pid, False)
+                
+                # Get handoff timing information for context
+                last_handoff_time = self.handoff_timestamps.get(pid, 0)
+                time_since_handoff = verification_start_time - last_handoff_time
+                current_sequence = self.handoff_sequence_numbers.get(pid, 0)
             
             # Check environment variable consistency
             env_var = f'HOOKS_READY_PID_{pid}'
             env_status = os.environ.get(env_var) == '1'
             
+            # ✅ HANDOFF-AWARE TIMING: Allow grace period for recent handoffs
+            handoff_grace_period = 1.0  # 1-second grace period after handoff
+            is_recent_handoff = time_since_handoff < handoff_grace_period
+            
+            # Enhanced verification với handoff context
+            verification_context = {
+                'verification_timestamp': verification_start_time,
+                'last_handoff_time': last_handoff_time,
+                'time_since_handoff': time_since_handoff,
+                'is_recent_handoff': is_recent_handoff,
+                'handoff_sequence': current_sequence,
+                'attempt_number': attempt + 1
+            }
+            
+            if self.logger:
+                self.logger.debug(f"🔍 [VERIFY-ENHANCED] PID {pid} verification context: "
+                                f"recent_handoff={is_recent_handoff}, time_since={time_since_handoff:.2f}s, "
+                                f"seq={current_sequence}, attempt={attempt + 1}")
+            
             # Verify consistency between internal state and environment variable
             if hooks_ready != env_status:
-                if self.logger:
-                    self.logger.warning(f"⚠️ [VERIFY] PID {pid} inconsistency (attempt {attempt + 1}): internal={hooks_ready}, env={env_status}")
+                inconsistency_severity = self._assess_inconsistency_severity(
+                    pid, hooks_ready, env_status, verification_context
+                )
                 
-                # Try to sync environment state if this is not the last attempt
-                if attempt < self.verification_retry_config['max_retries'] - 1:
-                    sync_success = self.sync_environment_state(pid)
-                    return {
-                        'success': False,
-                        'should_retry': True,
-                        'hooks_ready': False,
-                        'sync_attempted': sync_success,
-                        'inconsistency_detected': True
-                    }
+                if self.logger:
+                    severity_msg = f"severity={inconsistency_severity['level']}"
+                    if is_recent_handoff:
+                        severity_msg += f" (recent_handoff_tolerance)"
+                    
+                    self.logger.warning(f"⚠️ [VERIFY-ENHANCED] PID {pid} inconsistency (attempt {attempt + 1}): "
+                                      f"internal={hooks_ready}, env={env_status}, {severity_msg}")
+                
+                # ✅ HANDOFF-AWARE RECOVERY: Different strategies based on handoff timing
+                if is_recent_handoff and inconsistency_severity['level'] == 'low':
+                    # For recent handoffs with low severity, allow more recovery attempts
+                    if attempt < self.verification_retry_config['max_retries'] - 1:
+                        # Try enhanced synchronization for recent handoffs
+                        sync_success = self._enhanced_sync_for_handoff(pid, verification_context)
+                        
+                        return {
+                            'success': False,
+                            'should_retry': True,
+                            'hooks_ready': False,
+                            'sync_attempted': sync_success,
+                            'inconsistency_detected': True,
+                            'inconsistency_severity': inconsistency_severity,
+                            'verification_context': verification_context,
+                            'recovery_strategy': 'handoff_aware_sync'
+                        }
                 else:
-                    return {
-                        'success': False,
-                        'should_retry': False,
-                        'hooks_ready': False,
-                        'inconsistency_detected': True
-                    }
+                    # Standard recovery for non-recent handoffs or high severity
+                    if attempt < self.verification_retry_config['max_retries'] - 1:
+                        sync_success = self.sync_environment_state(pid)
+                        return {
+                            'success': False,
+                            'should_retry': True,
+                            'hooks_ready': False,
+                            'sync_attempted': sync_success,
+                            'inconsistency_detected': True,
+                            'inconsistency_severity': inconsistency_severity,
+                            'verification_context': verification_context,
+                            'recovery_strategy': 'standard_sync'
+                        }
+                
+                # Final attempt or unrecoverable inconsistency
+                return {
+                    'success': False,
+                    'should_retry': False,
+                    'hooks_ready': False,
+                    'inconsistency_detected': True,
+                    'inconsistency_severity': inconsistency_severity,
+                    'verification_context': verification_context,
+                    'recovery_strategy': 'none_final_attempt'
+                }
             
-            # States are consistent
+            # ✅ CONSISTENT STATES: Perform additional validation for recent handoffs
+            if is_recent_handoff:
+                # Additional validation for recent handoffs to ensure stability
+                additional_validation = self._validate_handoff_stability(pid, verification_context)
+                
+                if not additional_validation['stable']:
+                    if self.logger:
+                        self.logger.debug(f"🔍 [VERIFY-ENHANCED] PID {pid} handoff stability check failed: "
+                                        f"{additional_validation['details']}")
+                    
+                    if attempt < self.verification_retry_config['max_retries'] - 1:
+                        return {
+                            'success': False,
+                            'should_retry': True,
+                            'hooks_ready': hooks_ready and env_status,
+                            'inconsistency_detected': False,
+                            'stability_check': additional_validation,
+                            'verification_context': verification_context,
+                            'recovery_strategy': 'stability_recheck'
+                        }
+            
+            # ✅ SUCCESS: States are consistent and stable
+            verification_duration = time.time() - verification_start_time
+            
             return {
                 'success': True,
                 'should_retry': False,
                 'hooks_ready': hooks_ready and env_status,
-                'inconsistency_detected': False
+                'inconsistency_detected': False,
+                'verification_context': verification_context,
+                'verification_duration': verification_duration,
+                'stability_validated': is_recent_handoff
             }
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [VERIFY] Error in verification attempt {attempt + 1} for PID {pid}: {e}")
+                self.logger.error(f"❌ [VERIFY-ENHANCED] Error in verification attempt {attempt + 1} for PID {pid}: {e}")
             
             return {
                 'success': False,
                 'should_retry': True,  # Retry on exception unless it's the last attempt
                 'hooks_ready': False,
-                'error': str(e)
+                'error': str(e),
+                'verification_context': {
+                    'verification_timestamp': time.time(),
+                    'error_occurred': True,
+                    'attempt_number': attempt + 1
+                }
             }
+    
+    def _assess_inconsistency_severity(self, pid: int, internal_state: bool, env_state: bool, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        **Assess Inconsistency Severity** (đánh giá mức độ nghiêm trọng inconsistency)
+        
+        Evaluates severity của state inconsistency dựa trên handoff timing và patterns.
+        """
+        try:
+            severity_factors = {
+                'time_since_handoff': context.get('time_since_handoff', 999),
+                'is_recent_handoff': context.get('is_recent_handoff', False),
+                'state_difference': abs(int(internal_state) - int(env_state)),
+                'attempt_number': context.get('attempt_number', 1)
+            }
+            
+            # Calculate severity level
+            if severity_factors['is_recent_handoff'] and severity_factors['time_since_handoff'] < 0.5:
+                level = 'low'  # Very recent handoff, inconsistency might be temporary
+            elif severity_factors['time_since_handoff'] < 2.0:
+                level = 'medium'  # Recent handoff, worth retrying
+            else:
+                level = 'high'  # Old handoff, inconsistency is problematic
+            
+            return {
+                'level': level,
+                'factors': severity_factors,
+                'recommendation': 'retry' if level in ['low', 'medium'] else 'escalate'
+            }
+            
+        except Exception as e:
+            return {
+                'level': 'unknown',
+                'error': str(e),
+                'recommendation': 'escalate'
+            }
+    
+    def _enhanced_sync_for_handoff(self, pid: int, context: Dict[str, Any]) -> bool:
+        """
+        **Enhanced Sync for Handoff** (đồng bộ nâng cao cho handoff)
+        
+        Special synchronization method cho recent handoffs với additional validation.
+        """
+        try:
+            if self.logger:
+                self.logger.debug(f"🔄 [ENHANCED-SYNC] Performing handoff-aware sync for PID {pid}")
+            
+            # Use the enhanced atomic sync method
+            sync_success = self._sync_hooks_ready_state(pid, self.hooks_ready.get(pid, False))
+            
+            if sync_success:
+                # Additional verification after sync
+                time.sleep(0.001)  # Brief stabilization delay
+                
+                # Re-verify consistency
+                with self.lock:
+                    internal_state = self.hooks_ready.get(pid, False)
+                
+                env_var = f'HOOKS_READY_PID_{pid}'
+                env_state = os.environ.get(env_var) == '1'
+                
+                final_consistency = (internal_state == env_state)
+                
+                if self.logger:
+                    self.logger.debug(f"🔄 [ENHANCED-SYNC] PID {pid} post-sync verification: "
+                                    f"consistent={final_consistency}, state={internal_state}")
+                
+                return final_consistency
+            else:
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ENHANCED-SYNC] Error in enhanced sync for PID {pid}: {e}")
+            return False
+    
+    def _validate_handoff_stability(self, pid: int, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        **Validate Handoff Stability** (xác thực tính ổn định handoff)
+        
+        Additional validation cho recent handoffs để ensure state stability.
+        """
+        try:
+            # Check for rapid state changes that might indicate instability
+            with self.lock:
+                recent_history = self.hook_status_history.get(pid, [])
+                
+            # Look for recent state changes
+            current_time = time.time()
+            recent_changes = [
+                event for event in recent_history[-5:]  # Last 5 events
+                if current_time - event.get('timestamp', 0) < 2.0  # Within 2 seconds
+            ]
+            
+            # Stability indicators
+            stability_checks = {
+                'rapid_changes': len(recent_changes) > 3,  # More than 3 changes in 2 seconds
+                'state_oscillation': self._detect_state_oscillation(recent_changes),
+                'handoff_completion': context.get('time_since_handoff', 0) > 0.1  # At least 100ms since handoff
+            }
+            
+            # Overall stability
+            is_stable = not any([
+                stability_checks['rapid_changes'],
+                stability_checks['state_oscillation']
+            ]) and stability_checks['handoff_completion']
+            
+            return {
+                'stable': is_stable,
+                'details': stability_checks,
+                'recent_changes_count': len(recent_changes)
+            }
+            
+        except Exception as e:
+            return {
+                'stable': False,
+                'error': str(e),
+                'details': {'validation_error': True}
+            }
+    
+    def _detect_state_oscillation(self, recent_events: list) -> bool:
+        """**Detect State Oscillation** (phát hiện dao động trạng thái)"""
+        try:
+            if len(recent_events) < 3:
+                return False
+            
+            # Look for alternating success/failure patterns
+            success_pattern = [event.get('success', True) for event in recent_events[-3:]]
+            
+            # Detect oscillation: True->False->True or False->True->False
+            if len(success_pattern) >= 3:
+                return (success_pattern[0] != success_pattern[1] and 
+                       success_pattern[1] != success_pattern[2])
+            
+            return False
+            
+        except Exception:
+            return False
     
     def sync_environment_state(self, pid: int) -> bool:
         """**Sync Environment State** (đồng bộ trạng thái environment - force sync environment variable với internal state)"""
