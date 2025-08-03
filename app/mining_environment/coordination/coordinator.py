@@ -295,7 +295,15 @@ class HookCoordinator:
                 sys.path.insert(0, str(scripts_path))
             
             try:
-                from resource_manager import ResourceManager
+                # ✅ FIX: Use absolute import with full module path
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "resource_manager", 
+                    scripts_path / "resource_manager.py"
+                )
+                resource_manager_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(resource_manager_module)
+                ResourceManager = resource_manager_module.ResourceManager
                 
                 # **Check for global resource manager instance** (kiểm tra instance resource manager toàn cục)
                 # Note: In linear flow, resource manager is typically started by main thread

