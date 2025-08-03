@@ -88,9 +88,7 @@ class IGPUCloakService(IGPUPlugin):
         """
         pass
 
-# IGPUTelemetryFilter has been removed - telemetry functionality deprecated
-# class IGPUTelemetryFilter(IGPUPlugin):
-#     """Interface cho GPU telemetry filtering - DEPRECATED"""
+# GPU telemetry filtering removed for memory optimization
 
 class IGPUHookManager(IGPUPlugin):
     """Interface cho GPU hook management"""

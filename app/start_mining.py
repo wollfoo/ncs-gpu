@@ -859,9 +859,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     stop_event.set()
     return None
 
-# **DEPRECATED FUNCTION REMOVED** - manage_gpu_miner() replaced by direct GPU process startup
-
-# **DEPRECATED FUNCTION REMOVED** - gpu_mining_thread() replaced by direct GPU process startup in main()
+# GPU mining management integrated into main() for linear flow architecture
 
 def resource_manager_thread():
     thread_logger = setup_logging('resource_manager_thread', str(Path(LOGS_DIR) / 'resource_manager_thread.log'), 'INFO')
@@ -897,7 +895,7 @@ def resource_manager_thread():
         stop_event.set()
     thread_logger.info("🔚 Resource Manager Thread ended")
 
-# **DEPRECATED FUNCTION REMOVED** - environment_setup_thread() replaced by direct setup in main()
+# Environment setup integrated into main() for sequential initialization
 
 def main():
     """**Simplified Sequential Architecture Main Function** (hàm chính kiến trúc tuần tự đơn giản) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""

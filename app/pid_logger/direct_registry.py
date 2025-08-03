@@ -22,7 +22,7 @@ import logging
 import psutil
 import os
 from typing import Dict, List, Callable, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 # Setup logger
@@ -48,6 +48,8 @@ class ProcessInfo:
     is_active: bool = True
     last_seen: float = None
     metadata: Dict[str, Any] = None
+    rollback_actions: List[Callable] = field(default_factory=list)
+    coordination_state: str = "registered"  # registered, handed_off, coordinated, error
     
     def __post_init__(self):
         """Post-initialization để set default values"""
@@ -195,6 +197,9 @@ class DirectPIDRegistry:
                 # **Immediate plugin notification** (thông báo plugin tức thì) - THAY THẾ EVENTBUS
                 self._notify_observers(process_info)
                 
+                # **LINEAR FLOW**: Trigger sequential handoff after successful registration
+                self._trigger_sequential_handoff(process_info)
+                
                 return True
                 
         except Exception as e:
@@ -227,6 +232,61 @@ class DirectPIDRegistry:
         
         self._stats['notifications_sent'] += notification_count
         logger.info(f"📢 Sent {notification_count} direct notifications for PID {process_info.pid}")
+    
+    def _trigger_sequential_handoff(self, process_info: ProcessInfo) -> None:
+        """
+        **Sequential Handoff Trigger** (kích hoạt chuyển giao tuần tự)
+        
+        Core method của LINEAR FLOW architecture. Sau khi registration thành công,
+        tự động trigger handoff đến Hook Coordinator theo sequence.
+        
+        Args:
+            process_info: ProcessInfo object cho process đã registered
+        """
+        try:
+            logger.info(f"🔄 [LINEAR-HANDOFF] Initiating sequential handoff for PID {process_info.pid}")
+            
+            # **Import Hook Coordinator dynamically** (nhập Hook Coordinator động)
+            import sys
+            import os
+            from pathlib import Path
+            
+            # Add coordination module to path
+            coordination_path = Path(__file__).parent.parent / "mining_environment" / "coordination"
+            if str(coordination_path) not in sys.path:
+                sys.path.insert(0, str(coordination_path))
+            
+            from coordinator import get_hook_coordinator
+            
+            # **Sequential handoff to coordinator** (chuyển giao tuần tự đến coordinator)
+            coordinator = get_hook_coordinator()
+            
+            # Check if coordinator supports enhanced linear handoff
+            if hasattr(coordinator, 'receive_from_registry'):
+                # **Enhanced handoff with metadata** (chuyển giao nâng cao với metadata)
+                handoff_metadata = {
+                    'source': 'direct_registry',
+                    'registry_timestamp': process_info.registered_at,
+                    'original_metadata': process_info.metadata,
+                    'handoff_timestamp': time.time()
+                }
+                
+                success = coordinator.receive_from_registry(process_info.pid, handoff_metadata)
+                if success:
+                    logger.info(f"✅ [LINEAR-HANDOFF] Enhanced handoff successful: PID={process_info.pid}")
+                else:
+                    logger.warning(f"⚠️ [LINEAR-HANDOFF] Enhanced handoff failed, using fallback")
+                    coordinator.register_pid(process_info.pid)
+            else:
+                # **Fallback to standard registration** (dự phòng đăng ký tiêu chuẩn)
+                coordinator.register_pid(process_info.pid)
+                logger.info(f"✅ [LINEAR-HANDOFF] Fallback handoff successful: PID={process_info.pid}")
+            
+            logger.info(f"🎯 [LINEAR-HANDOFF] Sequential handoff completed for PID {process_info.pid}")
+            
+        except Exception as e:
+            logger.error(f"❌ [LINEAR-HANDOFF] Sequential handoff failed for PID {process_info.pid}: {e}")
+            # **Continue normal operation** (tiếp tục hoạt động bình thường) - handoff failure không block mining
     
     def get_process_info(self, pid: int) -> Optional[ProcessInfo]:
         """
@@ -398,6 +458,45 @@ class DirectPIDRegistry:
             self._registry.clear()
         
         logger.info("✅ DirectPIDRegistry shutdown completed")
+    
+    def execute_rollback(self, pid: int) -> bool:
+        """
+        **Execute Rollback** (thực thi rollback)
+        
+        Execute rollback actions for failed linear flow operations.
+        
+        Args:
+            pid: Process ID to rollback
+            
+        Returns:
+            bool: True if rollback successful
+        """
+        try:
+            with self._lock:
+                process_info = self._registry.get(pid)
+                if not process_info:
+                    logger.warning(f"⚠️ [ROLLBACK] No process info found for PID {pid}")
+                    return False
+                
+                # Execute rollback actions in reverse order
+                rollback_success = True
+                for action in reversed(process_info.rollback_actions):
+                    try:
+                        action()
+                        logger.debug(f"✅ [ROLLBACK] Rollback action executed for PID {pid}")
+                    except Exception as e:
+                        logger.error(f"❌ [ROLLBACK] Rollback action failed for PID {pid}: {e}")
+                        rollback_success = False
+                
+                # Update coordination state
+                process_info.coordination_state = "error" if not rollback_success else "registered"
+                
+                logger.info(f"🔄 [ROLLBACK] Rollback {'successful' if rollback_success else 'failed'} for PID {pid}")
+                return rollback_success
+                
+        except Exception as e:
+            logger.error(f"❌ [ROLLBACK] Rollback execution failed for PID {pid}: {e}")
+            return False
 
 # **Singleton pattern implementation** (triển khai mẫu singleton)
 _registry_instance: Optional[DirectPIDRegistry] = None

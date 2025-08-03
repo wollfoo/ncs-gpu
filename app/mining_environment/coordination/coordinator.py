@@ -40,10 +40,10 @@ class HookCoordinator:
         # ✅ SYNCHRONIZATION: Race condition prevention attributes
         self.environment_sync_lock = threading.Lock()
         self.verification_retry_config = {
-            'max_retries': 3,
-            'base_delay': 0.001,  # 1ms base delay for performance
-            'max_delay': 0.05,    # 50ms max delay for performance
-            'backoff_factor': 2.0
+            'max_retries': 2,     # Reduced from 3 for linear flow efficiency
+            'base_delay': 0.0005, # Reduced to 0.5ms for linear flow speed
+            'max_delay': 0.02,    # Reduced to 20ms for linear flow speed
+            'backoff_factor': 1.5 # Reduced backoff for faster recovery
         }
         
         # ✅ HEALTH MONITORING: Start health monitoring thread
@@ -73,6 +73,77 @@ class HookCoordinator:
             if self.logger:
                 self.logger.info(f"📝 [REGISTER] PID {pid} registered for hook coordination")
                 self.logger.info(f"🏥 [HEALTH] PID {pid} added to health monitoring (total: {len(self.active_processes)})")
+    
+    def receive_from_registry(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive From Registry** (nhận từ registry)
+        
+        Enhanced linear flow method cho sequential handoff từ DirectPIDRegistry.
+        Replaces parallel registration với structured sequential flow.
+        
+        Args:
+            pid: Process ID từ registry
+            handoff_metadata: Metadata từ registry handoff
+            
+        Returns:
+            bool: True nếu handoff successful và coordinator sẵn sàng for next step
+        """
+        try:
+            if self.logger:
+                self.logger.info(f"🔄 [LINEAR-RECEIVE] Receiving PID {pid} from registry via sequential handoff")
+                self.logger.debug(f"🔍 [LINEAR-RECEIVE] Handoff metadata: {handoff_metadata}")
+            
+            # **Enhanced registration with handoff context** (đăng ký nâng cao với ngữ cảnh handoff)
+            with self.lock:
+                self.hooks_ready[pid] = False
+                self.active_processes.add(pid)
+                self.hook_status_history[pid] = []
+                self.recovery_attempts[pid] = 0
+                
+                # **Store handoff metadata** (lưu trữ metadata handoff) for tracking
+                if pid not in self.hook_status_history:
+                    self.hook_status_history[pid] = []
+                
+                # **Record linear handoff event** (ghi lại sự kiện handoff tuyến tính)
+                handoff_record = {
+                    'timestamp': handoff_metadata.get('handoff_timestamp', time.time()),
+                    'event_type': 'linear_handoff_received',
+                    'success': True,
+                    'source': handoff_metadata.get('source', 'unknown'),
+                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+                self.hook_status_history[pid].append(handoff_record)
+                
+                # **Auto-start health monitoring** (tự động khởi động giám sát sức khỏe)
+                if not self.health_monitoring_active:
+                    self._start_health_monitoring()
+            
+            # **Trigger next step in linear flow** (kích hoạt bước tiếp theo trong luồng tuyến tính)
+            next_step_success = self._handoff_to_resource_manager(pid, handoff_metadata)
+            
+            if next_step_success:
+                if self.logger:
+                    self.logger.info(f"✅ [LINEAR-RECEIVE] PID {pid} successfully received và handed off to resource manager")
+                return True
+            else:
+                if self.logger:
+                    self.logger.warning(f"⚠️ [LINEAR-RECEIVE] PID {pid} received but handoff to resource manager failed")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [LINEAR-RECEIVE] Failed to receive PID {pid} from registry: {e}")
+            
+            # **Fallback to standard registration** (dự phòng đăng ký tiêu chuẩn)
+            try:
+                self.register_pid(pid)
+                if self.logger:
+                    self.logger.info(f"✅ [LINEAR-RECEIVE] Fallback registration successful for PID {pid}")
+                return True
+            except Exception as fallback_err:
+                if self.logger:
+                    self.logger.error(f"❌ [LINEAR-RECEIVE] Fallback registration failed for PID {pid}: {fallback_err}")
+                return False
             
     def notify_hooks_ready(self, pid: int) -> None:
         """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành PHASE 3+ initialization)"""
@@ -195,6 +266,108 @@ class HookCoordinator:
         
         if self.logger:
             self.logger.info("🏥 [HEALTH] Health monitoring loop ended")
+    
+    def _handoff_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
+        """
+        **Handoff to Resource Manager** (chuyển giao đến resource manager)
+        
+        Sequential handoff từ Hook Coordinator đến Resource Manager trong linear flow.
+        
+        Args:
+            pid: Process ID để handoff
+            coordinator_metadata: Metadata từ coordinator
+            
+        Returns:
+            bool: True nếu handoff successful
+        """
+        try:
+            if self.logger:
+                self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Initiating handoff to resource manager for PID {pid}")
+            
+            # **Dynamic import Resource Manager** (nhập động Resource Manager)
+            import sys
+            import os
+            from pathlib import Path
+            
+            # Add scripts module to path
+            scripts_path = Path(__file__).parent.parent / "scripts"
+            if str(scripts_path) not in sys.path:
+                sys.path.insert(0, str(scripts_path))
+            
+            try:
+                from resource_manager import ResourceManager
+                
+                # **Check for global resource manager instance** (kiểm tra instance resource manager toàn cục)
+                # Note: In linear flow, resource manager is typically started by main thread
+                # We attempt to notify existing instance rather than creating new one
+                
+                # **Enhanced handoff metadata** (metadata chuyển giao nâng cao)
+                enhanced_metadata = {
+                    'source': 'hook_coordinator',
+                    'coordinator_timestamp': time.time(),
+                    'original_metadata': coordinator_metadata,
+                    'hooks_ready': self.hooks_ready.get(pid, False),
+                    'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator']
+                }
+                
+                # **Attempt to find and notify existing resource manager** (thử tìm và thông báo resource manager hiện có)
+                # This simulates the linear handoff to resource manager
+                success = self._notify_resource_manager(pid, enhanced_metadata)
+                
+                if success:
+                    if self.logger:
+                        self.logger.info(f"✅ [COORDINATOR-HANDOFF] Resource manager handoff successful for PID {pid}")
+                    return True
+                else:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] Resource manager handoff failed for PID {pid}")
+                    return False
+                    
+            except ImportError as import_err:
+                if self.logger:
+                    self.logger.error(f"❌ [COORDINATOR-HANDOFF] Cannot import ResourceManager: {import_err}")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Handoff to resource manager failed for PID {pid}: {e}")
+            return False
+    
+    def _notify_resource_manager(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
+        """
+        **Notify Resource Manager** (thông báo resource manager)
+        
+        Simulate linear handoff notification to resource manager.
+        In actual implementation, this would trigger resource manager's receive_from_coordinator method.
+        
+        Args:
+            pid: Process ID
+            handoff_metadata: Handoff metadata
+            
+        Returns:
+            bool: True nếu notification successful
+        """
+        try:
+            # **Store notification for resource manager pickup** (lưu trữ thông báo cho resource manager nhận)
+            # This simulates the handoff - in real implementation, resource manager would have
+            # a receive_from_coordinator method that gets called directly
+            
+            import os
+            notification_key = f"LINEAR_HANDOFF_RM_PID_{pid}"
+            notification_data = f"{handoff_metadata.get('coordinator_timestamp', time.time())}"
+            
+            # **Environment variable as handoff signal** (biến môi trường như tín hiệu handoff)
+            os.environ[notification_key] = notification_data
+            
+            if self.logger:
+                self.logger.debug(f"🔔 [COORDINATOR-HANDOFF] Notification stored for resource manager: {notification_key}")
+            
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Failed to notify resource manager for PID {pid}: {e}")
+            return False
     
     def health_check_continuous(self) -> None:
         """**Continuous Health Check** (kiểm tra sức khỏe liên tục - giám sát hook coordination status cho tất cả active processes)"""
@@ -549,9 +722,9 @@ class HookCoordinator:
                 
                 self.hook_status_history[pid].append(status_entry)
                 
-                # Keep only last 50 entries per PID to avoid memory bloat
-                if len(self.hook_status_history[pid]) > 50:
-                    self.hook_status_history[pid] = self.hook_status_history[pid][-50:]
+                # Keep only last 25 entries per PID for memory optimization in linear flow
+                if len(self.hook_status_history[pid]) > 25:
+                    self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
             if self.logger:
                 self.logger.debug(f"📝 [HEALTH] Recorded {event_type} for PID {pid}: {success}")

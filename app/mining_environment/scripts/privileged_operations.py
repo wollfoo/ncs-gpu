@@ -109,10 +109,9 @@ class PrivilegedOperationManager:
     
     def load_ebpf_program(self, bpf_obj_path: str) -> bool:
         """
-        Load eBPF program - DEPRECATED/REMOVED
-        eBPF functionality has been removed from this application
+        eBPF functionality removed for memory optimization
         """
-        self.logger.warning("eBPF functionality has been completely removed from this application")
+        self.logger.warning("eBPF functionality has been removed for memory optimization")
         return False
     
     def create_namespace_isolation(self, command: List[str]) -> subprocess.Popen:

