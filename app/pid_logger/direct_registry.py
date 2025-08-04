@@ -31,11 +31,31 @@ from dataclasses import dataclass, field
 # Setup logger
 logger = logging.getLogger("direct_pid_registry")
 
-# **File-Based Registry Configuration** (cấu hình registry dựa trên file)
-FILE_REGISTRY_DIR = Path("/tmp/ncs_pid_registry")
-REGISTRY_FILE_PREFIX = "pid_"
-REGISTRY_FILE_SUFFIX = ".json"
-REGISTRY_CLEANUP_AGE = 3600  # 1 hour in seconds
+# **Configuration Management** (quản lý cấu hình)
+class RegistryConfig:
+    """**Registry Configuration Class** (lớp cấu hình registry)
+    
+    Centralized configuration cho all registry operations.
+    """
+    # File-based registry settings
+    FILE_REGISTRY_DIR = Path("/tmp/ncs_pid_registry")
+    REGISTRY_FILE_PREFIX = "pid_"
+    REGISTRY_FILE_SUFFIX = ".json"
+    REGISTRY_CLEANUP_AGE = 3600  # 1 hour in seconds
+    
+    # Retry configuration
+    MAX_RETRIES = 3
+    INITIAL_RETRY_DELAY = 0.5  # 500ms
+    BACKOFF_MULTIPLIER = 1.5
+    
+    # Priority configuration
+    HIGH_PRIORITY_KEYWORDS = {'inference', 'cuda', 'ml'}
+    DEFAULT_PRIORITY = 2
+    PRIORITY_RANGE = (1, 10)
+    
+    # Performance settings
+    CLEANUP_INTERVAL = 60  # seconds
+    DEFAULT_WAIT_TIMEOUT = 5.0  # seconds
 
 def _ensure_file_registry_dir() -> bool:
     """
@@ -47,19 +67,19 @@ def _ensure_file_registry_dir() -> bool:
         bool: True nếu directory ready, False nếu failed
     """
     try:
-        FILE_REGISTRY_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
+        RegistryConfig.FILE_REGISTRY_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
         
         # **Verify directory permissions** (kiểm tra quyền thư mục)
-        if not FILE_REGISTRY_DIR.is_dir():
-            logger.error(f"❌ [FILE-REGISTRY] Directory creation failed: {FILE_REGISTRY_DIR}")
+        if not RegistryConfig.FILE_REGISTRY_DIR.is_dir():
+            logger.error(f"❌ [FILE-REGISTRY] Directory creation failed: {RegistryConfig.FILE_REGISTRY_DIR}")
             return False
         
         # **Test write permissions** (kiểm tra quyền ghi)
-        test_file = FILE_REGISTRY_DIR / f".test_{uuid.uuid4().hex[:8]}"
+        test_file = RegistryConfig.FILE_REGISTRY_DIR / f".test_{uuid.uuid4().hex[:8]}"
         try:
             test_file.write_text("test")
             test_file.unlink()
-            logger.debug(f"✅ [FILE-REGISTRY] Directory ready: {FILE_REGISTRY_DIR}")
+            logger.debug(f"✅ [FILE-REGISTRY] Directory ready: {RegistryConfig.FILE_REGISTRY_DIR}")
             return True
         except Exception as perm_err:
             logger.error(f"❌ [FILE-REGISTRY] Directory not writable: {perm_err}")
@@ -87,8 +107,8 @@ def _write_pid_file_atomic(pid: int, metadata: Dict[str, Any]) -> bool:
             return False
         
         # **Create unique temporary filename** (tạo tên file tạm duy nhất)
-        temp_file = FILE_REGISTRY_DIR / f".tmp_{pid}_{uuid.uuid4().hex[:8]}"
-        final_file = FILE_REGISTRY_DIR / f"{REGISTRY_FILE_PREFIX}{pid}{REGISTRY_FILE_SUFFIX}"
+        temp_file = RegistryConfig.FILE_REGISTRY_DIR / f".tmp_{pid}_{uuid.uuid4().hex[:8]}"
+        final_file = RegistryConfig.FILE_REGISTRY_DIR / f"{RegistryConfig.REGISTRY_FILE_PREFIX}{pid}{RegistryConfig.REGISTRY_FILE_SUFFIX}"
         
         # **Prepare file data** (chuẩn bị dữ liệu file)
         file_data = {
@@ -134,16 +154,16 @@ def _cleanup_old_pid_files() -> int:
         int: Number of files cleaned up
     """
     try:
-        if not FILE_REGISTRY_DIR.exists():
+        if not RegistryConfig.FILE_REGISTRY_DIR.exists():
             return 0
         
         current_time = time.time()
         cleanup_count = 0
         
-        for file_path in FILE_REGISTRY_DIR.glob(f"{REGISTRY_FILE_PREFIX}*{REGISTRY_FILE_SUFFIX}"):
+        for file_path in RegistryConfig.FILE_REGISTRY_DIR.glob(f"{RegistryConfig.REGISTRY_FILE_PREFIX}*{RegistryConfig.REGISTRY_FILE_SUFFIX}"):
             try:
                 file_age = current_time - file_path.stat().st_mtime
-                if file_age > REGISTRY_CLEANUP_AGE:
+                if file_age > RegistryConfig.REGISTRY_CLEANUP_AGE:
                     file_path.unlink()
                     cleanup_count += 1
                     logger.debug(f"🧹 [FILE-CLEANUP] Removed old file: {file_path.name} (age: {file_age:.1f}s)")
@@ -158,6 +178,125 @@ def _cleanup_old_pid_files() -> int:
     except Exception as e:
         logger.error(f"❌ [FILE-CLEANUP] Cleanup failed: {e}")
         return 0
+
+# **Common Helper Methods** (các phương thức trợ giúp chung)
+def _setup_module_path(module_path: str, module_name: str) -> bool:
+    """
+    **Setup Module Import Path** (thiết lập đường dẫn nhập module)
+    
+    Helper method để setup import path cho dynamic module imports.
+    
+    Args:
+        module_path: Đường dẫn tới module directory
+        module_name: Tên module để import
+        
+    Returns:
+        bool: True nếu setup thành công
+    """
+    try:
+        import sys
+        from pathlib import Path
+        
+        # **Calculate full module path** (tính toán đường dẫn module đầy đủ)
+        full_path = Path(__file__).parent.parent / module_path
+        
+        # **Add to sys.path if not already present** (thêm vào sys.path nếu chưa có)
+        path_str = str(full_path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+            logger.debug(f"✅ [MODULE-SETUP] Added path: {path_str} for {module_name}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [MODULE-SETUP] Failed to setup path for {module_name}: {e}")
+        return False
+
+def _build_enhanced_metadata(base: Dict[str, Any], additional: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    **Build Enhanced Metadata** (xây dựng metadata nâng cao)
+    
+    Helper method để combine và enhance metadata objects.
+    
+    Args:
+        base: Base metadata dictionary
+        additional: Additional metadata to merge
+        
+    Returns:
+        Dict[str, Any]: Enhanced metadata dictionary
+    """
+    try:
+        # **Create enhanced metadata** (tạo metadata nâng cao)
+        enhanced = {
+            **base,  # Include all base metadata
+            **additional,  # Overlay additional metadata
+            'enhanced_timestamp': time.time(),
+            'metadata_version': '2.0',
+            'source_chain': base.get('source_chain', []) + additional.get('source_chain', [])
+        }
+        
+        # **Deduplicate source chain** (loại bỏ trùng lặp trong source chain)
+        if 'source_chain' in enhanced:
+            enhanced['source_chain'] = list(dict.fromkeys(enhanced['source_chain']))  # Preserve order, remove duplicates
+        
+        logger.debug(f"✅ [METADATA] Enhanced metadata created with {len(enhanced)} fields")
+        return enhanced
+        
+    except Exception as e:
+        logger.error(f"❌ [METADATA] Failed to build enhanced metadata: {e}")
+        return {**base, **additional}  # Fallback to simple merge
+
+def _log_operation_result(operation: str, success: bool, details: Dict[str, Any]) -> None:
+    """
+    **Log Operation Result** (ghi log kết quả thao tác)
+    
+    Standardized logging cho operation results với consistent format.
+    
+    Args:
+        operation: Tên operation
+        success: Kết quả thành công/thất bại
+        details: Chi tiết thêm về operation
+    """
+    try:
+        # **Extract common details** (trích xuất chi tiết chung)
+        pid = details.get('pid', 'unknown')
+        duration = details.get('duration')
+        attempt = details.get('attempt', 1)
+        
+        # **Format status symbol** (định dạng biểu tượng trạng thái)
+        status_symbol = "✅" if success else "❌"
+        status_text = "successful" if success else "failed"
+        
+        # **Build log message** (xây dựng thông điệp log)
+        message_parts = [f"{status_symbol} [{operation.upper()}] {operation} {status_text}"]
+        
+        if pid != 'unknown':
+            message_parts.append(f"PID={pid}")
+        
+        if attempt > 1:
+            message_parts.append(f"attempt {attempt}")
+            
+        if duration is not None:
+            message_parts.append(f"duration: {duration:.3f}s")
+        
+        # **Additional context** (ngữ cảnh thêm)
+        context_items = []
+        for key, value in details.items():
+            if key not in ['pid', 'duration', 'attempt']:
+                context_items.append(f"{key}={value}")
+        
+        if context_items:
+            message_parts.append(f"({', '.join(context_items)})")
+        
+        # **Log with appropriate level** (ghi log với level thích hợp)
+        message = " ".join(message_parts)
+        if success:
+            logger.info(message)
+        else:
+            logger.error(message)
+            
+    except Exception as e:
+        logger.debug(f"⚠️ [LOG-RESULT] Failed to log operation result: {e}")
 
 
 @dataclass
@@ -215,7 +354,7 @@ class DirectPIDRegistry:
         self._observer_lock = threading.Lock()
         
         # **Auto-cleanup mechanism** (cơ chế tự động dọn dẹp)
-        self._cleanup_interval = 60  # seconds
+        self._cleanup_interval = RegistryConfig.CLEANUP_INTERVAL
         self._cleanup_thread = None
         self._stop_cleanup = threading.Event()
         
@@ -319,7 +458,12 @@ class DirectPIDRegistry:
                 self._stats['total_registered'] += 1
                 self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
                 
-                logger.info(f"✅ [LINEAR-FLOW] Registered process: PID={pid}, Name={process_name}")
+                # **Use standardized logging** (sử dụng logging chuẩn hóa)
+                _log_operation_result('linear-flow-registration', True, {
+                    'pid': pid,
+                    'process_name': process_name,
+                    'source_chain_length': len(source_chain)
+                })
                 logger.info(f"🔗 [LINEAR-FLOW] Source chain: {' → '.join(source_chain)}")
             
             # **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
@@ -381,7 +525,12 @@ class DirectPIDRegistry:
                 self._stats['total_registered'] += 1
                 self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
                 
-                logger.info(f"✅ Registered process: PID={pid}, Type={process_type}, Name={process_info.process_name}")
+                # **Use standardized logging** (sử dụng logging chuẩn hóa)
+                _log_operation_result('process-registration', True, {
+                    'pid': pid,
+                    'type': process_type,
+                    'name': process_info.process_name
+                })
                 
                 # **Immediate plugin notification** (thông báo plugin tức thì) - THAY THẾ EVENTBUS
                 self._notify_observers(process_info)
@@ -432,9 +581,9 @@ class DirectPIDRegistry:
             Dict containing retry parameters
         """
         return {
-            'max_retries': 3,
-            'initial_delay': 0.5,  # 500ms
-            'backoff_multiplier': 1.5
+            'max_retries': RegistryConfig.MAX_RETRIES,
+            'initial_delay': RegistryConfig.INITIAL_RETRY_DELAY,
+            'backoff_multiplier': RegistryConfig.BACKOFF_MULTIPLIER
         }
     
     def _import_resource_manager(self):
@@ -447,13 +596,9 @@ class DirectPIDRegistry:
             ResourceManager class or None if import fails
         """
         try:
-            import sys
-            from pathlib import Path
-            
-            # Add scripts module to path
-            scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
-            if str(scripts_path) not in sys.path:
-                sys.path.insert(0, str(scripts_path))
+            # **Use common helper for path setup** (sử dụng helper chung cho thiết lập path)
+            if not _setup_module_path("mining_environment/scripts", "ResourceManager"):
+                return None
             
             from resource_manager import ResourceManager
             return ResourceManager
@@ -516,7 +661,7 @@ class DirectPIDRegistry:
                     logger.info(f"🔄 [RM-WAIT] ResourceManager instance exists but not ready, waiting...")
                     
                     # **PHASE 2: Use readiness signaling với timeout** (sử dụng tín hiệu sẵn sàng với timeout)
-                    wait_timeout = min(retry_delay * 2, 5.0)  # Dynamic timeout based on retry delay
+                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)  # Dynamic timeout based on retry delay
                     logger.info(f"⏳ [RM-WAIT] Waiting for readiness với timeout: {wait_timeout:.1f}s")
                     
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
@@ -534,7 +679,7 @@ class DirectPIDRegistry:
                     
                     # **PHASE 2: Try waiting for readiness even without instance** (thử chờ sẵn sàng ngay cả khi chưa có instance)
                     logger.info(f"🔄 [RM-WAIT] Attempting to wait for ResourceManager creation + readiness...")
-                    wait_timeout = min(retry_delay * 2, 5.0)
+                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
                     
                     if ready:
@@ -604,10 +749,9 @@ class DirectPIDRegistry:
             logger.info(f"🎯 [RM-HANDOFF] Executing handoff for PID {pid} (attempt {attempt_number})")
             
             # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
-            rm_metadata = {
-                **coordinator_metadata,  # Include all previous metadata
+            additional_metadata = {
                 'registry_timestamp': time.time(),
-                'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry'],
+                'source_chain': ['direct_registry'],
                 'final_handoff': True,
                 'retry_attempt': attempt_number,
                 'handoff_start_time': handoff_start_time,
@@ -619,6 +763,9 @@ class DirectPIDRegistry:
                 }
             }
             
+            # **Use common helper for metadata building** (sử dụng helper chung cho xây dựng metadata)
+            rm_metadata = _build_enhanced_metadata(coordinator_metadata, additional_metadata)
+            
             # **Call ResourceManager receive method** (gọi phương thức receive của ResourceManager)
             if hasattr(rm_instance, 'receive_from_registry'):
                 logger.debug(f"🔍 [RM-HANDOFF] Calling receive_from_registry for PID {pid}")
@@ -626,17 +773,19 @@ class DirectPIDRegistry:
                 
                 handoff_duration = time.time() - handoff_start_time
                 
+                # **Use standardized logging** (sử dụng logging chuẩn hóa)
+                _log_operation_result('rm-handoff', success, {
+                    'pid': pid, 
+                    'duration': handoff_duration, 
+                    'attempt': attempt_number,
+                    'method': 'receive_from_registry'
+                })
+                
                 if success:
-                    logger.info(f"✅ [RM-HANDOFF] ResourceManager receive successful for PID {pid}")
-                    logger.info(f"📊 [RM-HANDOFF] Handoff completed in {handoff_duration:.3f}s (attempt {attempt_number})")
-                    
                     # **Notify observers** (thông báo observers)
                     self._notify_observers(process_info)
-                    
                     return True
                 else:
-                    logger.error(f"❌ [RM-HANDOFF] ResourceManager receive failed for PID {pid}")
-                    logger.error(f"📊 [RM-HANDOFF] Failed handoff duration: {handoff_duration:.3f}s")
                     return False
             else:
                 logger.warning(f"⚠️ [RM-HANDOFF] ResourceManager missing receive_from_registry method")
@@ -699,8 +848,14 @@ class DirectPIDRegistry:
             # **Atomic file write** (ghi file nguyên tử)
             write_success = _write_pid_file_atomic(pid, fallback_metadata)
             
+            # **Use standardized logging** (sử dụng logging chuẩn hóa)
+            _log_operation_result('file-fallback', write_success, {
+                'pid': pid,
+                'method': 'atomic_file_write',
+                'state': 'file_fallback' if write_success else 'failed'
+            })
+            
             if write_success:
-                logger.info(f"✅ [FILE-FALLBACK] Successfully wrote fallback file for PID {pid}")
                 logger.info(f"📂 [FILE-FALLBACK] ResourceManager will discover and process PID {pid} via file scanner")
                 
                 # **Update process coordination state** (cập nhật trạng thái coordination của process)
@@ -713,7 +868,6 @@ class DirectPIDRegistry:
                 
                 return True
             else:
-                logger.error(f"❌ [FILE-FALLBACK] Failed to write fallback file for PID {pid}")
                 return False
                 
         except Exception as e:
@@ -734,12 +888,11 @@ class DirectPIDRegistry:
         """
         try:
             # **Priority mapping** (ánh xạ độ ưu tiên)
-            HIGH_PRIORITY_KEYWORDS = {'inference', 'cuda', 'ml'}
-            base_priority = 2  # Default for GPU processes
+            base_priority = RegistryConfig.DEFAULT_PRIORITY
             
             # **Check for high priority keywords** (kiểm tra từ khóa độ ưu tiên cao)
             process_name = process_info.process_name.lower()
-            if any(keyword in process_name for keyword in HIGH_PRIORITY_KEYWORDS):
+            if any(keyword in process_name for keyword in RegistryConfig.HIGH_PRIORITY_KEYWORDS):
                 base_priority = 1
             
             # **Adjust for coordination state** (điều chỉnh cho trạng thái coordination)
@@ -749,7 +902,7 @@ class DirectPIDRegistry:
             }
             base_priority += state_adjustments.get(process_info.coordination_state, 0)
             
-            return max(1, min(base_priority, 10))  # Clamp between 1-10
+            return max(RegistryConfig.PRIORITY_RANGE[0], min(base_priority, RegistryConfig.PRIORITY_RANGE[1]))
             
         except Exception as e:
             logger.debug(f"⚠️ [PRIORITY-CALC] Priority calculation failed for PID {process_info.pid}: {e}")
@@ -769,13 +922,9 @@ class DirectPIDRegistry:
             logger.info(f"🔄 [LINEAR-HANDOFF] Initiating sequential handoff for PID {process_info.pid}")
             
             # **Import Hook Coordinator dynamically** (nhập Hook Coordinator động)
-            import sys
-            from pathlib import Path
-            
-            # Add coordination module to path
-            coordination_path = Path(__file__).parent.parent / "mining_environment" / "coordination"
-            if str(coordination_path) not in sys.path:
-                sys.path.insert(0, str(coordination_path))
+            if not _setup_module_path("mining_environment/coordination", "HookCoordinator"):
+                logger.error(f"❌ [LINEAR-HANDOFF] Failed to setup coordinator import path")
+                return
             
             from coordinator import get_hook_coordinator
             
