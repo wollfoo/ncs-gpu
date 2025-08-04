@@ -281,7 +281,7 @@ class HookCoordinator:
         return False
         
     def cleanup_pid(self, pid: int) -> None:
-        """**Cleanup PID** (dọn dẹp PID - xóa tiến trình khỏi tất cả hệ thống theo dõi)"""
+        """**Enhanced Cleanup PID** (dọn dẹp PID nâng cao - xóa tiến trình khỏi tất cả hệ thống theo dõi)"""
         with self.lock:
             was_tracked = pid in self.hooks_ready
             self.hooks_ready.pop(pid, None)
@@ -294,14 +294,37 @@ class HookCoordinator:
             self.handoff_metadata_cache.pop(pid, None)
             self.handoff_sequence_numbers.pop(pid, None)
             
+            # **Enhanced Environment Cleanup** (dọn dẹp môi trường nâng cao)
+            env_vars_cleaned = []
+            
+            # Core hook coordination variables
             env_var = f'HOOKS_READY_PID_{pid}'
-            env_cleaned = False
             if env_var in os.environ:
                 del os.environ[env_var]
-                env_cleaned = True
-                
+                env_vars_cleaned.append(env_var)
+            
+            # Linear handoff variables
+            handoff_var = f'LINEAR_HANDOFF_RM_PID_{pid}'
+            if handoff_var in os.environ:
+                del os.environ[handoff_var]
+                env_vars_cleaned.append(handoff_var)
+            
+            # Pickup detection variables
+            pickup_var = f'RM_PICKUP_READY_PID_{pid}'
+            if pickup_var in os.environ:
+                del os.environ[pickup_var]
+                env_vars_cleaned.append(pickup_var)
+            
+            # Deferred handoff variables
+            deferred_var = f'DEFERRED_RM_HANDOFF_PID_{pid}'
+            if deferred_var in os.environ:
+                del os.environ[deferred_var]
+                env_vars_cleaned.append(deferred_var)
+            
             if self.logger and was_tracked:
-                self.logger.info(f"🧹 [CLEANUP] PID {pid} removed from all tracking systems (env_var_cleaned: {env_cleaned})")
+                self.logger.info(f"🧹 [CLEANUP] PID {pid} removed from all tracking systems")
+                if env_vars_cleaned:
+                    self.logger.info(f"📝 [CLEANUP] Environment variables cleaned: {env_vars_cleaned}")
                 self.logger.info(f"🏥 [HEALTH] Health monitoring cleanup for PID {pid} completed")
                 
             # ✅ HEALTH MONITORING: Stop monitoring if no active processes
@@ -479,9 +502,10 @@ class HookCoordinator:
     
     def _handoff_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
         """
-        **Handoff to Resource Manager** (chuyển giao đến resource manager)
+        **Enhanced Handoff to Resource Manager** (chuyển giao nâng cao đến resource manager)
         
-        Sequential handoff từ Hook Coordinator đến Resource Manager trong linear flow.
+        Sequential handoff từ Hook Coordinator đến Resource Manager trong linear flow
+        với direct method invocation thay vì environment variables.
         
         Args:
             pid: Process ID để handoff
@@ -492,7 +516,7 @@ class HookCoordinator:
         """
         try:
             if self.logger:
-                self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Initiating handoff to resource manager for PID {pid}")
+                self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Initiating enhanced handoff to resource manager for PID {pid}")
             
             # **Dynamic import Resource Manager** (nhập động Resource Manager)
             import sys
@@ -505,41 +529,52 @@ class HookCoordinator:
                 sys.path.insert(0, str(scripts_path))
             
             try:
-                # ✅ FIX: Use absolute import with full module path
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(
-                    "resource_manager", 
-                    scripts_path / "resource_manager.py"
-                )
-                resource_manager_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(resource_manager_module)
-                ResourceManager = resource_manager_module.ResourceManager
+                # ✅ ENHANCED: Direct import with better error handling
+                from resource_manager import ResourceManager
                 
-                # **Check for global resource manager instance** (kiểm tra instance resource manager toàn cục)
-                # Note: In linear flow, resource manager is typically started by main thread
-                # We attempt to notify existing instance rather than creating new one
-                
-                # **Enhanced handoff metadata** (metadata chuyển giao nâng cao)
-                enhanced_metadata = {
-                    'source': 'hook_coordinator',
-                    'coordinator_timestamp': time.time(),
-                    'original_metadata': coordinator_metadata,
-                    'hooks_ready': self.hooks_ready.get(pid, False),
-                    'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator']
-                }
-                
-                # **Attempt to find and notify existing resource manager** (thử tìm và thông báo resource manager hiện có)
-                # This simulates the linear handoff to resource manager
-                success = self._notify_resource_manager(pid, enhanced_metadata)
-                
-                if success:
+                # **Get singleton instance directly** (lấy instance singleton trực tiếp)
+                rm_instance = ResourceManager._instance
+                if not rm_instance:
                     if self.logger:
-                        self.logger.info(f"✅ [COORDINATOR-HANDOFF] Resource manager handoff successful for PID {pid}")
-                    return True
+                        self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] ResourceManager instance not yet created - deferring handoff")
+                    return self._defer_resource_manager_handoff(pid, coordinator_metadata)
+                
+                # **Check for enhanced receive method** (kiểm tra phương thức receive nâng cao)
+                if hasattr(rm_instance, 'receive_from_coordinator'):
+                    # **Enhanced handoff metadata** (metadata chuyển giao nâng cao)
+                    enhanced_metadata = {
+                        'source': 'hook_coordinator',
+                        'coordinator_timestamp': time.time(), 
+                        'original_metadata': coordinator_metadata,
+                        'hooks_ready': self.hooks_ready.get(pid, False),
+                        'hook_coordination_verified': True,
+                        'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator', 'resource_manager']
+                    }
+                    
+                    # **Direct method invocation** (gọi phương thức trực tiếp)
+                    success = rm_instance.receive_from_coordinator(pid, enhanced_metadata)
+                    
+                    if success:
+                        if self.logger:
+                            self.logger.info(f"✅ [COORDINATOR-HANDOFF] Enhanced direct handoff successful for PID {pid}")
+                        return True
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] Enhanced direct handoff failed for PID {pid}")
+                        # **Fallback to notification method** (dự phòng bằng phương thức thông báo)
+                        return self._notify_resource_manager(pid, enhanced_metadata)
                 else:
+                    # **Fallback to notification method** (phương thức thông báo dự phòng)
                     if self.logger:
-                        self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] Resource manager handoff failed for PID {pid}")
-                    return False
+                        self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Using fallback notification method for PID {pid}")
+                    enhanced_metadata = {
+                        'source': 'hook_coordinator',
+                        'coordinator_timestamp': time.time(),
+                        'original_metadata': coordinator_metadata,
+                        'hooks_ready': self.hooks_ready.get(pid, False),
+                        'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator']
+                    }
+                    return self._notify_resource_manager(pid, enhanced_metadata)
                     
             except ImportError as import_err:
                 if self.logger:
@@ -548,15 +583,52 @@ class HookCoordinator:
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Handoff to resource manager failed for PID {pid}: {e}")
+                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Enhanced handoff to resource manager failed for PID {pid}: {e}")
+            return False
+    
+    def _defer_resource_manager_handoff(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
+        """
+        **Defer Resource Manager Handoff** (hoãn handoff resource manager)
+        
+        Store handoff data for later pickup by ResourceManager when it becomes available.
+        
+        Args:
+            pid: Process ID
+            coordinator_metadata: Coordinator metadata
+            
+        Returns:
+            bool: True if deferral successful
+        """
+        try:
+            # **Store deferred handoff data** (lưu trữ dữ liệu handoff hoãn)
+            deferred_key = f"DEFERRED_RM_HANDOFF_PID_{pid}"
+            deferred_data = {
+                'pid': pid,
+                'metadata': coordinator_metadata,
+                'coordinator_timestamp': time.time(),
+                'hooks_ready': self.hooks_ready.get(pid, False)
+            }
+            
+            # **Environment variable storage for cross-component communication** (lưu trữ biến môi trường)
+            import json
+            os.environ[deferred_key] = json.dumps(deferred_data)
+            
+            if self.logger:
+                self.logger.info(f"💾 [COORDINATOR-HANDOFF] Deferred handoff stored for PID {pid}")
+            
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Failed to defer handoff for PID {pid}: {e}")
             return False
     
     def _notify_resource_manager(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
         """
-        **Notify Resource Manager** (thông báo resource manager)
+        **Enhanced Notify Resource Manager** (thông báo resource manager nâng cao)
         
-        Simulate linear handoff notification to resource manager.
-        In actual implementation, this would trigger resource manager's receive_from_coordinator method.
+        Enhanced notification system với structured data storage và pickup detection.
+        Stores comprehensive handoff data for ResourceManager pickup.
         
         Args:
             pid: Process ID
@@ -566,19 +638,34 @@ class HookCoordinator:
             bool: True nếu notification successful
         """
         try:
-            # **Store notification for resource manager pickup** (lưu trữ thông báo cho resource manager nhận)
-            # This simulates the handoff - in real implementation, resource manager would have
-            # a receive_from_coordinator method that gets called directly
-            
+            # **Enhanced notification with structured data** (thông báo nâng cao với dữ liệu có cấu trúc)
             import os
-            notification_key = f"LINEAR_HANDOFF_RM_PID_{pid}"
-            notification_data = f"{handoff_metadata.get('coordinator_timestamp', time.time())}"
+            import json
             
-            # **Environment variable as handoff signal** (biến môi trường như tín hiệu handoff)
-            os.environ[notification_key] = notification_data
+            notification_key = f"LINEAR_HANDOFF_RM_PID_{pid}"
+            
+            # **Comprehensive notification payload** (tải trọng thông báo toàn diện)
+            notification_payload = {
+                'pid': pid,
+                'coordinator_timestamp': handoff_metadata.get('coordinator_timestamp', time.time()),
+                'hooks_ready': handoff_metadata.get('hooks_ready', False),
+                'handoff_chain': handoff_metadata.get('handoff_chain', []),
+                'source': handoff_metadata.get('source', 'hook_coordinator'),
+                'original_metadata': handoff_metadata.get('original_metadata', {}),
+                'notification_timestamp': time.time(),
+                'hook_coordination_verified': True
+            }
+            
+            # **Store structured JSON data** (lưu trữ dữ liệu JSON có cấu trúc)
+            os.environ[notification_key] = json.dumps(notification_payload)
+            
+            # **Additional pickup detection mechanism** (cơ chế phát hiện pickup bổ sung)
+            pickup_key = f"RM_PICKUP_READY_PID_{pid}"
+            os.environ[pickup_key] = "1"
             
             if self.logger:
-                self.logger.debug(f"🔔 [COORDINATOR-HANDOFF] Notification stored for resource manager: {notification_key}")
+                self.logger.info(f"🔔 [COORDINATOR-HANDOFF] Enhanced notification stored: {notification_key}")
+                self.logger.debug(f"📋 [COORDINATOR-HANDOFF] Payload size: {len(json.dumps(notification_payload))} bytes")
             
             return True
             
@@ -1593,7 +1680,7 @@ class HookCoordinator:
                 self.logger.error(f"❌ [HEALTH] Error recording status change for PID {pid}: {e}")
     
     def get_health_report(self) -> Dict[str, Any]:
-        """**Get Health Report** (lấy báo cáo sức khỏe - trả về comprehensive health status của hook coordination system)"""
+        """**Enhanced Health Report** (báo cáo sức khỏe nâng cao - trả về comprehensive health status với linear flow metrics)"""
         try:
             with self.lock:
                 current_time = time.time()
@@ -1605,6 +1692,27 @@ class HookCoordinator:
                 # Recovery statistics
                 total_recovery_attempts = sum(self.recovery_attempts.values())
                 processes_with_recoveries = len([pid for pid, attempts in self.recovery_attempts.items() if attempts > 0])
+                
+                # **Linear Flow Statistics** (thống kê luồng tuyến tính)
+                handoff_stats = {
+                    'total_handoffs': len(self.handoff_timestamps),
+                    'recent_handoffs': len([t for t in self.handoff_timestamps.values() if current_time - t < 300]),  # Last 5 minutes
+                    'average_handoff_interval': 0.0
+                }
+                
+                # Calculate average handoff interval
+                if len(self.handoff_timestamps) > 1:
+                    handoff_times = sorted(self.handoff_timestamps.values())
+                    intervals = [handoff_times[i] - handoff_times[i-1] for i in range(1, len(handoff_times))]
+                    handoff_stats['average_handoff_interval'] = sum(intervals) / len(intervals)
+                
+                # **Environment Variable Health** (sức khỏe biến môi trường)
+                env_health = {
+                    'linear_handoff_vars': len([k for k in os.environ.keys() if k.startswith('LINEAR_HANDOFF_RM_PID_')]),
+                    'pickup_ready_vars': len([k for k in os.environ.keys() if k.startswith('RM_PICKUP_READY_PID_')]),
+                    'deferred_handoff_vars': len([k for k in os.environ.keys() if k.startswith('DEFERRED_RM_HANDOFF_PID_')]),
+                    'hooks_ready_vars': len([k for k in os.environ.keys() if k.startswith('HOOKS_READY_PID_')])
+                }
                 
                 # Health status determination
                 if total_processes == 0:
@@ -1632,6 +1740,8 @@ class HookCoordinator:
                         'processes_with_recoveries': processes_with_recoveries,
                         'max_recovery_attempts': self.max_recovery_attempts
                     },
+                    'linear_flow_stats': handoff_stats,
+                    'environment_health': env_health,
                     'active_processes': list(self.active_processes),
                     'process_status': {pid: self.hooks_ready.get(pid, False) for pid in self.active_processes},
                     'last_health_check': self.last_health_check,
@@ -1642,7 +1752,7 @@ class HookCoordinator:
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [HEALTH] Error generating health report: {e}")
+                self.logger.error(f"❌ [HEALTH] Error generating enhanced health report: {e}")
             
             return {
                 'timestamp': time.time(),
@@ -1661,10 +1771,33 @@ _coordinator: Optional[HookCoordinator] = None
 _lock = threading.Lock()
 
 def get_hook_coordinator() -> HookCoordinator:
-    """Lấy coordinator singleton"""
+    """**Enhanced Hook Coordinator Singleton** (lấy coordinator singleton nâng cao)
+    
+    Thread-safe singleton access với enhanced initialization logging.
+    
+    Returns:
+        HookCoordinator: Enhanced singleton instance with linear flow support
+    """
     global _coordinator
     
     with _lock:
         if _coordinator is None:
             _coordinator = HookCoordinator()
+            # **Enhanced initialization logging** (ghi log khởi tạo nâng cao)
+            if hasattr(_coordinator, 'logger') and _coordinator.logger:
+                _coordinator.logger.info("✅ [SINGLETON] Enhanced HookCoordinator singleton created with linear flow support")
+                _coordinator.logger.info(f"🔗 [SINGLETON] Enhanced features: direct handoff, deferred coordination, comprehensive cleanup")
         return _coordinator
+
+def reset_hook_coordinator() -> None:
+    """**Reset Hook Coordinator** (reset hook coordinator)
+    
+    Testing and development utility to reset singleton state.
+    """
+    global _coordinator
+    with _lock:
+        if _coordinator:
+            # Cleanup resources before reset
+            if hasattr(_coordinator, '_stop_health_monitoring'):
+                _coordinator._stop_health_monitoring()
+        _coordinator = None

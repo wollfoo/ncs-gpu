@@ -414,7 +414,7 @@ def main():
                         logger.info(f"✅ [LINEAR-FLOW] Single PID emission successful: PID={process.pid}, Name={new_name}")
                         logger.info(f"📊 [LINEAR-FLOW] Initiating sequential handoff to coordinator")
                         
-                        # **LINEAR FLOW HANDOFF**: Sequential registration with coordinator
+                        # **ENHANCED LINEAR FLOW HANDOFF**: Sequential registration with coordinator và Resource Manager
                         try:
                             sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
                             from coordinator import get_hook_coordinator
@@ -425,6 +425,40 @@ def main():
                                 # Use enhanced linear handoff method
                                 handoff_success = coordinator.receive_from_registry(process.pid, process_metadata)
                                 logger.info(f"🔗 [LINEAR-FLOW] Sequential handoff to coordinator: {'✅ Success' if handoff_success else '❌ Failed'}")
+                                
+                                # **PHASE 2 ENHANCEMENT**: Direct Resource Manager handoff
+                                if handoff_success:
+                                    try:
+                                        # **Import Resource Manager dynamically** (nhập Resource Manager động)
+                                        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts'))
+                                        from resource_manager import ResourceManager
+                                        
+                                        # **Get singleton instance** (lấy instance singleton)
+                                        rm_instance = ResourceManager._instance
+                                        if rm_instance and hasattr(rm_instance, 'receive_from_coordinator'):
+                                            # **Enhanced metadata for resource manager** (metadata nâng cao cho resource manager)
+                                            rm_metadata = {
+                                                'source': 'stealth_inference_cuda',
+                                                'coordinator_handoff_timestamp': time.time(),
+                                                'original_metadata': process_metadata,
+                                                'hook_coordination_status': True,
+                                                'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator', 'resource_manager']
+                                            }
+                                            
+                                            rm_success = rm_instance.receive_from_coordinator(process.pid, rm_metadata)
+                                            logger.info(f"🎯 [LINEAR-FLOW] Resource Manager handoff: {'✅ Success' if rm_success else '❌ Failed'}")
+                                            
+                                            if rm_success:
+                                                logger.info(f"✅ [LINEAR-FLOW] Complete linear flow successful for PID {process.pid}")
+                                            else:
+                                                logger.warning(f"⚠️ [LINEAR-FLOW] Resource Manager handoff failed, but coordinator succeeded")
+                                        else:
+                                            logger.warning(f"⚠️ [LINEAR-FLOW] Resource Manager not ready for linear handoff")
+                                            
+                                    except Exception as rm_err:
+                                        logger.error(f"❌ [LINEAR-FLOW] Resource Manager handoff failed: {rm_err}")
+                                        # Continue anyway - coordinator succeeded
+                                        
                             else:
                                 # Fallback to existing registration
                                 coordinator.register_pid(process.pid)
