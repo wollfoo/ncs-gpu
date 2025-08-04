@@ -18,6 +18,7 @@ import time
 from threading import RLock
 from typing import List, Any, Dict, Optional
 from itertools import count
+from pathlib import Path
 
 # Các import liên quan đến dự án
 from mining_environment.scripts.utils import MiningProcess
@@ -2261,7 +2262,6 @@ class ResourceManager(IResourceManager):
         
         # **Import required modules for file operations** (nhập module cần thiết cho thao tác file)
         import json
-        from pathlib import Path
         
         # **File registry constants** (hằng số registry file)
         file_registry_dir = Path("/tmp/ncs_pid_registry")
