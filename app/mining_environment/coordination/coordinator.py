@@ -99,8 +99,8 @@ class HookCoordinator:
             current_time = time.time()
             
             if self.logger:
-                self.logger.info(f"🚀 [STEALTH-RECEIVE] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)")
-                self.logger.debug(f"🔍 [STEALTH-RECEIVE] Process metadata: {process_metadata}")
+                self.logger.info(f"🚀 [LINEAR-FLOW] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)")
+                self.logger.debug(f"🔍 [LINEAR-FLOW] Process metadata: {process_metadata}")
             
             # **STEP 1: Register PID với HookCoordinator** (đăng ký PID với HookCoordinator)
             with self.lock:
@@ -125,178 +125,26 @@ class HookCoordinator:
                 self.hook_status_history[pid].append(handoff_record)
                 
                 if self.logger:
-                    self.logger.info(f"✅ [STEALTH-RECEIVE] PID {pid} registered with HookCoordinator")
+                    self.logger.info(f"✅ [LINEAR-FLOW] PID {pid} registered with HookCoordinator")
             
             # **STEP 2: Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
             registry_success = self._forward_to_direct_registry(pid, process_metadata)
             
             if registry_success:
                 if self.logger:
-                    self.logger.info(f"✅ [STEALTH-RECEIVE] PID {pid} successfully forwarded to DirectPIDRegistry")
+                    self.logger.info(f"✅ [LINEAR-FLOW] PID {pid} successfully forwarded to DirectPIDRegistry")
                 return True
             else:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [STEALTH-RECEIVE] DirectPIDRegistry forwarding failed for PID {pid}")
+                    self.logger.warning(f"⚠️ [LINEAR-FLOW] DirectPIDRegistry forwarding failed for PID {pid}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [STEALTH-RECEIVE] Failed to receive from stealth wrapper for PID {pid}: {e}")
+                self.logger.error(f"❌ [LINEAR-FLOW] Failed to receive from stealth wrapper for PID {pid}: {e}")
             return False
     
-    def receive_from_registry(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
-        """
-        **Receive From Registry** (nhận từ registry)
-        
-        Enhanced linear flow method cho sequential handoff từ DirectPIDRegistry với IDEMPOTENCY PROTECTION.
-        Replaces parallel registration với structured sequential flow và duplicate handoff detection.
-        
-        Args:
-            pid: Process ID từ registry
-            handoff_metadata: Metadata từ registry handoff
-            
-        Returns:
-            bool: True nếu handoff successful và coordinator sẵn sàng for next step
-        """
-        try:
-            current_time = time.time()
-            handoff_timestamp = handoff_metadata.get('handoff_timestamp', current_time)
-            
-            if self.logger:
-                self.logger.info(f"🔄 [LINEAR-RECEIVE] Receiving PID {pid} from registry via sequential handoff")
-                self.logger.debug(f"🔍 [LINEAR-RECEIVE] Handoff metadata: {handoff_metadata}")
-            
-            # ✅ SOLUTION 1: IDEMPOTENCY PROTECTION - Duplicate handoff detection
-            with self.lock:
-                # Check for duplicate handoffs within detection window
-                last_handoff_time = self.handoff_timestamps.get(pid, 0)
-                time_since_last_handoff = current_time - last_handoff_time
-                
-                # Generate sequence number for this handoff
-                current_sequence = self.handoff_sequence_numbers.get(pid, 0) + 1
-                self.handoff_sequence_numbers[pid] = current_sequence
-                
-                if time_since_last_handoff < self.duplicate_detection_window:
-                    # Potential duplicate handoff detected
-                    cached_metadata = self.handoff_metadata_cache.get(pid, {})
-                    
-                    # ✅ ENHANCED DUPLICATE DETECTION: Multi-layer validation
-                    current_fingerprint = self._generate_handoff_fingerprint(handoff_metadata)
-                    cached_fingerprint = self._generate_handoff_fingerprint(cached_metadata)
-                    
-                    # ✅ ADDITIONAL CHECK: PID + Source + Role combination for extra safety
-                    current_pid_source = f"{pid}_{handoff_metadata.get('source', 'unknown')}"
-                    cached_pid_source = f"{pid}_{cached_metadata.get('source', 'unknown')}"
-                    
-                    # Enhanced role-based detection
-                    current_role = handoff_metadata.get('original_metadata', handoff_metadata).get('role', 'unknown')
-                    cached_role = cached_metadata.get('original_metadata', cached_metadata).get('role', 'unknown')
-                    role_match = (current_role == cached_role and current_role != 'unknown')
-                    
-                    # ✅ MULTI-CRITERIA DUPLICATE DETECTION
-                    is_fingerprint_duplicate = (current_fingerprint == cached_fingerprint)
-                    is_source_duplicate = (current_pid_source == cached_pid_source)
-                    is_role_duplicate = role_match
-                    
-                    duplicate_detected = (is_fingerprint_duplicate or 
-                                        (is_source_duplicate and is_role_duplicate))
-                    
-                    if duplicate_detected:
-                        # True duplicate detected - preserve existing state
-                        existing_ready_state = self.hooks_ready.get(pid, False)
-                        
-                        detection_method = []
-                        if is_fingerprint_duplicate:
-                            detection_method.append("fingerprint")
-                        if is_source_duplicate:
-                            detection_method.append("source")
-                        if is_role_duplicate:
-                            detection_method.append("role")
-                        
-                        if self.logger:
-                            self.logger.warning(f"🔄 [ENHANCED-IDEMPOTENCY] Duplicate handoff detected for PID {pid} "
-                                              f"(time_gap: {time_since_last_handoff:.2f}s, seq: {current_sequence}, "
-                                              f"method: {'+'.join(detection_method)})")
-                            self.logger.info(f"🔄 [ENHANCED-IDEMPOTENCY] Preserving existing ready state: {existing_ready_state}")
-                        
-                        # ✅ ENHANCED LOGGING: Record duplicate handoff event with detection details
-                        self._record_duplicate_handoff(pid, handoff_metadata, current_sequence, detection_method)
-                        
-                        # Return success without state modification
-                        return True
-                
-                # Not a duplicate or outside detection window - proceed with normal registration
-                # ⚠️ CRITICAL FIX: Only reset state for genuinely new handoffs
-                previous_ready_state = self.hooks_ready.get(pid, False)
-                
-                # Only reset to False if PID is not currently registered or if it's been too long
-                if pid not in self.active_processes or time_since_last_handoff > self.duplicate_detection_window:
-                    self.hooks_ready[pid] = False  # Safe to reset for new/expired registrations
-                    state_action = "reset_to_false"
-                else:
-                    # Preserve existing state for recent registrations
-                    state_action = "preserved"
-                
-                # Update tracking data
-                self.handoff_timestamps[pid] = current_time
-                self.handoff_metadata_cache[pid] = handoff_metadata.copy()
-                self.active_processes.add(pid)
-                
-                # Initialize or update health tracking
-                if pid not in self.hook_status_history:
-                    self.hook_status_history[pid] = []
-                if pid not in self.recovery_attempts:
-                    self.recovery_attempts[pid] = 0
-                
-                # **Record enhanced handoff event** (ghi lại sự kiện handoff nâng cao)
-                handoff_record = {
-                    'timestamp': handoff_timestamp,
-                    'event_type': 'linear_handoff_received',
-                    'success': True,
-                    'source': handoff_metadata.get('source', 'unknown'),
-                    'sequence_number': current_sequence,
-                    'state_action': state_action,
-                    'previous_ready_state': previous_ready_state,
-                    'current_ready_state': self.hooks_ready.get(pid, False),
-                    'time_since_last_handoff': time_since_last_handoff,
-                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(handoff_timestamp))
-                }
-                self.hook_status_history[pid].append(handoff_record)
-                
-                if self.logger:
-                    self.logger.info(f"✅ [IDEMPOTENCY] PID {pid} handoff processed (seq: {current_sequence}, "
-                                   f"state_action: {state_action}, ready: {self.hooks_ready.get(pid, False)})")
-                
-                # **Auto-start health monitoring** (tự động khởi động giám sát sức khỏe)
-                if not self.health_monitoring_active:
-                    self._start_health_monitoring()
-            
-            # **Trigger next step in linear flow** (kích hoạt bước tiếp theo trong luồng tuyến tính)
-            next_step_success = self._handoff_to_resource_manager(pid, handoff_metadata)
-            
-            if next_step_success:
-                if self.logger:
-                    self.logger.info(f"✅ [LINEAR-RECEIVE] PID {pid} successfully received và handed off to resource manager")
-                return True
-            else:
-                if self.logger:
-                    self.logger.warning(f"⚠️ [LINEAR-RECEIVE] PID {pid} received but handoff to resource manager failed")
-                return False
-                
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"❌ [LINEAR-RECEIVE] Failed to receive PID {pid} from registry: {e}")
-            
-            # **Fallback to standard registration** (dự phòng đăng ký tiêu chuẩn)
-            try:
-                self.register_pid(pid)
-                if self.logger:
-                    self.logger.info(f"✅ [LINEAR-RECEIVE] Fallback registration successful for PID {pid}")
-                return True
-            except Exception as fallback_err:
-                if self.logger:
-                    self.logger.error(f"❌ [LINEAR-RECEIVE] Fallback registration failed for PID {pid}: {fallback_err}")
-                return False
+    # REMOVED: receive_from_registry method - obsolete with new linear flow
             
     def notify_hooks_ready(self, pid: int) -> None:
         """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành PHASE 3+ initialization)"""
@@ -578,7 +426,7 @@ class HookCoordinator:
         """
         try:
             if self.logger:
-                self.logger.info(f"🔄 [REGISTRY-FORWARD] Forwarding PID {pid} to DirectPIDRegistry")
+                self.logger.info(f"🔄 [LINEAR-FLOW] Forwarding PID {pid} to DirectPIDRegistry")
             
             # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
             import sys
@@ -610,196 +458,28 @@ class HookCoordinator:
                 
                 if success:
                     if self.logger:
-                        self.logger.info(f"✅ [REGISTRY-FORWARD] DirectPIDRegistry registration successful for PID {pid}")
+                        self.logger.info(f"✅ [LINEAR-FLOW] DirectPIDRegistry registration successful for PID {pid}")
                     return True
                 else:
                     if self.logger:
-                        self.logger.error(f"❌ [REGISTRY-FORWARD] DirectPIDRegistry registration failed for PID {pid}")
+                        self.logger.error(f"❌ [LINEAR-FLOW] DirectPIDRegistry registration failed for PID {pid}")
                     return False
                     
             except ImportError as import_err:
                 if self.logger:
-                    self.logger.error(f"❌ [REGISTRY-FORWARD] Cannot import DirectPIDRegistry: {import_err}")
+                    self.logger.error(f"❌ [LINEAR-FLOW] Cannot import DirectPIDRegistry: {import_err}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [REGISTRY-FORWARD] Failed to forward to DirectPIDRegistry for PID {pid}: {e}")
+                self.logger.error(f"❌ [LINEAR-FLOW] Failed to forward to DirectPIDRegistry for PID {pid}: {e}")
             return False
     
-    def _handoff_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
-        """
-        **Enhanced Handoff to Resource Manager** (chuyển giao nâng cao đến resource manager)
-        
-        Sequential handoff từ Hook Coordinator đến Resource Manager trong linear flow
-        với direct method invocation thay vì environment variables.
-        
-        Args:
-            pid: Process ID để handoff
-            coordinator_metadata: Metadata từ coordinator
-            
-        Returns:
-            bool: True nếu handoff successful
-        """
-        try:
-            if self.logger:
-                self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Initiating enhanced handoff to resource manager for PID {pid}")
-            
-            # **Dynamic import Resource Manager** (nhập động Resource Manager)
-            import sys
-            import os
-            from pathlib import Path
-            
-            # Add scripts module to path
-            scripts_path = Path(__file__).parent.parent / "scripts"
-            if str(scripts_path) not in sys.path:
-                sys.path.insert(0, str(scripts_path))
-            
-            try:
-                # ✅ ENHANCED: Direct import with better error handling
-                from resource_manager import ResourceManager
-                
-                # **Get singleton instance directly** (lấy instance singleton trực tiếp)
-                rm_instance = ResourceManager._instance
-                if not rm_instance:
-                    if self.logger:
-                        self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] ResourceManager instance not yet created - deferring handoff")
-                    return self._defer_resource_manager_handoff(pid, coordinator_metadata)
-                
-                # **Check for enhanced receive method** (kiểm tra phương thức receive nâng cao)
-                if hasattr(rm_instance, 'receive_from_coordinator'):
-                    # **Enhanced handoff metadata** (metadata chuyển giao nâng cao)
-                    enhanced_metadata = {
-                        'source': 'hook_coordinator',
-                        'coordinator_timestamp': time.time(), 
-                        'original_metadata': coordinator_metadata,
-                        'hooks_ready': self.hooks_ready.get(pid, False),
-                        'hook_coordination_verified': True,
-                        'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator', 'resource_manager']
-                    }
-                    
-                    # **Direct method invocation** (gọi phương thức trực tiếp)
-                    success = rm_instance.receive_from_coordinator(pid, enhanced_metadata)
-                    
-                    if success:
-                        if self.logger:
-                            self.logger.info(f"✅ [COORDINATOR-HANDOFF] Enhanced direct handoff successful for PID {pid}")
-                        return True
-                    else:
-                        if self.logger:
-                            self.logger.warning(f"⚠️ [COORDINATOR-HANDOFF] Enhanced direct handoff failed for PID {pid}")
-                        # **Fallback to notification method** (dự phòng bằng phương thức thông báo)
-                        return self._notify_resource_manager(pid, enhanced_metadata)
-                else:
-                    # **Fallback to notification method** (phương thức thông báo dự phòng)
-                    if self.logger:
-                        self.logger.info(f"🔄 [COORDINATOR-HANDOFF] Using fallback notification method for PID {pid}")
-                    enhanced_metadata = {
-                        'source': 'hook_coordinator',
-                        'coordinator_timestamp': time.time(),
-                        'original_metadata': coordinator_metadata,
-                        'hooks_ready': self.hooks_ready.get(pid, False),
-                        'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator']
-                    }
-                    return self._notify_resource_manager(pid, enhanced_metadata)
-                    
-            except ImportError as import_err:
-                if self.logger:
-                    self.logger.error(f"❌ [COORDINATOR-HANDOFF] Cannot import ResourceManager: {import_err}")
-                return False
-                
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Enhanced handoff to resource manager failed for PID {pid}: {e}")
-            return False
+    # REMOVED: _handoff_to_resource_manager method - obsolete with new linear flow
     
-    def _defer_resource_manager_handoff(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
-        """
-        **Defer Resource Manager Handoff** (hoãn handoff resource manager)
-        
-        Store handoff data for later pickup by ResourceManager when it becomes available.
-        
-        Args:
-            pid: Process ID
-            coordinator_metadata: Coordinator metadata
-            
-        Returns:
-            bool: True if deferral successful
-        """
-        try:
-            # **Store deferred handoff data** (lưu trữ dữ liệu handoff hoãn)
-            deferred_key = f"DEFERRED_RM_HANDOFF_PID_{pid}"
-            deferred_data = {
-                'pid': pid,
-                'metadata': coordinator_metadata,
-                'coordinator_timestamp': time.time(),
-                'hooks_ready': self.hooks_ready.get(pid, False)
-            }
-            
-            # **Environment variable storage for cross-component communication** (lưu trữ biến môi trường)
-            import json
-            os.environ[deferred_key] = json.dumps(deferred_data)
-            
-            if self.logger:
-                self.logger.info(f"💾 [COORDINATOR-HANDOFF] Deferred handoff stored for PID {pid}")
-            
-            return True
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Failed to defer handoff for PID {pid}: {e}")
-            return False
+    # REMOVED: _defer_resource_manager_handoff method - obsolete with new linear flow
     
-    def _notify_resource_manager(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
-        """
-        **Enhanced Notify Resource Manager** (thông báo resource manager nâng cao)
-        
-        Enhanced notification system với structured data storage và pickup detection.
-        Stores comprehensive handoff data for ResourceManager pickup.
-        
-        Args:
-            pid: Process ID
-            handoff_metadata: Handoff metadata
-            
-        Returns:
-            bool: True nếu notification successful
-        """
-        try:
-            # **Enhanced notification with structured data** (thông báo nâng cao với dữ liệu có cấu trúc)
-            import os
-            import json
-            
-            notification_key = f"LINEAR_HANDOFF_RM_PID_{pid}"
-            
-            # **Comprehensive notification payload** (tải trọng thông báo toàn diện)
-            notification_payload = {
-                'pid': pid,
-                'coordinator_timestamp': handoff_metadata.get('coordinator_timestamp', time.time()),
-                'hooks_ready': handoff_metadata.get('hooks_ready', False),
-                'handoff_chain': handoff_metadata.get('handoff_chain', []),
-                'source': handoff_metadata.get('source', 'hook_coordinator'),
-                'original_metadata': handoff_metadata.get('original_metadata', {}),
-                'notification_timestamp': time.time(),
-                'hook_coordination_verified': True
-            }
-            
-            # **Store structured JSON data** (lưu trữ dữ liệu JSON có cấu trúc)
-            os.environ[notification_key] = json.dumps(notification_payload)
-            
-            # **Additional pickup detection mechanism** (cơ chế phát hiện pickup bổ sung)
-            pickup_key = f"RM_PICKUP_READY_PID_{pid}"
-            os.environ[pickup_key] = "1"
-            
-            if self.logger:
-                self.logger.info(f"🔔 [COORDINATOR-HANDOFF] Enhanced notification stored: {notification_key}")
-                self.logger.debug(f"📋 [COORDINATOR-HANDOFF] Payload size: {len(json.dumps(notification_payload))} bytes")
-            
-            return True
-            
-        except Exception as e:
-            if self.logger:
-                self.logger.error(f"❌ [COORDINATOR-HANDOFF] Failed to notify resource manager for PID {pid}: {e}")
-            return False
+    # REMOVED: _notify_resource_manager method - obsolete with new linear flow
     
     def health_check_continuous(self) -> None:
         """**Continuous Health Check** (kiểm tra sức khỏe liên tục - giám sát hook coordination status cho tất cả active processes)"""

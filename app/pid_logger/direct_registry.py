@@ -163,8 +163,8 @@ class DirectPIDRegistry:
             bool: True nếu processing successful
         """
         try:
-            logger.info(f"🔄 [COORDINATOR-RECEIVE] Receiving PID {pid} from HookCoordinator")
-            logger.debug(f"🔍 [COORDINATOR-RECEIVE] Coordinator metadata: {coordinator_metadata}")
+            logger.info(f"🔄 [LINEAR-FLOW] Receiving PID {pid} from HookCoordinator")
+            logger.debug(f"🔍 [LINEAR-FLOW] Coordinator metadata: {coordinator_metadata}")
             
             # **Extract process information from metadata** (trích xuất thông tin tiến trình từ metadata)
             process_name = coordinator_metadata.get('stealth_name', 'inference-cuda')
@@ -188,21 +188,21 @@ class DirectPIDRegistry:
                 self._stats['total_registered'] += 1
                 self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
                 
-                logger.info(f"✅ [COORDINATOR-RECEIVE] Registered process: PID={pid}, Name={process_name}")
-                logger.info(f"🔗 [COORDINATOR-RECEIVE] Source chain: {' → '.join(source_chain)}")
+                logger.info(f"✅ [LINEAR-FLOW] Registered process: PID={pid}, Name={process_name}")
+                logger.info(f"🔗 [LINEAR-FLOW] Source chain: {' → '.join(source_chain)}")
             
             # **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
             rm_success = self._forward_to_resource_manager(pid, coordinator_metadata, process_info)
             
             if rm_success:
-                logger.info(f"✅ [COORDINATOR-RECEIVE] Complete linear flow successful for PID {pid}")
+                logger.info(f"✅ [LINEAR-FLOW] Complete linear flow successful for PID {pid}")
                 return True
             else:
-                logger.warning(f"⚠️ [COORDINATOR-RECEIVE] ResourceManager forwarding failed for PID {pid}")
+                logger.warning(f"⚠️ [LINEAR-FLOW] ResourceManager forwarding failed for PID {pid}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ [COORDINATOR-RECEIVE] Failed to receive from coordinator for PID {pid}: {e}")
+            logger.error(f"❌ [LINEAR-FLOW] Failed to receive from coordinator for PID {pid}: {e}")
             return False
     
     def register_process(self, pid: int, process_type: str, process_obj: Any, 
