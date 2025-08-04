@@ -433,13 +433,8 @@ class HookCoordinator:
             import os
             from pathlib import Path
             
-            # Add pid_logger module to path
-            pid_logger_path = Path(__file__).parent.parent.parent / "pid_logger"
-            if str(pid_logger_path) not in sys.path:
-                sys.path.insert(0, str(pid_logger_path))
-            
             try:
-                from direct_registry import get_direct_registry
+                from pid_logger.direct_registry import get_direct_registry
                 
                 # **Get DirectPIDRegistry singleton** (lấy singleton DirectPIDRegistry)
                 registry = get_direct_registry()
@@ -467,7 +462,9 @@ class HookCoordinator:
                     
             except ImportError as import_err:
                 if self.logger:
-                    self.logger.error(f"❌ [LINEAR-FLOW] Cannot import DirectPIDRegistry: {import_err}")
+                    self.logger.error(f"❌ [LINEAR-FLOW] Cannot import DirectPIDRegistry from pid_logger.direct_registry: {import_err}")
+                    self.logger.error("💡 [FIX-HINT] Check if psutil dependency is installed: pip install psutil")
+                    self.logger.error("💡 [FIX-HINT] Verify pid_logger module is in PYTHONPATH")
                 return False
                 
         except Exception as e:
