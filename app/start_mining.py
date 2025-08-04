@@ -861,9 +861,19 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
 
 # GPU mining management integrated into main() for linear flow architecture
 
-def resource_manager_thread():
+def start_resource_manager_thread():
+    """
+    **Enhanced ResourceManager Startup Thread** (luồng khởi động ResourceManager nâng cao)
+    
+    **PHASE 3**: Enhanced với readiness validation để ensure ResourceManager 
+    ready trước khi GPU process start.
+    
+    Returns:
+        ResourceManager: Instance nếu successful, None nếu failed
+    """
     thread_logger = setup_logging('resource_manager_thread', str(Path(LOGS_DIR) / 'resource_manager_thread.log'), 'INFO')
-    thread_logger.info("🔧 Starting Resource Manager Thread...")
+    thread_logger.info("🔧 [PHASE 3] Starting Enhanced Resource Manager Thread...")
+    
     try:
         # **Step 1**: Load configuration
         thread_logger.info("📋 Loading ResourceManager configuration...")
@@ -880,30 +890,48 @@ def resource_manager_thread():
         
         # **Step 2**: Initialize ResourceManager
         thread_logger.info("🔧 Creating ResourceManager instance...")
-        # 🪲 DEBUG: Log ResourceManager creation timing
         import time
         rm_creation_time = time.time()
-        print(f"🔍 [DEBUG] ResourceManager creation started at {rm_creation_time}")
+        thread_logger.info(f"🔍 [PHASE 3] ResourceManager creation started at {rm_creation_time}")
         
         resource_manager = ResourceManager(config, None, thread_logger)  # No event bus needed
         
         rm_creation_end = time.time()
-        print(f"🔍 [DEBUG] ResourceManager creation completed at {rm_creation_end}")
-        print(f"🔍 [DEBUG] ResourceManager creation took {rm_creation_end - rm_creation_time:.3f} seconds")
-        
+        thread_logger.info(f"🔍 [PHASE 3] ResourceManager creation completed at {rm_creation_end}")
+        thread_logger.info(f"🔍 [PHASE 3] ResourceManager creation took {rm_creation_end - rm_creation_time:.3f} seconds")
         thread_logger.info("✅ ResourceManager instance created")
-        
-        # 🗑️ EventBus removed - ResourceManager uses DirectPIDRegistry observers
         
         # **Step 3**: Start ResourceManager
         thread_logger.info("🚀 Starting ResourceManager...")
         resource_manager.start()
         thread_logger.info("🎯 ResourceManager started successfully")
+        
+        # **PHASE 3: NEW - Wait for ResourceManager readiness confirmation** (chờ xác nhận ResourceManager sẵn sàng)
+        thread_logger.info("⏳ [PHASE 3] Waiting for ResourceManager readiness confirmation...")
+        ready = ResourceManager.wait_for_ready(timeout=15.0)
+        
+        if ready:
+            thread_logger.info("✅ [PHASE 3] ResourceManager fully ready - safe to start GPU processes")
+            thread_logger.info("🎯 [PHASE 3] ResourceManager is now accepting PID handoffs from DirectPIDRegistry")
+            return resource_manager
+        else:
+            thread_logger.error("❌ [PHASE 3] ResourceManager readiness timeout - continuing with warnings")
+            thread_logger.error("🚨 [PHASE 3] GPU processes may experience race conditions without ready ResourceManager")
+            return resource_manager  # Return anyway but with warnings
+            
     except Exception as e:
-        thread_logger.error(f"❌ Resource Manager Thread failed: {e}")
-        # resource_manager_failed_event removed - using stop_event only
+        thread_logger.error(f"❌ [PHASE 3] Resource Manager Thread failed: {e}")
+        thread_logger.error(f"🔍 [PHASE 3] Exception details: {type(e).__name__}: {str(e)}")
+        
+        # **PHASE 3: Enhanced error reporting** (báo cáo lỗi nâng cao)
+        import traceback
+        thread_logger.error(f"📋 [PHASE 3] Full traceback: {traceback.format_exc()}")
+        
         stop_event.set()
-    thread_logger.info("🔚 Resource Manager Thread ended")
+        return None
+        
+    finally:
+        thread_logger.info("🔚 [PHASE 3] Resource Manager Thread completed")
 
 # Environment setup integrated into main() for sequential initialization
 
@@ -936,17 +964,48 @@ def main():
         # Tiếp tục chạy mà không dừng hệ thống
 
     # ------------------------------------------------------------------
-    # 3️⃣ **SIMPLIFIED**: Khởi động Resource Manager tuần tự
+    # 3️⃣ **PHASE 3**: Enhanced Resource Manager Startup với Readiness Validation
     # ------------------------------------------------------------------
-    logger.info("🔧 Starting Resource Manager (sequential)...")
+    logger.info("🔧 [PHASE 3] Starting Enhanced Resource Manager với readiness validation...")
+    
+    # **PHASE 3: Start ResourceManager in background thread** (khởi động ResourceManager trong background thread)
     resource_manager_thread_obj = threading.Thread(
-        target=resource_manager_thread,
+        target=lambda: start_resource_manager_thread(),
         daemon=True,
-        name="ResourceManagerThread"
+        name="EnhancedResourceManagerThread"
     )
     resource_manager_thread_obj.start()
-    time.sleep(2)  # Đợi Resource Manager khởi động
-    logger.info("✅ Resource Manager started (background)")
+    
+    # **PHASE 3: Wait for ResourceManager thread to complete initialization** (chờ ResourceManager thread hoàn thành khởi tạo)
+    logger.info("⏳ [PHASE 3] Waiting for ResourceManager thread completion...")
+    resource_manager_thread_obj.join(timeout=20.0)  # Give 20 seconds for complete startup
+    
+    if resource_manager_thread_obj.is_alive():
+        logger.warning("⚠️ [PHASE 3] ResourceManager thread still running after 20s timeout")
+        logger.warning("🔄 [PHASE 3] Continuing with GPU process startup - ResourceManager may not be fully ready")
+    else:
+        logger.info("✅ [PHASE 3] ResourceManager thread completed initialization")
+    
+    # **PHASE 3: Final readiness check before GPU process start** (kiểm tra sẵn sàng cuối cùng trước khi start GPU process)
+    logger.info("🔍 [PHASE 3] Final ResourceManager readiness verification...")
+    
+    # Import ResourceManager to access class methods
+    try:
+        from mining_environment.scripts.resource_manager import ResourceManager
+        final_ready = ResourceManager.is_ready()
+        
+        if final_ready:
+            logger.info("✅ [PHASE 3] ResourceManager CONFIRMED READY - safe to start GPU processes")
+            logger.info("🎯 [PHASE 3] Race condition prevention: ResourceManager accepting handoffs")
+        else:
+            logger.warning("⚠️ [PHASE 3] ResourceManager NOT READY - potential race conditions")
+            logger.warning("🚨 [PHASE 3] GPU processes may experience 'ResourceManager instance not yet created' errors")
+            
+    except ImportError as e:
+        logger.error(f"❌ [PHASE 3] Cannot import ResourceManager for readiness check: {e}")
+        logger.error("🚨 [PHASE 3] Proceeding without readiness verification - high risk of race conditions")
+    
+    logger.info("✅ [PHASE 3] Enhanced Resource Manager startup phase completed")
     
     # ------------------------------------------------------------------
     # 4️⃣ **SIMPLIFIED**: Khởi động GPU Mining process trực tiếp

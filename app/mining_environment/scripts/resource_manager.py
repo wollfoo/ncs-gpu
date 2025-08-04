@@ -259,10 +259,14 @@ class ResourceManager(IResourceManager):
     - Khởi tạo SharedResourceManager
     - Khám phá tiến trình (duy nhất 1 lần) và Cloak tất cả
     - Không giám sát, không restore
+    - **PHASE 2**: Enhanced với Readiness Signaling System
     """
 
     _instance = None
     _instance_lock = threading.Lock()
+    # **PHASE 2: Readiness Signaling System** (hệ thống tín hiệu sẵn sàng)
+    _ready_event = threading.Event()  # Signal khi ResourceManager fully initialized
+    _initialization_lock = threading.RLock()  # Additional lock for initialization safety
 
     def __new__(cls, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
         with cls._instance_lock:
@@ -339,6 +343,82 @@ class ResourceManager(IResourceManager):
         self.logger.info("ResourceManager.__init__ (simplified with unified cloaking queue)")
 
         # ✅ PROCESS COMMUNICATION: DirectPIDRegistry observers handle all process events
+        
+    # **PHASE 2: Readiness Signaling Class Methods** (phương thức lớp tín hiệu sẵn sàng)
+    @classmethod
+    def wait_for_ready(cls, timeout: float = 10.0) -> bool:
+        """
+        **Wait for ResourceManager Readiness** (chờ ResourceManager sẵn sàng)
+        
+        Thread-safe method để wait cho ResourceManager hoàn thành initialization.
+        
+        Args:
+            timeout: Maximum time to wait in seconds (thời gian chờ tối đa)
+            
+        Returns:
+            bool: True nếu ResourceManager ready trong timeout, False nếu timeout
+        """
+        try:
+            ready = cls._ready_event.wait(timeout)
+            if ready:
+                logger.info(f"✅ [RM-READY] ResourceManager confirmed ready within {timeout}s")
+            else:
+                logger.warning(f"⏰ [RM-READY] ResourceManager readiness timeout after {timeout}s")
+            return ready
+        except Exception as e:
+            logger.error(f"❌ [RM-READY] Error waiting for readiness: {e}")
+            return False
+    
+    @classmethod
+    def is_ready(cls) -> bool:
+        """
+        **Check ResourceManager Readiness** (kiểm tra ResourceManager sẵn sàng)
+        
+        Non-blocking check để determine nếu ResourceManager đã ready.
+        
+        Returns:
+            bool: True nếu ResourceManager ready, False otherwise
+        """
+        try:
+            ready = cls._ready_event.is_set()
+            logger.debug(f"🔍 [RM-READY] Readiness check: {ready}")
+            return ready
+        except Exception as e:
+            logger.error(f"❌ [RM-READY] Error checking readiness: {e}")
+            return False
+    
+    @classmethod
+    def signal_ready(cls):
+        """
+        **Signal ResourceManager Ready** (báo hiệu ResourceManager sẵn sàng)
+        
+        Internal method để signal rằng ResourceManager đã fully initialized.
+        Called automatically by start() method khi initialization completes.
+        """
+        try:
+            if not cls._ready_event.is_set():
+                cls._ready_event.set()
+                logger.info("🎯 [RM-READY] ResourceManager readiness signaled - now accepting connections")
+            else:
+                logger.debug("🔍 [RM-READY] Readiness signal already set")
+        except Exception as e:
+            logger.error(f"❌ [RM-READY] Error signaling readiness: {e}")
+    
+    @classmethod
+    def clear_ready_signal(cls):
+        """
+        **Clear ResourceManager Ready Signal** (xóa tín hiệu ResourceManager sẵn sàng)
+        
+        Internal method để clear readiness signal khi shutdown hoặc reinitializing.
+        """
+        try:
+            if cls._ready_event.is_set():
+                cls._ready_event.clear()
+                logger.info("🔄 [RM-READY] ResourceManager readiness signal cleared")
+            else:
+                logger.debug("🔍 [RM-READY] Readiness signal already cleared")
+        except Exception as e:
+            logger.error(f"❌ [RM-READY] Error clearing readiness signal: {e}")
     
     def _validate_configuration(self, config: ConfigModel) -> ConfigModel:
         """
@@ -1183,8 +1263,18 @@ class ResourceManager(IResourceManager):
         return default_sequence
 
     def start(self):
-        self.logger.info("🚀 Starting ResourceManager (Ultra-Fast Non-Blocking Initialization)...")
+        """
+        **Enhanced Start Method với Readiness Signaling** (phương thức start nâng cao với tín hiệu sẵn sàng)
+        
+        Performs complete ResourceManager initialization và signals readiness khi completed.
+        **PHASE 2**: Integrated readiness signaling để eliminate race conditions.
+        """
+        self.logger.info("🚀 Starting ResourceManager (PHASE 2: Enhanced với Readiness Signaling)...")
         start_time = time.time()
+        
+        # **PHASE 2: Clear any previous ready signal** (xóa tín hiệu sẵn sàng trước đó)
+        self.clear_ready_signal()
+        
         try:
             # Step 1: Minimal essential initialization only
             step_start = time.time()
@@ -1277,6 +1367,15 @@ class ResourceManager(IResourceManager):
             self.logger.info("🔍 [PROCESS DISCOVERY] Scanning for existing mining processes...")
             self._discover_and_register_existing_processes()
             
+            # **PHASE 2: Signal ResourceManager Ready** (báo hiệu ResourceManager sẵn sàng)
+            self.logger.info("🎯 [PHASE 2] ResourceManager initialization completed - signaling readiness...")
+            self.signal_ready()
+            
+            ready_time = time.time()
+            total_init_time = ready_time - start_time
+            self.logger.info(f"✅ [PHASE 2] ResourceManager READY - Total initialization: {total_init_time:.2f}s")
+            self.logger.info("🎯 [PHASE 2] ResourceManager now accepting PID handoffs from DirectPIDRegistry")
+            
             # Ultra-fast main loop với minimal monitoring
             self.logger.info("🔄 Entering minimal main monitoring loop...")
             last_discovery_time = time.time()
@@ -1302,7 +1401,9 @@ class ResourceManager(IResourceManager):
 
             self.logger.info("ResourceManager main loop completed.")
         except Exception as e:
-            self.logger.error(f"❌ ResourceManager startup failed: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"❌ [PHASE 2] ResourceManager startup failed: {e}\n{traceback.format_exc()}")
+            # **PHASE 2: Clear ready signal on failure** (xóa tín hiệu sẵn sàng khi lỗi)
+            self.clear_ready_signal()
             self.shutdown()
 
     def _record_strategy_metrics(self, pid: int, result_type: str, metrics_data: Dict[str, Any]) -> None:
@@ -2142,7 +2243,15 @@ class ResourceManager(IResourceManager):
             }
 
     def shutdown(self):
-        self.logger.info("Dừng ResourceManager... (BẮT ĐẦU)")
+        """
+        **Enhanced Shutdown với Readiness Signal Cleanup** (shutdown nâng cao với dọn dẹp tín hiệu sẵn sàng)
+        
+        **PHASE 2**: Clear readiness signal during shutdown để ensure clean state.
+        """
+        self.logger.info("🔄 [PHASE 2] Shutting down ResourceManager với readiness signal cleanup...")
+        
+        # **PHASE 2: Clear readiness signal first** (xóa tín hiệu sẵn sàng trước tiên)
+        self.clear_ready_signal()
 
         # Bước 0: Chờ hàng đợi cloaking xử lý xong
         self.logger.info("Đợi xử lý xong các tác vụ trong resource_adjustment_queue.")

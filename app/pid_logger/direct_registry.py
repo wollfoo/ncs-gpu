@@ -293,9 +293,10 @@ class DirectPIDRegistry:
     
     def _forward_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
         """
-        **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
+        **Enhanced Forward to ResourceManager** (chuyển tiếp nâng cao đến ResourceManager)
         
-        Final step trong linear flow: DirectPIDRegistry → ResourceManager
+        Final step trong linear flow với Enhanced Retry Logic + Exponential Backoff.
+        Implements comprehensive retry strategy để eliminate race conditions.
         
         Args:
             pid: Process ID
@@ -305,79 +306,183 @@ class DirectPIDRegistry:
         Returns:
             bool: True nếu forwarding successful
         """
+        # **PHASE 1: Enhanced Retry Logic Configuration** (cấu hình logic thử lại nâng cao)
+        max_retries = 3
+        retry_delay = 0.5  # Initial delay 500ms
+        backoff_multiplier = 1.5  # Exponential backoff multiplier
+        
+        logger.info(f"🎯 [RM-FORWARD] Enhanced forwarding PID {pid} to ResourceManager (PHASE 1)")
+        
+        # **Import ResourceManager** (nhập ResourceManager)
+        import sys
+        import os
+        import time
+        from pathlib import Path
+        
+        # Add scripts module to path
+        scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
+        if str(scripts_path) not in sys.path:
+            sys.path.insert(0, str(scripts_path))
+        
         try:
-            logger.info(f"🎯 [RM-FORWARD] Forwarding PID {pid} to ResourceManager (FINAL STEP)")
-            
-            # **Import ResourceManager** (nhập ResourceManager)
-            import sys
-            import os
-            from pathlib import Path
-            
-            # Add scripts module to path
-            scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
-            if str(scripts_path) not in sys.path:
-                sys.path.insert(0, str(scripts_path))
+            from resource_manager import ResourceManager
+        except ImportError as import_err:
+            logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager: {import_err}")
+            return False
+        
+        # **Enhanced Retry Loop với Readiness Signaling Integration** (vòng lặp thử lại nâng cao với tích hợp tín hiệu sẵn sàng)
+        for attempt in range(max_retries):
+            attempt_start_time = time.time()
+            logger.info(f"🔄 [RM-RETRY] Attempt {attempt + 1}/{max_retries} for PID {pid} (PHASE 2 Integration)")
             
             try:
-                from resource_manager import ResourceManager
-
                 # **Get ResourceManager singleton** (lấy singleton ResourceManager)
                 rm_instance = ResourceManager._instance
-                # 🪲 DEBUG: Log singleton access timing and status
-                import time
+                
+                # **Enhanced Debug Logging** (ghi log gỡ lỗi nâng cao)
                 access_time = time.time()
-                print(f"🔍 [DEBUG] DirectPIDRegistry attempting to access ResourceManager singleton at {access_time}")
-                print(f"🔍 [DEBUG] ResourceManager singleton status: {rm_instance is not None}")
+                logger.debug(f"🔍 [RM-ACCESS] Singleton access attempt at {access_time:.3f}")
+                logger.debug(f"🔍 [RM-ACCESS] ResourceManager instance status: {rm_instance is not None}")
                 
-                if not rm_instance:
-                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager instance not yet created")
-                    print(f"🔍 [DEBUG] ResourceManager singleton is None - confirming timing issue")
-                    return False
-                else:
-                    print(f"🔍 [DEBUG] ResourceManager singleton accessed successfully")
-                
-                # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
-                rm_metadata = {
-                    **coordinator_metadata,  # Include all previous metadata
-                    'registry_timestamp': time.time(),
-                    'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry'],
-                    'final_handoff': True,
-                    'process_info': {
-                        'pid': pid,
-                        'process_type': process_info.process_type,
-                        'process_name': process_info.process_name,
-                        'registered_at': process_info.registered_at
-                    }
-                }
-                
-                # **Call ResourceManager receive method** (gọi phương thức receive của ResourceManager)
-                if hasattr(rm_instance, 'receive_from_registry'):
-                    success = rm_instance.receive_from_registry(pid, rm_metadata)
+                if rm_instance and ResourceManager.is_ready():
+                    # **SUCCESS PATH: ResourceManager available and ready** (đường dẫn thành công)
+                    logger.info(f"✅ [RM-FORWARD] ResourceManager available and ready on attempt {attempt + 1}")
                     
-                    if success:
-                        logger.info(f"✅ [RM-FORWARD] ResourceManager receive successful for PID {pid}")
-                        
-                        # **Notify observers** (thông báo observers)
-                        self._notify_observers(process_info)
-                        
-                        return True
+                    # **Execute handoff with comprehensive metadata** (thực thi handoff với metadata toàn diện)
+                    return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                    
+                elif rm_instance and not ResourceManager.is_ready():
+                    # **READINESS WAIT PATH: Instance exists but not ready** (đường dẫn chờ sẵn sàng)
+                    logger.info(f"🔄 [RM-WAIT] ResourceManager instance exists but not ready, waiting...")
+                    
+                    # **PHASE 2: Use readiness signaling với timeout** (sử dụng tín hiệu sẵn sàng với timeout)
+                    wait_timeout = min(retry_delay * 2, 5.0)  # Dynamic timeout based on retry delay
+                    logger.info(f"⏳ [RM-WAIT] Waiting for readiness với timeout: {wait_timeout:.1f}s")
+                    
+                    ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
+                    
+                    if ready:
+                        logger.info(f"✅ [RM-WAIT] ResourceManager became ready, executing handoff")
+                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
                     else:
-                        logger.error(f"❌ [RM-FORWARD] ResourceManager receive failed for PID {pid}")
-                        return False
+                        logger.warning(f"⏰ [RM-WAIT] ResourceManager readiness timeout after {wait_timeout:.1f}s")
+                        # Continue to exponential backoff section
+                        
                 else:
-                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager missing receive_from_registry method")
+                    # **INSTANCE NOT AVAILABLE PATH: Wait for instance creation** (đường dẫn instance chưa khả dụng)
+                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager instance not yet created (attempt {attempt + 1}/{max_retries})")
                     
-                    # **Fallback: Notify observers directly** (dự phòng: thông báo observers trực tiếp)
+                    # **PHASE 2: Try waiting for readiness even without instance** (thử chờ sẵn sàng ngay cả khi chưa có instance)
+                    logger.info(f"🔄 [RM-WAIT] Attempting to wait for ResourceManager creation + readiness...")
+                    wait_timeout = min(retry_delay * 2, 5.0)
+                    ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
+                    
+                    if ready:
+                        # **Re-check instance after wait** (kiểm tra lại instance sau khi chờ)
+                        rm_instance = ResourceManager._instance
+                        if rm_instance:
+                            logger.info(f"✅ [RM-WAIT] ResourceManager created and ready after wait")
+                            return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                        else:
+                            logger.warning(f"⚠️ [RM-WAIT] Ready signal set but instance still None")
+                
+                # **Exponential Backoff Section** (phần backoff theo cấp số nhân)
+                if attempt < max_retries - 1:
+                    # **Exponential Backoff Delay** (độ trễ backoff theo cấp số nhân)
+                    logger.info(f"🔄 [RM-RETRY] Applying exponential backoff: {retry_delay:.1f}s")
+                    time.sleep(retry_delay)
+                    retry_delay *= backoff_multiplier
+                    
+                    # **Progress Logging** (ghi log tiến trình)
+                    attempt_duration = time.time() - attempt_start_time
+                    logger.debug(f"📊 [RM-RETRY] Attempt {attempt + 1} duration: {attempt_duration:.3f}s")
+                else:
+                    # **Final Attempt Failed** (lần thử cuối cùng thất bại)
+                    logger.error(f"❌ [RM-FORWARD] ResourceManager unavailable after {max_retries} attempts với readiness signaling")
+                    logger.error(f"💀 [RM-FORWARD] Final state - Instance: {ResourceManager._instance is not None}, Ready: {ResourceManager.is_ready()}")
+                    return False
+                        
+            except Exception as attempt_err:
+                logger.error(f"❌ [RM-RETRY] Attempt {attempt + 1} exception: {attempt_err}")
+                
+                if attempt < max_retries - 1:
+                    logger.info(f"🔄 [RM-RETRY] Exception recovery, retrying in {retry_delay:.1f}s")
+                    time.sleep(retry_delay)
+                    retry_delay *= backoff_multiplier
+                else:
+                    logger.error(f"❌ [RM-FORWARD] All attempts failed with exceptions")
+                    return False
+        
+        # **Should not reach here** (không nên đến đây)
+        logger.error(f"❌ [RM-FORWARD] Unexpected end of retry loop for PID {pid}")
+        return False
+    
+    def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
+                           process_info: ProcessInfo, attempt_number: int = 1) -> bool:
+        """
+        **Execute ResourceManager Handoff** (thực thi handoff ResourceManager)
+        
+        Extracted handoff execution logic với comprehensive error handling.
+        
+        Args:
+            pid: Process ID
+            rm_instance: ResourceManager instance
+            coordinator_metadata: Metadata từ coordinator
+            process_info: ProcessInfo object
+            attempt_number: Current attempt number for logging
+            
+        Returns:
+            bool: True nếu handoff successful
+        """
+        try:
+            handoff_start_time = time.time()
+            logger.info(f"🎯 [RM-HANDOFF] Executing handoff for PID {pid} (attempt {attempt_number})")
+            
+            # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
+            rm_metadata = {
+                **coordinator_metadata,  # Include all previous metadata
+                'registry_timestamp': time.time(),
+                'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry'],
+                'final_handoff': True,
+                'retry_attempt': attempt_number,
+                'handoff_start_time': handoff_start_time,
+                'process_info': {
+                    'pid': pid,
+                    'process_type': process_info.process_type,
+                    'process_name': process_info.process_name,
+                    'registered_at': process_info.registered_at
+                }
+            }
+            
+            # **Call ResourceManager receive method** (gọi phương thức receive của ResourceManager)
+            if hasattr(rm_instance, 'receive_from_registry'):
+                logger.debug(f"🔍 [RM-HANDOFF] Calling receive_from_registry for PID {pid}")
+                success = rm_instance.receive_from_registry(pid, rm_metadata)
+                
+                handoff_duration = time.time() - handoff_start_time
+                
+                if success:
+                    logger.info(f"✅ [RM-HANDOFF] ResourceManager receive successful for PID {pid}")
+                    logger.info(f"📊 [RM-HANDOFF] Handoff completed in {handoff_duration:.3f}s (attempt {attempt_number})")
+                    
+                    # **Notify observers** (thông báo observers)
                     self._notify_observers(process_info)
-                    logger.info(f"🔄 [RM-FORWARD] Fallback notification completed for PID {pid}")
-                    return True
                     
-            except ImportError as import_err:
-                logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager: {import_err}")
-                return False
+                    return True
+                else:
+                    logger.error(f"❌ [RM-HANDOFF] ResourceManager receive failed for PID {pid}")
+                    logger.error(f"📊 [RM-HANDOFF] Failed handoff duration: {handoff_duration:.3f}s")
+                    return False
+            else:
+                logger.warning(f"⚠️ [RM-HANDOFF] ResourceManager missing receive_from_registry method")
+                
+                # **Fallback: Notify observers directly** (dự phòng: thông báo observers trực tiếp)
+                self._notify_observers(process_info)
+                logger.info(f"🔄 [RM-HANDOFF] Fallback notification completed for PID {pid}")
+                return True
                 
         except Exception as e:
-            logger.error(f"❌ [RM-FORWARD] Failed to forward to ResourceManager for PID {pid}: {e}")
+            logger.error(f"❌ [RM-HANDOFF] Handoff execution failed for PID {pid}: {e}")
             return False
     
     def _trigger_sequential_handoff(self, process_info: ProcessInfo) -> None:
