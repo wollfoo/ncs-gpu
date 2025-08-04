@@ -880,7 +880,17 @@ def resource_manager_thread():
         
         # **Step 2**: Initialize ResourceManager
         thread_logger.info("🔧 Creating ResourceManager instance...")
+        # 🪲 DEBUG: Log ResourceManager creation timing
+        import time
+        rm_creation_time = time.time()
+        print(f"🔍 [DEBUG] ResourceManager creation started at {rm_creation_time}")
+        
         resource_manager = ResourceManager(config, None, thread_logger)  # No event bus needed
+        
+        rm_creation_end = time.time()
+        print(f"🔍 [DEBUG] ResourceManager creation completed at {rm_creation_end}")
+        print(f"🔍 [DEBUG] ResourceManager creation took {rm_creation_end - rm_creation_time:.3f} seconds")
+        
         thread_logger.info("✅ ResourceManager instance created")
         
         # 🗑️ EventBus removed - ResourceManager uses DirectPIDRegistry observers

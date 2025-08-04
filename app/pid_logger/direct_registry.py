@@ -320,12 +320,21 @@ class DirectPIDRegistry:
             
             try:
                 from resource_manager import ResourceManager
-                
+
                 # **Get ResourceManager singleton** (lấy singleton ResourceManager)
                 rm_instance = ResourceManager._instance
+                # 🪲 DEBUG: Log singleton access timing and status
+                import time
+                access_time = time.time()
+                print(f"🔍 [DEBUG] DirectPIDRegistry attempting to access ResourceManager singleton at {access_time}")
+                print(f"🔍 [DEBUG] ResourceManager singleton status: {rm_instance is not None}")
+                
                 if not rm_instance:
                     logger.warning(f"⚠️ [RM-FORWARD] ResourceManager instance not yet created")
+                    print(f"🔍 [DEBUG] ResourceManager singleton is None - confirming timing issue")
                     return False
+                else:
+                    print(f"🔍 [DEBUG] ResourceManager singleton accessed successfully")
                 
                 # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
                 rm_metadata = {

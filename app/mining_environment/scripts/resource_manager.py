@@ -268,13 +268,26 @@ class ResourceManager(IResourceManager):
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
+                # 🪲 DEBUG: Log singleton creation timing
+                import time
+                creation_time = time.time()
+                print(f"🔍 [DEBUG] ResourceManager singleton created at {creation_time}")
         return cls._instance
 
     def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
         if getattr(self, '_initialized', False):
+            # 🪲 DEBUG: Log singleton access timing
+            import time
+            access_time = time.time()
+            print(f"🔍 [DEBUG] ResourceManager singleton accessed at {access_time} (already initialized)")
             return
 
         self._initialized = True
+        # 🪲 DEBUG: Log initialization timing
+        import time
+        init_time = time.time()
+        print(f"🔍 [DEBUG] ResourceManager initialization started at {init_time}")
+        
         # ✅ UNIFIED: Use unified logger for consistent logging hierarchy
         self.logger = get_unified_logger('resource_manager')
         
