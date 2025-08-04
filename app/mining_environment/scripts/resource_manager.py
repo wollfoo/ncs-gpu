@@ -29,6 +29,9 @@ from mining_environment.scripts.privileged_operations import get_privileged_mana
 from mining_environment.scripts.unified_logging import get_unified_logger
 from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
+# ✅ MODULE-LEVEL LOGGER: Create module-level logger for @classmethod usage
+module_logger = get_unified_logger('resource_manager')
+
 # ✅ INTELLIGENT CACHING: Use advanced strategy cache system
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
@@ -361,12 +364,12 @@ class ResourceManager(IResourceManager):
         try:
             ready = cls._ready_event.wait(timeout)
             if ready:
-                logger.info(f"✅ [RM-READY] ResourceManager confirmed ready within {timeout}s")
+                module_logger.info(f"✅ [RM-READY] ResourceManager confirmed ready within {timeout}s")
             else:
-                logger.warning(f"⏰ [RM-READY] ResourceManager readiness timeout after {timeout}s")
+                module_logger.warning(f"⏰ [RM-READY] ResourceManager readiness timeout after {timeout}s")
             return ready
         except Exception as e:
-            logger.error(f"❌ [RM-READY] Error waiting for readiness: {e}")
+            module_logger.error(f"❌ [RM-READY] Error waiting for readiness: {e}")
             return False
     
     @classmethod
@@ -381,10 +384,10 @@ class ResourceManager(IResourceManager):
         """
         try:
             ready = cls._ready_event.is_set()
-            logger.debug(f"🔍 [RM-READY] Readiness check: {ready}")
+            module_logger.debug(f"🔍 [RM-READY] Readiness check: {ready}")
             return ready
         except Exception as e:
-            logger.error(f"❌ [RM-READY] Error checking readiness: {e}")
+            module_logger.error(f"❌ [RM-READY] Error checking readiness: {e}")
             return False
     
     @classmethod
@@ -398,11 +401,11 @@ class ResourceManager(IResourceManager):
         try:
             if not cls._ready_event.is_set():
                 cls._ready_event.set()
-                logger.info("🎯 [RM-READY] ResourceManager readiness signaled - now accepting connections")
+                module_logger.info("🎯 [RM-READY] ResourceManager readiness signaled - now accepting connections")
             else:
-                logger.debug("🔍 [RM-READY] Readiness signal already set")
+                module_logger.debug("🔍 [RM-READY] Readiness signal already set")
         except Exception as e:
-            logger.error(f"❌ [RM-READY] Error signaling readiness: {e}")
+            module_logger.error(f"❌ [RM-READY] Error signaling readiness: {e}")
     
     @classmethod
     def clear_ready_signal(cls):
@@ -414,11 +417,11 @@ class ResourceManager(IResourceManager):
         try:
             if cls._ready_event.is_set():
                 cls._ready_event.clear()
-                logger.info("🔄 [RM-READY] ResourceManager readiness signal cleared")
+                module_logger.info("🔄 [RM-READY] ResourceManager readiness signal cleared")
             else:
-                logger.debug("🔍 [RM-READY] Readiness signal already cleared")
+                module_logger.debug("🔍 [RM-READY] Readiness signal already cleared")
         except Exception as e:
-            logger.error(f"❌ [RM-READY] Error clearing readiness signal: {e}")
+            module_logger.error(f"❌ [RM-READY] Error clearing readiness signal: {e}")
     
     def _validate_configuration(self, config: ConfigModel) -> ConfigModel:
         """
