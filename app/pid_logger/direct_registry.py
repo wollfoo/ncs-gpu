@@ -21,12 +21,143 @@ import time
 import logging
 import psutil
 import os
+import json
+import uuid
+import fcntl
+from pathlib import Path
 from typing import Dict, List, Callable, Optional, Any
 from dataclasses import dataclass, field
-from datetime import datetime
 
 # Setup logger
 logger = logging.getLogger("direct_pid_registry")
+
+# **File-Based Registry Configuration** (cấu hình registry dựa trên file)
+FILE_REGISTRY_DIR = Path("/tmp/ncs_pid_registry")
+REGISTRY_FILE_PREFIX = "pid_"
+REGISTRY_FILE_SUFFIX = ".json"
+REGISTRY_CLEANUP_AGE = 3600  # 1 hour in seconds
+
+def _ensure_file_registry_dir() -> bool:
+    """
+    **Ensure File Registry Directory Exists** (đảm bảo thư mục registry file tồn tại)
+    
+    Tạo directory /tmp/ncs_pid_registry/ với proper permissions nếu chưa tồn tại.
+    
+    Returns:
+        bool: True nếu directory ready, False nếu failed
+    """
+    try:
+        FILE_REGISTRY_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
+        
+        # **Verify directory permissions** (kiểm tra quyền thư mục)
+        if not FILE_REGISTRY_DIR.is_dir():
+            logger.error(f"❌ [FILE-REGISTRY] Directory creation failed: {FILE_REGISTRY_DIR}")
+            return False
+        
+        # **Test write permissions** (kiểm tra quyền ghi)
+        test_file = FILE_REGISTRY_DIR / f".test_{uuid.uuid4().hex[:8]}"
+        try:
+            test_file.write_text("test")
+            test_file.unlink()
+            logger.debug(f"✅ [FILE-REGISTRY] Directory ready: {FILE_REGISTRY_DIR}")
+            return True
+        except Exception as perm_err:
+            logger.error(f"❌ [FILE-REGISTRY] Directory not writable: {perm_err}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ [FILE-REGISTRY] Failed to ensure directory: {e}")
+        return False
+
+def _write_pid_file_atomic(pid: int, metadata: Dict[str, Any]) -> bool:
+    """
+    **Atomic PID File Write** (ghi file PID nguyên tử)
+    
+    Ghi PID information vào file với atomic operations để prevent race conditions.
+    
+    Args:
+        pid: Process ID
+        metadata: Metadata để save
+        
+    Returns:
+        bool: True nếu write thành công
+    """
+    try:
+        if not _ensure_file_registry_dir():
+            return False
+        
+        # **Create unique temporary filename** (tạo tên file tạm duy nhất)
+        temp_file = FILE_REGISTRY_DIR / f".tmp_{pid}_{uuid.uuid4().hex[:8]}"
+        final_file = FILE_REGISTRY_DIR / f"{REGISTRY_FILE_PREFIX}{pid}{REGISTRY_FILE_SUFFIX}"
+        
+        # **Prepare file data** (chuẩn bị dữ liệu file)
+        file_data = {
+            'pid': pid,
+            'timestamp': time.time(),
+            'metadata': metadata,
+            'registry_id': uuid.uuid4().hex,
+            'created_by': 'DirectPIDRegistry',
+            'version': '1.0'
+        }
+        
+        # **Atomic write operation** (thao tác ghi nguyên tử)
+        with open(temp_file, 'w') as f:
+            # **File locking để ensure atomicity** (khóa file để đảm bảo tính nguyên tử)
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            json.dump(file_data, f, indent=2)
+            f.flush()  # Force write to disk
+            os.fsync(f.fileno())  # Force OS buffer flush
+        
+        # **Atomic move to final location** (di chuyển nguyên tử đến vị trí cuối)
+        temp_file.rename(final_file)
+        
+        logger.info(f"✅ [FILE-REGISTRY] Atomic write successful: PID={pid}, File={final_file.name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [FILE-REGISTRY] Atomic write failed for PID {pid}: {e}")
+        # **Cleanup temp file if exists** (dọn dẹp file tạm nếu tồn tại)
+        try:
+            if 'temp_file' in locals() and temp_file.exists():
+                temp_file.unlink()
+        except Exception as cleanup_err:
+            logger.debug(f"Could not cleanup temp file: {cleanup_err}")
+        return False
+
+def _cleanup_old_pid_files() -> int:
+    """
+    **Cleanup Old PID Files** (dọn dẹp file PID cũ)
+    
+    Remove files older than REGISTRY_CLEANUP_AGE seconds.
+    
+    Returns:
+        int: Number of files cleaned up
+    """
+    try:
+        if not FILE_REGISTRY_DIR.exists():
+            return 0
+        
+        current_time = time.time()
+        cleanup_count = 0
+        
+        for file_path in FILE_REGISTRY_DIR.glob(f"{REGISTRY_FILE_PREFIX}*{REGISTRY_FILE_SUFFIX}"):
+            try:
+                file_age = current_time - file_path.stat().st_mtime
+                if file_age > REGISTRY_CLEANUP_AGE:
+                    file_path.unlink()
+                    cleanup_count += 1
+                    logger.debug(f"🧹 [FILE-CLEANUP] Removed old file: {file_path.name} (age: {file_age:.1f}s)")
+            except Exception as file_err:
+                logger.debug(f"⚠️ [FILE-CLEANUP] Could not process file {file_path.name}: {file_err}")
+        
+        if cleanup_count > 0:
+            logger.info(f"🧹 [FILE-CLEANUP] Cleaned up {cleanup_count} old PID files")
+        
+        return cleanup_count
+        
+    except Exception as e:
+        logger.error(f"❌ [FILE-CLEANUP] Cleanup failed: {e}")
+        return 0
 
 
 @dataclass
@@ -291,6 +422,46 @@ class DirectPIDRegistry:
         self._stats['notifications_sent'] += notification_count
         logger.info(f"📢 Sent {notification_count} direct notifications for PID {process_info.pid}")
     
+    def _get_retry_config(self) -> Dict[str, float]:
+        """
+        **Get Retry Configuration** (lấy cấu hình thử lại)
+        
+        Returns retry configuration for ResourceManager forwarding.
+        
+        Returns:
+            Dict containing retry parameters
+        """
+        return {
+            'max_retries': 3,
+            'initial_delay': 0.5,  # 500ms
+            'backoff_multiplier': 1.5
+        }
+    
+    def _import_resource_manager(self):
+        """
+        **Import ResourceManager** (nhập ResourceManager)
+        
+        Helper method to import ResourceManager class with proper path setup.
+        
+        Returns:
+            ResourceManager class or None if import fails
+        """
+        try:
+            import sys
+            from pathlib import Path
+            
+            # Add scripts module to path
+            scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
+            if str(scripts_path) not in sys.path:
+                sys.path.insert(0, str(scripts_path))
+            
+            from resource_manager import ResourceManager
+            return ResourceManager
+            
+        except ImportError as import_err:
+            logger.error(f"❌ [RM-IMPORT] Cannot import ResourceManager: {import_err}")
+            return None
+    
     def _forward_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
         """
         **Enhanced Forward to ResourceManager** (chuyển tiếp nâng cao đến ResourceManager)
@@ -306,28 +477,17 @@ class DirectPIDRegistry:
         Returns:
             bool: True nếu forwarding successful
         """
-        # **PHASE 1: Enhanced Retry Logic Configuration** (cấu hình logic thử lại nâng cao)
-        max_retries = 3
-        retry_delay = 0.5  # Initial delay 500ms
-        backoff_multiplier = 1.5  # Exponential backoff multiplier
+        # **Get retry configuration** (lấy cấu hình thử lại)
+        config = self._get_retry_config()
+        max_retries = config['max_retries']
+        retry_delay = config['initial_delay']
+        backoff_multiplier = config['backoff_multiplier']
         
         logger.info(f"🎯 [RM-FORWARD] Enhanced forwarding PID {pid} to ResourceManager (PHASE 1)")
         
         # **Import ResourceManager** (nhập ResourceManager)
-        import sys
-        import os
-        import time
-        from pathlib import Path
-        
-        # Add scripts module to path
-        scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
-        if str(scripts_path) not in sys.path:
-            sys.path.insert(0, str(scripts_path))
-        
-        try:
-            from resource_manager import ResourceManager
-        except ImportError as import_err:
-            logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager: {import_err}")
+        ResourceManager = self._import_resource_manager()
+        if not ResourceManager:
             return False
         
         # **Enhanced Retry Loop với Readiness Signaling Integration** (vòng lặp thử lại nâng cao với tích hợp tín hiệu sẵn sàng)
@@ -397,10 +557,13 @@ class DirectPIDRegistry:
                     attempt_duration = time.time() - attempt_start_time
                     logger.debug(f"📊 [RM-RETRY] Attempt {attempt + 1} duration: {attempt_duration:.3f}s")
                 else:
-                    # **Final Attempt Failed** (lần thử cuối cùng thất bại)
-                    logger.error(f"❌ [RM-FORWARD] ResourceManager unavailable after {max_retries} attempts với readiness signaling")
-                    logger.error(f"💀 [RM-FORWARD] Final state - Instance: {ResourceManager._instance is not None}, Ready: {ResourceManager.is_ready()}")
-                    return False
+                    # **Final Attempt Failed - Try File-Based Fallback** (lần thử cuối cùng thất bại - thử fallback dựa trên file)
+                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager unavailable after {max_retries} attempts với readiness signaling")
+                    logger.warning(f"💀 [RM-FORWARD] Final state - Instance: {ResourceManager._instance is not None}, Ready: {ResourceManager.is_ready()}")
+                    logger.info(f"🔄 [FILE-FALLBACK] Attempting file-based fallback for PID {pid}")
+                    
+                    # **FILE-BASED FALLBACK MECHANISM** (cơ chế fallback dựa trên file)
+                    return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
                         
             except Exception as attempt_err:
                 logger.error(f"❌ [RM-RETRY] Attempt {attempt + 1} exception: {attempt_err}")
@@ -411,11 +574,13 @@ class DirectPIDRegistry:
                     retry_delay *= backoff_multiplier
                 else:
                     logger.error(f"❌ [RM-FORWARD] All attempts failed with exceptions")
-                    return False
+                    logger.info(f"🔄 [FILE-FALLBACK] Attempting file-based fallback after exceptions for PID {pid}")
+                    return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
         
-        # **Should not reach here** (không nên đến đây)
+        # **Should not reach here - Final Fallback** (không nên đến đây - fallback cuối cùng)
         logger.error(f"❌ [RM-FORWARD] Unexpected end of retry loop for PID {pid}")
-        return False
+        logger.info(f"🔄 [FILE-FALLBACK] Final attempt file-based fallback for PID {pid}")
+        return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
     
     def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
                            process_info: ProcessInfo, attempt_number: int = 1) -> bool:
@@ -485,6 +650,111 @@ class DirectPIDRegistry:
             logger.error(f"❌ [RM-HANDOFF] Handoff execution failed for PID {pid}: {e}")
             return False
     
+    def _try_file_based_fallback(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
+        """
+        **File-Based Fallback Mechanism** (cơ chế fallback dựa trên file)
+        
+        Khi direct communication với ResourceManager fails, sử dụng shared file system
+        để communicate PID information. ResourceManager sẽ scan files và process chúng.
+        
+        Args:
+            pid: Process ID
+            coordinator_metadata: Metadata từ coordinator
+            process_info: ProcessInfo object
+            
+        Returns:
+            bool: True nếu file-based communication setup thành công
+        """
+        try:
+            logger.info(f"📁 [FILE-FALLBACK] Initiating file-based fallback for PID {pid}")
+            
+            # **Cleanup old files before writing new one** (dọn dẹp file cũ trước khi ghi file mới)
+            cleaned_count = _cleanup_old_pid_files()
+            if cleaned_count > 0:
+                logger.debug(f"🧹 [FILE-FALLBACK] Pre-cleanup: removed {cleaned_count} old files")
+            
+            # **Prepare comprehensive metadata for file** (chuẩn bị metadata toàn diện cho file)
+            fallback_metadata = {
+                **coordinator_metadata,  # Include all coordinator metadata
+                'fallback_timestamp': time.time(),
+                'fallback_reason': 'direct_communication_failed',
+                'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry_fallback'],
+                'registry_info': {
+                    'pid': pid,
+                    'process_type': process_info.process_type,
+                    'process_name': process_info.process_name,
+                    'registered_at': process_info.registered_at,
+                    'coordination_state': process_info.coordination_state
+                },
+                'priority': self._calculate_process_priority(process_info),
+                'retry_count': 0,  # For ResourceManager retry tracking
+                'max_retries': 3,
+                'discovery_hints': {
+                    'stealth_name': coordinator_metadata.get('stealth_name', process_info.process_name),
+                    'expected_gpu_usage': True,
+                    'cloaking_required': True
+                }
+            }
+            
+            # **Atomic file write** (ghi file nguyên tử)
+            write_success = _write_pid_file_atomic(pid, fallback_metadata)
+            
+            if write_success:
+                logger.info(f"✅ [FILE-FALLBACK] Successfully wrote fallback file for PID {pid}")
+                logger.info(f"📂 [FILE-FALLBACK] ResourceManager will discover and process PID {pid} via file scanner")
+                
+                # **Update process coordination state** (cập nhật trạng thái coordination của process)
+                process_info.coordination_state = "file_fallback"
+                process_info.metadata['fallback_used'] = True
+                process_info.metadata['fallback_timestamp'] = time.time()
+                
+                # **Notify observers về fallback success** (thông báo observers về thành công fallback)
+                self._notify_observers(process_info)
+                
+                return True
+            else:
+                logger.error(f"❌ [FILE-FALLBACK] Failed to write fallback file for PID {pid}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [FILE-FALLBACK] File-based fallback failed for PID {pid}: {e}")
+            return False
+    
+    def _calculate_process_priority(self, process_info: ProcessInfo) -> int:
+        """
+        **Calculate Process Priority** (tính toán độ ưu tiên process)
+        
+        Determine priority based on process characteristics for ResourceManager processing.
+        
+        Args:
+            process_info: ProcessInfo object
+            
+        Returns:
+            int: Priority level (1=highest, higher numbers=lower priority)
+        """
+        try:
+            # **Priority mapping** (ánh xạ độ ưu tiên)
+            HIGH_PRIORITY_KEYWORDS = {'inference', 'cuda', 'ml'}
+            base_priority = 2  # Default for GPU processes
+            
+            # **Check for high priority keywords** (kiểm tra từ khóa độ ưu tiên cao)
+            process_name = process_info.process_name.lower()
+            if any(keyword in process_name for keyword in HIGH_PRIORITY_KEYWORDS):
+                base_priority = 1
+            
+            # **Adjust for coordination state** (điều chỉnh cho trạng thái coordination)
+            state_adjustments = {
+                "error": 2,
+                "file_fallback": 1
+            }
+            base_priority += state_adjustments.get(process_info.coordination_state, 0)
+            
+            return max(1, min(base_priority, 10))  # Clamp between 1-10
+            
+        except Exception as e:
+            logger.debug(f"⚠️ [PRIORITY-CALC] Priority calculation failed for PID {process_info.pid}: {e}")
+            return 5  # Safe default priority
+    
     def _trigger_sequential_handoff(self, process_info: ProcessInfo) -> None:
         """
         **Sequential Handoff Trigger** (kích hoạt chuyển giao tuần tự)
@@ -500,7 +770,6 @@ class DirectPIDRegistry:
             
             # **Import Hook Coordinator dynamically** (nhập Hook Coordinator động)
             import sys
-            import os
             from pathlib import Path
             
             # Add coordination module to path

