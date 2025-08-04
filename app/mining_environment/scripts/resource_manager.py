@@ -273,23 +273,37 @@ class ResourceManager(IResourceManager):
     _initialization_lock = threading.RLock()  # Additional lock for initialization safety
 
     def __new__(cls, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
+        """
+        **Clean Object Creation** (tạo đối tượng sạch)
+        
+        CLEAN ARCHITECTURE: Chỉ handle object creation, KHÔNG initialize attributes.
+        All attribute initialization được thực hiện trong __init__ method.
+        """
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
-                # **Singleton created** (singleton đã tạo)
-                self._creation_time = time.time()
+                # ✅ CLEAN ARCHITECTURE: NO attribute initialization here
+                # All attributes will be initialized in __init__ method
+                module_logger.debug("ResourceManager singleton instance created (clean creation)")
         return cls._instance
 
     def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
+        """
+        **Clean Attribute Initialization** (khởi tạo thuộc tính sạch)
+        
+        CLEAN ARCHITECTURE: Handle ALL attribute initialization here.
+        Includes _creation_time và other instance attributes moved from __new__.
+        """
         if getattr(self, '_initialized', False):
             # **Singleton already initialized** (singleton đã khởi tạo)
             module_logger.debug(f"ResourceManager singleton accessed (already initialized)")
             return
 
         self._initialized = True
-        # **Initialization started** (bắt đầu khởi tạo)
+        # ✅ CLEAN ARCHITECTURE: ALL attribute initialization trong __init__
+        self._creation_time = time.time()  # Moved from __new__ method
         self._init_time = time.time()
-        module_logger.debug(f"ResourceManager initialization started")
+        module_logger.debug(f"ResourceManager initialization started với clean architecture")
         
         # ✅ UNIFIED: Use unified logger for consistent logging hierarchy
         self.logger = get_unified_logger('resource_manager')
