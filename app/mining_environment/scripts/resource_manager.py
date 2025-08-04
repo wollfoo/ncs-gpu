@@ -1108,12 +1108,15 @@ class ResourceManager(IResourceManager):
             try:
                 import psutil
                 process_obj = psutil.Process(pid)
-                mining_process = MiningProcess(
+                
+                # ✅ REFACTORED: Using factory method to prevent parameter mismatch
+                # Previous issue: used unsupported parameters 'process_type', 'start_time', 'process_obj'
+                # Solution: MiningProcess.from_process_info() validates parameters and handles GPU classification
+                mining_process = MiningProcess.from_process_info(
                     pid=pid,
                     name=stealth_name,
-                    process_type='GPU',
-                    start_time=registry_metadata.get('timestamp', time.time()),
-                    process_obj=process_obj
+                    is_gpu_process=True,  # Explicitly mark as GPU process (priority=2 auto-assigned)
+                    logger=self.logger      # Pass logger for consistent logging
                 )
                 
                 # **Add to tracking list** (thêm vào danh sách theo dõi)

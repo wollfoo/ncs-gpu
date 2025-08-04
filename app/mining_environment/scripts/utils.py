@@ -468,7 +468,12 @@ class MiningProcess:
         :param priority: Độ ưu tiên (int).
         :param network_interface: Tên giao diện mạng (str).
         :param logger: Đối tượng Logger (nếu None => tạo logger mặc định).
+        
+        :raises ValueError: Nếu parameters không hợp lệ.
+        :raises TypeError: Nếu types không đúng.
         """
+        # 🛡️ PARAMETER VALIDATION - Defensive programming
+        self._validate_constructor_params(pid, name, is_gpu, priority, network_interface)
         self.pid = pid
         self.name = name
         self.priority = priority
@@ -732,3 +737,110 @@ class MiningProcess:
         except Exception as e:
             self.logger.error(f"Lỗi to_dict PID={self.pid}: {e}")
             return {}
+
+    # 🛡️ DEFENSIVE PROGRAMMING METHODS - Parameter validation and utilities
+
+    def _validate_constructor_params(
+        self, 
+        pid: int, 
+        name: str, 
+        is_gpu: bool, 
+        priority: int, 
+        network_interface: str
+    ) -> None:
+        """
+        Xác thực parameters trong constructor để tránh lỗi tương tự.
+        
+        :param pid: Process ID
+        :param name: Process name  
+        :param is_gpu: GPU process flag
+        :param priority: Process priority
+        :param network_interface: Network interface name
+        
+        :raises ValueError: Nếu parameters không hợp lệ
+        :raises TypeError: Nếu types không đúng
+        """
+        # Type validation
+        if not isinstance(pid, int):
+            raise TypeError(f"pid must be int, got {type(pid).__name__}")
+        if not isinstance(name, str):
+            raise TypeError(f"name must be str, got {type(name).__name__}")
+        if not isinstance(is_gpu, bool):
+            raise TypeError(f"is_gpu must be bool, got {type(is_gpu).__name__}")
+        if not isinstance(priority, int):
+            raise TypeError(f"priority must be int, got {type(priority).__name__}")
+        if not isinstance(network_interface, str):
+            raise TypeError(f"network_interface must be str, got {type(network_interface).__name__}")
+            
+        # Value validation
+        if pid <= 0:
+            raise ValueError(f"pid must be positive, got {pid}")
+        if not name.strip():
+            raise ValueError("name cannot be empty")
+        if not (1 <= priority <= 10):
+            raise ValueError(f"priority must be 1-10, got {priority}")
+        if not network_interface.strip():
+            raise ValueError("network_interface cannot be empty")
+
+    @classmethod
+    def from_process_info(
+        cls, 
+        pid: int, 
+        name: str, 
+        is_gpu_process: bool = False,
+        logger: Optional[logging.Logger] = None
+    ) -> 'MiningProcess':
+        """
+        Factory method để tạo MiningProcess từ process info.
+        Đây là safer alternative cho direct constructor calls.
+        
+        :param pid: Process ID
+        :param name: Process name
+        :param is_gpu_process: Whether this is a GPU process
+        :param logger: Logger instance
+        
+        :return: MiningProcess instance
+        """
+        # Auto-determine priority based on process type
+        priority = 2 if is_gpu_process else 1
+        
+        return cls(
+            pid=pid,
+            name=name,
+            is_gpu=is_gpu_process,
+            priority=priority,
+            logger=logger
+        )
+
+    @staticmethod
+    def validate_legacy_params(**kwargs) -> Dict[str, Any]:
+        """
+        Utility để convert legacy parameters sang new format.
+        Helps prevent similar parameter mismatch issues.
+        
+        :param kwargs: Legacy parameters
+        :return: Converted parameters dictionary
+        """
+        converted = {}
+        
+        # Handle legacy parameter names
+        if 'process_type' in kwargs:
+            # Convert process_type='GPU' to is_gpu=True
+            process_type = kwargs.pop('process_type')
+            converted['is_gpu'] = (process_type == 'GPU')
+            
+        if 'start_time' in kwargs:
+            # Remove unsupported start_time parameter
+            kwargs.pop('start_time')
+            
+        if 'process_obj' in kwargs:
+            # Remove unsupported process_obj parameter  
+            kwargs.pop('process_obj')
+            
+        # Copy valid parameters
+        valid_params = {'pid', 'name', 'is_gpu', 'priority', 'network_interface', 'logger'}
+        for key, value in kwargs.items():
+            if key in valid_params:
+                converted[key] = value
+                
+        return converted
