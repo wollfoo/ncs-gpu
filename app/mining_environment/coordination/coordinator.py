@@ -81,6 +81,69 @@ class HookCoordinator:
                 self.logger.info(f"📝 [REGISTER] PID {pid} registered for hook coordination")
                 self.logger.info(f"🏥 [HEALTH] PID {pid} added to health monitoring (total: {len(self.active_processes)})")
     
+    def receive_from_stealth_wrapper(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive From Stealth Wrapper** (nhận từ stealth wrapper)
+        
+        NEW METHOD: Primary entry point cho linear flow từ stealth_inference_cuda.py.
+        Implements CORRECT flow: stealth → HookCoordinator → DirectPIDRegistry → ResourceManager
+        
+        Args:
+            pid: Process ID từ stealth wrapper
+            process_metadata: Metadata từ stealth wrapper
+            
+        Returns:
+            bool: True nếu handoff successful và ready for next step
+        """
+        try:
+            current_time = time.time()
+            
+            if self.logger:
+                self.logger.info(f"🚀 [STEALTH-RECEIVE] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)")
+                self.logger.debug(f"🔍 [STEALTH-RECEIVE] Process metadata: {process_metadata}")
+            
+            # **STEP 1: Register PID với HookCoordinator** (đăng ký PID với HookCoordinator)
+            with self.lock:
+                self.hooks_ready[pid] = False  # Initialize as not ready
+                self.active_processes.add(pid)
+                
+                # Initialize tracking data
+                if pid not in self.hook_status_history:
+                    self.hook_status_history[pid] = []
+                if pid not in self.recovery_attempts:
+                    self.recovery_attempts[pid] = 0
+                
+                # Record stealth handoff event
+                handoff_record = {
+                    'timestamp': current_time,
+                    'event_type': 'stealth_handoff_received',
+                    'success': True,
+                    'source': 'stealth_inference_cuda',
+                    'metadata': process_metadata,
+                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))
+                }
+                self.hook_status_history[pid].append(handoff_record)
+                
+                if self.logger:
+                    self.logger.info(f"✅ [STEALTH-RECEIVE] PID {pid} registered with HookCoordinator")
+            
+            # **STEP 2: Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
+            registry_success = self._forward_to_direct_registry(pid, process_metadata)
+            
+            if registry_success:
+                if self.logger:
+                    self.logger.info(f"✅ [STEALTH-RECEIVE] PID {pid} successfully forwarded to DirectPIDRegistry")
+                return True
+            else:
+                if self.logger:
+                    self.logger.warning(f"⚠️ [STEALTH-RECEIVE] DirectPIDRegistry forwarding failed for PID {pid}")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [STEALTH-RECEIVE] Failed to receive from stealth wrapper for PID {pid}: {e}")
+            return False
+    
     def receive_from_registry(self, pid: int, handoff_metadata: Dict[str, Any]) -> bool:
         """
         **Receive From Registry** (nhận từ registry)
@@ -499,6 +562,70 @@ class HookCoordinator:
         
         if self.logger:
             self.logger.info("🏥 [HEALTH] Health monitoring loop ended")
+    
+    def _forward_to_direct_registry(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
+        """
+        **Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
+        
+        Forward process từ HookCoordinator đến DirectPIDRegistry theo linear flow.
+        
+        Args:
+            pid: Process ID
+            process_metadata: Metadata từ stealth wrapper
+            
+        Returns:
+            bool: True nếu forwarding successful
+        """
+        try:
+            if self.logger:
+                self.logger.info(f"🔄 [REGISTRY-FORWARD] Forwarding PID {pid} to DirectPIDRegistry")
+            
+            # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
+            import sys
+            import os
+            from pathlib import Path
+            
+            # Add pid_logger module to path
+            pid_logger_path = Path(__file__).parent.parent.parent / "pid_logger"
+            if str(pid_logger_path) not in sys.path:
+                sys.path.insert(0, str(pid_logger_path))
+            
+            try:
+                from direct_registry import get_direct_registry
+                
+                # **Get DirectPIDRegistry singleton** (lấy singleton DirectPIDRegistry)
+                registry = get_direct_registry()
+                
+                # **Enhanced metadata for registry** (metadata nâng cao cho registry)
+                registry_metadata = {
+                    **process_metadata,  # Include original metadata
+                    'coordinator_timestamp': time.time(),
+                    'source_chain': ['stealth_inference_cuda', 'hook_coordinator'],
+                    'coordinator_handoff': True
+                }
+                
+                # **Call DirectPIDRegistry receive method** (gọi phương thức receive của DirectPIDRegistry)
+                # This implements the correct linear flow: HookCoordinator → DirectPIDRegistry
+                success = registry.receive_from_coordinator(pid, registry_metadata)
+                
+                if success:
+                    if self.logger:
+                        self.logger.info(f"✅ [REGISTRY-FORWARD] DirectPIDRegistry registration successful for PID {pid}")
+                    return True
+                else:
+                    if self.logger:
+                        self.logger.error(f"❌ [REGISTRY-FORWARD] DirectPIDRegistry registration failed for PID {pid}")
+                    return False
+                    
+            except ImportError as import_err:
+                if self.logger:
+                    self.logger.error(f"❌ [REGISTRY-FORWARD] Cannot import DirectPIDRegistry: {import_err}")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [REGISTRY-FORWARD] Failed to forward to DirectPIDRegistry for PID {pid}: {e}")
+            return False
     
     def _handoff_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
         """
