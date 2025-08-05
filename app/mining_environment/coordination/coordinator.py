@@ -29,6 +29,20 @@ class HookCoordinator:
     
     def __init__(self):
         self.lock = threading.Lock()
+        
+        # ✅ LOGGER INITIALIZATION: Initialize logger using unified_logging system
+        if LOGGING_AVAILABLE:
+            try:
+                self.logger = get_unified_logger('mining_environment.coordination.coordinator')
+            except Exception:
+                # Fallback to default logger if unified_logging fails
+                import logging
+                self.logger = logging.getLogger(__name__)
+        else:
+            # Fallback to default logger if unified_logging not available
+            import logging
+            self.logger = logging.getLogger(__name__)
+        
         self.hooks_ready: Dict[int, bool] = {}
         
         # ✅ IDEMPOTENCY PROTECTION: Handoff deduplication system

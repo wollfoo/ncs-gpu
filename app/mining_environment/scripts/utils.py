@@ -457,7 +457,8 @@ class MiningProcess:
         is_gpu: bool = False,
         priority: int = 1,
         network_interface: str = 'eth0',
-        logger: Optional[logging.Logger] = None
+        logger: Optional[logging.Logger] = None,
+        cmd: Optional[list] = None
     ):
         """
         ✅ ENHANCED: Khởi tạo MiningProcess với classification metadata.
@@ -468,6 +469,7 @@ class MiningProcess:
         :param priority: Độ ưu tiên (int).
         :param network_interface: Tên giao diện mạng (str).
         :param logger: Đối tượng Logger (nếu None => tạo logger mặc định).
+        :param cmd: Command line arguments của tiến trình (Optional[list]).
         
         :raises ValueError: Nếu parameters không hợp lệ.
         :raises TypeError: Nếu types không đúng.
@@ -488,6 +490,7 @@ class MiningProcess:
         self._prev_bytes_recv: Optional[int] = None
         self.is_cloaked = False
         self.logger = logger or logging.getLogger(__name__)
+        self.cmd = cmd or []
 
         # GPUManager (singleton)
         self.gpu_manager = GPUManager()

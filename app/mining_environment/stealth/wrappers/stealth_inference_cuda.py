@@ -263,8 +263,76 @@ def main():
                 threading.Thread(target=_enhanced_stealth_rename, daemon=True).start()
                 
                 # ====================================
-                # LINEAR FLOW: Simplified Hook Sequencing 
+                # LINEAR FLOW: Enhanced Readiness Check & Hook Sequencing 
                 # ====================================
+                
+                def _enhanced_readiness_check(process, timeout=30, subprocess_env=None):
+                    """
+                    **Enhanced Readiness Check** (kiểm tra sẵn sàng nâng cao) for subprocess DAG completion.
+                    
+                    Reused logic from HookCoordinator._enhanced_readiness_check() adapted for subprocess.
+                    
+                    Args:
+                        process: subprocess.Popen object
+                        timeout: timeout tối đa (giây)
+                        subprocess_env: subprocess environment dict for context-aware checking
+                    
+                    Returns:
+                        bool: True nếu DAG allocation complete, False nếu timeout hoặc process failed
+                    """
+                    start_time = time.time()
+                    consecutive_checks = 2
+                    MINIMUM_THRESHOLD = 0.6  # 60% score required to pass
+                    
+                    logger.info(f"🚀 [READINESS-START] Starting enhanced readiness check for PID {process.pid} with timeout={timeout}s")
+                    
+                    while time.time() - start_time < timeout:
+                        checks = {
+                            'process_alive': 1.0 if process.poll() is None else 0.0,  # Check if process is still running
+                            'env_config': 1.0 if subprocess_env and subprocess_env.get('KAWPOW_DAG_PROGRESSIVE') == '1' else 0.5,  # DAG config check
+                            'time_elapsed': min(1.0, (time.time() - start_time) / 10.0)  # Give time for DAG generation (10s scale)
+                        }
+                        
+                        # Calculate weighted score
+                        weights = {
+                            'process_alive': 0.6,    # 60% - Process must be alive (most critical)
+                            'env_config': 0.2,       # 20% - Environment configuration
+                            'time_elapsed': 0.2      # 20% - Allow time for DAG generation
+                        }
+                        
+                        weighted_score = sum(checks[check] * weights[check] for check in checks)
+                        passed_checks = sum(1 for score in checks.values() if score > 0.5)
+                        total_checks = len(checks)
+                        
+                        logger.info(f"📊 [READINESS-PROGRESS] Weighted score: {weighted_score:.3f} ({passed_checks}/{total_checks} checks > 0.5)")
+                        
+                        # Log chi tiết từng check
+                        for check_name, result in checks.items():
+                            status_icon = "✅" if result > 0.5 else "⚠️"
+                            status = "PASS" if result > 0.5 else "NEEDS ATTENTION"
+                            logger.info(f"   ├─ {check_name}: {status_icon} {status} (score: {result:.3f})")
+                        
+                        # Check if threshold met
+                        if weighted_score >= MINIMUM_THRESHOLD:
+                            # Quick stability check
+                            stability_count = 0
+                            for i in range(consecutive_checks):
+                                time.sleep(0.5)  # Brief stability check
+                                if process.poll() is not None:  # Process died
+                                    logger.warning(f"⚠️ [READINESS-STABILITY] Process {process.pid} died at verification {i+1}")
+                                    break
+                                stability_count += 1
+                            
+                            if stability_count == consecutive_checks:
+                                logger.info(f"✅ [READINESS-STABLE] Process {process.pid} verified stable (score: {weighted_score:.3f})")
+                                return True
+                        
+                        # Brief wait before next check
+                        time.sleep(1)
+                    
+                    # Timeout reached
+                    logger.warning(f"⏰ [READINESS-TIMEOUT] Enhanced readiness check timeout after {timeout}s (final score: {weighted_score:.3f})")
+                    return False
                 
                 def _simplified_hook_sequencing():
                     """
