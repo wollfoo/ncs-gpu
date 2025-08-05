@@ -413,65 +413,247 @@ class HookCoordinator:
     
     def _forward_to_direct_registry(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
         """
-        **Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
+        **🥈 SOLUTION 2: Enhanced Forward to DirectPIDRegistry** (chuyển tiếp nâng cao đến DirectPIDRegistry)
         
-        Forward process từ HookCoordinator đến DirectPIDRegistry theo linear flow.
+        Forward process từ HookCoordinator đến DirectPIDRegistry với enhanced reliability và acknowledgment system.
         
         Args:
             pid: Process ID
             process_metadata: Metadata từ stealth wrapper
             
         Returns:
-            bool: True nếu forwarding successful
+            bool: True nếu forwarding successful với acknowledgment
         """
         try:
             if self.logger:
-                self.logger.info(f"🔄 [LINEAR-FLOW] Forwarding PID {pid} to DirectPIDRegistry")
+                self.logger.info(f"🔄 [SOLUTION-2] Enhanced forwarding PID {pid} to DirectPIDRegistry")
             
-            # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
-            import sys
-            import os
-            from pathlib import Path
+            # **🥈 SOLUTION 2: Enhanced Retry Logic** (logic thử lại nâng cao)
+            max_retries = 3
+            retry_delay = 0.1  # 100ms
             
-            try:
-                from pid_logger.direct_registry import get_direct_registry
-                
-                # **Get DirectPIDRegistry singleton** (lấy singleton DirectPIDRegistry)
-                registry = get_direct_registry()
-                
-                # **Enhanced metadata for registry** (metadata nâng cao cho registry)
-                registry_metadata = {
-                    **process_metadata,  # Include original metadata
-                    'coordinator_timestamp': time.time(),
-                    'source_chain': ['stealth_inference_cuda', 'hook_coordinator'],
-                    'coordinator_handoff': True
-                }
-                
-                # **Call DirectPIDRegistry receive method** (gọi phương thức receive của DirectPIDRegistry)
-                # This implements the correct linear flow: HookCoordinator → DirectPIDRegistry
-                success = registry.receive_from_coordinator(pid, registry_metadata)
-                
-                if success:
+            for attempt in range(max_retries):
+                try:
                     if self.logger:
-                        self.logger.info(f"✅ [LINEAR-FLOW] DirectPIDRegistry registration successful for PID {pid}")
-                    return True
-                else:
+                        self.logger.debug(f"🔄 [HANDOFF-RETRY] PID {pid} attempt {attempt + 1}/{max_retries}")
+                    
+                    # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
+                    from pid_logger.direct_registry import get_direct_registry
+                    
+                    # **Get DirectPIDRegistry singleton** (lấy singleton DirectPIDRegistry)
+                    registry = get_direct_registry()
+                    
+                    # **🥈 SOLUTION 2: Enhanced Handoff Metadata** (metadata handoff nâng cao)
+                    handoff_timestamp = time.time()
+                    registry_metadata = {
+                        **process_metadata,  # Include original metadata
+                        'coordinator_timestamp': handoff_timestamp,
+                        'handoff_attempt': attempt + 1,
+                        'max_handoff_attempts': max_retries,
+                        'source_chain': ['stealth_inference_cuda', 'hook_coordinator'],
+                        'coordinator_handoff': True,
+                        'handoff_id': f"HC-{pid}-{int(handoff_timestamp * 1000)}",  # Unique handoff ID
+                        'acknowledgment_required': True,
+                        'bidirectional_communication': True
+                    }
+                    
+                    # **🥈 SOLUTION 2: Call with Acknowledgment** (gọi với acknowledgment)
+                    success = registry.receive_from_coordinator(pid, registry_metadata)
+                    
+                    if success:
+                        # **🥈 SOLUTION 2: Wait for Acknowledgment** (chờ acknowledgment)
+                        ack_success = self._wait_for_registry_acknowledgment(pid, handoff_timestamp, timeout=2.0)
+                        
+                        if ack_success:
+                            if self.logger:
+                                self.logger.info(f"✅ [SOLUTION-2] DirectPIDRegistry handoff successful với acknowledgment for PID {pid}")
+                            
+                            # **🥈 SOLUTION 2: Record Successful Handoff** (ghi lại handoff thành công)
+                            self._record_handoff_success(pid, handoff_timestamp, attempt + 1)
+                            return True
+                        else:
+                            if self.logger:
+                                self.logger.warning(f"⚠️ [SOLUTION-2] DirectPIDRegistry handoff without acknowledgment for PID {pid}, attempt {attempt + 1}")
+                            
+                            # If this is the last attempt, still consider it successful if registry accepted
+                            if attempt == max_retries - 1:
+                                if self.logger:
+                                    self.logger.info(f"✅ [SOLUTION-2] Final attempt success despite missing acknowledgment for PID {pid}")
+                                return True
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"⚠️ [SOLUTION-2] DirectPIDRegistry registration failed for PID {pid}, attempt {attempt + 1}")
+                    
+                    # **🥈 SOLUTION 2: Retry Delay** (độ trễ thử lại)
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        retry_delay *= 1.5  # Exponential backoff
+                        
+                except ImportError as import_err:
                     if self.logger:
-                        self.logger.error(f"❌ [LINEAR-FLOW] DirectPIDRegistry registration failed for PID {pid}")
+                        self.logger.error(f"❌ [SOLUTION-2] Cannot import DirectPIDRegistry: {import_err}")
+                        self.logger.error("💡 [FIX-HINT] Check if psutil dependency is installed: pip install psutil")
                     return False
                     
-            except ImportError as import_err:
-                if self.logger:
-                    self.logger.error(f"❌ [LINEAR-FLOW] Cannot import DirectPIDRegistry from pid_logger.direct_registry: {import_err}")
-                    self.logger.error("💡 [FIX-HINT] Check if psutil dependency is installed: pip install psutil")
-                    self.logger.error("💡 [FIX-HINT] Verify pid_logger module is in PYTHONPATH")
-                return False
+                except Exception as attempt_err:
+                    if self.logger:
+                        self.logger.error(f"❌ [SOLUTION-2] Handoff attempt {attempt + 1} failed for PID {pid}: {attempt_err}")
+                    
+                    if attempt == max_retries - 1:
+                        raise attempt_err
+                    
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5
+            
+            # **All attempts failed** (tất cả lần thử đều thất bại)
+            if self.logger:
+                self.logger.error(f"❌ [SOLUTION-2] All {max_retries} handoff attempts failed for PID {pid}")
+            return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [LINEAR-FLOW] Failed to forward to DirectPIDRegistry for PID {pid}: {e}")
+                self.logger.error(f"❌ [SOLUTION-2] Enhanced handoff failed for PID {pid}: {e}")
             return False
     
+    def _wait_for_registry_acknowledgment(self, pid: int, handoff_timestamp: float, timeout: float = 2.0) -> bool:
+        """
+        **🥈 SOLUTION 2: Wait for Registry Acknowledgment** (chờ acknowledgment từ registry)
+        
+        Wait for DirectPIDRegistry để acknowledge successful handoff.
+        
+        Args:
+            pid: Process ID
+            handoff_timestamp: Timestamp của handoff
+            timeout: Timeout in seconds
+            
+        Returns:
+            bool: True nếu acknowledgment received
+        """
+        try:
+            # **🥈 SOLUTION 2: Environment Variable-based Acknowledgment** (acknowledgment qua biến môi trường)
+            ack_env_var = f"REGISTRY_ACK_PID_{pid}"
+            start_time = time.time()
+            
+            if self.logger:
+                self.logger.debug(f"⏳ [ACK-WAIT] Waiting for DirectPIDRegistry acknowledgment for PID {pid}")
+            
+            while time.time() - start_time < timeout:
+                # **Check for acknowledgment signal** (kiểm tra tín hiệu acknowledgment)
+                ack_value = os.environ.get(ack_env_var)
+                
+                if ack_value:
+                    try:
+                        ack_timestamp = float(ack_value)
+                        
+                        # **Verify acknowledgment is for current handoff** (xác minh acknowledgment cho handoff hiện tại)
+                        if ack_timestamp >= handoff_timestamp - 1.0:  # Allow 1 second tolerance
+                            if self.logger:
+                                elapsed = time.time() - start_time
+                                self.logger.debug(f"✅ [ACK-WAIT] Registry acknowledgment received for PID {pid} after {elapsed*1000:.1f}ms")
+                            
+                            # **Clean up acknowledgment variable** (dọn dẹp biến acknowledgment)
+                            os.environ.pop(ack_env_var, None)
+                            return True
+                    except ValueError:
+                        # Invalid acknowledgment format, ignore and continue
+                        pass
+                
+                time.sleep(0.01)  # Check every 10ms
+            
+            # **Timeout reached** (đã timeout)
+            if self.logger:
+                self.logger.warning(f"⏰ [ACK-WAIT] Acknowledgment timeout for PID {pid} after {timeout}s")
+            
+            # **Clean up acknowledgment variable on timeout** (dọn dẹp biến acknowledgment khi timeout)
+            os.environ.pop(ack_env_var, None)
+            return False
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ACK-WAIT] Error waiting for acknowledgment for PID {pid}: {e}")
+            return False
+    
+    def _record_handoff_success(self, pid: int, handoff_timestamp: float, attempt_number: int) -> None:
+        """
+        **🥈 SOLUTION 2: Record Handoff Success** (ghi lại thành công handoff)
+        
+        Record successful handoff với acknowledgment system tracking.
+        """
+        try:
+            handoff_record = {
+                'timestamp': handoff_timestamp,
+                'event_type': 'coordinator_handoff_success',
+                'success': True,
+                'target': 'direct_pid_registry',
+                'attempt_number': attempt_number,
+                'acknowledgment_received': True,
+                'handoff_duration_ms': (time.time() - handoff_timestamp) * 1000,
+                'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(handoff_timestamp))
+            }
+            
+            with self.lock:
+                # **Update handoff tracking** (cập nhật theo dõi handoff)
+                self.handoff_timestamps[pid] = handoff_timestamp
+                
+                # **Record in history** (ghi vào lịch sử)
+                if pid in self.hook_status_history:
+                    self.hook_status_history[pid].append(handoff_record)
+                    
+                    # Keep history manageable
+                    if len(self.hook_status_history[pid]) > 25:
+                        self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
+            
+            if self.logger:
+                duration = handoff_record['handoff_duration_ms']
+                self.logger.info(f"📝 [HANDOFF-SUCCESS] Recorded successful handoff for PID {pid} "
+                               f"(attempt: {attempt_number}, duration: {duration:.1f}ms)")
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [HANDOFF-SUCCESS] Error recording handoff success for PID {pid}: {e}")
+    
+    def provide_acknowledgment_to_stealth(self, pid: int, success: bool, details: Dict[str, Any] = None) -> None:
+        """
+        **🥈 SOLUTION 2: Provide Acknowledgment to Stealth** (cung cấp acknowledgment cho stealth)
+        
+        Send acknowledgment back to stealth_inference_cuda về handoff status.
+        
+        Args:
+            pid: Process ID
+            success: Whether handoff was successful
+            details: Additional details about handoff result
+        """
+        try:
+            # **🥈 SOLUTION 2: Bidirectional Communication** (giao tiếp hai chiều)
+            ack_env_var = f"COORDINATOR_ACK_PID_{pid}"
+            ack_timestamp = time.time()
+            
+            ack_data = {
+                'success': success,
+                'timestamp': ack_timestamp,
+                'details': details or {},
+                'source': 'hook_coordinator'
+            }
+            
+            # **Set acknowledgment environment variable** (đặt biến môi trường acknowledgment)
+            os.environ[ack_env_var] = json.dumps(ack_data)
+            
+            if self.logger:
+                self.logger.debug(f"📤 [BIDIRECTIONAL] Sent acknowledgment to stealth for PID {pid}: {success}")
+            
+            # **Schedule cleanup** (lên lịch dọn dẹp)
+            # Clean up after 30 seconds to prevent environment variable buildup
+            def cleanup_ack():
+                time.sleep(30.0)
+                os.environ.pop(ack_env_var, None)
+            
+            cleanup_thread = threading.Thread(target=cleanup_ack, daemon=True)
+            cleanup_thread.start()
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [BIDIRECTIONAL] Error providing acknowledgment to stealth for PID {pid}: {e}")
+
     # REMOVED: _handoff_to_resource_manager method - obsolete with new linear flow
     
     # REMOVED: _defer_resource_manager_handoff method - obsolete with new linear flow

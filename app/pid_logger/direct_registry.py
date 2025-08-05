@@ -1168,7 +1168,94 @@ class DirectPIDRegistry:
             logger.error(f"❌ [ROLLBACK] Rollback execution failed for PID {pid}: {e}")
             return False
 
-# **Singleton pattern implementation** (triển khai mẫu singleton)
+# **🥈 SOLUTION 2: Acknowledgment Support Methods** (phương thức hỗ trợ acknowledgment)
+
+def _send_acknowledgment_to_coordinator(registry_self, pid: int, timestamp: float, success: bool, error: str = None) -> None:
+    """
+    **🥈 SOLUTION 2: Send Acknowledgment to Coordinator** (gửi acknowledgment cho coordinator)
+    
+    Send acknowledgment back to HookCoordinator về handoff status.
+    
+    Args:
+        registry_self: DirectPIDRegistry instance
+        pid: Process ID
+        timestamp: Timestamp của registry processing
+        success: Whether processing was successful
+        error: Error message if applicable
+    """
+    try:
+        # **🥈 SOLUTION 2: Environment Variable-based Acknowledgment** (acknowledgment qua biến môi trường)
+        ack_env_var = f"REGISTRY_ACK_PID_{pid}"
+        
+        if success:
+            # **Success acknowledgment** (acknowledgment thành công)
+            os.environ[ack_env_var] = str(timestamp)
+            logger.debug(f"📤 [REGISTRY-ACK] Success acknowledgment sent to coordinator for PID {pid}")
+        else:
+            # **Failure acknowledgment with error** (acknowledgment thất bại với lỗi)
+            import json
+            ack_data = {
+                'success': False,
+                'timestamp': timestamp,
+                'error': error or 'Unknown error',
+                'source': 'direct_pid_registry'
+            }
+            os.environ[ack_env_var] = json.dumps(ack_data)
+            logger.debug(f"📤 [REGISTRY-ACK] Failure acknowledgment sent to coordinator for PID {pid}: {error}")
+        
+        # **Schedule cleanup** (lên lịch dọn dẹp)
+        # Clean up after 10 seconds to prevent environment variable buildup
+        def cleanup_ack():
+            time.sleep(10.0)
+            os.environ.pop(ack_env_var, None)
+        
+        cleanup_thread = threading.Thread(target=cleanup_ack, daemon=True)
+        cleanup_thread.start()
+        
+    except Exception as e:
+        logger.error(f"❌ [REGISTRY-ACK] Error sending acknowledgment for PID {pid}: {e}")
+
+def _send_chain_completion_acknowledgment(registry_self, pid: int, handoff_id: str) -> None:
+    """
+    **🥈 SOLUTION 2: Send Chain Completion Acknowledgment** (gửi acknowledgment hoàn thành chuỗi)
+    
+    Send acknowledgment về complete handoff chain success.
+    
+    Args:
+        registry_self: DirectPIDRegistry instance
+        pid: Process ID
+        handoff_id: Unique handoff identifier
+    """
+    try:
+        # **🥈 SOLUTION 2: Chain Completion Signal** (tín hiệu hoàn thành chuỗi)
+        chain_ack_env_var = f"CHAIN_COMPLETE_PID_{pid}"
+        import json
+        completion_data = {
+            'handoff_id': handoff_id,
+            'timestamp': time.time(),
+            'complete_chain': ['stealth_inference_cuda', 'hook_coordinator', 'direct_pid_registry', 'resource_manager'],
+            'source': 'direct_pid_registry'
+        }
+        
+        os.environ[chain_ack_env_var] = json.dumps(completion_data)
+        logger.debug(f"📤 [CHAIN-ACK] Complete chain acknowledgment sent for PID {pid} (handoff_id: {handoff_id})")
+        
+        # **Schedule cleanup** (lên lịch dọn dẹp)
+        # Clean up after 60 seconds to allow monitoring systems to read
+        def cleanup_chain_ack():
+            time.sleep(60.0)
+            os.environ.pop(chain_ack_env_var, None)
+        
+        cleanup_thread = threading.Thread(target=cleanup_chain_ack, daemon=True)
+        cleanup_thread.start()
+        
+    except Exception as e:
+        logger.error(f"❌ [CHAIN-ACK] Error sending chain completion acknowledgment for PID {pid}: {e}")
+
+# **Bind acknowledgment methods to DirectPIDRegistry class** (liên kết phương thức acknowledgment với lớp DirectPIDRegistry)
+DirectPIDRegistry._send_acknowledgment_to_coordinator = lambda self, pid, timestamp, success, error=None: _send_acknowledgment_to_coordinator(self, pid, timestamp, success, error)
+DirectPIDRegistry._send_chain_completion_acknowledgment = lambda self, pid, handoff_id: _send_chain_completion_acknowledgment(self, pid, handoff_id)
+
 _registry_instance: Optional[DirectPIDRegistry] = None
 _registry_lock = threading.Lock()
 

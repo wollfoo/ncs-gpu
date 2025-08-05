@@ -968,7 +968,10 @@ def main():
     # ------------------------------------------------------------------
     logger.info("🔧 [PHASE 3] Starting Enhanced Resource Manager với readiness validation...")
     
-    # **PHASE 3: Start ResourceManager in background thread** (khởi động ResourceManager trong background thread)
+    # **🥉 SOLUTION 3: Enhanced ResourceManager with Health Monitoring** (ResourceManager nâng cao với giám sát sức khỏe)
+    logger.info("🏥 [SOLUTION-3] Starting ResourceManager with health monitoring system...")
+    
+    # **Start ResourceManager in background thread** (khởi động ResourceManager trong background thread)
     resource_manager_thread_obj = threading.Thread(
         target=lambda: start_resource_manager_thread(),
         daemon=True,
@@ -976,15 +979,24 @@ def main():
     )
     resource_manager_thread_obj.start()
     
-    # **PHASE 3: Wait for ResourceManager thread to complete initialization** (chờ ResourceManager thread hoàn thành khởi tạo)
-    logger.info("⏳ [PHASE 3] Waiting for ResourceManager thread completion...")
+    # **🥉 SOLUTION 3: Start Health Monitoring Thread** (khởi động thread giám sát sức khỏe)
+    health_monitor_thread_obj = threading.Thread(
+        target=lambda: start_resource_manager_health_monitor(resource_manager_thread_obj),
+        daemon=True,
+        name="ResourceManagerHealthMonitor"
+    )
+    health_monitor_thread_obj.start()
+    
+    # **Wait for ResourceManager thread to complete initialization** (chờ ResourceManager thread hoàn thành khởi tạo)
+    logger.info("⏳ [SOLUTION-3] Waiting for ResourceManager thread completion...")
     resource_manager_thread_obj.join(timeout=20.0)  # Give 20 seconds for complete startup
     
     if resource_manager_thread_obj.is_alive():
-        logger.warning("⚠️ [PHASE 3] ResourceManager thread still running after 20s timeout")
-        logger.warning("🔄 [PHASE 3] Continuing with GPU process startup - ResourceManager may not be fully ready")
+        logger.info("✅ [SOLUTION-3] ResourceManager thread is running persistently (EXPECTED for Solution 1)")
+        logger.info("🔄 [SOLUTION-3] Health monitor will track ResourceManager thread status")
     else:
-        logger.info("✅ [PHASE 3] ResourceManager thread completed initialization")
+        logger.warning("⚠️ [SOLUTION-3] ResourceManager thread completed unexpectedly - health monitor active")
+        logger.warning("🚨 [SOLUTION-3] May indicate initialization failure - check logs")
     
     # **PHASE 3: Final readiness check before GPU process start** (kiểm tra sẵn sàng cuối cùng trước khi start GPU process)
     logger.info("🔍 [PHASE 3] Final ResourceManager readiness verification...")
@@ -1160,6 +1172,167 @@ def main():
             gpu_process = None
     
     logger.info("===== HỆ THỐNG ĐÃ DỪNG (SIMPLIFIED ARCHITECTURE) =====")
+
+def start_resource_manager_health_monitor(resource_manager_thread):
+    """
+    **🥉 SOLUTION 3: ResourceManager Health Monitor** (giám sát sức khỏe ResourceManager)
+    
+    Watchdog system cho ResourceManager thread với automatic restart capability.
+    
+    Args:
+        resource_manager_thread: Threading.Thread object của ResourceManager
+    """
+    monitor_logger = logging.getLogger('start_mining.health_monitor')
+    monitor_logger.info("🏥 [HEALTH-MONITOR] ResourceManager health monitoring started")
+    
+    # **🥉 SOLUTION 3: Health Check Configuration** (cấu hình kiểm tra sức khỏe)
+    check_interval = 30.0  # Check every 30 seconds
+    restart_cooldown = 60.0  # Wait 60 seconds between restart attempts  
+    max_restart_attempts = 3  # Maximum restart attempts per session
+    restart_attempts = 0
+    last_restart_time = 0.0
+    
+    # **🥉 SOLUTION 3: Health Statistics** (thống kê sức khỏe)
+    health_stats = {
+        'monitor_start_time': time.time(),
+        'total_checks': 0,
+        'healthy_checks': 0,
+        'unhealthy_checks': 0,
+        'restart_attempts': 0,
+        'successful_restarts': 0,
+        'failed_restarts': 0
+    }
+    
+    while not stop_event.is_set():
+        try:
+            current_time = time.time()
+            health_stats['total_checks'] += 1
+            
+            # **🥉 SOLUTION 3: Thread Health Check** (kiểm tra sức khỏe thread)
+            thread_alive = resource_manager_thread.is_alive() if resource_manager_thread else False
+            
+            # **🥉 SOLUTION 3: ResourceManager Instance Health Check** (kiểm tra sức khỏe instance ResourceManager)
+            rm_instance_healthy = False
+            rm_ready = False
+            
+            try:
+                from mining_environment.scripts.resource_manager import ResourceManager
+                rm_instance = ResourceManager._instance
+                rm_instance_healthy = rm_instance is not None
+                rm_ready = ResourceManager.is_ready() if rm_instance_healthy else False
+            except Exception as rm_check_error:
+                monitor_logger.debug(f"🔍 [HEALTH-MONITOR] ResourceManager instance check error: {rm_check_error}")
+            
+            # **🥉 SOLUTION 3: Overall Health Assessment** (đánh giá sức khỏe tổng thể)
+            overall_healthy = thread_alive and rm_instance_healthy and rm_ready
+            
+            if overall_healthy:
+                health_stats['healthy_checks'] += 1
+                monitor_logger.debug(f"✅ [HEALTH-MONITOR] ResourceManager healthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}")
+            else:
+                health_stats['unhealthy_checks'] += 1
+                monitor_logger.warning(f"⚠️ [HEALTH-MONITOR] ResourceManager unhealthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}")
+                
+                # **🥉 SOLUTION 3: Automatic Restart Logic** (logic khởi động lại tự động)
+                if (restart_attempts < max_restart_attempts and 
+                    current_time - last_restart_time > restart_cooldown):
+                    
+                    monitor_logger.warning(f"🔄 [HEALTH-MONITOR] Attempting ResourceManager restart (attempt {restart_attempts + 1}/{max_restart_attempts})")
+                    
+                    restart_success = attempt_resource_manager_restart()
+                    restart_attempts += 1
+                    last_restart_time = current_time
+                    health_stats['restart_attempts'] += 1
+                    
+                    if restart_success:
+                        health_stats['successful_restarts'] += 1
+                        monitor_logger.info(f"✅ [HEALTH-MONITOR] ResourceManager restart successful")
+                        # Reset restart attempts on successful restart
+                        restart_attempts = 0
+                    else:
+                        health_stats['failed_restarts'] += 1
+                        monitor_logger.error(f"❌ [HEALTH-MONITOR] ResourceManager restart failed")
+                else:
+                    if restart_attempts >= max_restart_attempts:
+                        monitor_logger.error(f"🚨 [HEALTH-MONITOR] Maximum restart attempts ({max_restart_attempts}) exceeded")
+                    elif current_time - last_restart_time <= restart_cooldown:
+                        remaining_cooldown = restart_cooldown - (current_time - last_restart_time)
+                        monitor_logger.debug(f"⏳ [HEALTH-MONITOR] Restart cooldown active - {remaining_cooldown:.1f}s remaining")
+            
+            # **🥉 SOLUTION 3: Periodic Health Report** (báo cáo sức khỏe định kỳ)
+            if health_stats['total_checks'] % 10 == 0:  # Every 10 checks (5 minutes)
+                monitor_uptime = current_time - health_stats['monitor_start_time']
+                healthy_percentage = (health_stats['healthy_checks'] / health_stats['total_checks']) * 100
+                
+                monitor_logger.info(f"📊 [HEALTH-REPORT] Uptime: {monitor_uptime/3600:.1f}h, "
+                                  f"Health: {healthy_percentage:.1f}%, "
+                                  f"Checks: {health_stats['total_checks']}, "
+                                  f"Restarts: {health_stats['successful_restarts']}/{health_stats['restart_attempts']}")
+            
+            # **Wait for next check** (chờ kiểm tra tiếp theo)
+            time.sleep(check_interval)
+            
+        except Exception as e:
+            monitor_logger.error(f"❌ [HEALTH-MONITOR] Health monitoring error: {e}")
+            time.sleep(check_interval)  # Continue monitoring despite errors
+    
+    monitor_logger.info("🔚 [HEALTH-MONITOR] ResourceManager health monitoring stopped")
+
+def attempt_resource_manager_restart():
+    """
+    **🥉 SOLUTION 3: Attempt ResourceManager Restart** (thử khởi động lại ResourceManager)
+    
+    Attempts to restart ResourceManager instance.
+    
+    Returns:
+        bool: True if restart successful
+    """
+    restart_logger = logging.getLogger('start_mining.restart')
+    
+    try:
+        restart_logger.info("🔄 [RESTART] Attempting ResourceManager restart...")
+        
+        # **Step 1: Cleanup existing instance** (dọn dẹp instance hiện tại)
+        try:
+            from mining_environment.scripts.resource_manager import ResourceManager
+            if ResourceManager._instance:
+                restart_logger.info("🧹 [RESTART] Cleaning up existing ResourceManager instance...")
+                ResourceManager._instance.shutdown()
+                ResourceManager._instance = None
+                time.sleep(2.0)  # Allow cleanup to complete
+        except Exception as cleanup_error:
+            restart_logger.warning(f"⚠️ [RESTART] Cleanup error (continuing): {cleanup_error}")
+        
+        # **Step 2: Create new instance** (tạo instance mới)
+        restart_logger.info("🚀 [RESTART] Creating new ResourceManager instance...")
+        
+        # Start new ResourceManager thread
+        new_rm_thread = threading.Thread(
+            target=lambda: start_resource_manager_thread(),
+            daemon=True,
+            name="RestartedResourceManagerThread"
+        )
+        new_rm_thread.start()
+        
+        # **Step 3: Wait for initialization** (chờ khởi tạo)
+        new_rm_thread.join(timeout=10.0)  # 10 second timeout for restart
+        
+        # **Step 4: Verify restart success** (xác minh khởi động lại thành công)
+        try:
+            from mining_environment.scripts.resource_manager import ResourceManager
+            if ResourceManager._instance and ResourceManager.is_ready():
+                restart_logger.info("✅ [RESTART] ResourceManager restart successful and ready")
+                return True
+            else:
+                restart_logger.error("❌ [RESTART] ResourceManager restart failed - instance not ready")
+                return False
+        except Exception as verify_error:
+            restart_logger.error(f"❌ [RESTART] Verification failed: {verify_error}")
+            return False
+        
+    except Exception as e:
+        restart_logger.error(f"❌ [RESTART] ResourceManager restart failed: {e}")
+        return False
 
 if __name__ == "__main__":
     main()

