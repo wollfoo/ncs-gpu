@@ -58,13 +58,18 @@ class SharedResourceManager:
         security_context = self.privileged_manager.validate_security_context()
         self.logger.info(f"Security context: User={security_context['user']}, Root={security_context['is_root']}")
 
+        # **NVML DECOUPLING: Không block nếu NVML fail** (tách rời NVML)
         self._nvml_init = False
+        self._nvml_available = False  # Flag cho biết NVML có khả dụng không
+        
+        # Thử khởi tạo NVML nhưng không throw exception nếu fail
         try:
             self.initialize_nvml()
-            self.logger.info("SharedResourceManager khởi tạo thành công")
+            self.logger.info("✅ SharedResourceManager khởi tạo với NVML")
         except Exception as e:
-            self.logger.error(f"SharedResourceManager khởi tạo thất bại: {e}")
-            raise
+            self.logger.warning(f"⚠️ NVML không khả dụng: {e}")
+            self.logger.info("🔄 SharedResourceManager hoạt động ở chế độ fallback (không có NVML)")
+            # Không raise exception - hệ thống vẫn tiếp tục với limited functionality
 
     def is_nvml_initialized(self) -> bool:
         return self._nvml_init
@@ -82,11 +87,13 @@ class SharedResourceManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(nvml_init_worker)
                 try:
-                    timeout = getattr(self.config, 'nvml_init_timeout', 3.0)
+                    # Giảm timeout để không block lâu
+                    timeout = getattr(self.config, 'nvml_init_timeout', 2.0) 
                     result = future.result(timeout=timeout)
                     if result:
                         self._nvml_init = True
-                        self.logger.info("NVML khởi tạo thành công")
+                        self._nvml_available = True
+                        self.logger.info("✅ NVML khởi tạo thành công")
                 except concurrent.futures.TimeoutError:
                     self.logger.warning("NVML khởi tạo timeout")
                     raise
@@ -204,18 +211,12 @@ class ResourceManager(IResourceManager):
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
             
-            # **🥇 CRITICAL FIX: Initialize SharedResourceManager in __init__** (khởi tạo SharedResourceManager trong __init__)
-            self.logger.info("🔧 [CRITICAL] Initializing SharedResourceManager trong __init__ để tránh race condition...")
-            try:
-                resource_managers = {'main': self}
-                self.shared_resource_manager = SharedResourceManager(
-                    self.config, self.logger, resource_managers
-                )
-                self.logger.info("✅ [CRITICAL] SharedResourceManager khởi tạo thành công trong __init__")
-            except Exception as init_error:
-                self.logger.error(f"❌ [CRITICAL] SharedResourceManager initialization failed trong __init__: {init_error}")
-                # Set to None nhưng vẫn cho phép start() method retry
-                self.shared_resource_manager = None
+            # **🥇 LAZY INITIALIZATION FIX: Defer SharedResourceManager initialization** (hoãn khởi tạo SharedResourceManager)
+            # Không khởi tạo SharedResourceManager ngay lập tức để tránh blocking
+            self.shared_resource_manager = None
+            self._shared_resource_manager_lock = threading.Lock()
+            self._shared_resource_manager_init_attempted = False
+            self.logger.info("🔄 [LAZY-INIT] SharedResourceManager sẽ được khởi tạo lazy khi cần thiết")
             
             # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục)
             self._pid_queue = queue.Queue()  # Queue for incoming PIDs from registry
@@ -283,6 +284,47 @@ class ResourceManager(IResourceManager):
         except queue.Full:
             self.logger.warning("Resource adjustment queue đầy")
 
+    def _ensure_shared_resource_manager(self) -> bool:
+        """**Lazy Initialize SharedResourceManager** (khởi tạo lười SharedResourceManager)
+        
+        Chỉ khởi tạo SharedResourceManager khi thực sự cần dùng.
+        Sử dụng lock để tránh race condition khi nhiều thread gọi cùng lúc.
+        
+        Returns:
+            bool: True nếu SharedResourceManager sẵn sàng, False nếu không
+        """
+        # Fast path: đã khởi tạo rồi
+        if self.shared_resource_manager is not None:
+            return True
+            
+        # Slow path: cần khởi tạo
+        with self._shared_resource_manager_lock:
+            # Double-check pattern
+            if self.shared_resource_manager is not None:
+                return True
+                
+            # Chỉ thử một lần để tránh block lâu
+            if self._shared_resource_manager_init_attempted:
+                return False
+                
+            self._shared_resource_manager_init_attempted = True
+            self.logger.info("🔧 [LAZY-INIT] Bắt đầu khởi tạo SharedResourceManager...")
+            
+            try:
+                # Thử khởi tạo với timeout ngắn
+                resource_managers = {'main': self}
+                self.shared_resource_manager = SharedResourceManager(
+                    self.config, self.logger, resource_managers
+                )
+                self.logger.info("✅ [LAZY-INIT] SharedResourceManager khởi tạo thành công")
+                return True
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ [LAZY-INIT] SharedResourceManager khởi tạo thất bại: {e}")
+                self.logger.info("🔄 [LAZY-INIT] Hệ thống sẽ hoạt động ở chế độ giới hạn")
+                self.shared_resource_manager = None
+                return False
+    
     def _setup_direct_registry_observer(self):
         """**Setup DirectPIDRegistry Observer** (thiết lập observer DirectPIDRegistry)"""
         try:
@@ -319,10 +361,9 @@ class ResourceManager(IResourceManager):
         try:
             self.logger.info(f"🎯 [TIER-1] trigger_cloaking called for PID {process.pid} from source: {source}")
             
-            # **🥇 CRITICAL FIX: SharedResourceManager should be available từ __init__** (SharedResourceManager nên có sẵn từ __init__)
-            if not self.shared_resource_manager:
-                self.logger.error(f"❌ [CRITICAL] SharedResourceManager is None for PID {process.pid} - this should not happen with __init__ initialization!")
-                self.logger.error(f"🔍 [CRITICAL] ResourceManager state: started={getattr(self, '_started', False)}")
+            # **Lazy initialization: thử khởi tạo SharedResourceManager nếu chưa có**
+            if not self._ensure_shared_resource_manager():
+                self.logger.warning("SharedResourceManager không khả dụng, bỏ qua cloaking")
                 return
 
             # **TIER 1 FIX: Enhanced Determine Strategies** (xác định chiến lược nâng cao)

