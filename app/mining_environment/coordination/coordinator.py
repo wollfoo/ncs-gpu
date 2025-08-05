@@ -201,29 +201,50 @@ class HookCoordinator:
             if self.logger:
                 env_type = "subprocess" if subprocess_env is not None else "parent"
                 self.logger.info(f"🔍 [ENV-CHECK] Checking {env_type} environment with {len(target_env)} variables")
-                # **DEBUG: Log environment variable values**
+                # **TIER 7.2 FIX: Enhanced DEBUG logging with subprocess environment validation**
                 key_vars = ['KAWPOW_DAG_PROGRESSIVE', 'CUDA_LAUNCH_BLOCKING', 'CUDA_CACHE_DISABLE']
+                self.logger.debug(f"🔍 [ENV-CHECK-DEBUG] Environment variable dump:")
                 for var in key_vars:
                     value = target_env.get(var, 'NOT_SET')
-                    self.logger.info(f"🔍 [ENV-CHECK] {var} = {value}")
+                    self.logger.debug(f"🔍 [ENV-CHECK-DEBUG] {var} = {value}")
+                    # **TIER 7.2 FIX: Also log at INFO level for critical variables**
+                    if var == 'KAWPOW_DAG_PROGRESSIVE':
+                        self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE = {value} (from {env_type} environment)")
             
             # **TIER 1 FIX: Flexible Environment Detection with Auto-Fallback**
             score = 0.0
             max_score = 3.0
             
-            # **TIER 7 FIX: Check KAWPOW_DAG_PROGRESSIVE in target environment**
-            progressive = target_env.get('KAWPOW_DAG_PROGRESSIVE', '0') == '1'
+            # **TIER 7.2 FIX: Enhanced KAWPOW_DAG_PROGRESSIVE check with robust validation**
+            progressive_value = target_env.get('KAWPOW_DAG_PROGRESSIVE', '0')
+            progressive = progressive_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check: {progressive}")
+                self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check: value='{progressive_value}', result={progressive}")
+            
+            # **TIER 7.2 FIX: Force-set if not detected correctly**
             if not progressive:
-                # **TIER 1 FIX: Auto-set KAWPOW_DAG_PROGRESSIVE if missing**
+                if self.logger:
+                    self.logger.warning(f"⚠️ [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE not properly set (found: '{progressive_value}')")
+                # **TIER 7.2 FIX: Auto-set KAWPOW_DAG_PROGRESSIVE if missing/incorrect**
                 if subprocess_env is not None:
                     subprocess_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in subprocess_env")
                 else:
                     os.environ['KAWPOW_DAG_PROGRESSIVE'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in os.environ")
                 progressive = True
+                # **TIER 7.2 FIX: Verify the fix worked**
+                if subprocess_env is not None:
+                    fixed_value = subprocess_env.get('KAWPOW_DAG_PROGRESSIVE', '0')
+                else:
+                    fixed_value = os.environ.get('KAWPOW_DAG_PROGRESSIVE', '0')
                 if self.logger:
-                    self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 (was missing)")
+                    self.logger.info(f"✅ [ENV-CHECK] Verification after fix: KAWPOW_DAG_PROGRESSIVE='{fixed_value}'")
+            else:
+                if self.logger:
+                    self.logger.info(f"✅ [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE correctly set: '{progressive_value}'")
             score += 1.0
             
             # **TIER 7 FIX: Check KAWPOW_DAG_MEMORY_LIMIT in target environment (optional)**
@@ -231,41 +252,64 @@ class HookCoordinator:
             if memory_limit:
                 score += 0.5  # Bonus point for having memory limit
             
-            # **TIER 7 FIX: Check CUDA_LAUNCH_BLOCKING in target environment**
-            cuda_blocking = target_env.get('CUDA_LAUNCH_BLOCKING', '0') == '1'
+            # **TIER 7.2 FIX: Enhanced CUDA_LAUNCH_BLOCKING check with robust validation**
+            cuda_blocking_value = target_env.get('CUDA_LAUNCH_BLOCKING', '0')
+            cuda_blocking = cuda_blocking_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] CUDA_LAUNCH_BLOCKING check: {cuda_blocking}")
+                self.logger.info(f"🔍 [ENV-CHECK] CUDA_LAUNCH_BLOCKING check: value='{cuda_blocking_value}', result={cuda_blocking}")
             if not cuda_blocking:
-                # **TIER 1 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing**
+                if self.logger:
+                    self.logger.warning(f"⚠️ [ENV-CHECK] CUDA_LAUNCH_BLOCKING not properly set (found: '{cuda_blocking_value}')")
+                # **TIER 7.2 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing/incorrect**
                 if subprocess_env is not None:
                     subprocess_env['CUDA_LAUNCH_BLOCKING'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in subprocess_env")
                 else:
                     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in os.environ")
                 cuda_blocking = True
                 if self.logger:
-                    self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 (was missing)")
+                    self.logger.info("✅ [ENV-CHECK] CUDA_LAUNCH_BLOCKING auto-fix applied")
+            else:
+                if self.logger:
+                    self.logger.info(f"✅ [ENV-CHECK] CUDA_LAUNCH_BLOCKING correctly set: '{cuda_blocking_value}'")
             score += 1.0
             
-            # **TIER 7 FIX: Check CUDA_CACHE_DISABLE in target environment**
-            cuda_cache_disable = target_env.get('CUDA_CACHE_DISABLE', '0') == '1'
+            # **TIER 7.2 FIX: Enhanced CUDA_CACHE_DISABLE check with robust validation**
+            cuda_cache_disable_value = target_env.get('CUDA_CACHE_DISABLE', '0')
+            cuda_cache_disable = cuda_cache_disable_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] CUDA_CACHE_DISABLE check: {cuda_cache_disable}")
+                self.logger.info(f"🔍 [ENV-CHECK] CUDA_CACHE_DISABLE check: value='{cuda_cache_disable_value}', result={cuda_cache_disable}")
             if not cuda_cache_disable:
-                # **TIER 1 FIX: Auto-set CUDA_CACHE_DISABLE if missing**
+                if self.logger:
+                    self.logger.warning(f"⚠️ [ENV-CHECK] CUDA_CACHE_DISABLE not properly set (found: '{cuda_cache_disable_value}')")
+                # **TIER 7.2 FIX: Auto-set CUDA_CACHE_DISABLE if missing/incorrect**
                 if subprocess_env is not None:
                     subprocess_env['CUDA_CACHE_DISABLE'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in subprocess_env")
                 else:
                     os.environ['CUDA_CACHE_DISABLE'] = '1'
+                    if self.logger:
+                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in os.environ")
                 cuda_cache_disable = True
                 if self.logger:
-                    self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 (was missing)")
+                    self.logger.info("✅ [ENV-CHECK] CUDA_CACHE_DISABLE auto-fix applied")
+            else:
+                if self.logger:
+                    self.logger.info(f"✅ [ENV-CHECK] CUDA_CACHE_DISABLE correctly set: '{cuda_cache_disable_value}'")
             score += 1.0
             
             # Calculate final percentage
             final_score = min(score / max_score, 1.0)
             
             if self.logger:
+                # **TIER 7.2 FIX: Enhanced final scoring with detailed breakdown**
                 self.logger.info(f"📊 [ENV-CHECK] Raw score: {score}/{max_score} = {final_score:.3f}")
+                self.logger.info(f"📊 [ENV-CHECK] Final results: progressive={progressive}, cuda_blocking={cuda_blocking}, cache_disable={cuda_cache_disable}")
+                
                 if final_score >= 0.8:
                     self.logger.info(f"✅ [ENV-CHECK] Good environment configuration score: {final_score:.2f}")
                 elif final_score >= 0.6:
