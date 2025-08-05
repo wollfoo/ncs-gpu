@@ -766,26 +766,50 @@ class DirectPIDRegistry:
             # **Use common helper for metadata building** (sử dụng helper chung cho xây dựng metadata)
             rm_metadata = _build_enhanced_metadata(coordinator_metadata, additional_metadata)
             
-            # **Call ResourceManager receive method** (gọi phương thức receive của ResourceManager)
+            # **TIER 2 FIX: Enhanced ResourceManager receive method call** (gọi phương thức receive của ResourceManager nâng cao)
             if hasattr(rm_instance, 'receive_from_registry'):
-                logger.debug(f"🔍 [RM-HANDOFF] Calling receive_from_registry for PID {pid}")
-                success = rm_instance.receive_from_registry(pid, rm_metadata)
+                logger.info(f"🎯 [TIER-2] Calling receive_from_registry for PID {pid} (attempt {attempt_number})")
                 
-                handoff_duration = time.time() - handoff_start_time
-                
-                # **Use standardized logging** (sử dụng logging chuẩn hóa)
-                _log_operation_result('rm-handoff', success, {
-                    'pid': pid, 
-                    'duration': handoff_duration, 
-                    'attempt': attempt_number,
-                    'method': 'receive_from_registry'
-                })
-                
-                if success:
-                    # **Notify observers** (thông báo observers)
-                    self._notify_observers(process_info)
-                    return True
-                else:
+                # **TIER 2 FIX: Validate ResourceManager state before call** (xác thực trạng thái ResourceManager trước khi gọi)
+                if hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is None:
+                    logger.error(f"❌ [TIER-2] ResourceManager has no SharedResourceManager - handoff will likely fail for PID {pid}")
+                    
+                try:
+                    success = rm_instance.receive_from_registry(pid, rm_metadata)
+                    
+                    handoff_duration = time.time() - handoff_start_time
+                    
+                    # **TIER 2 FIX: Enhanced standardized logging** (logging chuẩn hóa nâng cao)
+                    _log_operation_result('rm-handoff', success, {
+                        'pid': pid, 
+                        'duration': handoff_duration, 
+                        'attempt': attempt_number,
+                        'method': 'receive_from_registry',
+                        'rm_shared_manager_status': rm_instance.shared_resource_manager is not None if hasattr(rm_instance, 'shared_resource_manager') else 'unknown'
+                    })
+                    
+                    if success:
+                        logger.info(f"✅ [TIER-2] ResourceManager handoff successful for PID {pid}")
+                        # **Notify observers** (thông báo observers)
+                        self._notify_observers(process_info)
+                        return True
+                    else:
+                        logger.error(f"❌ [TIER-2] ResourceManager handoff failed for PID {pid} - receive_from_registry returned False")
+                        return False
+                        
+                except Exception as receive_error:
+                    logger.error(f"❌ [TIER-2] Exception during receive_from_registry for PID {pid}: {receive_error}")
+                    handoff_duration = time.time() - handoff_start_time
+                    
+                    # **Log exception details** (ghi log chi tiết exception)
+                    _log_operation_result('rm-handoff', False, {
+                        'pid': pid, 
+                        'duration': handoff_duration, 
+                        'attempt': attempt_number,
+                        'method': 'receive_from_registry',
+                        'error': str(receive_error),
+                        'error_type': type(receive_error).__name__
+                    })
                     return False
             else:
                 logger.warning(f"⚠️ [RM-HANDOFF] ResourceManager missing receive_from_registry method")
