@@ -906,16 +906,21 @@ def start_resource_manager_thread():
         resource_manager.start()
         thread_logger.info("🎯 ResourceManager started successfully")
         
-        # **PHASE 3: NEW - Wait for ResourceManager readiness confirmation** (chờ xác nhận ResourceManager sẵn sàng)
-        thread_logger.info("⏳ [PHASE 3] Waiting for ResourceManager readiness confirmation...")
-        ready = ResourceManager.wait_for_ready(timeout=15.0)
+        # **🥈 HIGH FIX: Enhanced Wait for ResourceManager readiness confirmation** (chờ xác nhận ResourceManager sẵn sàng nâng cao)
+        thread_logger.info("⏳ [HIGH] Waiting for ResourceManager readiness confirmation with extended timeout...")
+        ready = ResourceManager.wait_for_ready(timeout=30.0)  # 🥈 Tăng từ 15s → 30s
         
         if ready:
-            thread_logger.info("✅ [PHASE 3] ResourceManager fully ready - safe to start GPU processes")
-            thread_logger.info("🎯 [PHASE 3] ResourceManager is now accepting PID handoffs from DirectPIDRegistry")
+            thread_logger.info("✅ [HIGH] ResourceManager fully ready - safe to start GPU processes")
+            thread_logger.info("🎯 [HIGH] ResourceManager is now accepting PID handoffs from DirectPIDRegistry")
+            # **🥈 HIGH FIX: Additional SharedResourceManager validation** (xác thực SharedResourceManager bổ sung)
+            if hasattr(resource_manager, 'shared_resource_manager') and resource_manager.shared_resource_manager is not None:
+                thread_logger.info("✅ [HIGH] SharedResourceManager confirmed available for cloaking operations")
+            else:
+                thread_logger.warning("⚠️ [HIGH] SharedResourceManager validation failed - cloaking may not work")
         else:
-            thread_logger.error("❌ [PHASE 3] ResourceManager readiness timeout - continuing with warnings")
-            thread_logger.error("🚨 [PHASE 3] GPU processes may experience race conditions without ready ResourceManager")
+            thread_logger.error("❌ [HIGH] ResourceManager readiness timeout - continuing with warnings")
+            thread_logger.error("🚨 [HIGH] GPU processes may experience race conditions without ready ResourceManager")
         
         # **🥇 TIER 1 FIX: Add Persistent Daemon Loop** (thêm vòng lặp daemon liên tục)
         thread_logger.info("🔄 [TIER-1] Starting persistent ResourceManager daemon loop...")
@@ -1024,19 +1029,23 @@ def main():
     )
     resource_manager_thread_obj.start()
     
-    # **TIER 1 FIX: Wait for ResourceManager initialization** (chờ khởi tạo ResourceManager)
-    logger.info("⏳ [TIER-1] Waiting for ResourceManager initialization...")
-    initialization_timeout = 20.0  # 20 seconds timeout
+    # **🥈 HIGH FIX: Enhanced Wait for ResourceManager initialization** (chờ khởi tạo ResourceManager nâng cao)
+    logger.info("⏳ [HIGH] Waiting for ResourceManager initialization with extended timeout...")
+    initialization_timeout = 60.0  # 🥈 Tăng từ 20s → 60s để tránh race condition
     start_wait = time.time()
     
     while time.time() - start_wait < initialization_timeout:
         if _active_resource_manager_instance is not None:
-            logger.info("✅ [TIER-1] ResourceManager instance successfully initialized")
-            break
+            # **🥈 HIGH FIX: Validate SharedResourceManager readiness** (xác thực SharedResourceManager sẵn sàng)
+            if hasattr(_active_resource_manager_instance, 'shared_resource_manager') and _active_resource_manager_instance.shared_resource_manager is not None:
+                logger.info("✅ [HIGH] ResourceManager instance and SharedResourceManager successfully initialized")
+                break
+            else:
+                logger.warning("⚠️ [HIGH] ResourceManager instance exists but SharedResourceManager not yet initialized, continuing to wait...")
         time.sleep(0.5)
     else:
-        logger.error("❌ [TIER-1] ResourceManager initialization timeout - continuing with warnings")
-        logger.error("🚨 [TIER-1] GPU cloaking may not function properly without ResourceManager")
+        logger.error("❌ [HIGH] ResourceManager initialization timeout - continuing with warnings")
+        logger.error("🚨 [HIGH] GPU cloaking may not function properly without ResourceManager and SharedResourceManager")
     
     # **🥉 SOLUTION 3: Start Health Monitoring Thread** (khởi động thread giám sát sức khỏe)
     health_monitor_thread_obj = threading.Thread(

@@ -657,39 +657,47 @@ class DirectPIDRegistry:
                     return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
                     
                 elif rm_instance and not ResourceManager.is_ready():
-                    # **READINESS WAIT PATH: Instance exists but not ready** (đường dẫn chờ sẵn sàng)
-                    logger.info(f"🔄 [RM-WAIT] ResourceManager instance exists but not ready, waiting...")
+                    # **🥉 MEDIUM FIX: Enhanced Readiness Wait Path** (đường dẫn chờ sẵn sàng nâng cao)
+                    logger.info(f"🔄 [MEDIUM] ResourceManager instance exists but not ready, waiting with enhanced validation...")
                     
-                    # **PHASE 2: Use readiness signaling với timeout** (sử dụng tín hiệu sẵn sàng với timeout)
-                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)  # Dynamic timeout based on retry delay
-                    logger.info(f"⏳ [RM-WAIT] Waiting for readiness với timeout: {wait_timeout:.1f}s")
+                    # **🥉 MEDIUM FIX: Extended timeout với SharedResourceManager validation** (timeout mở rộng với xác thực SharedResourceManager)
+                    wait_timeout = min(retry_delay * 3, RegistryConfig.DEFAULT_WAIT_TIMEOUT * 1.5)  # 🥉 Tăng từ *2 → *3, và *1.5 timeout
+                    logger.info(f"⏳ [MEDIUM] Waiting for readiness với extended timeout: {wait_timeout:.1f}s")
                     
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
                     
                     if ready:
-                        logger.info(f"✅ [RM-WAIT] ResourceManager became ready, executing handoff")
-                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                        # **🥉 MEDIUM FIX: Additional SharedResourceManager validation** (xác thực SharedResourceManager bổ sung)
+                        if hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is not None:
+                            logger.info(f"✅ [MEDIUM] ResourceManager và SharedResourceManager sẵn sàng, executing handoff")
+                            return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                        else:
+                            logger.warning(f"⚠️ [MEDIUM] ResourceManager ready but SharedResourceManager not available")
+                            # Continue to exponential backoff section
                     else:
-                        logger.warning(f"⏰ [RM-WAIT] ResourceManager readiness timeout after {wait_timeout:.1f}s")
+                        logger.warning(f"⏰ [MEDIUM] ResourceManager readiness timeout after {wait_timeout:.1f}s")
                         # Continue to exponential backoff section
                         
                 else:
-                    # **INSTANCE NOT AVAILABLE PATH: Wait for instance creation** (đường dẫn instance chưa khả dụng)
-                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager instance not yet created (attempt {attempt + 1}/{max_retries})")
+                    # **🥉 MEDIUM FIX: Enhanced Instance Not Available Path** (đường dẫn instance chưa khả dụng nâng cao)
+                    logger.warning(f"⚠️ [MEDIUM] ResourceManager instance not yet created (attempt {attempt + 1}/{max_retries})")
+                    logger.warning(f"🔍 [MEDIUM] This indicates ResourceManager.__init__() chưa hoàn thành - critical race condition!")
                     
-                    # **PHASE 2: Try waiting for readiness even without instance** (thử chờ sẵn sàng ngay cả khi chưa có instance)
-                    logger.info(f"🔄 [RM-WAIT] Attempting to wait for ResourceManager creation + readiness...")
-                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
+                    # **🥉 MEDIUM FIX: Enhanced wait với SharedResourceManager validation** (chờ nâng cao với xác thực SharedResourceManager)
+                    logger.info(f"🔄 [MEDIUM] Attempting to wait for ResourceManager creation + SharedResourceManager readiness...")
+                    wait_timeout = min(retry_delay * 3, RegistryConfig.DEFAULT_WAIT_TIMEOUT * 1.5)  # 🥉 Tăng timeout
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
                     
                     if ready:
-                        # **Re-check instance after wait** (kiểm tra lại instance sau khi chờ)
+                        # **🥉 MEDIUM FIX: Enhanced re-check instance sau wait** (kiểm tra lại instance nâng cao sau khi chờ)
                         rm_instance = ResourceManager._instance
-                        if rm_instance:
-                            logger.info(f"✅ [RM-WAIT] ResourceManager created and ready after wait")
+                        if rm_instance and hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is not None:
+                            logger.info(f"✅ [MEDIUM] ResourceManager và SharedResourceManager created and ready after wait")
                             return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                        elif rm_instance:
+                            logger.warning(f"⚠️ [MEDIUM] ResourceManager created but SharedResourceManager still None")
                         else:
-                            logger.warning(f"⚠️ [RM-WAIT] Ready signal set but instance still None")
+                            logger.warning(f"⚠️ [MEDIUM] Ready signal set but instance still None")
                 
                 # **Exponential Backoff Section** (phần backoff theo cấp số nhân)
                 if attempt < max_retries - 1:

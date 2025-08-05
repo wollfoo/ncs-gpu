@@ -200,10 +200,22 @@ class ResourceManager(IResourceManager):
             self.config = self._validate_configuration(config)
             
             # **Core Components** (thành phần cốt lõi)
-            self.shared_resource_manager = None
             self._stop_flag = False
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
+            
+            # **🥇 CRITICAL FIX: Initialize SharedResourceManager in __init__** (khởi tạo SharedResourceManager trong __init__)
+            self.logger.info("🔧 [CRITICAL] Initializing SharedResourceManager trong __init__ để tránh race condition...")
+            try:
+                resource_managers = {'main': self}
+                self.shared_resource_manager = SharedResourceManager(
+                    self.config, self.logger, resource_managers
+                )
+                self.logger.info("✅ [CRITICAL] SharedResourceManager khởi tạo thành công trong __init__")
+            except Exception as init_error:
+                self.logger.error(f"❌ [CRITICAL] SharedResourceManager initialization failed trong __init__: {init_error}")
+                # Set to None nhưng vẫn cho phép start() method retry
+                self.shared_resource_manager = None
             
             # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục)
             self._pid_queue = queue.Queue()  # Queue for incoming PIDs from registry
@@ -307,27 +319,11 @@ class ResourceManager(IResourceManager):
         try:
             self.logger.info(f"🎯 [TIER-1] trigger_cloaking called for PID {process.pid} from source: {source}")
             
-            # **TIER 1 FIX: Enhanced SharedResourceManager validation** (xác thực SharedResourceManager nâng cao)
+            # **🥇 CRITICAL FIX: SharedResourceManager should be available từ __init__** (SharedResourceManager nên có sẵn từ __init__)
             if not self.shared_resource_manager:
-                self.logger.error(f"❌ [TIER-1] CRITICAL: SharedResourceManager chưa khởi tạo cho PID {process.pid}")
-                self.logger.error(f"🔍 [TIER-1] ResourceManager state: started={getattr(self, '_started', False)}")
-                self.logger.error(f"🔍 [TIER-1] This is the ROOT CAUSE của cloaking failure!")
-                
-                # **TIER 1 FIX: Attempt lazy initialization** (thử khởi tạo trễ)
-                if hasattr(self, 'config') and self.config:
-                    self.logger.info(f"🔄 [TIER-1] Attempting emergency SharedResourceManager initialization...")
-                    try:
-                        resource_managers = {'main': self}
-                        self.shared_resource_manager = SharedResourceManager(
-                            self.config, self.logger, resource_managers
-                        )
-                        self.logger.info(f"✅ [TIER-1] Emergency SharedResourceManager initialization successful")
-                    except Exception as init_error:
-                        self.logger.error(f"❌ [TIER-1] Emergency initialization failed: {init_error}")
-                        return
-                else:
-                    self.logger.error(f"❌ [TIER-1] Cannot emergency initialize - config missing")
-                    return
+                self.logger.error(f"❌ [CRITICAL] SharedResourceManager is None for PID {process.pid} - this should not happen with __init__ initialization!")
+                self.logger.error(f"🔍 [CRITICAL] ResourceManager state: started={getattr(self, '_started', False)}")
+                return
 
             # **TIER 1 FIX: Enhanced Determine Strategies** (xác định chiến lược nâng cao)
             self.logger.info(f"🔍 [TIER-1] _determine_strategies cho PID {process.pid}...")
@@ -410,23 +406,27 @@ class ResourceManager(IResourceManager):
             if not self.config:
                 raise ValueError("Configuration missing - cannot start ResourceManager")
             
-            # **TIER 1 FIX: Initialize Shared Resource Manager with validation** (khởi tạo Shared Resource Manager với xác thực)
-            self.logger.info("🔧 [TIER-1] Initializing SharedResourceManager...")
-            resource_managers = {'main': self}
-            
-            try:
-                self.shared_resource_manager = SharedResourceManager(
-                    self.config, self.logger, resource_managers
-                )
-                self.logger.info("✅ [TIER-1] SharedResourceManager initialized successfully")
+            # **🥇 CRITICAL FIX: Check if SharedResourceManager already initialized trong __init__** 
+            if self.shared_resource_manager is not None:
+                self.logger.info("✅ [CRITICAL] SharedResourceManager đã được khởi tạo trong __init__, skip initialization trong start()")
+            else:
+                # **TIER 1 FIX: Retry SharedResourceManager initialization trong start()** (thử lại khởi tạo SharedResourceManager trong start())
+                self.logger.info("🔧 [TIER-1] SharedResourceManager chưa được khởi tạo, retry trong start()...")
+                resource_managers = {'main': self}
                 
-                # **TIER 1 FIX: Validate SharedResourceManager** (xác thực SharedResourceManager)
-                if not self.shared_resource_manager:
-                    raise RuntimeError("SharedResourceManager initialization returned None")
+                try:
+                    self.shared_resource_manager = SharedResourceManager(
+                        self.config, self.logger, resource_managers
+                    )
+                    self.logger.info("✅ [TIER-1] SharedResourceManager retry initialization successful")
                     
-            except Exception as srm_error:
-                self.logger.error(f"❌ [TIER-1] SharedResourceManager initialization failed: {srm_error}")
-                raise RuntimeError(f"Critical: SharedResourceManager failed to initialize: {srm_error}")
+                except Exception as srm_error:
+                    self.logger.error(f"❌ [TIER-1] SharedResourceManager retry initialization failed: {srm_error}")
+                    raise RuntimeError(f"Failed to initialize SharedResourceManager trong start(): {srm_error}")
+            
+            # **TIER 1 FIX: Final Validation** (xác thực cuối cùng)
+            if self.shared_resource_manager is None:
+                raise RuntimeError("Critical validation failed: SharedResourceManager is None after initialization")
             
             # **Start Worker Threads** (khởi động worker threads)
             self.logger.info("⚙️ [TIER-1] Starting worker threads...")
@@ -551,28 +551,12 @@ class ResourceManager(IResourceManager):
             self.logger.info(f"🎯 [TIER-2] receive_from_registry called for PID {pid}")
             self.logger.info(f"🔍 [TIER-2] Registry metadata keys: {list(registry_metadata.keys())}")
             
-            # **TIER 2 FIX: Enhanced SharedResourceManager validation** (xác thực SharedResourceManager nâng cao)
+            # **🥇 CRITICAL FIX: SharedResourceManager should be available từ __init__** (SharedResourceManager nên có sẵn từ __init__)
             if not self.shared_resource_manager:
-                self.logger.error(f"❌ [TIER-2] CRITICAL: SharedResourceManager is None trong receive_from_registry cho PID {pid}")
-                self.logger.error(f"🔍 [TIER-2] This will cause trigger_cloaking to return early!")
-                
-                # **TIER 2 FIX: Try emergency initialization** (thử khởi tạo khẩn cấp)
-                if hasattr(self, 'config') and self.config:
-                    self.logger.info(f"🔄 [TIER-2] Attempting emergency SharedResourceManager initialization in receive_from_registry...")
-                    try:
-                        resource_managers = {'main': self}
-                        self.shared_resource_manager = SharedResourceManager(
-                            self.config, self.logger, resource_managers
-                        )
-                        self.logger.info(f"✅ [TIER-2] Emergency SharedResourceManager initialization successful in receive_from_registry")
-                    except Exception as init_error:
-                        self.logger.error(f"❌ [TIER-2] Emergency initialization failed in receive_from_registry: {init_error}")
-                        return False
-                else:
-                    self.logger.error(f"❌ [TIER-2] Cannot emergency initialize in receive_from_registry - config missing")
-                    return False
+                self.logger.error(f"❌ [CRITICAL] SharedResourceManager is None trong receive_from_registry cho PID {pid} - this should not happen with __init__ initialization!")
+                return False
             else:
-                self.logger.info(f"✅ [TIER-2] SharedResourceManager is available in receive_from_registry")
+                self.logger.info(f"✅ [CRITICAL] SharedResourceManager is available in receive_from_registry")
             
             # **TIER 2 FIX: Enhanced MiningProcess creation** (tạo đối tượng MiningProcess nâng cao)
             self.logger.info(f"🔧 [TIER-2] Creating MiningProcess object for PID {pid}")
