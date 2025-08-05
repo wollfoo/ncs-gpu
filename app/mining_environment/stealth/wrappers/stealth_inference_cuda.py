@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 # Import required modules
 try:
     from mining_environment.scripts.unified_logging import get_unified_logger
+    from mining_environment.coordination.coordinator import HookCoordinator
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
     sys.exit(1)
@@ -252,9 +253,15 @@ def main():
                     Simplified Hook Sequencing cho Linear Flow
                     """
                     try:
-                        # Simple delay for memory allocation
-                        logger.info("🕒 [HOOK-SEQ] Waiting for memory allocation (20s)")
-                        time.sleep(20)
+                        # Enhanced readiness check thay vì fixed 20s delay
+                        logger.info("🚀 [HOOK-SEQ] Starting enhanced readiness check for DAG completion...")
+                        
+                        # Perform enhanced readiness check
+                        if not _enhanced_readiness_check(process, timeout=30):
+                            logger.error("❌ [HOOK-SEQ] Enhanced readiness check failed - DAG allocation incomplete")
+                            return False
+                        
+                        logger.info("✅ [HOOK-SEQ] Enhanced readiness check passed - DAG allocation complete")
                         
                         # Re-enable hooks directly
                         os.environ['THERMAL_SPOOF_DISABLED'] = '0'
@@ -284,9 +291,8 @@ def main():
                 # REMOVED: Duplicate coordination method - using linear flow only
                 # 🚀 **LINEAR FLOW: PRIMARY HANDOFF TO HOOKCOORDINATOR** (luồng tuyến tính: chuyển giao chính đến HookCoordinator)
                 try:
-                    # **Import HookCoordinator FIRST** (nhập HookCoordinator TRƯỚC TIÊN)
-                    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'coordination'))
-                    from coordinator import get_hook_coordinator
+                    # **Use HookCoordinator from imported module** (sử dụng HookCoordinator từ module đã import)
+                    from mining_environment.coordination.coordinator import get_hook_coordinator
                     
                     # **Process metadata for handoff chain** (metadata tiến trình cho chuỗi handoff)
                     process_metadata = {

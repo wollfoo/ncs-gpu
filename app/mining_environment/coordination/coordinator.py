@@ -11,6 +11,7 @@ import json
 import psutil
 import random
 import hashlib
+import glob
 from typing import Dict, Optional, Set, Any
 
 # ✅ UNIFIED LOGGING: Import unified logging system
@@ -64,7 +65,179 @@ class HookCoordinator:
             self.logger.info("🏥 [HEALTH] Health monitoring system initialized")
         else:
             self.logger = None
+    
+    def _check_process_alive(self, pid: int) -> bool:
+        """
+        **[Process Alive Check]** (kiểm tra process còn sống)
         
+        Kiểm tra process mining vẫn còn chạy và không bị terminate.
+        
+        Args:
+            pid: Process ID cần kiểm tra
+            
+        Returns:
+            bool: True nếu process còn sống, False nếu đã chết
+        """
+        try:
+            return psutil.Process(pid).is_running()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"⚠️ [PROCESS-CHECK] Error checking process {pid}: {e}")
+            return False
+    
+    def _check_dag_environment_config(self) -> bool:
+        """
+        **[DAG Environment Configuration Check]** (kiểm tra cấu hình môi trường DAG)
+        
+        Kiểm tra các biến môi trường cần thiết cho DAG generation đã được set.
+        
+        Returns:
+            bool: True nếu các biến môi trường cần thiết đã được set
+        """
+        try:
+            # Kiểm tra KAWPOW_DAG_PROGRESSIVE
+            progressive = os.environ.get('KAWPOW_DAG_PROGRESSIVE', '0') == '1'
+            
+            # Kiểm tra KAWPOW_DAG_MEMORY_LIMIT (nếu có)
+            memory_limit = 'KAWPOW_DAG_MEMORY_LIMIT' in os.environ
+            
+            # Kiểm tra các biến CUDA optimization
+            cuda_blocking = os.environ.get('CUDA_LAUNCH_BLOCKING', '0') == '1'
+            cuda_cache_disable = os.environ.get('CUDA_CACHE_DISABLE', '0') == '1'
+            
+            result = progressive and cuda_blocking and cuda_cache_disable
+            
+            if self.logger:
+                if result:
+                    self.logger.info("✅ [ENV-CHECK] All DAG environment configurations are valid")
+                else:
+                    self.logger.warning(f"⚠️ [ENV-CHECK] DAG environment check failed - progressive: {progressive}, blocking: {cuda_blocking}, cache_disable: {cuda_cache_disable}")
+            
+            return result
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [ENV-CHECK] Error checking DAG environment: {e}")
+            return False
+    
+    def _check_dag_files_existence(self) -> bool:
+        """
+        **[DAG Files Existence Check]** (kiểm tra sự tồn tại file DAG)
+        
+        Kiểm tra các file DAG đã được tạo thành công.
+        
+        Returns:
+            bool: True nếu các file DAG tồn tại, False nếu không
+        """
+        try:
+            # Các pattern file DAG phổ biến
+            dag_patterns = [
+                '/tmp/kawpow_dag_*',
+                '/var/tmp/kawpow_dag_*',
+                './kawpow_dag_*',
+                '/tmp/ethash_*',
+                '/var/tmp/ethash_*'
+            ]
+            
+            found_files = []
+            for pattern in dag_patterns:
+                files = glob.glob(pattern)
+                if files:
+                    found_files.extend(files)
+            
+            if found_files:
+                if self.logger:
+                    self.logger.info(f"✅ [DAG-FILES] Found {len(found_files)} DAG files: {found_files[:3]}...")  # Show first 3
+                return True
+            else:
+                if self.logger:
+                    self.logger.debug("🔍 [DAG-FILES] No DAG files found at common locations")
+                return False
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"❌ [DAG-FILES] Error checking DAG files: {e}")
+            return False
+    
+    def _enhanced_readiness_check(self, pid: int, timeout=30) -> bool:
+        """
+        **[Enhanced Readiness Check]** (kiểm tra sẵn sàng nâng cao)
+        
+        Multi-factor verification để đảm bảo mining process đã hoàn thành DAG buffer allocation.
+        
+        Args:
+            pid: Process ID cần kiểm tra
+            timeout: timeout tối đa (giây)
+            
+        Returns:
+            bool: True nếu tất cả điều kiện đều thỏa mãn, False nếu không
+        """
+        start_time = time.time()
+        consecutive_checks = 3  # Số lần kiểm tra liên tiếp phải pass
+        
+        if self.logger:
+            self.logger.info(f"🚀 [READINESS-START] Starting enhanced readiness check for PID {pid} with timeout={timeout}s")
+        
+        while time.time() - start_time < timeout:
+            checks = {
+                'process_alive': self._check_process_alive(pid),
+                'env_config': self._check_dag_environment_config(),
+                'dag_files': self._check_dag_files_existence()
+            }
+            
+            # Đếm số lượng check pass
+            passed_checks = sum(checks.values())
+            total_checks = len(checks)
+            
+            if self.logger:
+                self.logger.info(f"📊 [READINESS-PROGRESS] {passed_checks}/{total_checks} checks passed")
+            
+            # Log chi tiết từng check
+            for check_name, result in checks.items():
+                status = "✅ PASS" if result else "❌ FAIL"
+                if self.logger:
+                    self.logger.info(f"   ├─ {check_name}: {status}")
+            
+            # Nếu tất cả checks pass, verify thêm 2 lần nữa để đảm bảo tính ổn định
+            if passed_checks == total_checks:
+                if self.logger:
+                    self.logger.info("🎯 [READINESS-CANDIDATE] All checks passed - verifying stability...")
+                
+                stability_count = 0
+                for i in range(consecutive_checks):
+                    time.sleep(2)  # Chờ 2 giây giữa các lần kiểm tra
+                    
+                    # Re-check process status (quan trọng nhất)
+                    if not self._check_process_alive(pid):
+                        if self.logger:
+                            self.logger.warning(f"⚠️ [READINESS-STABILITY] Process {pid} died at verification {i+1}")
+                        break
+                    
+                    # Re-check DAG files
+                    if not self._check_dag_files_existence():
+                        if self.logger:
+                            self.logger.warning(f"⚠️ [READINESS-STABILITY] DAG files disappeared at verification {i+1}")
+                        break
+                    
+                    stability_count += 1
+                
+                if stability_count == consecutive_checks:
+                    if self.logger:
+                        self.logger.info(f"✅ [READINESS-SUCCESS] Enhanced readiness check completed successfully for PID {pid} in {time.time() - start_time:.1f}s")
+                    return True
+                else:
+                    if self.logger:
+                        self.logger.warning(f"⚠️ [READINESS-UNSTABLE] Failed {consecutive_checks - stability_count} stability checks for PID {pid}")
+            
+            # Chờ 2 giây trước khi kiểm tra lại
+            time.sleep(2)
+        
+        if self.logger:
+            self.logger.error(f"❌ [READINESS-FAILED] Enhanced readiness check timed out after {timeout}s for PID {pid}")
+        return False
+    
     def register_pid(self, pid: int) -> None:
         """**Register PID** (đăng ký PID - thêm tiến trình vào hệ thống theo dõi hook coordination)"""
         with self.lock:
@@ -127,7 +300,20 @@ class HookCoordinator:
                 if self.logger:
                     self.logger.info(f"✅ [LINEAR-FLOW] PID {pid} registered with HookCoordinator")
             
-            # **STEP 2: Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
+            # **STEP 2: Enhanced Readiness Check** (kiểm tra sẵn sàng nâng cao)
+            if self.logger:
+                self.logger.info(f"🚀 [LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...")
+            
+            # Perform enhanced readiness check
+            if not self._enhanced_readiness_check(pid, timeout=30):
+                if self.logger:
+                    self.logger.error(f"❌ [LINEAR-FLOW] Enhanced readiness check failed for PID {pid} - DAG allocation incomplete")
+                return False
+            
+            if self.logger:
+                self.logger.info(f"✅ [LINEAR-FLOW] Enhanced readiness check passed for PID {pid} - DAG allocation complete")
+            
+            # **STEP 3: Forward to DirectPIDRegistry** (chuyển tiếp đến DirectPIDRegistry)
             registry_success = self._forward_to_direct_registry(pid, process_metadata)
             
             if registry_success:
