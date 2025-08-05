@@ -326,7 +326,8 @@ def main():
                     coordinator = get_hook_coordinator()
                     success = coordinator.receive_from_stealth_wrapper(
                         pid=process.pid,
-                        process_metadata=process_metadata
+                        process_metadata=process_metadata,
+                        subprocess_env=clean_env  # **TIER 7.1 FIX: Pass subprocess environment for context-aware checking**
                     )
                     
                     if success:

@@ -489,7 +489,7 @@ class HookCoordinator:
                 self.logger.info(f"📝 [REGISTER] PID {pid} registered for hook coordination")
                 self.logger.info(f"🏥 [HEALTH] PID {pid} added to health monitoring (total: {len(self.active_processes)})")
     
-    def receive_from_stealth_wrapper(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
+    def receive_from_stealth_wrapper(self, pid: int, process_metadata: Dict[str, Any], subprocess_env: Dict[str, str] = None) -> bool:
         """
         **Receive From Stealth Wrapper** (nhận từ stealth wrapper)
         
@@ -499,6 +499,7 @@ class HookCoordinator:
         Args:
             pid: Process ID từ stealth wrapper
             process_metadata: Metadata từ stealth wrapper
+            subprocess_env: Subprocess environment dict (TIER 7.1 FIX - để check đúng context)
             
         Returns:
             bool: True nếu handoff successful và ready for next step
@@ -539,8 +540,8 @@ class HookCoordinator:
             if self.logger:
                 self.logger.info(f"🚀 [LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...")
             
-            # Perform enhanced readiness check
-            readiness_result = self._enhanced_readiness_check(pid, timeout=30)
+            # **TIER 7.1 FIX: Perform enhanced readiness check with subprocess environment context**
+            readiness_result = self._enhanced_readiness_check(pid, timeout=30, subprocess_env=subprocess_env)
             
             if readiness_result:
                 if self.logger:
