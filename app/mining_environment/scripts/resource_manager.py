@@ -371,10 +371,23 @@ class ResourceManager(IResourceManager):
             from pid_logger.direct_registry import get_direct_registry
             
             registry = get_direct_registry()
+            
+            # **SOLUTION 1: Register ResourceManager instance với DirectPIDRegistry** (đăng ký instance ResourceManager)
+            if hasattr(registry, 'register_resource_manager'):
+                success = registry.register_resource_manager(self)
+                if success:
+                    self.logger.info("✅ [SOLUTION-1] ResourceManager đã đăng ký với DirectPIDRegistry")
+                else:
+                    self.logger.warning("⚠️ [SOLUTION-1] Không thể đăng ký ResourceManager với DirectPIDRegistry")
+            else:
+                self.logger.warning("⚠️ [SOLUTION-1] DirectPIDRegistry không hỗ trợ register_resource_manager")
+            
+            # **Original observer registration** (đăng ký observer gốc)
             registry.register_observer(self._on_process_registered_direct)
-            self.logger.info("DirectPIDRegistry observer đã đăng ký")
+            self.logger.info("✅ DirectPIDRegistry observer đã đăng ký")
+            
         except Exception as e:
-            self.logger.error(f"Lỗi thiết lập DirectPIDRegistry observer: {e}")
+            self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")
 
     def _on_process_registered_direct(self, process_info) -> None:
         """**Handle Process Registration** (xử lý đăng ký process)"""
