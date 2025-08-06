@@ -473,8 +473,10 @@ class DirectPIDRegistry:
             bool: True nếu processing successful
         """
         try:
-            logger.info(f"🔄 [LINEAR-FLOW] Receiving PID {pid} from HookCoordinator")
-            logger.debug(f"🔍 [LINEAR-FLOW] Coordinator metadata: {coordinator_metadata}")
+            logger.info(f"🚀 [COORD-RECEIVE] Receiving PID {pid} from HookCoordinator")
+            logger.info(f"📊 [MONITORING] Handoff Chain: HookCoordinator → DirectPIDRegistry [PID={pid}]")
+            logger.info(f"⏰ [MONITORING] Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.debug(f"🔍 [COORD-RECEIVE] Metadata: {coordinator_metadata}")
             
             # **Extract process information from metadata** (trích xuất thông tin tiến trình từ metadata)
             process_name = coordinator_metadata.get('stealth_name', 'inference-cuda')
@@ -807,6 +809,8 @@ class DirectPIDRegistry:
         try:
             handoff_start_time = time.time()
             logger.info(f"🎯 [RM-HANDOFF] Executing handoff for PID {pid} (attempt {attempt_number})")
+            logger.info(f"📊 [MONITORING] Handoff Chain: DirectPIDRegistry → ResourceManager [PID={pid}]")
+            logger.info(f"⏰ [MONITORING] Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # **SOLUTION 1 & 2: Use registered ResourceManager if available** (sử dụng ResourceManager đã đăng ký nếu có)
             with self._resource_manager_lock:

@@ -567,7 +567,9 @@ class HookCoordinator:
             
             if self.logger:
                 self.logger.info(f"🚀 [LINEAR-FLOW] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)")
+                self.logger.info(f"📊 [MONITORING] Handoff Chain Start: stealth_inference_cuda → HookCoordinator [PID={pid}]")
                 self.logger.debug(f"🔍 [LINEAR-FLOW] Process metadata: {process_metadata}")
+                self.logger.info(f"⏰ [MONITORING] Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # **STEP 1: Register PID với HookCoordinator** (đăng ký PID với HookCoordinator)
             with self.lock:

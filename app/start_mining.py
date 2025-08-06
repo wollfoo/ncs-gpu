@@ -1093,6 +1093,7 @@ def main():
     logger.info("🔍 [PHASE 3] Final ResourceManager readiness verification...")
     
     # Import ResourceManager to access class methods
+    resource_manager_ready = False
     try:
         from mining_environment.scripts.resource_manager import ResourceManager
         final_ready = ResourceManager.is_ready()
@@ -1100,29 +1101,39 @@ def main():
         if final_ready:
             logger.info("✅ [PHASE 3] ResourceManager CONFIRMED READY - safe to start GPU processes")
             logger.info("🎯 [PHASE 3] Race condition prevention: ResourceManager accepting handoffs")
+            resource_manager_ready = True
+            
+            # ------------------------------------------------------------------
+            # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
+            # ------------------------------------------------------------------
+            global gpu_process
+            logger.info("🎮 [RACE-FIX] Starting GPU Mining process AFTER ResourceManager ready...")
+            gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
         else:
-            logger.warning("⚠️ [PHASE 3] ResourceManager NOT READY - potential race conditions")
-            logger.warning("🚨 [PHASE 3] GPU processes may experience 'ResourceManager instance not yet created' errors")
+            logger.error("❌ [PHASE 3] ResourceManager NOT READY - CANNOT start GPU process")
+            logger.error("🚨 [PHASE 3] Aborting startup to prevent race conditions")
+            logger.error("💡 [PHASE 3] Please check ResourceManager initialization logs for issues")
             
     except ImportError as e:
         logger.error(f"❌ [PHASE 3] Cannot import ResourceManager for readiness check: {e}")
-        logger.error("🚨 [PHASE 3] Proceeding without readiness verification - high risk of race conditions")
+        logger.error("🚨 [PHASE 3] CRITICAL: Cannot verify ResourceManager status - aborting")
     
-    logger.info("✅ [PHASE 3] Enhanced Resource Manager startup phase completed")
-    
-    # ------------------------------------------------------------------
-    # 4️⃣ **SIMPLIFIED**: Khởi động GPU Mining process trực tiếp
-    # ------------------------------------------------------------------
-    global gpu_process
-    logger.info("🎮 Starting GPU Mining process (sequential direct)...")
-    gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
-    
-    if not gpu_process or not is_mining_process_running(gpu_process):
-        logger.error("❌ Không thể khởi động GPU mining process")
+    # Kiểm tra nếu ResourceManager không sẵn sàng thì dừng hệ thống
+    if not resource_manager_ready:
+        logger.error("🛑 [RACE-FIX] System startup aborted - ResourceManager not ready")
+        logger.error("📋 [RACE-FIX] Please check logs in /app/mining_environment/logs/")
         stop_event.set()
         return
     
-    logger.info(f"✅ GPU Mining process started - PID: {gpu_process.pid}")
+    logger.info("✅ [PHASE 3] Enhanced Resource Manager startup phase completed")
+    
+    # Kiểm tra GPU process đã khởi động thành công sau khi move vào trong if block
+    if gpu_process and is_mining_process_running(gpu_process):
+        logger.info(f"✅ [RACE-FIX] GPU Mining process started successfully - PID: {gpu_process.pid}")
+    else:
+        logger.error("❌ [RACE-FIX] GPU mining process failed to start after ResourceManager ready")
+        stop_event.set()
+        return
     
     # **Enhanced process registration với real mining PID detection**
     real_mining_pid = getattr(gpu_process, '_real_mining_pid', None)
