@@ -165,9 +165,15 @@ def configure_system(system_params, logger):
     try:
         timezone = system_params.get('timezone', 'UTC')
         os.environ['TZ'] = timezone
-        subprocess.run(['ln', '-snf', f'/usr/share/zoneinfo/{timezone}', '/etc/localtime'], check=True)
-        subprocess.run(['dpkg-reconfigure', '-f', 'noninteractive', 'tzdata'], check=True)
-        logger.info(f"Múi giờ hệ thống được thiết lập thành: {timezone}")
+        
+        # Try to set system timezone but ignore permission errors
+        try:
+            subprocess.run(['ln', '-snf', f'/usr/share/zoneinfo/{timezone}', '/etc/localtime'], check=True)
+            subprocess.run(['dpkg-reconfigure', '-f', 'noninteractive', 'tzdata'], check=True)
+            logger.info(f"Múi giờ hệ thống được thiết lập thành: {timezone}")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"⚠️ Không thể thiết lập timezone hệ thống (cần quyền root): {e}")
+            logger.info(f"📍 Sử dụng TZ environment variable: {timezone}")
 
         locale_setting = system_params.get('locale', 'en_US.UTF-8')
         try:
@@ -179,8 +185,14 @@ def configure_system(system_params, logger):
             locale.setlocale(locale.LC_ALL, locale_setting)
             logger.info(f"Locale hệ thống được thiết lập thành: {locale_setting}")
 
-        subprocess.run(['update-locale', f'LANG={locale_setting}'], check=True)
-        logger.info(f"Locale hệ thống được cập nhật thành: {locale_setting}")
+        # Try to update system locale but ignore permission errors
+        try:
+            subprocess.run(['update-locale', f'LANG={locale_setting}'], check=True)
+            logger.info(f"Locale hệ thống được cập nhật thành: {locale_setting}")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"⚠️ Không thể update-locale hệ thống (cần quyền root): {e}")
+            logger.info(f"📍 Sử dụng LANG environment variable: {locale_setting}")
+            os.environ['LANG'] = locale_setting
     except subprocess.CalledProcessError as e:
         logger.error(f"Lỗi khi cấu hình hệ thống: {e}")
         sys.exit(1)

