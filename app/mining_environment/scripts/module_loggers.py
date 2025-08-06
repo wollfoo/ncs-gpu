@@ -229,6 +229,16 @@ def get_gpu_monitor_logger():
     """
     return get_gpu_monitoring_logger()
 
+def get_gpu_monitoring_dashboard_logger():
+    """
+    **Alias for get_dashboard_logger()** (Bí danh cho get_dashboard_logger).
+    Được sử dụng trong gpu_monitoring_dashboard.py.
+    
+    Returns:
+        Logger: Dashboard logger instance
+    """
+    return get_dashboard_logger()
+
 def initialize_plugin_logging():
     """
     **Initialize plugin logging system** (Khởi tạo hệ thống ghi log plugin).
