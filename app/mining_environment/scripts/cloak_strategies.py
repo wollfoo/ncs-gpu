@@ -44,6 +44,205 @@ else:
 
 
 ###############################################################################
+#                         SIMPLIFIED CLOAK COORDINATOR                        #
+###############################################################################
+
+from .utils import CloakRequest, CloakResult
+from .resource_control import HardwareController
+
+class CloakCoordinator:
+    """
+    Simple coordinator - no complex factory or abstract strategies.
+    Pipeline Stage 2: Nhận CloakRequest từ ResourceManager -> Chọn strategy -> Gọi HardwareController.
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize CloakCoordinator với config.
+        
+        :param config: Configuration dictionary
+        """
+        self.config = config
+        self.logger = cloak_logger  # Use existing logger
+        
+        # Initialize hardware controller for Stage 3
+        self.hw_controller = HardwareController(config)
+        
+        self.logger.info("[CS] CloakCoordinator initialized - Stage 2 ready")
+    
+    def process_request(self, request: CloakRequest) -> CloakResult:
+        """**Stage 2: Strategy Coordinator** (điều phối chiến lược)
+        
+        Trách nhiệm chính của Stage 2:
+        1. Quyết định strategy dựa trên config
+        2. Chuẩn bị params cho strategy đó
+        3. Forward đến hardware controller
+        
+        :param request: CloakRequest từ ResourceManager (chỉ có PID & metadata)
+        :return: CloakResult từ HardwareController
+        """
+        try:
+            # Stage 2 decides strategy (not Stage 1!)
+            strategy = request.strategy_name
+            if not strategy:
+                # Auto-select strategy based on config
+                strategy = getattr(self.config, 'default_strategy', 'gpu')
+                self.logger.info(f"[CS] Auto-selected strategy '{strategy}' from config")
+            
+            self.logger.info(f"[CS] Stage 2: Processing PID {request.pid} with strategy '{strategy}'")
+            
+            # Stage 2 prepares params based on strategy
+            if strategy == 'gpu':
+                # Prepare GPU params from config
+                request.params = {
+                    'gpu_index': 0,
+                    'power_limit': getattr(self.config, 'gpu_power_limit', 150),
+                    'memory_clock': getattr(self.config, 'gpu_memory_clock', 810),
+                    'sm_clock': getattr(self.config, 'gpu_sm_clock', 1200),
+                    'temp_threshold': getattr(self.config, 'gpu_temp_threshold', 75)
+                }
+                return self._apply_gpu_strategy(request)
+                
+            elif strategy == 'network':
+                # Prepare network params from config
+                request.params = {
+                    'bandwidth_limit': getattr(self.config, 'network_bandwidth_limit', 100),
+                    'interface': getattr(self.config, 'network_interface', 'eth0')
+                }
+                return self._apply_network_strategy(request)
+                
+            elif strategy == 'disk_io':
+                # Prepare disk I/O params (placeholder for now)
+                request.params = {}
+                return self._apply_disk_io_strategy(request)
+                
+            elif strategy == 'cache':
+                # Prepare cache params (placeholder)
+                request.params = {}
+                return self._apply_cache_strategy(request)
+                
+            elif strategy == 'memory':
+                # Prepare memory params (placeholder)
+                request.params = {}
+                return self._apply_memory_strategy(request)
+                
+            else:
+                self.logger.error(f"[CS] Unknown strategy: {strategy}")
+                return CloakResult(
+                    success=False,
+                    pid=request.pid,
+                    error_msg=f"Unknown strategy: {strategy}"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"[CS] Exception in process_request: {e}")
+            return CloakResult(
+                success=False,
+                pid=request.pid,
+                error_msg=str(e)
+            )
+    
+    def _apply_gpu_strategy(self, request: CloakRequest) -> CloakResult:
+        """**Stage 2: Route GPU strategy** (điều phối chiến lược GPU)
+        
+        CHỈ forward params từ request, KHÔNG duplicate defaults!
+        Stage 1 đã prepare params, Stage 2 chỉ route.
+        
+        :param request: CloakRequest với GPU params đã được prepare ở Stage 1
+        :return: CloakResult từ HardwareController
+        """
+        self.logger.info(f"[CS] Routing GPU strategy for PID {request.pid}")
+        
+        # Stage 3: Direct forward to hardware controller
+        # KHÔNG prepare lại params - dùng trực tiếp từ request!
+        control_params = {
+            'pid': request.pid,
+            **request.params  # Forward ALL params as-is from Stage 1
+        }
+        
+        result = self.hw_controller.apply_gpu_controls(control_params)
+        
+        if result.success:
+            self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
+        else:
+            self.logger.error(f"[CS] ❌ GPU strategy routing failed: {result.error_msg}")
+            
+        return result
+    
+    def _apply_network_strategy(self, request: CloakRequest) -> CloakResult:
+        """**Stage 2: Route Network strategy** (điều phối chiến lược mạng)
+        
+        CHỈ forward params, KHÔNG duplicate defaults!
+        
+        :param request: CloakRequest với network params từ Stage 1
+        :return: CloakResult
+        """
+        self.logger.info(f"[CS] Routing network strategy for PID {request.pid}")
+        
+        # Direct forward params từ Stage 1, không prepare lại
+        control_params = {
+            'pid': request.pid,
+            **request.params  # Forward ALL network params as-is
+        }
+        
+        # Forward to hardware controller
+        result = self.hw_controller.apply_network_controls(control_params)
+        
+        if result.success:
+            self.logger.info(f"[CS] ✅ Network strategy routed successfully for PID {request.pid}")
+            
+        return result
+    
+    def _apply_disk_io_strategy(self, request: CloakRequest) -> CloakResult:
+        """
+        Apply disk I/O throttling - simplified placeholder.
+        
+        :param request: CloakRequest
+        :return: CloakResult
+        """
+        self.logger.info(f"[CS] Disk I/O strategy for PID {request.pid} - placeholder")
+        
+        # Placeholder - có thể implement sau nếu cần
+        return CloakResult(
+            success=True,
+            pid=request.pid,
+            applied_controls=['disk_io_throttle']
+        )
+    
+    def _apply_cache_strategy(self, request: CloakRequest) -> CloakResult:
+        """
+        Apply cache management - simplified placeholder.
+        
+        :param request: CloakRequest
+        :return: CloakResult
+        """
+        self.logger.info(f"[CS] Cache strategy for PID {request.pid} - placeholder")
+        
+        # Placeholder
+        return CloakResult(
+            success=True,
+            pid=request.pid,
+            applied_controls=['cache_management']
+        )
+    
+    def _apply_memory_strategy(self, request: CloakRequest) -> CloakResult:
+        """
+        Apply memory limits - simplified placeholder.
+        
+        :param request: CloakRequest
+        :return: CloakResult  
+        """
+        self.logger.info(f"[CS] Memory strategy for PID {request.pid} - placeholder")
+        
+        # Placeholder
+        return CloakResult(
+            success=True,
+            pid=request.pid,
+            applied_controls=['memory_limit']
+        )
+
+
+###############################################################################
 #                    STRATEGY TYPES & UNIFIED ARCHITECTURE                   #
 ###############################################################################
 
@@ -315,9 +514,6 @@ class CloakStrategy(ABC):
             'compatibility': self.compatibility_matrix
         }
 
-###############################################################################
-#                              GPU STRATEGIES                                  #
-###############################################################################
 
 ###############################################################################
 #                 GPU STRATEGY: GpuCloakStrategy                              #
@@ -1556,8 +1752,6 @@ class MemoryCloakStrategy(CloakStrategy):
         Khôi phục Memory - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
         """
         self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-
-# Note: CloakStrategyFactory implementation moved to resource_control.py
 
 ###############################################################################
 #                         ✅ ERROR RECOVERY SYSTEM                         #

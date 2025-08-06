@@ -43,10 +43,6 @@ error_reporter = get_error_reporter()
 from threading import RLock
 
 
-# ✅ CPU RESOURCE MANAGER COMPLETELY REMOVED
-# All CPU processing, optimization, and cloaking functionality eliminated.
-# Only GPU processing remains for crypto mining operations.
-
 ###############################################################################
 #                           GPU RESOURCE MANAGER                              #
 ###############################################################################
@@ -1235,7 +1231,7 @@ class ResourceControlFactory:
     @staticmethod
     def get_shared_managers_info() -> Dict[str, Any]:
         """
-        ✅ NEW: Get information about shared resource manager instances.
+        Get information about shared resource manager instances.
         
         :return: Dictionary containing shared managers statistics
         """
@@ -1253,7 +1249,7 @@ class ResourceControlFactory:
     @staticmethod
     def validate_manager_instances(expected_managers: List[str]) -> bool:
         """
-        ✅ NEW: Validate that required manager instances are available and functional.
+        Validate that required manager instances are available and functional.
         
         :param expected_managers: List of manager names that should be available
         :return: True if all expected managers are available and functional
@@ -1263,31 +1259,31 @@ class ResourceControlFactory:
                 for config_hash, managers in ResourceControlFactory._shared_managers.items():
                     missing_managers = set(expected_managers) - set(managers.keys())
                     if missing_managers:
-                        resource_logger.warning(f"⚠️ [Validation] Config {config_hash} missing managers: {missing_managers}")
+                        resource_logger.warning(f"Config {config_hash} missing managers: {missing_managers}")
                         return False
                     
-                    # ✅ FUNCTIONAL CHECK: Verify each manager is still operational
+                    # FUNCTIONAL CHECK: Verify each manager is still operational
                     for manager_name, manager_instance in managers.items():
                         if manager_instance is None:
-                            resource_logger.error(f"❌ [Validation] Manager '{manager_name}' is None in config {config_hash}")
+                            resource_logger.error(f"Manager '{manager_name}' is None in config {config_hash}")
                             return False
                         
                         # Basic health check - verify the manager has expected attributes
                         if not hasattr(manager_instance, 'config') or not hasattr(manager_instance, 'logger'):
-                            resource_logger.error(f"❌ [Validation] Manager '{manager_name}' missing required attributes")
+                            resource_logger.error(f"Manager '{manager_name}' missing required attributes")
                             return False
                 
-                resource_logger.info(f"✅ [Validation] All {len(expected_managers)} expected managers validated successfully")
+                resource_logger.info(f"All {len(expected_managers)} expected managers validated successfully")
                 return True
                 
         except Exception as e:
-            resource_logger.error(f"❌ [Validation] Error validating manager instances: {e}")
+            resource_logger.error(f"Error validating manager instances: {e}")
             return False
     
     @staticmethod
     def cleanup_unused_managers() -> int:
         """
-        ✅ NEW: Clean up unused resource manager instances to free memory.
+        Clean up unused resource manager instances to free memory.
         
         :return: Number of cleaned up manager configurations
         """
@@ -1296,303 +1292,155 @@ class ResourceControlFactory:
                 initial_count = len(ResourceControlFactory._shared_managers)
                 
                 # For now, we'll keep all managers as they might be reused
-                # In a more sophisticated implementation, we could track usage and clean up unused ones
-                resource_logger.info(f"🧹 [Cleanup] Keeping {initial_count} manager configurations (all potentially active)")
+                resource_logger.info(f"Keeping {initial_count} manager configurations (all potentially active)")
                 
                 return 0  # No cleanup performed in this conservative implementation
                 
         except Exception as e:
-            resource_logger.error(f"❌ [Cleanup] Error during cleanup: {e}")
+            resource_logger.error(f"Error during cleanup: {e}")
             return 0
 
-    # ------------------------------------------------------------------
-    # Fail-safe helper
-    # ------------------------------------------------------------------
-    # ✅ CPU RLIMITS REMOVED: All CPU resource limiting functionality eliminated
 
 ###############################################################################
-#                           RESOURCE COORDINATOR                              #
+#                      SIMPLIFIED HARDWARE CONTROLLER                         #
 ###############################################################################
 
-class ResourceCoordinator:
+from .utils import CloakResult
+
+class HardwareController:
     """
-    ✅ ENHANCED: Điều phối viên trung tâm với shared resource managers.
-    Phân biệt giữa direct execution và plugin delegation.
-    Optimized với singleton resource managers để prevent redundant creation.
-    
-    Strategies: GPU (with thermal), Network, Disk I/O, Cache, Memory
+    Simple hardware controller - direct manipulation, no abstraction layers.
+    Pipeline Stage 3: Nhận control params từ CloakStrategies -> Apply hardware controls.
     """
     
-    def __init__(self, config: Dict[str, Any], logger: logging.Logger):
+    def __init__(self, config: Dict[str, Any]):
         """
-        Khởi tạo ResourceCoordinator.
+        Initialize hardware controller với config.
         
-        :param config: Cấu hình hệ thống
-        :param logger: Logger để ghi log
+        :param config: Configuration dictionary
         """
         self.config = config
-        self.logger = logger
-        self.resource_managers = {}
+        self.logger = resource_logger  # Use existing logger
         
-        # Import strategies (CPU strategy removed)
-        from .cloak_strategies import (
-            GpuCloakStrategy, NetworkCloakStrategy,
-            DiskIoCloakStrategy, CacheCloakStrategy, MemoryCloakStrategy,
-            StrategyType
-        )
+        # Initialize GPU manager
+        self.gpu_manager = GPUResourceManager(config, self.logger)
         
-        # ✅ ENHANCED: Use shared resource managers from singleton factory
+        # Initialize Network manager if needed
+        self.network_manager = NetworkResourceManager(config, self.logger)
+        
+        self.logger.info("[RC] HardwareController initialized - Stage 3 ready")
+    
+    def apply_gpu_controls(self, params: Dict[str, Any]) -> CloakResult:
+        """
+        Apply GPU hardware controls directly - no abstraction.
+        
+        :param params: Control parameters including:
+            - pid: Process ID
+            - gpu_index: GPU index (default 0)
+            - power_limit: Power limit in Watts
+            - memory_clock: Memory clock in MHz (optional)
+            - sm_clock: SM clock in MHz (optional)
+        :return: CloakResult với status và details
+        """
+        pid = params.get('pid', -1)
+        gpu_index = params.get('gpu_index', 0)
+        
         try:
-            self.resource_managers = ResourceControlFactory.create_resource_managers(config, logger)
+            self.logger.info(f"[RC] Stage 3: Applying GPU controls for PID {pid}")
             
-            # ✅ VALIDATION: Verify all required managers are available (CPU removed)
-            required_managers = ['gpu', 'network', 'disk_io', 'cache', 'memory']
-            if ResourceControlFactory.validate_manager_instances(required_managers):
-                self.logger.info("✅ ResourceCoordinator using shared resource managers successfully")
-                
-                # ✅ METRICS: Log sharing efficiency
-                sharing_info = ResourceControlFactory.get_shared_managers_info()
-                self.logger.info(f"📊 [ResourceCoordinator] {sharing_info['memory_efficiency']}")
-            else:
-                self.logger.warning("⚠️ ResourceCoordinator validation issues detected")
-                
-        except Exception as e:
-            self.logger.error(f"❌ Lỗi khởi tạo shared resource managers: {e}")
-            raise
-        
-        # Khởi tạo strategies (CPU strategy removed)
-        self.strategies = {
-            StrategyType.GPU: GpuCloakStrategy(config, logger, self.resource_managers.get('gpu')),
-            StrategyType.NETWORK: NetworkCloakStrategy(config, logger, self.resource_managers.get('network')),
-            StrategyType.DISK_IO: DiskIoCloakStrategy(config, logger, self.resource_managers.get('disk_io')),
-            StrategyType.CACHE: CacheCloakStrategy(config, logger, self.resource_managers.get('cache')),
-            StrategyType.MEMORY: MemoryCloakStrategy(config, logger, self.resource_managers.get('memory'), self.resource_managers.get('cache'))
-        }
-        
-        self.logger.info("✅ ResourceCoordinator khởi tạo 5 GPU-only strategies thành công (thermal integrated trong GPU)")
-    
-    def apply_strategy(self, strategy_type: str, process: Any) -> bool:
-        """
-        Áp dụng một chiến lược cụ thể cho một tiến trình.
-        
-        :param strategy_type: Loại chiến lược cần áp dụng
-        :param process: Đối tượng MiningProcess cần áp dụng chiến lược
-        :return: True nếu áp dụng thành công, False nếu thất bại
-        """
-        try:
-            strategy = self.strategies.get(strategy_type)
-            if not strategy:
-                self.logger.error(f"❌ Không tìm thấy strategy: {strategy_type}")
-                return False
+            applied_controls = []
             
-            # Phân biệt giữa direct execution và plugin delegation
-            if strategy.requires_plugin_system:
-                return self._delegate_to_plugin(strategy_type, strategy, process)
-            else:
-                return self._direct_execute(strategy_type, strategy, process)
-                
-        except Exception as e:
-            self.logger.error(f"❌ Lỗi áp dụng strategy {strategy_type}: {e}")
-            return False
-    
-    def apply_strategies(self, process: Any) -> Dict[str, bool]:
-        """
-        Áp dụng tất cả chiến lược phù hợp cho một tiến trình.
-        
-        :param process: Đối tượng MiningProcess cần áp dụng chiến lược
-        :return: Dictionary chứa kết quả áp dụng từng chiến lược
-        """
-        results = {}
-        
-        # Xác định loại tiến trình
-        is_gpu = hasattr(process, "is_gpu_process") and callable(getattr(process, "is_gpu_process")) and process.is_gpu_process()
-        
-        # Áp dụng chiến lược phù hợp
-        if is_gpu:
-            # GPU process: áp dụng GPU (with integrated thermal) + các chiến lược chung
-            # ✅ UNIFIED: Thermal management được integrate trong StrategyType.GPU
-            strategies_to_apply = [
-                StrategyType.GPU,  # Includes integrated thermal management
-                StrategyType.NETWORK,
-                StrategyType.DISK_IO,
-                StrategyType.CACHE,
-                StrategyType.MEMORY
-            ]
-        else:
-            # Non-GPU process: áp dụng các chiến lược chung (CPU disabled)
-            strategies_to_apply = [
-                StrategyType.NETWORK,
-                StrategyType.DISK_IO,
-                StrategyType.CACHE,
-                StrategyType.MEMORY
-            ]
-        
-        for strategy_type in strategies_to_apply:
-            results[strategy_type] = self.apply_strategy(strategy_type, process)
-        
-        return results
-    
-    def _direct_execute(self, strategy_type: str, strategy: Any, process: Any) -> bool:
-        """
-        Thực thi trực tiếp một chiến lược.
-        
-        :param strategy_type: Loại chiến lược
-        :param strategy: Đối tượng chiến lược
-        :param process: Đối tượng MiningProcess
-        :return: True nếu thực thi thành công, False nếu thất bại
-        """
-        try:
-            self.logger.info(f"🔧 Direct execute strategy: {strategy_type} cho PID={process.pid}")
-            strategy.apply(process)
-            self.logger.info(f"✅ Direct execute thành công: {strategy_type} cho PID={process.pid}")
-            return True
-        except Exception as e:
-            self.logger.error(f"❌ Lỗi direct execute {strategy_type}: {e}")
-            return False
-    
-    def _delegate_to_plugin(self, strategy_type: str, strategy: Any, process: Any) -> bool:
-        """
-        Ủy quyền thực thi cho plugin system.
-        
-        :param strategy_type: Loại chiến lược
-        :param strategy: Đối tượng chiến lược
-        :param process: Đối tượng MiningProcess
-        :return: True nếu ủy quyền thành công, False nếu thất bại
-        """
-        try:
-            self.logger.debug(f"🔄 Ủy quyền chiến lược {strategy_type} cho plugin system")
-            
-            # GPU plugin delegation (CPU delegation removed)
-            if strategy_type == StrategyType.GPU:
-                gpu_manager = self.resource_managers.get('gpu')
-                if not gpu_manager:
-                    self.logger.error("❌ Không tìm thấy GPU resource manager")
-                    return False
-                
-                # Import gpu_plugins system
-                try:
-                    from mining_environment.gpu_plugins import apply_gpu_strategies
-                    
-                    # Apply GPU strategies thông qua plugin system
-                    success = apply_gpu_strategies(process.pid, strategies=None)
-                    if success:
-                        self.logger.info(f"✅ Đã ủy quyền chiến lược GPU cho plugin system, PID={process.pid}")
-                        return True
-                    else:
-                        self.logger.error(f"❌ GPU plugin delegation thất bại cho PID={process.pid}")
-                        return False
-                        
-                except ImportError as e:
-                    self.logger.error(f"❌ Không thể import GPU plugins: {e}")
-                    # Fallback to direct execution
-                    self.logger.warning("⚠️ Fallback to direct GPU strategy execution")
-                    strategy.apply(process)
-                    return True
-                    
-                except Exception as e:
-                    self.logger.error(f"❌ Lỗi GPU plugin delegation: {e}")
-                    return False
-            
-            self.logger.warning(f"⚠️ Không hỗ trợ ủy quyền cho plugin system với chiến lược {strategy_type}")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"❌ Lỗi khi ủy quyền chiến lược {strategy_type} cho plugin system: {e}")
-            return False
-
-###############################################################################
-#                          BACKWARD COMPATIBILITY                             #
-###############################################################################
-
-class CloakStrategyFactory:
-    """
-    Wrapper factory để đảm bảo tương thích ngược với codebase hiện tại.
-    Thực ra chỉ là proxy đến ResourceCoordinator theo blueprint.
-    """
-    
-    _coordinator_instances = {}
-    
-    @staticmethod
-    def create_strategy(
-        strategy_name: str,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        resource_managers: Dict[str, Any],
-        process_type: str = None,
-        strategy_hints: Dict[str, Any] = None
-        ) -> Optional[Any]:
-        """
-        ✅ ENHANCED: Tạo type-aware strategy instance với pre-configuration.
-        
-        :param strategy_name: Tên chiến lược
-        :param config: Cấu hình
-        :param logger: Logger
-        :param resource_managers: Resource managers
-        :param process_type: 'GPU' process type cho optimization
-        :param strategy_hints: Optional optimization hints
-        :return: Pre-configured strategy instance hoặc None
-        """
-        # Tạo hoặc lấy ResourceCoordinator instance
-        coordinator_key = id(config)
-        if coordinator_key not in CloakStrategyFactory._coordinator_instances:
-            coordinator = ResourceCoordinator(config, logger)
-            CloakStrategyFactory._coordinator_instances[coordinator_key] = coordinator
-        else:
-            coordinator = CloakStrategyFactory._coordinator_instances[coordinator_key]
-        
-        # Import StrategyType
-        from .cloak_strategies import StrategyType
-        
-        # ✅ ENHANCED: Map strategy name cho GPU-only comprehensive cloaking (CPU removed)
-        strategy_mapping = {
-            'gpu': StrategyType.GPU,
-            'network': StrategyType.NETWORK,
-            'disk_io': StrategyType.DISK_IO,
-            'cache': StrategyType.CACHE,
-            'memory': StrategyType.MEMORY,
-            # GPU cloaking strategies
-            'gpu_cloaking': StrategyType.GPU,
-            'network_cloaking': StrategyType.NETWORK,
-            'disk_io_cloaking': StrategyType.DISK_IO,
-            'cache_cloaking': StrategyType.CACHE,
-            'memory_cloaking': StrategyType.MEMORY,
-        }
-        
-        if strategy_name in strategy_mapping:
-            mapped_name = strategy_mapping[strategy_name]
-            strategy = coordinator.strategies.get(mapped_name)
-        else:
-            # Thử tìm trực tiếp
-            strategy = coordinator.strategies.get(strategy_name)
-        
-        # ✅ TYPE-AWARE CONFIGURATION
-        if strategy and process_type:
-            try:
-                # Pre-configure strategy nếu support type-aware config
-                if hasattr(strategy, 'configure_for_process_type'):
-                    strategy.configure_for_process_type(process_type, strategy_hints)
-                    logger.info(f"🎯 [Factory] Strategy '{strategy_name}' pre-configured for {process_type}")
+            # 1. Apply power limit if specified
+            if 'power_limit' in params:
+                power_limit = params['power_limit']
+                success = self.gpu_manager.set_gpu_power_limit(pid, gpu_index, power_limit)
+                if success:
+                    self.logger.info(f"[RC] ✅ Applied {power_limit}W to GPU {gpu_index}")
+                    applied_controls.append(f"power_limit_{power_limit}W")
                 else:
-                    logger.debug(f"⚠️ [Factory] Strategy '{strategy_name}' doesn't support type-aware config")
-            except Exception as e:
-                logger.error(f"❌ [Factory] Failed to configure strategy '{strategy_name}': {e}")
-        
-        return strategy
+                    self.logger.error(f"[RC] ❌ Failed to set power limit")
+            
+            # 2. Apply clock speeds if specified
+            if 'sm_clock' in params and 'memory_clock' in params:
+                sm_clock = params['sm_clock']
+                mem_clock = params['memory_clock']
+                success = self.gpu_manager.set_gpu_clocks(pid, gpu_index, sm_clock, mem_clock)
+                if success:
+                    self.logger.info(f"[RC] ✅ Applied clocks: SM={sm_clock}MHz, Mem={mem_clock}MHz")
+                    applied_controls.append(f"clocks_{sm_clock}_{mem_clock}MHz")
+                else:
+                    self.logger.warning(f"[RC] ⚠️ Could not set GPU clocks")
+            
+            # 3. Temperature management if threshold specified
+            if 'temp_threshold' in params:
+                temp_threshold = params['temp_threshold']
+                fan_increase = params.get('fan_increase', 10.0)
+                success = self.gpu_manager.limit_temperature(gpu_index, temp_threshold, fan_increase)
+                if success:
+                    self.logger.info(f"[RC] ✅ Temperature management active: {temp_threshold}°C")
+                    applied_controls.append(f"temp_mgmt_{temp_threshold}C")
+            
+            # Return success if at least one control was applied
+            if applied_controls:
+                return CloakResult(
+                    success=True,
+                    pid=pid,
+                    applied_controls=applied_controls
+                )
+            else:
+                return CloakResult(
+                    success=False,
+                    pid=pid,
+                    error_msg="No controls were successfully applied"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"[RC] Exception in apply_gpu_controls: {e}")
+            return CloakResult(
+                success=False,
+                pid=pid,
+                error_msg=str(e)
+            )
     
-    @staticmethod
-    def get_available_strategies() -> List[str]:
+    def apply_network_controls(self, params: Dict[str, Any]) -> CloakResult:
         """
-        Lấy danh sách 5 GPU-only strategies có sẵn cho tương thích ngược.
-        Thermal management được integrate trong GPU strategy.
+        Apply network bandwidth controls.
         
-        :return: List các strategy names (5 strategies, CPU removed)
+        :param params: Network control parameters
+        :return: CloakResult
         """
-        from .cloak_strategies import StrategyType
+        pid = params.get('pid', -1)
         
-        return [
-            StrategyType.GPU,
-            StrategyType.NETWORK,
-            StrategyType.DISK_IO,
-            StrategyType.CACHE,
-            StrategyType.MEMORY
-        ]
+        try:
+            self.logger.info(f"[RC] Stage 3: Applying network controls for PID {pid}")
+            
+            # Apply bandwidth limits
+            if 'bandwidth_limit' in params:
+                limit_mbps = params['bandwidth_limit']
+                interface = params.get('interface', 'eth0')
+                
+                # Use NetworkResourceManager's existing methods
+                success = self.network_manager.limit_bandwidth(pid, interface, limit_mbps)
+                
+                if success:
+                    self.logger.info(f"[RC] ✅ Applied {limit_mbps}Mbps limit on {interface}")
+                    return CloakResult(
+                        success=True,
+                        pid=pid,
+                        applied_controls=[f"bandwidth_{limit_mbps}Mbps"]
+                    )
+            
+            return CloakResult(
+                success=False,
+                pid=pid,
+                error_msg="Network control not applied"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"[RC] Exception in apply_network_controls: {e}")
+            return CloakResult(
+                success=False,
+                pid=pid,
+                error_msg=str(e)
+            )
+

