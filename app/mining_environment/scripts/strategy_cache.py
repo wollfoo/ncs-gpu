@@ -15,10 +15,10 @@ from collections import defaultdict, OrderedDict
 
 # Import unified logging và error management
 try:
-    from .unified_logging import get_unified_logger
+    from .module_loggers import get_cloak_strategies_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
 except ImportError:
-    from unified_logging import get_unified_logger
+    from module_loggers import get_cloak_strategies_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity
 
 class CacheEvictionPolicy(Enum):
@@ -143,7 +143,7 @@ class IntelligentStrategyCache:
         self.metrics_lock = threading.RLock()
         
         # ✅ LOGGING: Unified logging integration
-        self.logger = get_unified_logger('strategy_cache')
+        self.logger = get_cloak_strategies_logger()
         self.error_reporter = get_error_reporter()
         
         # ✅ BACKGROUND TASKS: Cleanup and validation

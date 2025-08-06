@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict
 from concurrent.futures import ThreadPoolExecutor
 
 # ✅ UNIFIED LOGGING: Use centralized logging system
-from .unified_logging import get_unified_logger
+from .module_loggers import get_gpu_monitoring_logger
 
 @dataclass
 class GPUHealthMetrics:
@@ -64,7 +64,7 @@ class GPUResourceManagerMonitor:
             gpu_manager: Instance của GPUResourceManager
             config: Configuration cho monitoring
         """
-        self.logger = get_unified_logger('gpu_resource_monitor')
+        self.logger = get_gpu_monitoring_logger()
         self.gpu_manager = gpu_manager
         self.config = config or {}
         

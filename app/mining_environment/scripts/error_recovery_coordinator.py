@@ -15,10 +15,10 @@ from collections import defaultdict, deque
 
 # Import unified logging và error management
 try:
-    from .unified_logging import get_unified_logger
+    from .module_loggers import get_coordination_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, ErrorContext
 except ImportError:
-    from unified_logging import get_unified_logger
+    from module_loggers import get_coordination_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, ErrorContext
 
 class RecoveryStrategy(Enum):
@@ -97,7 +97,7 @@ class ErrorRecoveryCoordinator:
         )
         
         # ✅ LOGGING: Unified logging integration
-        self.logger = get_unified_logger('error_recovery_coordinator')
+        self.logger = get_coordination_logger()
         self.error_reporter = get_error_reporter()
         
         self.logger.info("✅ [RecoveryCoordinator] Error recovery coordinator initialized")

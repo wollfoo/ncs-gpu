@@ -11,8 +11,8 @@ from typing import Dict, Any, List, Optional
 from flask import Flask, render_template_string, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-# ✅ UNIFIED LOGGING: Use centralized logging system  
-from .unified_logging import get_unified_logger
+# ✅ MIGRATED LOGGING: Use new module-specific logging system  
+from .module_loggers import get_gpu_monitoring_dashboard_logger
 from .gpu_resource_monitor import get_gpu_monitor
 
 class GPUMonitoringDashboard:

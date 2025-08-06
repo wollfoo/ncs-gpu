@@ -35,7 +35,7 @@ sys.path.insert(0, str(project_root))
 
 # Import required modules
 try:
-    from mining_environment.scripts.unified_logging import get_unified_logger
+    from mining_environment.scripts.module_loggers import get_stealth_inference_logger
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
     sys.exit(1)
@@ -56,7 +56,7 @@ class StealthActivationManager:
         Args:
             logger: Optional logger instance
         """
-        self.logger = logger or get_unified_logger('mining_environment.stealth_activation')
+        self.logger = logger or get_stealth_inference_logger()
         
         # DirectPIDRegistry observer setup
         self.direct_registry = None

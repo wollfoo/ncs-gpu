@@ -52,7 +52,8 @@ logger = setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'),
 
 # ---------- DEBUG GPU-ONLY LOGGING BOOSTER ----------
 try:
-    from mining_environment.scripts.unified_logging import get_unified_logger
+    # Updated: migrated from unified_logging to module_loggers
+    from mining_environment.scripts.module_loggers import get_start_mining_logger
     GPU_LOGGERS = [
         'mining_environment.resource_control',
         'mining_environment.cloak_strategies',

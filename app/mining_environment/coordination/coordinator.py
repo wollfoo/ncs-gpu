@@ -19,7 +19,7 @@ try:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent / 'scripts'))
-    from unified_logging import get_unified_logger
+    from module_loggers import get_coordination_logger
     LOGGING_AVAILABLE = True
 except ImportError:
     LOGGING_AVAILABLE = False
@@ -33,7 +33,7 @@ class HookCoordinator:
         # ✅ LOGGER INITIALIZATION: Initialize logger using unified_logging system
         if LOGGING_AVAILABLE:
             try:
-                self.logger = get_unified_logger('mining_environment.coordination.coordinator')
+                self.logger = get_coordination_logger()
             except Exception:
                 # Fallback to default logger if unified_logging fails
                 import logging
@@ -78,7 +78,7 @@ class HookCoordinator:
         
         # ✅ UNIFIED LOGGING: Initialize coordination logger
         if LOGGING_AVAILABLE:
-            self.logger = get_unified_logger('mining_environment.coordination')
+            self.logger = get_coordination_logger()
             self.logger.info("🔗 HookCoordinator initialized with unified logging")
             self.logger.info("🏥 [HEALTH] Health monitoring system initialized")
             self.logger.info("⚙️ [TIER-4-CONFIG] Centralized configuration manager initialized")

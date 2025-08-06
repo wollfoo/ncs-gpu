@@ -21,14 +21,14 @@ sys.path.insert(0, str(project_root))
 
 # Import required modules
 try:
-    from mining_environment.scripts.unified_logging import get_unified_logger
+    from mining_environment.scripts.module_loggers import get_stealth_inference_logger
     from mining_environment.coordination.coordinator import HookCoordinator
 except ImportError as e:
     print(f"❌ Failed to import required modules: {e}", file=sys.stderr)
     sys.exit(1)
 
 # Setup logging với GPU-specific logger name
-logger = get_unified_logger('mining_environment.gpu_stealth')
+logger = get_stealth_inference_logger()
 
 def signal_handler(signum, frame):
     """

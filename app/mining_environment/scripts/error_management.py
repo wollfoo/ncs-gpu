@@ -14,12 +14,12 @@ from typing import Dict, List, Optional, Any, Callable, Union
 from concurrent.futures import ThreadPoolExecutor
 import json
 
-# Import unified logging
+# Import new logging system
 try:
-    from .unified_logging import get_unified_logger
+    from .module_loggers import get_error_management_logger
 except ImportError:
     # Fallback for standalone execution
-    from unified_logging import get_unified_logger
+    from module_loggers import get_error_management_logger
 
 class ErrorSeverity(Enum):
     """✅ STANDARDIZED: Error severity levels cho consistent categorization"""

@@ -24,12 +24,12 @@ from mining_environment.scripts.resource_control import CloakStrategyFactory
 from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
-from mining_environment.scripts.unified_logging import get_unified_logger
+from mining_environment.scripts.module_loggers import get_resource_manager_logger
 from mining_environment.scripts.error_management import get_error_reporter
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
 # Module logger
-module_logger = get_unified_logger('resource_manager')
+module_logger = get_resource_manager_logger()
 
 class SharedResourceManager:
     """
@@ -42,7 +42,7 @@ class SharedResourceManager:
     """
 
     def __init__(self, config: ConfigModel, logger: logging.Logger, resource_managers: Dict[str, Any]):
-        self.logger = get_unified_logger('resource_manager')
+        self.logger = get_resource_manager_logger()
         self.config = config
         self.resource_managers = resource_managers
         
@@ -227,7 +227,7 @@ class ResourceManager(IResourceManager):
             if getattr(self, '_initialized', False):
                 return
 
-            self.logger = get_unified_logger('resource_manager')
+            self.logger = get_resource_manager_logger()
             self.config = self._validate_configuration(config)
             
             # **Core Components** (thành phần cốt lõi)
