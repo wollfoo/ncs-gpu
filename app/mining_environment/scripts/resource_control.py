@@ -28,7 +28,8 @@ from pathlib import Path
 from .cloak_strategies import StrategyType
 
 # ✅ UNIFIED LOGGING: Use centralized logging system
-from .unified_logging import get_unified_logger
+# Migration Phase 3: Updated to use new logging architecture
+from .module_loggers import get_resource_control_logger
 
 # ✅ ERROR MANAGEMENT: Use centralized error handling system
 from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error

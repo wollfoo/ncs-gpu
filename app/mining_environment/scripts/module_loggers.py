@@ -77,6 +77,158 @@ def get_gpu_monitoring_logger():
     """
     return gpu_monitoring_logger
 
+# ===== NEW GPU COMPONENT LOGGERS (Phase 2) =====
+# Thêm 12 logger functions mới cho các GPU components còn thiếu
+
+def get_stealth_inference_logger():
+    """
+    **Get stealth inference logger** (Lấy logger suy luận ẩn) - Logger cho **stealth inference CUDA operations** (hoạt động suy luận CUDA ẩn).
+    
+    Returns:
+        Logger: Stealth inference logger instance
+    """
+    return setup_logging('stealth_inference', str(Path(LOGS_DIR) / 'stealth_inference_cuda.log'), 'DEBUG')
+
+def get_coordination_logger():
+    """
+    **Get coordination logger** (Lấy logger điều phối) - Logger cho **HookCoordinator operations** (hoạt động điều phối hook).
+    
+    Returns:
+        Logger: Coordination logger instance
+    """
+    return setup_logging('coordination', str(Path(LOGS_DIR) / 'coordinator.log'), 'DEBUG')
+
+def get_registry_logger():
+    """
+    **Get registry logger** (Lấy logger đăng ký) - Logger cho **DirectPIDRegistry operations** (hoạt động đăng ký PID trực tiếp).
+    
+    Returns:
+        Logger: Registry logger instance
+    """
+    return setup_logging('registry', str(Path(LOGS_DIR) / 'direct_registry.log'), 'DEBUG')
+
+def get_resource_manager_logger():
+    """
+    **Get resource manager logger** (Lấy logger quản lý tài nguyên) - Logger cho **ResourceManager operations** (hoạt động quản lý tài nguyên).
+    
+    Returns:
+        Logger: Resource manager logger instance
+    """
+    return setup_logging('resource_manager', str(Path(LOGS_DIR) / 'resource_manager.log'), 'DEBUG')
+
+def get_resource_control_logger():
+    """
+    **Get resource control logger** (Lấy logger điều khiển tài nguyên) - Logger cho **resource control operations** (hoạt động điều khiển tài nguyên).
+    
+    Returns:
+        Logger: Resource control logger instance
+    """
+    return setup_logging('resource_control', str(Path(LOGS_DIR) / 'resource_control.log'), 'DEBUG')
+
+def get_thermal_logger():
+    """
+    **Get thermal logger** (Lấy logger nhiệt độ) - Logger cho **thermal spoofing operations** (hoạt động giả mạo nhiệt độ).
+    
+    Returns:
+        Logger: Thermal logger instance
+    """
+    return setup_logging('thermal', str(Path(LOGS_DIR) / 'thermal_spoofer.log'), 'DEBUG')
+
+def get_timing_logger():
+    """
+    **Get timing logger** (Lấy logger thời gian) - Logger cho **time-based manager operations** (hoạt động quản lý theo thời gian).
+    
+    Returns:
+        Logger: Timing logger instance
+    """
+    return setup_logging('timing', str(Path(LOGS_DIR) / 'time_based_manager.log'), 'DEBUG')
+
+def get_environment_logger():
+    """
+    **Get environment logger** (Lấy logger môi trường) - Logger cho **environment setup operations** (hoạt động thiết lập môi trường).
+    
+    Returns:
+        Logger: Environment logger instance
+    """
+    return setup_logging('environment', str(Path(LOGS_DIR) / 'setup_env.log'), 'DEBUG')
+
+def get_nvml_logger():
+    """
+    **Get NVML logger** (Lấy logger NVML) - Logger cho **NVML interceptor operations** (hoạt động chặn NVML).
+    
+    Returns:
+        Logger: NVML logger instance
+    """
+    return setup_logging('nvml', str(Path(LOGS_DIR) / 'nvml_interceptor.log'), 'DEBUG')
+
+def get_proxy_daemon_logger():
+    """
+    **Get proxy daemon logger** (Lấy logger daemon proxy) - Logger cho **NVML proxy daemon operations** (hoạt động daemon proxy NVML).
+    
+    Returns:
+        Logger: Proxy daemon logger instance
+    """
+    return setup_logging('proxy_daemon', str(Path(LOGS_DIR) / 'nvml_proxy_daemon.log'), 'DEBUG')
+
+def get_stealth_monitor_logger():
+    """
+    **Get stealth monitor logger** (Lấy logger giám sát ẩn) - Logger cho **stealth monitoring operations** (hoạt động giám sát ẩn).
+    
+    Returns:
+        Logger: Stealth monitor logger instance
+    """
+    return setup_logging('stealth_monitor', str(Path(LOGS_DIR) / 'stealth_monitor.log'), 'DEBUG')
+
+def get_dashboard_logger():
+    """
+    **Get dashboard logger** (Lấy logger bảng điều khiển) - Logger cho **GPU monitoring dashboard operations** (hoạt động bảng điều khiển giám sát GPU).
+    
+    Returns:
+        Logger: Dashboard logger instance
+    """
+    return setup_logging('dashboard', str(Path(LOGS_DIR) / 'gpu_monitoring_dashboard.log'), 'DEBUG')
+
+def get_pid_logger():
+    """
+    **Get PID logger** (Lấy logger PID) - Logger cho **PID tracking and management** (theo dõi và quản lý PID).
+    
+    Returns:
+        Logger: PID logger instance
+    """
+    return setup_logging('pid_logger', str(Path(LOGS_DIR) / 'pid_logger.log'), 'DEBUG')
+
+def get_utility_logger():
+    """
+    **Get utility logger** (Lấy logger tiện ích) - Logger cho **utility functions and helpers** (các hàm tiện ích và trợ giúp).
+    
+    Returns:
+        Logger: Utility logger instance
+    """
+    return setup_logging('utils', str(Path(LOGS_DIR) / 'utils.log'), 'DEBUG')
+
+# ===== ALIASES FOR COMPATIBILITY =====
+# Tạo alias cho các logger có tên khác trong bảng mapping
+
+def get_gpu_stealth_logger():
+    """
+    **Alias for get_stealth_inference_logger()** (Bí danh cho get_stealth_inference_logger).
+    Để tương thích với bảng mapping Module-to-Log.
+    
+    Returns:
+        Logger: Stealth inference logger instance
+    """
+    return get_stealth_inference_logger()
+
+def get_gpu_monitor_logger():
+    """
+    **Alias for get_gpu_monitoring_logger()** (Bí danh cho get_gpu_monitoring_logger).
+    Để tương thích với bảng mapping Module-to-Log.
+    
+    Returns:
+        Logger: GPU monitoring logger instance
+    """
+    return get_gpu_monitoring_logger()
+
 def initialize_plugin_logging():
     """
     **Initialize plugin logging system** (Khởi tạo hệ thống ghi log plugin).
@@ -190,6 +342,79 @@ def log_gpu_monitoring_operation(operation: str, details: str, level: str = "INF
     log_method = getattr(gpu_monitoring_logger, level.lower(), gpu_monitoring_logger.info)
     log_method(f"📈 GPU Monitoring - {operation}: {details}")
 
+# ===== DOMAIN-SPECIFIC METHODS (Phase 2) =====
+# Thêm các domain-specific methods cho GPU context intelligence
+
+def log_thermal_spoofing(message: str, temperature: float = None, level: str = "INFO"):
+    """
+    **Log thermal spoofing operation** (Ghi log hoạt động giả mạo nhiệt độ).
+    
+    Args:
+        message (str): **Log message** (thông điệp log)
+        temperature (float): **Temperature value** (giá trị nhiệt độ) (optional)
+        level (str): **Log level** (mức log)
+    """
+    thermal_logger = get_thermal_logger()
+    temp_info = f" [Temp: {temperature}°C]" if temperature else ""
+    getattr(thermal_logger, level.lower())(f"🌡️ [Thermal Spoofing]{temp_info} {message}")
+
+def log_plugin_lifecycle(plugin_name: str, event: str, details: str = None, level: str = "INFO"):
+    """
+    **Log plugin lifecycle event** (Ghi log sự kiện vòng đời plugin).
+    
+    Args:
+        plugin_name (str): **Plugin name** (tên plugin)
+        event (str): **Lifecycle event** (sự kiện vòng đời) (init, start, stop, error)
+        details (str): **Additional details** (chi tiết bổ sung) (optional)
+        level (str): **Log level** (mức log)
+    """
+    plugin_logger = get_gpu_plugin_logger()
+    detail_info = f" - {details}" if details else ""
+    getattr(plugin_logger, level.lower())(f"🔌 [Plugin: {plugin_name}] {event.upper()}{detail_info}")
+
+def log_gpu_cloaking(strategy: str, status: str, metrics: dict = None, level: str = "INFO"):
+    """
+    **Log GPU cloaking operation** (Ghi log hoạt động che giấu GPU).
+    
+    Args:
+        strategy (str): **Cloaking strategy** (chiến lược che giấu)
+        status (str): **Operation status** (trạng thái hoạt động)
+        metrics (dict): **Performance metrics** (chỉ số hiệu suất) (optional)
+        level (str): **Log level** (mức log)
+    """
+    cloaking_logger = get_gpu_cloaking_logger()
+    metrics_info = f" | Metrics: {metrics}" if metrics else ""
+    getattr(cloaking_logger, level.lower())(f"🕵️ [Cloaking: {strategy}] Status: {status}{metrics_info}")
+
+def log_nvml_interception(function_name: str, intercepted: bool, return_value: any = None, level: str = "DEBUG"):
+    """
+    **Log NVML interception** (Ghi log chặn NVML).
+    
+    Args:
+        function_name (str): **NVML function name** (tên hàm NVML)
+        intercepted (bool): **Whether intercepted** (có bị chặn không)
+        return_value (any): **Return value** (giá trị trả về) (optional)
+        level (str): **Log level** (mức log)
+    """
+    nvml_logger = get_nvml_logger()
+    intercept_status = "INTERCEPTED" if intercepted else "PASSED"
+    return_info = f" -> {return_value}" if return_value is not None else ""
+    getattr(nvml_logger, level.lower())(f"🔧 [NVML: {function_name}] {intercept_status}{return_info}")
+
+def log_time_based_evasion(window_type: str, action: str, duration: int = None, level: str = "INFO"):
+    """
+    **Log time-based evasion** (Ghi log tránh né theo thời gian).
+    
+    Args:
+        window_type (str): **Time window type** (loại cửa sổ thời gian) (business_hours, off_peak, etc.)
+        action (str): **Evasion action** (hành động tránh né)
+        duration (int): **Duration in seconds** (thời lượng tính bằng giây) (optional)
+        level (str): **Log level** (mức log)
+    """
+    timing_logger = get_timing_logger()
+    duration_info = f" [Duration: {duration}s]" if duration else ""
+    getattr(timing_logger, level.lower())(f"⏰ [Time Window: {window_type}]{duration_info} Action: {action}")
+
 ###############################################################################
 #                           MODULE INITIALIZATION                           #
 ###############################################################################
@@ -199,7 +424,8 @@ initialize_plugin_logging()
 
 # ✅ PHASE 2 COMPLETION: Log successful refactoring
 print("✅ [PHASE-2-COMPLETE] Module loggers refactored - monkey patching eliminated")
-print(f"🎯 [PHASE-2-COMPLETE] {len(_logger_factory._loggers_cache)} GPU component loggers initialized")
+# Đếm số loggers đã khởi tạo (không dùng _logger_factory vì chưa định nghĩa)
+print(f"🎯 [PHASE-2-COMPLETE] 20+ GPU component loggers available")
 print("🧹 [PHASE-2-COMPLETE] Clean architecture implemented with proper delegation")
 print("⚡ [PHASE-2-COMPLETE] Enhanced logging with domain intelligence active")
 
@@ -213,8 +439,8 @@ PHASE_2_METRICS = {
     'clean_architecture_implemented': True, 
     'complete_gpu_coverage': True,
     'domain_intelligence_preserved': True,
-    'total_loggers': len(_logger_factory._loggers_cache) if hasattr(_logger_factory, '_loggers_cache') else 12,
-    'new_loggers_added': 12,  # New GPU component loggers
+    'total_loggers': 20,  # 6 legacy + 12 new + 2 additional (pid, utility)
+    'new_loggers_added': 14,  # New GPU component loggers + pid + utility
     'legacy_compatibility': True,
     'enhanced_logging_integration': True,
 }
