@@ -695,7 +695,18 @@ class DirectPIDRegistry:
             logger.info(f"🔄 [RM-RETRY] Attempt {attempt + 1}/{max_retries} for PID {pid} (PHASE 2 Integration)")
             
             try:
-                # **Get ResourceManager singleton** (lấy singleton ResourceManager)
+                # **CRITICAL FIX: Prioritize registered ResourceManager for cross-process** (ưu tiên ResourceManager đã đăng ký cho cross-process)
+                rm_instance = None
+                
+                # **Check registered ResourceManager first (cross-process safe)** (kiểm tra ResourceManager đã đăng ký trước - an toàn cross-process)
+                with self._resource_manager_lock:
+                    if self._resource_manager is not None:
+                        logger.info(f"✅ [CROSS-PROCESS] Using registered ResourceManager instance")
+                        rm_instance = self._resource_manager
+                        # **For registered RM, skip readiness checks and execute directly** (với RM đã đăng ký, bỏ qua kiểm tra và thực thi trực tiếp)
+                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
+                
+                # **Fallback to singleton (only works in same process)** (fallback sang singleton - chỉ hoạt động trong cùng process)
                 rm_instance = ResourceManager._instance
                 
                 # **Enhanced Debug Logging** (ghi log gỡ lỗi nâng cao)
@@ -705,53 +716,51 @@ class DirectPIDRegistry:
                 
                 if rm_instance and ResourceManager.is_ready():
                     # **SUCCESS PATH: ResourceManager available and ready** (đường dẫn thành công)
-                    logger.info(f"✅ [RM-FORWARD] ResourceManager available and ready on attempt {attempt + 1}")
+                    logger.info(f"✅ [RM-FORWARD] ResourceManager singleton available and ready on attempt {attempt + 1}")
                     
                     # **Execute handoff with comprehensive metadata** (thực thi handoff với metadata toàn diện)
                     return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
                     
                 elif rm_instance and not ResourceManager.is_ready():
-                    # **🥉 MEDIUM FIX: Enhanced Readiness Wait Path** (đường dẫn chờ sẵn sàng nâng cao)
-                    logger.info(f"🔄 [MEDIUM] ResourceManager instance exists but not ready, waiting with enhanced validation...")
+                    # **Instance exists but not ready** (instance tồn tại nhưng chưa sẵn sàng)
+                    logger.info(f"🔄 [RM-FORWARD] ResourceManager instance exists but not ready, waiting...")
                     
-                    # **🥉 MEDIUM FIX: Extended timeout với SharedResourceManager validation** (timeout mở rộng với xác thực SharedResourceManager)
-                    wait_timeout = min(retry_delay * 3, RegistryConfig.DEFAULT_WAIT_TIMEOUT * 1.5)  # 🥉 Tăng từ *2 → *3, và *1.5 timeout
-                    logger.info(f"⏳ [MEDIUM] Waiting for readiness với extended timeout: {wait_timeout:.1f}s")
+                    # **Wait for readiness** (chờ sẵn sàng)
+                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
+                    logger.info(f"⏳ [RM-FORWARD] Waiting for readiness with timeout: {wait_timeout:.1f}s")
                     
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
                     
                     if ready:
-                        # **🥉 MEDIUM FIX: Additional SharedResourceManager validation** (xác thực SharedResourceManager bổ sung)
-                        if hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is not None:
-                            logger.info(f"✅ [MEDIUM] ResourceManager và SharedResourceManager sẵn sàng, executing handoff")
-                            return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                        else:
-                            logger.warning(f"⚠️ [MEDIUM] ResourceManager ready but SharedResourceManager not available")
-                            # Continue to exponential backoff section
+                        # **Skip SharedResourceManager check for singleton (may be cross-process)** (bỏ qua kiểm tra SharedResourceManager cho singleton)
+                        logger.info(f"✅ [RM-FORWARD] ResourceManager ready, executing handoff")
+                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
                     else:
-                        logger.warning(f"⏰ [MEDIUM] ResourceManager readiness timeout after {wait_timeout:.1f}s")
+                        logger.warning(f"⏰ [RM-FORWARD] ResourceManager readiness timeout after {wait_timeout:.1f}s")
                         # Continue to exponential backoff section
                         
                 else:
-                    # **🥉 MEDIUM FIX: Enhanced Instance Not Available Path** (đường dẫn instance chưa khả dụng nâng cao)
-                    logger.warning(f"⚠️ [MEDIUM] ResourceManager instance not yet created (attempt {attempt + 1}/{max_retries})")
-                    logger.warning(f"🔍 [MEDIUM] This indicates ResourceManager.__init__() chưa hoàn thành - critical race condition!")
+                    # **No ResourceManager available** (không có ResourceManager khả dụng)
+                    logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager instance available (attempt {attempt + 1}/{max_retries})")
+                    logger.info(f"🔍 [RM-FORWARD] This is expected in cross-process scenarios without registration")
                     
-                    # **🥉 MEDIUM FIX: Enhanced wait với SharedResourceManager validation** (chờ nâng cao với xác thực SharedResourceManager)
-                    logger.info(f"🔄 [MEDIUM] Attempting to wait for ResourceManager creation + SharedResourceManager readiness...")
-                    wait_timeout = min(retry_delay * 3, RegistryConfig.DEFAULT_WAIT_TIMEOUT * 1.5)  # 🥉 Tăng timeout
+                    # **For cross-process, cannot wait for singleton** (với cross-process, không thể chờ singleton)
+                    logger.info(f"🔄 [RM-FORWARD] Attempting to wait for ResourceManager readiness signal...")
+                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
+                    
+                    # **Try waiting for ready signal** (thử chờ tín hiệu sẵn sàng)
                     ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
                     
                     if ready:
-                        # **🥉 MEDIUM FIX: Enhanced re-check instance sau wait** (kiểm tra lại instance nâng cao sau khi chờ)
+                        # **Re-check instance after wait** (kiểm tra lại instance sau khi chờ)
                         rm_instance = ResourceManager._instance
-                        if rm_instance and hasattr(rm_instance, 'shared_resource_manager') and rm_instance.shared_resource_manager is not None:
-                            logger.info(f"✅ [MEDIUM] ResourceManager và SharedResourceManager created and ready after wait")
+                        if rm_instance:
+                            logger.info(f"✅ [RM-FORWARD] ResourceManager available after wait")
                             return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                        elif rm_instance:
-                            logger.warning(f"⚠️ [MEDIUM] ResourceManager created but SharedResourceManager still None")
                         else:
-                            logger.warning(f"⚠️ [MEDIUM] Ready signal set but instance still None")
+                            logger.warning(f"⚠️ [RM-FORWARD] Ready signal but instance still None (cross-process issue)")
+                    else:
+                        logger.warning(f"⏰ [RM-FORWARD] ResourceManager readiness timeout (expected in cross-process)")
                 
                 # **Exponential Backoff Section** (phần backoff theo cấp số nhân)
                 if attempt < max_retries - 1:
