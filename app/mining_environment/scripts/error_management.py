@@ -119,7 +119,7 @@ class CentralizedErrorReporter:
         Args:
             legacy_event_bus: Legacy parameter for backward compatibility (ignored)
         """
-        self.logger = get_unified_logger('error_management')
+        self.logger = get_error_management_logger()
         # 🗑️ EventBus completely removed - error reporting handled by logging system only
         
         # ✅ ERROR STORAGE: In-memory error storage với recent error tracking

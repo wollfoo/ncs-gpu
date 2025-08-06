@@ -35,7 +35,7 @@ from .module_loggers import get_resource_control_logger
 from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ STANDARDIZED: Get unified logger instance
-resource_logger = get_unified_logger('resource_control')
+resource_logger = get_resource_control_logger()
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
