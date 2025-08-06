@@ -1,13 +1,35 @@
-# logging_config.py
+#!/usr/bin/env python3
+"""
+✅ ENHANCED LOGGING CONFIG - Phase 1 Foundation
+Merged functionality từ 3 logging modules:
+- logging_config.py (core API compatibility)
+- unified_logging.py (singleton pattern + hierarchy)
+- unified_log_aggregator.py (event-driven aggregation)
+
+Provides unified logging system cho GPU mining environment với:
+- Backward compatible setup_logging() API
+- Thread-safe singleton pattern
+- Real-time log aggregation (event-driven, not polling)
+- Correlation ID system
+- Enhanced PID/TID tracking
+"""
 
 import os
 import sys
 import logging
+import threading
+import time
 from logging import Logger
+from logging.handlers import MemoryHandler, RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Optional
+from contextvars import ContextVar
+from datetime import datetime
+import re
+import queue
+import weakref
 
-# Giảm cảnh báo linter: chỉ import cryptography khi kiểm tra kiểu
+# Legacy cryptography imports (preserved for compatibility)
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet  # pragma: no cover
 else:
@@ -17,23 +39,22 @@ else:
         Fernet = Any  # type: ignore
 import random
 import string
-from contextvars import ContextVar
-from typing import Optional
-
 
 ###############################################################################
-#                           ĐỊNH NGHĨA CORRELATION ID                        #
+#                      ENHANCED LOGGING SYSTEM - PHASE 1                    #
 ###############################################################################
-# Định nghĩa một ContextVar để lưu trữ Correlation ID cho mỗi ngữ cảnh (context).
+
+# ✅ CORRELATION ID: ContextVar system (preserved from original)
 correlation_id: ContextVar[str] = ContextVar('correlation_id', default='unknown')
 
 
 ###############################################################################
-#                           CLASS: CorrelationIdFilter                       #
+#                       CORRELATION ID FILTER (PRESERVED)                    #
 ###############################################################################
 class CorrelationIdFilter(logging.Filter):
     """
-    Bộ lọc logging để thêm Correlation ID vào mỗi bản ghi log.
+    ✅ PRESERVED: Bộ lọc logging để thêm Correlation ID vào mỗi bản ghi log.
+    Maintained exact API compatibility từ original logging_config.py
     """
     def filter(self, record: logging.LogRecord) -> bool:
         """
@@ -50,12 +71,586 @@ class CorrelationIdFilter(logging.Filter):
 
 
 ###############################################################################
-#             CLASS: ObfuscatedEncryptedFileHandler (có tích hợp xoá file)   #
+#                         ENHANCED LOG MANAGER CLASS                         #
 ###############################################################################
+class EnhancedLogManager:
+    """
+    ✅ UNIFIED LOGGING MANAGER - Phase 1 Foundation
+    Merges functionality từ 3 modules:
+    1. logging_config.py: setup_logging() API + CorrelationIdFilter
+    2. unified_logging.py: Singleton pattern + logger hierarchy
+    3. unified_log_aggregator.py: Event-driven log aggregation
+    
+    Features:
+    - Thread-safe singleton pattern
+    - Backward compatible setup_logging() API
+    - Enhanced PID/TID tracking  
+    - Real-time log aggregation (event-driven)
+    - Centralized logger hierarchy management
+    """
+    
+    # ✅ SINGLETON: Thread-safe instance management
+    _instance: Optional['EnhancedLogManager'] = None
+    _lock = threading.RLock()
+    
+    # ✅ ENHANCED FORMATS: PID/TID tracking từ unified_logging.py
+    STANDARD_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
+    ENHANCED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - [PID:%(process)d|TID:%(thread)d] - %(correlation_id)s - %(message)s'
+    DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+    
+    # ✅ LOGGER HIERARCHY: Từ unified_logging.py (merged)
+    LOGGER_HIERARCHY = {
+        'mining_environment': {
+            'level': logging.INFO,
+            'file': 'mining_environment.log',
+            'description': 'Main mining environment logger'
+        },
+        'mining_environment.resource_manager': {
+            'level': logging.INFO,
+            'file': 'resource_manager.log',
+            'description': 'Resource management operations'
+        },
+        'mining_environment.cloak_strategies': {
+            'level': logging.DEBUG,
+            'file': 'cloak_strategies.log',
+            'description': 'Cloaking strategy implementations'
+        },
+        'mining_environment.cpu_cloaking': {
+            'level': logging.DEBUG,
+            'file': 'cpu_cloaking_manager.log',
+            'description': 'CPU cloaking legacy operations'
+        },
+        'mining_environment.gpu_cloaking': {
+            'level': logging.DEBUG,
+            'file': 'gpu_cloaking_manager.log',
+            'description': 'GPU cloaking and thermal spoofing operations'
+        },
+        'mining_environment.resource_control': {
+            'level': logging.DEBUG,
+            'file': 'resource_control.log',
+            'description': 'Low-level resource control operations'
+        },
+        'mining_environment.coordination': {
+            'level': logging.DEBUG,
+            'file': 'coordination.log',
+            'description': 'Hook coordination và PHASE 3++ sequencing operations'
+        },
+    }
+    
+    def __new__(cls) -> 'EnhancedLogManager':
+        """✅ SINGLETON: Thread-safe singleton pattern implementation"""
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+    
+    def __init__(self):
+        """✅ INITIALIZE: Setup enhanced logging system"""
+        if getattr(self, '_initialized', False):
+            return
+            
+        self._initialized = True
+        self._loggers: Dict[str, logging.Logger] = {}
+        self._handlers: Dict[str, logging.Handler] = {}
+        
+        # ✅ LOG DIRECTORY: Centralized log location  
+        try:
+            self.log_dir = Path('/app/mining_environment/logs')
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # Fallback to local directory if /app is not accessible
+            self.log_dir = Path('./logs')
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            print(f"⚠️ [EnhancedLogging] Using fallback log directory: {self.log_dir.absolute()}")
+        
+        # ✅ AGGREGATION: Event-driven log aggregation setup
+        self.unified_log_path = self.log_dir / "unified.log"
+        self.last_positions: Dict[str, int] = {}
+        self.aggregation_queue = queue.Queue()
+        self.aggregation_thread: Optional[threading.Thread] = None
+        self.aggregation_running = False
+        self.timestamp_pattern = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+        
+        # ✅ SETUP: Initialize logger hierarchy
+        self._setup_logger_hierarchy()
+        self._start_aggregation()
+        
+        print(f"✅ [EnhancedLogging] Initialized {len(self._loggers)} loggers với event-driven aggregation")
+    
+    def _setup_logger_hierarchy(self) -> None:
+        """✅ HIERARCHY: Setup complete logger hierarchy với standardized configuration"""
+        try:
+            for logger_name, config in self.LOGGER_HIERARCHY.items():
+                self._create_hierarchical_logger(
+                    name=logger_name,
+                    level=config['level'],
+                    log_file=config['file'],
+                    description=config['description']
+                )
+            
+            # ✅ ROOT LOGGER: Setup root logger for fallback
+            root_logger = logging.getLogger()
+            root_logger.setLevel(logging.WARNING)  # Only critical messages to root
+            
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Failed to setup logger hierarchy: {e}")
+            raise
+    
+    def _create_hierarchical_logger(self, name: str, level: int, log_file: str, description: str) -> logging.Logger:
+        """✅ CREATE: Individual logger với standardized configuration"""
+        try:
+            logger = logging.getLogger(name)
+            
+            # ✅ PREVENT DUPLICATES: Clear existing handlers
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
+            
+            logger.setLevel(level)
+            logger.propagate = False  # Prevent propagation to avoid duplicates
+            
+            # ✅ FILE HANDLER: Rotating file handler cho log rotation
+            log_path = self.log_dir / log_file
+            file_handler = RotatingFileHandler(
+                log_path,
+                maxBytes=10*1024*1024,  # 10MB max per file
+                backupCount=5,           # Keep 5 backup files
+                encoding='utf-8'
+            )
+            file_handler.setLevel(level)
+            
+            # ✅ MEMORY HANDLER: Buffer và immediate flush (preserved pattern)
+            memory_handler = MemoryHandler(
+                capacity=1,  # Flush sau 1 bản ghi (preserve original behavior)
+                target=file_handler,
+                flushLevel=logging.INFO  # Force flush khi có INFO+
+            )
+            
+            # ✅ ENHANCED FORMATTING: PID/TID tracking
+            formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
+            memory_handler.setFormatter(formatter)
+            memory_handler.addFilter(CorrelationIdFilter())
+            
+            # ✅ CONSOLE HANDLER: Console output cho important messages
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.WARNING)  # Only warnings+ to console
+            console_formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
+            console_handler.setFormatter(console_formatter)
+            console_handler.addFilter(CorrelationIdFilter())
+            
+            # ✅ ADD HANDLERS
+            logger.addHandler(memory_handler)
+            logger.addHandler(console_handler)
+            
+            # ✅ STORE REFERENCES
+            self._loggers[name] = logger
+            self._handlers[f"{name}_memory"] = memory_handler
+            self._handlers[f"{name}_file"] = file_handler
+            self._handlers[f"{name}_console"] = console_handler
+            
+            # ✅ AGGREGATION TRIGGER: Register logger for aggregation
+            self._register_logger_for_aggregation(log_file)
+            
+            return logger
+            
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Failed to create logger '{name}': {e}")
+            raise
+    
+    def setup_logging(self, module_name: str, log_file: str, log_level: str = 'INFO', **kwargs) -> Logger:
+        """
+        ✅ BACKWARD COMPATIBLE API: Preserved exact signature từ original logging_config.py
+        
+        Args:
+            module_name (str): Tên module (tên logger).
+            log_file (str): Đường dẫn đến tệp log.
+            log_level (str, optional): Mức log (DEBUG, INFO, WARN, ERROR...). Mặc định là 'INFO'.
+        
+        Returns:
+            Logger: Đối tượng logger đã được thiết lập.
+        """
+        safe_log_level = getattr(logging, log_level.upper(), logging.INFO)
+        logger = logging.getLogger(module_name)
+        logger.setLevel(safe_log_level)
+
+        # ✅ TEST MODE: Preserve original test mode behavior
+        in_test = "TESTING" in os.environ
+        logger.propagate = in_test
+
+        # ✅ HANDLER SETUP: Only add if no handlers exist
+        if not logger.handlers:
+            # ✅ LOG DIRECTORY: Ensure log directory exists
+            log_path = Path(log_file).parent
+            log_path.mkdir(parents=True, exist_ok=True)
+
+            # ✅ FILE HANDLER: RotatingFileHandler to auto rotate file when > 10MB
+            file_handler = RotatingFileHandler(
+                log_file, 
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(safe_log_level)
+            
+            formatter = logging.Formatter(self.STANDARD_FORMAT)
+            file_handler.setFormatter(formatter)
+            file_handler.addFilter(CorrelationIdFilter())
+
+            # ✅ MEMORY HANDLER: Buffer và flush tự động (preserved pattern)
+            memory_handler = MemoryHandler(
+                capacity=1,  # Flush sau 1 bản ghi (preserve original)
+                target=file_handler,
+                flushLevel=logging.INFO  # Force flush khi có INFO+
+            )
+            memory_handler.addFilter(CorrelationIdFilter())
+            
+            logger.addHandler(memory_handler)
+
+            # ✅ STREAM HANDLER: Console với flush tự động
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setLevel(safe_log_level)
+            stream_formatter = logging.Formatter(self.STANDARD_FORMAT)
+            stream_handler.setFormatter(stream_formatter)
+            stream_handler.addFilter(CorrelationIdFilter())
+            logger.addHandler(stream_handler)
+            
+            # ✅ AGGREGATION: Register for real-time aggregation
+            log_filename = Path(log_file).name
+            self._register_logger_for_aggregation(log_filename)
+
+        return logger
+    
+    def get_unified_logger(self, name: str) -> logging.Logger:
+        """
+        ✅ BRIDGE FUNCTION: Compatibility bridge từ unified_logging.py
+        
+        :param name: Logger name (can be full hierarchy or module name)
+        :return: Configured logger instance
+        """
+        try:
+            # ✅ DIRECT MATCH: Check if exact name exists in hierarchy
+            if name in self._loggers:
+                return self._loggers[name]
+            
+            # ✅ HIERARCHY MATCH: Try to find in hierarchy
+            full_name = f"mining_environment.{name}"
+            if full_name in self._loggers:
+                return self._loggers[full_name]
+            
+            # ✅ FALLBACK: Create ad-hoc logger if not in hierarchy
+            return self._create_adhoc_logger(name)
+            
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Error getting unified logger '{name}': {e}")
+            # ✅ SAFETY FALLBACK: Return basic logger
+            return logging.getLogger(name)
+    
+    def _create_adhoc_logger(self, name: str) -> logging.Logger:
+        """✅ AD-HOC: Create logger for modules not in predefined hierarchy"""
+        try:
+            logger_name = f"mining_environment.{name}" if not name.startswith('mining_environment') else name
+            
+            return self._create_hierarchical_logger(
+                name=logger_name,
+                level=logging.INFO,
+                log_file=f"{name.replace('.', '_')}.log",
+                description=f"Ad-hoc logger for {name}"
+            )
+            
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Failed to create ad-hoc logger '{name}': {e}")
+            return logging.getLogger(name)
+    
+    def _register_logger_for_aggregation(self, log_file: str):
+        """✅ REGISTER: Register log file for event-driven aggregation"""
+        log_path = self.log_dir / log_file
+        self.last_positions[str(log_path)] = 0
+    
+    def _start_aggregation(self):
+        """✅ START: Event-driven log aggregation (replace polling)"""
+        if self.aggregation_running:
+            return
+            
+        self.aggregation_running = True
+        self.aggregation_thread = threading.Thread(
+            target=self._aggregation_worker,
+            daemon=True,
+            name="EnhancedLogAggregator"
+        )
+        self.aggregation_thread.start()
+        print(f"✅ [EnhancedLogging] Event-driven aggregation started: {self.unified_log_path}")
+    
+    def _aggregation_worker(self):
+        """✅ WORKER: Event-driven aggregation worker thread"""
+        while self.aggregation_running:
+            try:
+                # ✅ EVENT-DRIVEN: Process aggregation requests from queue
+                try:
+                    # Wait for aggregation trigger với timeout
+                    self.aggregation_queue.get(timeout=1.0)
+                    self._aggregate_logs_immediate()
+                except queue.Empty:
+                    # ✅ FALLBACK: Periodic check every 1 second (not 5s polling)
+                    self._aggregate_logs_immediate()
+                    
+            except Exception as e:
+                print(f"❌ [EnhancedLogging] Aggregation worker error: {e}")
+                time.sleep(1)  # Back off on error
+    
+    def _aggregate_logs_immediate(self):
+        """✅ IMMEDIATE: Immediate log aggregation (event-driven)"""
+        if not self.log_dir.exists():
+            return
+            
+        # ✅ DISCOVER: Find all log files
+        log_files = list(self.log_dir.glob("*.log"))
+        if not log_files:
+            return
+            
+        # ✅ COLLECT: Gather new entries từ each log file
+        new_entries: List[Tuple[datetime, str, str]] = []
+        
+        for log_file in log_files:
+            if log_file.name == "unified.log":
+                continue  # Skip own file
+                
+            try:
+                entries = self._read_new_entries(log_file)
+                new_entries.extend(entries)
+            except Exception as e:
+                print(f"⚠️ [EnhancedLogging] Error reading {log_file.name}: {e}")
+                
+        # ✅ SORT: Sort by timestamp (chronological merging)
+        new_entries.sort(key=lambda x: x[0])
+        
+        # ✅ WRITE: Append to unified.log
+        if new_entries:
+            self._write_unified_entries(new_entries)
+    
+    def _read_new_entries(self, log_file: Path) -> List[Tuple[datetime, str, str]]:
+        """✅ READ: Extract new entries từ specific log file"""
+        entries = []
+        
+        if not log_file.exists():
+            return entries
+            
+        # ✅ TRACK: Get last read position
+        last_pos = self.last_positions.get(str(log_file), 0)
+        
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                f.seek(last_pos)
+                
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # ✅ EXTRACT: Parse timestamp
+                    timestamp = self._extract_timestamp(line)
+                    if timestamp:
+                        entries.append((timestamp, log_file.name, line))
+                        
+                # ✅ UPDATE: Save new position
+                self.last_positions[str(log_file)] = f.tell()
+                
+        except Exception as e:
+            print(f"⚠️ [EnhancedLogging] Error reading {log_file}: {e}")
+            
+        return entries
+    
+    def _extract_timestamp(self, line: str) -> datetime:
+        """✅ PARSE: Extract timestamp từ log line"""
+        match = self.timestamp_pattern.search(line)
+        if match:
+            try:
+                return datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                pass
+        return datetime.now()  # Fallback to current time
+    
+    def _write_unified_entries(self, entries: List[Tuple[datetime, str, str]]):
+        """✅ WRITE: Append entries to unified.log với chronological order"""
+        try:
+            with open(self.unified_log_path, 'a', encoding='utf-8') as f:
+                for timestamp, source_file, log_line in entries:
+                    # ✅ FORMAT: Add source file prefix (preserve format)
+                    unified_line = f"[{source_file}] {log_line}\n"
+                    f.write(unified_line)
+                    
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Error writing unified.log: {e}")
+    
+    def trigger_aggregation(self):
+        """✅ TRIGGER: Manual trigger cho immediate aggregation"""
+        try:
+            self.aggregation_queue.put_nowait("aggregate")
+        except queue.Full:
+            pass  # Queue full, aggregation will happen soon anyway
+    
+    def get_logging_status(self) -> Dict[str, Any]:
+        """✅ STATUS: Get comprehensive logging system status"""
+        try:
+            status = {
+                'timestamp': time.time(),
+                'total_loggers': len(self._loggers),
+                'total_handlers': len(self._handlers),
+                'log_directory': str(self.log_dir),
+                'aggregation_running': self.aggregation_running,
+                'loggers': {},
+                'disk_usage': {}
+            }
+            
+            # ✅ LOGGER DETAILS
+            for name, logger in self._loggers.items():
+                status['loggers'][name] = {
+                    'level': logging.getLevelName(logger.level),
+                    'handlers': len(logger.handlers),
+                    'propagate': logger.propagate
+                }
+            
+            # ✅ DISK USAGE
+            try:
+                for log_file in self.log_dir.glob('*.log'):
+                    size_mb = log_file.stat().st_size / (1024 * 1024)
+                    status['disk_usage'][log_file.name] = f"{size_mb:.2f} MB"
+            except Exception:
+                status['disk_usage'] = "Unable to calculate"
+            
+            return status
+            
+        except Exception as e:
+            return {'error': f"Failed to get logging status: {e}"}
+    
+    def cleanup_old_logs(self, days_to_keep: int = 7) -> int:
+        """✅ CLEANUP: Clean up old log files để manage disk space"""
+        try:
+            cutoff_time = time.time() - (days_to_keep * 24 * 60 * 60)
+            cleaned_count = 0
+            
+            for log_file in self.log_dir.glob('*.log*'):
+                try:
+                    if log_file.stat().st_mtime < cutoff_time:
+                        log_file.unlink()
+                        cleaned_count += 1
+                except Exception:
+                    continue  # Skip files that can't be deleted
+            
+            if cleaned_count > 0:
+                # Log to main logger
+                main_logger = self.get_unified_logger('mining_environment')
+                main_logger.info(f"🧹 [EnhancedLogging] Cleaned up {cleaned_count} old log files")
+            
+            return cleaned_count
+            
+        except Exception as e:
+            print(f"❌ [EnhancedLogging] Log cleanup failed: {e}")
+            return 0
+
+# ✅ GLOBAL INSTANCE: Thread-safe singleton instance
+_enhanced_manager: Optional[EnhancedLogManager] = None
+_manager_lock = threading.RLock()
+
+def _get_enhanced_manager() -> EnhancedLogManager:
+    """✅ FACTORY: Get singleton enhanced log manager instance"""
+    global _enhanced_manager
+    with _manager_lock:
+        if _enhanced_manager is None:
+            _enhanced_manager = EnhancedLogManager()
+        return _enhanced_manager
+
+###############################################################################
+#                    BACKWARD COMPATIBLE API FUNCTIONS                       #
+###############################################################################
+
+def setup_logging(module_name: str, log_file: str, log_level: str = 'INFO', **kwargs) -> Logger:
+    """
+    ✅ BACKWARD COMPATIBLE: Exact API preservation từ original logging_config.py
+    Now delegates to EnhancedLogManager để provide unified functionality.
+    
+    Args:
+        module_name (str): Tên module (tên logger).
+        log_file (str): Đường dẫn đến tệp log.
+        log_level (str, optional): Mức log (DEBUG, INFO, WARN, ERROR...). Mặc định là 'INFO'.
+    
+    Returns:
+        Logger: Đối tượng logger đã được thiết lập với enhanced functionality.
+    """
+    manager = _get_enhanced_manager()
+    return manager.setup_logging(module_name, log_file, log_level, **kwargs)
+
+
+def get_unified_logger(name: str) -> logging.Logger:
+    """
+    ✅ BRIDGE FUNCTION: Compatibility bridge từ unified_logging.py
+    
+    :param name: Module name (e.g., 'resource_manager', 'cloak_strategies')
+    :return: Configured logger from enhanced hierarchy
+    """
+    manager = _get_enhanced_manager()
+    return manager.get_unified_logger(name)
+
+
+def get_logging_status() -> Dict[str, Any]:
+    """
+    ✅ STATUS FUNCTION: Get enhanced logging system status.
+    
+    :return: Comprehensive logging system metrics and status
+    """
+    manager = _get_enhanced_manager()
+    return manager.get_logging_status()
+
+
+def cleanup_logs(days_to_keep: int = 7) -> int:
+    """
+    ✅ CLEANUP FUNCTION: Clean up old log files.
+    
+    :param days_to_keep: Days to keep log files (default: 7)
+    :return: Number of files cleaned up
+    """
+    manager = _get_enhanced_manager()
+    return manager.cleanup_old_logs(days_to_keep)
+
+
+def trigger_log_aggregation():
+    """
+    ✅ TRIGGER FUNCTION: Manual trigger cho immediate log aggregation
+    Useful for forcing immediate unified.log update
+    """
+    manager = _get_enhanced_manager()
+    manager.trigger_aggregation()
+
+
+def start_unified_logging():
+    """
+    ✅ START FUNCTION: Compatibility bridge để start unified logging system
+    EnhancedLogManager auto-starts aggregation, but this ensures initialization
+    """
+    _ = _get_enhanced_manager()  # Initialize manager (starts aggregation automatically)
+
+
+def stop_unified_logging():
+    """
+    ✅ STOP FUNCTION: Stop unified logging aggregation
+    """
+    global _enhanced_manager
+    if _enhanced_manager:
+        _enhanced_manager.aggregation_running = False
+
+
+###############################################################################
+#                           LEGACY CODE (PRESERVED)                          #
+###############################################################################
+# The following classes are preserved for reference but not used in Phase 1
+# They may be needed for future compatibility or specific use cases
+
 class ObfuscatedEncryptedFileHandler(logging.Handler):
     """
-    Custom logging handler để mã hóa và làm rối các log trước khi ghi vào tệp.
+    ⚠️ LEGACY: Custom logging handler để mã hóa và làm rối các log trước khi ghi vào tệp.
     Đồng thời tự động xóa file log khi dung lượng vượt quá ngưỡng cho phép.
+    
+    NOTE: This handler is preserved for compatibility but not used in Phase 1.
+    The enhanced system uses MemoryHandler + RotatingFileHandler pattern.
     """
     def __init__(
         self,
@@ -131,159 +726,3 @@ class ObfuscatedEncryptedFileHandler(logging.Handler):
         if not self.file.closed:
             self.file.close()
         super().close()
-
-
-###############################################################################
-#                           FUNCTION: setup_logging                          #
-###############################################################################
-# def setup_logging(module_name: str, log_file: str, log_level: str = 'INFO', **kwargs) -> Logger:
-#     """
-#     Thiết lập logger cho module, hỗ trợ mã hóa log bằng ObfuscatedEncryptedFileHandler
-#     (có tính năng xóa file nếu vượt dung lượng) và thêm Correlation ID vào mỗi bản ghi log.
-    
-#     Args:
-#         module_name (str): Tên module (tên logger).
-#         log_file (str): Đường dẫn đến tệp log.
-#         log_level (str, optional): Mức log (DEBUG, INFO, WARN, ERROR...). Mặc định là 'INFO'.
-    
-#     Returns:
-#         Logger: Đối tượng logger đã được thiết lập.
-#     """
-#     logger = logging.getLogger(module_name)
-#     # Lấy log_level an toàn bằng getattr
-#     safe_log_level = getattr(logging, log_level.upper(), logging.INFO)
-#     logger.setLevel(safe_log_level)
-    
-#     # Kiểm tra xem có đang trong môi trường kiểm thử hay không
-#     in_test = "TESTING" in os.environ
-#     if in_test:
-#         logger.propagate = True
-#         print("Logger propagate set to True for testing mode.")
-#     else:
-#         # Không propagate nếu không phải test
-#         logger.propagate = False
-
-#     # Nếu logger chưa có handler nào, ta thêm
-#     if not logger.handlers:
-#         if in_test:
-#             print("Skip adding file handlers due to testing mode.")
-#             return logger
-
-#         # Đảm bảo thư mục log tồn tại
-#         log_path = Path(log_file).parent
-#         log_path.mkdir(parents=True, exist_ok=True)
-
-#         # Lấy khóa mã hóa từ biến môi trường hoặc tự tạo mới
-#         encryption_key = os.getenv('LOG_ENCRYPTION_KEY')
-#         if not encryption_key:
-#             encryption_key = Fernet.generate_key().decode()
-#             os.environ['LOG_ENCRYPTION_KEY'] = encryption_key
-#             print(f"Đã tạo khóa mã hóa mới: {encryption_key} (hãy lưu lại để sử dụng tiếp).")
-
-#         # Khởi tạo đối tượng Fernet
-#         try:
-#             fernet = Fernet(encryption_key.encode())
-#         except Exception as e:
-#             print(f"Lỗi khi tạo Fernet với khóa mã hóa: {e}", file=sys.stderr)
-#             return logger
-
-#         # Tạo handler mã hóa (tích hợp xóa file nếu vượt 50MB)
-#         # - Có thể tuỳ chỉnh max_file_size qua kwargs
-#         max_file_size = kwargs.get('max_file_size', 50 * 1024 * 1024)
-#         encrypted_handler = ObfuscatedEncryptedFileHandler(
-#             filename=log_file,
-#             fernet=fernet,
-#             level=safe_log_level,
-#             max_file_size=max_file_size
-#         )
-#         formatter = logging.Formatter(
-#             '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
-#         )
-#         encrypted_handler.setFormatter(formatter)
-#         # Thêm CorrelationIdFilter vào handler
-#         encrypted_handler.addFilter(CorrelationIdFilter())
-#         logger.addHandler(encrypted_handler)
-
-#         # Thêm StreamHandler (log ra console)
-#         stream_handler = logging.StreamHandler(sys.stdout)
-#         stream_handler.setLevel(safe_log_level)
-#         stream_formatter = logging.Formatter(
-#             '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
-#         )
-#         stream_handler.setFormatter(stream_formatter)
-#         # Thêm CorrelationIdFilter
-#         stream_handler.addFilter(CorrelationIdFilter())
-#         logger.addHandler(stream_handler)
-
-#     return logger
-
-
-def setup_logging(module_name: str, log_file: str, log_level: str = 'INFO', **kwargs) -> Logger:
-    """
-    Thiết lập logger cho module với MemoryHandler + RotatingFileHandler
-    để đảm bảo flush tự động và quản lý file lâu dài.
-    
-    Args:
-        module_name (str): Tên module (tên logger).
-        log_file (str): Đường dẫn đến tệp log.
-        log_level (str, optional): Mức log (DEBUG, INFO, WARN, ERROR...). Mặc định là 'INFO'.
-    
-    Returns:
-        Logger: Đối tượng logger đã được thiết lập.
-    """
-    from logging.handlers import MemoryHandler, RotatingFileHandler
-    
-    logger = logging.getLogger(module_name)
-    safe_log_level = getattr(logging, log_level.upper(), logging.INFO)
-    logger.setLevel(safe_log_level)
-
-    # Kiểm tra xem có đang trong môi trường kiểm thử hay không
-    in_test = "TESTING" in os.environ
-    logger.propagate = in_test
-
-    # Nếu logger chưa có handler nào, ta thêm
-    if not logger.handlers:
-        # Đảm bảo thư mục log tồn tại
-        log_path = Path(log_file).parent
-        log_path.mkdir(parents=True, exist_ok=True)
-
-        # RotatingFileHandler để tự động rotate file khi > 10MB
-        file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(safe_log_level)
-        
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
-        )
-        file_handler.setFormatter(formatter)
-        file_handler.addFilter(CorrelationIdFilter())
-
-        # MemoryHandler để buffer và flush tự động
-        memory_handler = MemoryHandler(
-            capacity=1,  # Flush sau 1 bản ghi (fix cho cpu_miner/gpu_miner log)
-            target=file_handler,
-            flushLevel=logging.INFO  # Force flush khi có INFO+ (thay vì WARNING+)
-        )
-        memory_handler.addFilter(CorrelationIdFilter())
-        
-        logger.addHandler(memory_handler)
-
-        # StreamHandler cho console với flush tự động
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setLevel(safe_log_level)
-        stream_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
-        )
-        stream_handler.setFormatter(stream_formatter)
-        stream_handler.addFilter(CorrelationIdFilter())
-        logger.addHandler(stream_handler)
-
-    return logger
-
-
-
-
