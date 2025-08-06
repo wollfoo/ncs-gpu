@@ -1001,12 +1001,12 @@ class ResourceControlFactory:
     @staticmethod
     def create_resource_managers(config: Dict[str, Any], logger: logging.Logger) -> Dict[str, Any]:
         """
-        ✅ ENHANCED: Singleton-aware resource managers creation với instance sharing.
-        Reuses existing instances nếu có cùng config để prevent redundant creation.
+        ✅ ENHANCED: Singleton-aware resource managers creation với comprehensive validation.
+        Enhanced với retry mechanism và fallback creation cho GPU manager reliability.
 
         :param config: Cấu hình ResourceManager (dict).
         :param logger: Logger dùng để ghi log.
-        :return: Dictionary chứa các shared resource managers.
+        :return: Dictionary chứa các shared resource managers with guaranteed GPU manager.
         """
         # ✅ SINGLETON LOGIC: Generate config hash for instance sharing
         import hashlib
@@ -1023,13 +1023,21 @@ class ResourceControlFactory:
             # ✅ REUSE: Return existing managers if available
             if config_hash in ResourceControlFactory._shared_managers:
                 existing_managers = ResourceControlFactory._shared_managers[config_hash]
-                logger.info(f"♾️ [Factory] Reusing existing resource managers (hash: {config_hash})")
-                logger.info(f"🔄 [Factory] Available managers: {list(existing_managers.keys())}")
-                return existing_managers
+                
+                # ✅ VALIDATION: Verify GPU manager still exists and functional
+                if ResourceControlFactory._validate_gpu_manager_health(existing_managers.get('gpu'), logger):
+                    logger.info(f"♾️ [Factory] Reusing existing resource managers (hash: {config_hash})")
+                    logger.info(f"🔄 [Factory] Available managers: {list(existing_managers.keys())}")
+                    return existing_managers
+                else:
+                    logger.warning(f"⚠️ [Factory] Existing GPU manager unhealthy, recreating managers")
+                    # Remove unhealthy managers from cache
+                    del ResourceControlFactory._shared_managers[config_hash]
             
             # ✅ CREATE: New managers if none exist for this config
             logger.info(f"⚙️ [Factory] Creating new resource managers (hash: {config_hash})")
             logger.info(f"🏭 [FACTORY] ResourceControlFactory initialization started")
+        
         resource_managers = {}
         manager_classes = {
             'gpu': GPUResourceManager,
@@ -1039,39 +1047,189 @@ class ResourceControlFactory:
             'memory': MemoryResourceManager,
         }
 
+        # ✅ CRITICAL: GPU Manager with enhanced creation and retry logic
+        gpu_manager = ResourceControlFactory._create_gpu_manager_with_retry(config, logger, max_retries=3)
+        if gpu_manager is None:
+            logger.error("💀 [CRITICAL] GPU Manager creation FAILED after all retry attempts")
+            raise RuntimeError("Critical GPU manager initialization failure - aborting resource creation")
+        
+        resource_managers['gpu'] = gpu_manager
+        logger.info("✅ [GPU MANAGER] Successfully created and validated")
+
+        # ✅ CREATE: Other managers (non-critical)
         for name, manager_class in manager_classes.items():
+            if name == 'gpu':
+                continue  # Already handled above
+                
             try:
                 logger.info(f"🔧 [FACTORY] Đang khởi tạo {name} manager...")
                 manager_instance = manager_class(config, logger)
                 resource_managers[name] = manager_instance
-                
-                # ✅ ENHANCED GPU LOGGING: Chi tiết thông tin GPU manager
-                if name == 'gpu':
-                    gpu_count = manager_instance.get_gpu_count() if hasattr(manager_instance, 'get_gpu_count') else 0
-                    nvml_status = manager_instance.is_nvml_initialized() if hasattr(manager_instance, 'is_nvml_initialized') else False
-                    logger.info(f"🎮 [GPU MANAGER] ✅ ACTIVE: GPUs={gpu_count}, NVML={nvml_status}")
-                    logger.info(f"🎮 [GPU MANAGER] 📊 STATUS: Initialization SUCCESS, Ready for cloaking operations")
-                
                 logger.info(f"✅ [FACTORY] {name.capitalize()} manager đã được khởi tạo thành công.")
             except Exception as e:
-                if name == 'gpu':
-                    logger.error(f"❌ [GPU MANAGER] CRITICAL: GPU manager initialization FAILED: {e}")
-                logger.error(f"Lỗi khi khởi tạo {name} manager: {e}", exc_info=True)
+                logger.error(f"❌ [FACTORY] Lỗi khi khởi tạo {name} manager: {e}", exc_info=True)
+                # Continue with other managers - non-GPU managers are not critical
 
-            # (tiếp tục vòng lặp để khởi tạo các manager khác)
+        # ✅ FINAL VALIDATION: Ensure we have minimum required managers
+        if not resource_managers or 'gpu' not in resource_managers:
+            logger.error("💀 [CRITICAL] No GPU manager available - cannot proceed")
+            raise RuntimeError("GPU manager is mandatory for cloaking operations")
 
-        # --- Kết thúc vòng for ---
-        if not resource_managers:
-            logger.error("Không có resource managers nào được khởi tạo.")
-            raise RuntimeError("Tất cả resource managers đều khởi tạo thất bại.")
+        # ✅ GPU HEALTH CHECK: Final validation before caching
+        if not ResourceControlFactory._validate_gpu_manager_health(resource_managers['gpu'], logger):
+            logger.error("💀 [CRITICAL] GPU manager failed final health check")
+            raise RuntimeError("GPU manager health check failed")
 
         # ✅ CACHE: Store managers for reuse (sau khi đã khởi tạo đầy đủ)
         ResourceControlFactory._shared_managers[config_hash] = resource_managers
-        logger.info(f"✅ [Factory] Tất cả resource managers đã được khởi tạo và cached (hash: {config_hash}).")
+        logger.info(f"✅ [Factory] All resource managers created and cached (hash: {config_hash})")
         logger.info(f"📊 [Factory] Total shared instances: {len(ResourceControlFactory._shared_managers)}")
         logger.info(f"📋 [FACTORY] Available managers: {list(resource_managers.keys())}")
-        logger.info(f"🎮 [FACTORY] GPU manager registered: {'gpu' in resource_managers}")
+        logger.info(f"🎮 [FACTORY] GPU manager validated and ready for cloaking operations")
         return resource_managers
+
+    @staticmethod
+    def _create_gpu_manager_with_retry(config: Dict[str, Any], logger: logging.Logger, max_retries: int = 3) -> Optional[Any]:
+        """
+        ✅ RETRY MECHANISM: Create GPU manager with retry logic and comprehensive validation.
+        
+        :param config: Configuration for GPU manager
+        :param logger: Logger instance
+        :param max_retries: Maximum retry attempts (default: 3)
+        :return: GPUResourceManager instance or None if all attempts fail
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"🔄 [GPU RETRY] Attempt {attempt}/{max_retries} - Creating GPU manager...")
+                
+                # Create GPU manager instance
+                gpu_manager = GPUResourceManager(config, logger)
+                
+                # ✅ IMMEDIATE VALIDATION: Test manager functionality
+                if ResourceControlFactory._validate_gpu_manager_health(gpu_manager, logger):
+                    logger.info(f"✅ [GPU RETRY] Attempt {attempt} SUCCESS - GPU manager created and validated")
+                    return gpu_manager
+                else:
+                    logger.warning(f"⚠️ [GPU RETRY] Attempt {attempt} FAILED - GPU manager created but unhealthy")
+                    
+            except Exception as e:
+                logger.error(f"❌ [GPU RETRY] Attempt {attempt} EXCEPTION: {e}")
+                
+                # ✅ DETAILED ERROR ANALYSIS: Provide actionable feedback
+                if "nvml" in str(e).lower():
+                    logger.error("💡 [GPU RETRY] NVML initialization issue - check NVIDIA drivers")
+                elif "permission" in str(e).lower():
+                    logger.error("💡 [GPU RETRY] Permission issue - check user privileges")
+                elif "no device" in str(e).lower():
+                    logger.error("💡 [GPU RETRY] No GPU devices found - check hardware")
+                else:
+                    logger.error("💡 [GPU RETRY] Unknown GPU manager error - check system configuration")
+                
+            # ✅ RETRY DELAY: Wait between attempts (exponential backoff)
+            if attempt < max_retries:
+                retry_delay = 2 ** attempt  # 2s, 4s, 8s
+                logger.info(f"⏳ [GPU RETRY] Waiting {retry_delay}s before next attempt...")
+                time.sleep(retry_delay)
+        
+        # ✅ FALLBACK CREATION: Attempt minimal GPU manager as last resort
+        logger.warning("⚠️ [GPU FALLBACK] All normal attempts failed - trying fallback creation")
+        try:
+            fallback_manager = ResourceControlFactory._create_fallback_gpu_manager(config, logger)
+            if fallback_manager:
+                logger.info("✅ [GPU FALLBACK] Fallback GPU manager created successfully")
+                return fallback_manager
+        except Exception as e:
+            logger.error(f"❌ [GPU FALLBACK] Fallback creation also failed: {e}")
+        
+        logger.error(f"💀 [GPU RETRY] All {max_retries} attempts and fallback FAILED")
+        return None
+
+    @staticmethod
+    def _validate_gpu_manager_health(gpu_manager: Any, logger: logging.Logger) -> bool:
+        """
+        ✅ HEALTH CHECK: Comprehensive GPU manager health validation.
+        
+        :param gpu_manager: GPU manager instance to validate
+        :param logger: Logger instance
+        :return: True if GPU manager is healthy and functional
+        """
+        try:
+            if gpu_manager is None:
+                logger.error("❌ [GPU HEALTH] GPU manager is None")
+                return False
+            
+            # ✅ BASIC ATTRIBUTES: Check required attributes exist
+            if not hasattr(gpu_manager, 'config') or not hasattr(gpu_manager, 'logger'):
+                logger.error("❌ [GPU HEALTH] GPU manager missing required attributes")
+                return False
+            
+            # ✅ NVML STATUS: Check NVML initialization
+            if hasattr(gpu_manager, 'is_nvml_initialized'):
+                if not gpu_manager.is_nvml_initialized():
+                    logger.error("❌ [GPU HEALTH] NVML not initialized")
+                    return False
+                logger.debug("✅ [GPU HEALTH] NVML initialization validated")
+            
+            # ✅ GPU COUNT: Check GPU detection
+            if hasattr(gpu_manager, 'get_gpu_count'):
+                gpu_count = gpu_manager.get_gpu_count()
+                if gpu_count <= 0:
+                    logger.warning("⚠️ [GPU HEALTH] No GPUs detected (count=0)")
+                    # Not necessarily fatal - some systems might be in testing mode
+                    return True  # Still functional, just no GPUs
+                logger.debug(f"✅ [GPU HEALTH] GPU count validated: {gpu_count} GPUs")
+            
+            # ✅ BASIC FUNCTIONALITY: Test basic GPU manager methods
+            if hasattr(gpu_manager, 'get_handle'):
+                try:
+                    # Test handle retrieval for first GPU (if available)
+                    if gpu_manager.get_gpu_count() > 0:
+                        handle = gpu_manager.get_handle(0)
+                        if handle is None:
+                            logger.warning("⚠️ [GPU HEALTH] Cannot get handle for GPU 0")
+                        else:
+                            logger.debug("✅ [GPU HEALTH] GPU handle retrieval validated")
+                except Exception as e:
+                    logger.warning(f"⚠️ [GPU HEALTH] GPU handle test failed: {e}")
+                    # Not fatal - might be permission issue
+            
+            logger.info("✅ [GPU HEALTH] All health checks passed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [GPU HEALTH] Health check exception: {e}")
+            return False
+
+    @staticmethod
+    def _create_fallback_gpu_manager(config: Dict[str, Any], logger: logging.Logger) -> Optional[Any]:
+        """
+        ✅ FALLBACK CREATION: Create minimal GPU manager for testing/fallback scenarios.
+        
+        :param config: Configuration for GPU manager
+        :param logger: Logger instance
+        :return: Minimal GPU manager instance or None
+        """
+        try:
+            logger.info("🔧 [GPU FALLBACK] Creating minimal GPU manager for fallback...")
+            
+            # Create simplified config for fallback
+            fallback_config = config.copy()
+            fallback_config['fallback_mode'] = True
+            fallback_config['strict_validation'] = False
+            
+            # Try to create GPU manager with relaxed validation
+            fallback_manager = GPUResourceManager(fallback_config, logger)
+            
+            # Basic validation only
+            if fallback_manager and hasattr(fallback_manager, 'config'):
+                logger.info("✅ [GPU FALLBACK] Minimal GPU manager created successfully")
+                logger.warning("⚠️ [GPU FALLBACK] Using fallback mode - some functionality may be limited")
+                return fallback_manager
+            
+        except Exception as e:
+            logger.error(f"❌ [GPU FALLBACK] Fallback creation failed: {e}")
+        
+        return None
 
     @staticmethod
     def get_shared_managers_info() -> Dict[str, Any]:
