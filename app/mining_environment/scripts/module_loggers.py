@@ -17,7 +17,7 @@ Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng)
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
-gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'gpu_cloaking.log'), 'INFO')
+gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # Fixed: cloak_strategies.log instead of gpu_cloaking.log
 gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
@@ -96,7 +96,7 @@ def get_coordination_logger():
     Returns:
         Logger: Coordination logger instance
     """
-    return setup_logging('coordination', str(Path(LOGS_DIR) / 'coordinator.log'), 'DEBUG')
+    return setup_logging('coordination', str(Path(LOGS_DIR) / 'coordination.log'), 'DEBUG')
 
 def get_registry_logger():
     """

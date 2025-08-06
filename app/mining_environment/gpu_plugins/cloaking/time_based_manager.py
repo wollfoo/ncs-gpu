@@ -59,18 +59,14 @@ def log_gpu_feature(*_args, **_kwargs):  # type: ignore
     """Telemetry logging functionality has been removed"""
     pass
 
-# Import GPU cloaking logger
+# Import Timing logger (đúng mapping cho time_based_manager)  
 try:
-    from ...scripts.module_loggers import get_gpu_cloaking_logger, log_gpu_cloaking_operation
-    gpu_cloak_logger = get_gpu_cloaking_logger()
+    from ...scripts.module_loggers import get_timing_logger
+    logger = get_timing_logger()
 except ImportError:
     # Fallback nếu không có logger
-    class DummyLogger:
-        def info(self, *args, **kwargs): pass
-        def error(self, *args, **kwargs): pass
-        def warning(self, *args, **kwargs): pass
-    gpu_cloak_logger = DummyLogger()
-    def log_gpu_cloaking_operation(*args, **kwargs): pass
+    import logging
+    logger = logging.getLogger(__name__)
 
 # ---------- logging ----------
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')

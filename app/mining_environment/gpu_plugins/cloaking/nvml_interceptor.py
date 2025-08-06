@@ -4,18 +4,14 @@ import logging
 from typing import Dict, Any, List
 from ..core.interfaces import IGPUCloakService
 
-# Import GPU cloaking logger
+# Import NVML logger (đúng mapping cho nvml_interceptor)
 try:
-    from ...scripts.module_loggers import get_gpu_cloaking_logger, log_gpu_cloaking_operation
-    gpu_cloak_logger = get_gpu_cloaking_logger()
+    from ...scripts.module_loggers import get_nvml_logger
+    logger = get_nvml_logger()
 except ImportError:
     # Fallback nếu không có logger
-    class DummyLogger:
-        def info(self, *args, **kwargs): pass
-        def error(self, *args, **kwargs): pass
-        def warning(self, *args, **kwargs): pass
-    gpu_cloak_logger = DummyLogger()
-    def log_gpu_cloaking_operation(*args, **kwargs): pass
+    import logging
+    logger = logging.getLogger(__name__)
 def log_gpu_cloaking(strategy_name=None, action=None):
     """Decorator for GPU cloaking operations"""
     def decorator(func):
@@ -24,8 +20,6 @@ def log_gpu_cloaking(strategy_name=None, action=None):
             return func(*args, **kwargs)
         return wrapper
     return decorator
-
-logger = logging.getLogger(__name__)
 
 class NVMLInterceptor(IGPUCloakService):
     """Plugin quản lý NVML API interception qua LD_PRELOAD"""

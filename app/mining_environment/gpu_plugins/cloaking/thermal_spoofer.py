@@ -4,20 +4,13 @@ import logging
 from typing import Dict, Any, List
 from ..core.interfaces import IGPUCloakService
 
-# Import GPU cloaking logger
+# Import Thermal logger (đúng mapping cho thermal_spoofer)
 try:
-    from ...scripts.module_loggers import get_gpu_cloaking_logger, log_gpu_cloaking_operation
-    gpu_cloak_logger = get_gpu_cloaking_logger()
+    from ...scripts.module_loggers import get_thermal_logger
+    logger = get_thermal_logger()
 except ImportError:
     # Fallback nếu không có logger
-    class DummyLogger:
-        def info(self, *args, **kwargs): pass
-        def error(self, *args, **kwargs): pass
-        def warning(self, *args, **kwargs): pass
-    gpu_cloak_logger = DummyLogger()
-    def log_gpu_cloaking_operation(*args, **kwargs): pass
-
-logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
 class ThermalSpoofer(IGPUCloakService):
     """Plugin quản lý thermal spoofing qua LD_PRELOAD"""

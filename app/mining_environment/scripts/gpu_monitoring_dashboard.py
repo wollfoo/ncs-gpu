@@ -12,7 +12,7 @@ from flask import Flask, render_template_string, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
 # ✅ MIGRATED LOGGING: Use new module-specific logging system  
-from .module_loggers import get_gpu_monitoring_dashboard_logger
+from .module_loggers import get_dashboard_logger
 from .gpu_resource_monitor import get_gpu_monitor
 
 class GPUMonitoringDashboard:
@@ -34,7 +34,7 @@ class GPUMonitoringDashboard:
             host: Dashboard host address
             port: Dashboard port number
         """
-        self.logger = get_gpu_monitoring_dashboard_logger()
+        self.logger = get_dashboard_logger()
         self.host = host
         self.port = port
         self.app = Flask(__name__)
