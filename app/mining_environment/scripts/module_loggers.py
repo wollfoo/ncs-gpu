@@ -206,6 +206,15 @@ def get_utility_logger():
     """
     return setup_logging('utils', str(Path(LOGS_DIR) / 'utils.log'), 'DEBUG')
 
+def get_error_management_logger():
+    """
+    **Get error management logger** (Lấy logger quản lý lỗi) - Logger cho **error handling and reporting** (xử lý và báo cáo lỗi).
+    
+    Returns:
+        Logger: Error management logger instance
+    """
+    return setup_logging('error_management', str(Path(LOGS_DIR) / 'error_management.log'), 'DEBUG')
+
 # ===== ALIASES FOR COMPATIBILITY =====
 # Tạo alias cho các logger có tên khác trong bảng mapping
 
