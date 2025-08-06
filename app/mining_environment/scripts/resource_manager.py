@@ -668,7 +668,6 @@ class ResourceManager(IResourceManager):
         
         self.logger.info(f"Worker threads đã khởi động: {len(self.workers)} threads active")
 
-
     def process_resource_adjustments(self):
         """**Process Resource Adjustments** (xử lý điều chỉnh tài nguyên)"""
         while not self._stop_flag:
@@ -684,7 +683,6 @@ class ResourceManager(IResourceManager):
                 continue
             except Exception as e:
                 self.logger.error(f"Lỗi xử lý resource adjustment: {e}")
-
 
     def shutdown(self):
         """**Shutdown ResourceManager** (tắt ResourceManager)"""
