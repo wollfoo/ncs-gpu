@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 import signal
 import resource
 from pathlib import Path
-from .cloak_strategies import StrategyType
+from .utils import StrategyType
 
 # ✅ UNIFIED LOGGING: Use centralized logging system
 # Migration Phase 3: Updated to use new logging architecture

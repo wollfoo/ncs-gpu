@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING
 from pathlib import Path
 
-from .utils import MiningProcess
+from .utils import MiningProcess, StrategyType
 
 # ✅ UNIFIED LOGGING: Use centralized logging system
 from .module_loggers import get_gpu_cloaking_logger
@@ -246,18 +246,7 @@ class CloakCoordinator:
 #                    STRATEGY TYPES & UNIFIED ARCHITECTURE                   #
 ###############################################################################
 
-class StrategyType:
-    """
-    ✅ **GPU-Only Mode**: Các loại chiến lược cloaking cho GPU-only resource control.
-    5 active strategies: GPU (with thermal), Network, Disk I/O, Cache, Memory
-    """
-    # CPU strategy removed for GPU-only operations
-    GPU = "gpu"
-    NETWORK = "network"
-    DISK_IO = "disk_io"
-    CACHE = "cache"
-    MEMORY = "memory"
-    # THERMAL_CONTROL removed - unified into GPU strategy for better coordination
+# StrategyType moved to utils.py to break circular import dependency
 
 ###############################################################################
 #                           CƠ SỞ CỦA CÁC STRATEGY                            #

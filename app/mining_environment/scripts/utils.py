@@ -905,3 +905,19 @@ class CloakResult:
         """String representation để debug"""
         status = "✅ SUCCESS" if self.success else "❌ FAILED"
         return f"CloakResult({status}, pid={self.pid})"
+
+
+class StrategyType:
+    """
+    ✅ **GPU-Only Mode**: Các loại chiến lược cloaking cho GPU-only resource control.
+    5 active strategies: GPU (with thermal), Network, Disk I/O, Cache, Memory
+    
+    Moved from cloak_strategies.py to utils.py to break circular import dependency.
+    """
+    # CPU strategy removed for GPU-only operations
+    GPU = "gpu"
+    NETWORK = "network"
+    DISK_IO = "disk_io"
+    CACHE = "cache"
+    MEMORY = "memory"
+    # THERMAL_CONTROL removed - unified into GPU strategy for better coordination

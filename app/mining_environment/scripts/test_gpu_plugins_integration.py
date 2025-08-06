@@ -74,9 +74,17 @@ def test_pipeline_with_gpu_strategy():
         )
         logger.info(f"✅ Created test process: PID={test_process.pid}, Name={test_process.name}")
         
-        # Initialize components
-        rm = ResourceManager()
-        logger.info("✅ ResourceManager initialized")
+        # Initialize components with mock config
+        class MockConfig:
+            gpu_power_limit = 150
+            gpu_memory_clock = 810
+            gpu_sm_clock = 1200
+            gpu_temp_threshold = 75
+            network_bandwidth_limit = 100
+            network_interface = 'eth0'
+        
+        rm = ResourceManager(config=MockConfig())
+        logger.info("✅ ResourceManager initialized with mock config")
         
         # Test trigger_cloaking flow
         logger.info("🔄 Testing trigger_cloaking pipeline...")
@@ -104,8 +112,12 @@ def test_gpu_strategy_plugin_activation():
     logger.info("=" * 60)
     
     try:
-        from cloak_strategies import GPUCloakStrategy
-        from utils import MiningProcess
+        # Fix imports by adding mining_environment to path
+        import sys
+        sys.path.insert(0, '/app')
+        
+        from mining_environment.scripts.cloak_strategies import GpuCloakStrategy
+        from mining_environment.scripts.utils import MiningProcess
         
         # Create test process
         test_process = MiningProcess(
@@ -113,9 +125,38 @@ def test_gpu_strategy_plugin_activation():
             name="test_gpu_process"
         )
         
-        # Create GPU strategy instance
-        gpu_strategy = GPUCloakStrategy()
-        logger.info("✅ GPUCloakStrategy instance created")
+        # Create GPU strategy instance with required arguments
+        mock_config = {
+            'gpu_power_limit': 150,
+            'gpu_memory_clock': 810,
+            'gpu_sm_clock': 1200,
+            'gpu_temp_threshold': 75,
+            'gpu_throttle_percentage': 30,
+            'gpu_process_name': 'test_gpu_process',
+            'processes': {'GPU': 'test_gpu_process'}
+        }
+        
+        # Create a simple config object that has attributes for GPUResourceManager
+        class ConfigWrapper:
+            def __init__(self, config_dict):
+                for key, value in config_dict.items():
+                    setattr(self, key, value)
+                self._dict = config_dict
+            
+            def get(self, key, default=None):
+                return self._dict.get(key, default)
+        
+        config_obj = ConfigWrapper(mock_config)
+        
+        from mining_environment.scripts.resource_control import GPUResourceManager
+        gpu_manager = GPUResourceManager(config=config_obj, logger=logger)
+        
+        gpu_strategy = GpuCloakStrategy(
+            config=config_obj,
+            logger=logger,
+            gpu_resource_manager=gpu_manager
+        )
+        logger.info("✅ GpuCloakStrategy instance created with full config")
         
         # Check if _activate_gpu_plugins method exists
         if hasattr(gpu_strategy, '_activate_gpu_plugins'):
