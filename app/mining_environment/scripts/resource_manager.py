@@ -161,19 +161,6 @@ class SharedResourceManager:
         # Forward to new linear pipeline method
         return self.trigger_cloaking(process, f'legacy_{strategy_name}')
 
-    def trigger_cloaking(self, process: MiningProcess, strategy_name: str):
-        """**Trigger Cloaking** (kích hoạt che giấu)"""
-        try:
-            cloak_request = CloakRequest(process, strategy_name)
-            cloak_result = self._execute_cloak_request(cloak_request)
-            return cloak_result.success
-        except Exception as e:
-            self.logger.error(f"❌ [TIER-1] Error in cloaking pipeline: {e}")
-            import traceback
-            self.logger.debug(f"Traceback: {traceback.format_exc()}")
-            return False
-
-
 class ResourceManager(IResourceManager):
     """
     **Main Resource Manager Class** (lớp quản lý tài nguyên chính)
