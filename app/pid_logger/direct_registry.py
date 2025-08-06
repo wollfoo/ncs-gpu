@@ -506,8 +506,20 @@ class DirectPIDRegistry:
                 })
                 logger.info(f"🔗 [LINEAR-FLOW] Source chain: {' → '.join(source_chain)}")
             
+            # **CRITICAL FIX: Notify observers about new process** (thông báo observers về process mới)
+            # This triggers ResourceManager._on_process_registered_direct callback
+            self._notify_observers(process_info)
+            logger.info(f"📢 [LINEAR-FLOW] Notified {len(self._observers)} observers about PID {pid}")
+            
             # **Forward to ResourceManager** (chuyển tiếp đến ResourceManager)
             rm_success = self._forward_to_resource_manager(pid, coordinator_metadata, process_info)
+            
+            # **🔥 CRITICAL FIX: Send acknowledgment back to HookCoordinator** (gửi xác nhận về HookCoordinator)
+            # This prevents timeout in coordinator._wait_for_registry_acknowledgment()
+            ack_env_var = f"REGISTRY_ACK_PID_{pid}"
+            ack_timestamp = time.time()
+            os.environ[ack_env_var] = str(ack_timestamp)
+            logger.info(f"📨 [ACK-SEND] Sent acknowledgment for PID {pid} via env var {ack_env_var}")
             
             if rm_success:
                 logger.info(f"✅ [LINEAR-FLOW] Complete linear flow successful for PID {pid}")

