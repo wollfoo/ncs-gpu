@@ -49,14 +49,8 @@ class NVMLProxy:
         if not os.path.exists(self.original_socket):
             logger.debug("Socket chưa tồn tại, bỏ qua _free_socket()")
             return
-        try:
-            import subprocess
-            subprocess.run(["fuser", "-k", self.original_socket], capture_output=True)
-            time.sleep(0.5)
-        except Exception as e:
-            logger.debug(f"fuser not available or failed: {e}")
-        # Bỏ pkill để không dừng service nvidia-persistenced
-        logger.debug("Bỏ pkill nvidia-persistenced - chỉ giải phóng FD bằng fuser")
+        # Không chạy fuser/pkill để tránh dừng service nvidia-persistenced
+        logger.debug("Giữ nguyên process nvidia-persistenced; bỏ giải phóng FD")
 
     def start(self):
         """Khởi động proxy daemon"""
