@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 import time
 
-from .interfaces import IGPUPlugin, IGPUCloakService, IGPUHookManager
+from .interfaces import IGPUPlugin, IGPUCloakService
 # IGPUTelemetryFilter removed - telemetry functionality deprecated
 from .registry import gpu_plugin_registry
 
@@ -295,14 +295,7 @@ class GPUPluginManager:
         """
         return []
                 
-    def get_hook_managers(self) -> List[IGPUHookManager]:
-        """Lấy tất cả hook managers đang active
-        
-        Returns:
-            List of IGPUHookManager instances
-        """
-        return [plugin for plugin in self.active_plugins.values() 
-                if isinstance(plugin, IGPUHookManager)]
+    # get_hook_managers removed - IGPUHookManager deprecated
                 
     def enable_all_cloaking(self) -> Dict[str, bool]:
         """Enable tất cả cloaking strategies

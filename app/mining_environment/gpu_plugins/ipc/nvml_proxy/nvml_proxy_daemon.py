@@ -15,12 +15,17 @@ import signal
 import sys
 from pathlib import Path
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('NVMLProxy')
+# Import logger from module_loggers
+try:
+    from ....scripts.module_loggers import get_proxy_daemon_logger
+    logger = get_proxy_daemon_logger()
+except ImportError:
+    # Fallback logging setup
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('NVMLProxy')
 
 class NVMLProxy:
     def __init__(self):

