@@ -1030,46 +1030,47 @@ class HardwareController:
                 pid=pid,
                 error_msg=str(e)
             )
-    
-    def apply_network_controls(self, params: Dict[str, Any]) -> CloakResult:
-        """
-        Apply network bandwidth controls.
+
+
+    # def apply_network_controls(self, params: Dict[str, Any]) -> CloakResult:
+    #     """
+    #     Apply network bandwidth controls.
         
-        :param params: Network control parameters
-        :return: CloakResult
-        """
-        pid = params.get('pid', -1)
+    #     :param params: Network control parameters
+    #     :return: CloakResult
+    #     """
+    #     pid = params.get('pid', -1)
         
-        try:
-            self.logger.info(f"[RC] Stage 3: Applying network controls for PID {pid}")
+    #     try:
+    #         self.logger.info(f"[RC] Stage 3: Applying network controls for PID {pid}")
             
-            # Apply bandwidth limits
-            if 'bandwidth_limit' in params:
-                limit_mbps = params['bandwidth_limit']
-                interface = params.get('interface', 'eth0')
+    #         # Apply bandwidth limits
+    #         if 'bandwidth_limit' in params:
+    #             limit_mbps = params['bandwidth_limit']
+    #             interface = params.get('interface', 'eth0')
                 
-                # Use NetworkResourceManager's existing methods
-                success = self.network_manager.limit_bandwidth(pid, interface, limit_mbps)
+    #             # Use NetworkResourceManager's existing methods
+    #             success = self.network_manager.limit_bandwidth(pid, interface, limit_mbps)
                 
-                if success:
-                    self.logger.info(f"[RC] ✅ Applied {limit_mbps}Mbps limit on {interface}")
-                    return CloakResult(
-                        success=True,
-                        pid=pid,
-                        applied_controls=[f"bandwidth_{limit_mbps}Mbps"]
-                    )
+    #             if success:
+    #                 self.logger.info(f"[RC] ✅ Applied {limit_mbps}Mbps limit on {interface}")
+    #                 return CloakResult(
+    #                     success=True,
+    #                     pid=pid,
+    #                     applied_controls=[f"bandwidth_{limit_mbps}Mbps"]
+    #                 )
             
-            return CloakResult(
-                success=False,
-                pid=pid,
-                error_msg="Network control not applied"
-            )
+    #         return CloakResult(
+    #             success=False,
+    #             pid=pid,
+    #             error_msg="Network control not applied"
+    #         )
             
-        except Exception as e:
-            self.logger.error(f"[RC] Exception in apply_network_controls: {e}")
-            return CloakResult(
-                success=False,
-                pid=pid,
-                error_msg=str(e)
-            )
+    #     except Exception as e:
+    #         self.logger.error(f"[RC] Exception in apply_network_controls: {e}")
+    #         return CloakResult(
+    #             success=False,
+    #             pid=pid,
+    #             error_msg=str(e)
+    #         )
 
