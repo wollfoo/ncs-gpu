@@ -11,6 +11,8 @@ class ConfigModel:
             'memory': {'enabled': True},
             'disk': {'enabled': True},
         }
+        # **GPU Plugins Configuration** (cấu hình plugin GPU)
+        self.enable_gpu_plugins = True  # Auto-enable GPU plugins (tự động kích hoạt các plugin GPU)
         for key, value in kwargs.items():
             setattr(self, key, value)
     def get(self, key, default=None):

