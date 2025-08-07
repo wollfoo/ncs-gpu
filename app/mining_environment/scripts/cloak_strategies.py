@@ -222,77 +222,77 @@ class CloakCoordinator:
                 error_msg=f"GPU strategy failed: {str(e)}"
             )
     
-    def _apply_network_strategy(self, request: CloakRequest) -> CloakResult:
-        """**Stage 2: Route Network strategy** (điều phối chiến lược mạng)
+    # def _apply_network_strategy(self, request: CloakRequest) -> CloakResult:
+    #     """**Stage 2: Route Network strategy** (điều phối chiến lược mạng)
         
-        CHỈ forward params, KHÔNG duplicate defaults!
+    #     CHỈ forward params, KHÔNG duplicate defaults!
         
-        :param request: CloakRequest với network params từ Stage 1
-        :return: CloakResult
-        """
-        self.logger.info(f"[CS] Routing network strategy for PID {request.pid}")
+    #     :param request: CloakRequest với network params từ Stage 1
+    #     :return: CloakResult
+    #     """
+    #     self.logger.info(f"[CS] Routing network strategy for PID {request.pid}")
         
-        # Direct forward params từ Stage 1, không prepare lại
-        control_params = {
-            'pid': request.pid,
-            **request.params  # Forward ALL network params as-is
-        }
+    #     # Direct forward params từ Stage 1, không prepare lại
+    #     control_params = {
+    #         'pid': request.pid,
+    #         **request.params  # Forward ALL network params as-is
+    #     }
         
-        # Forward to hardware controller
-        result = self.hw_controller.apply_network_controls(control_params)
+    #     # Forward to hardware controller
+    #     result = self.hw_controller.apply_network_controls(control_params)
         
-        if result.success:
-            self.logger.info(f"[CS] ✅ Network strategy routed successfully for PID {request.pid}")
+    #     if result.success:
+    #         self.logger.info(f"[CS] ✅ Network strategy routed successfully for PID {request.pid}")
             
-        return result
+    #     return result
     
-    def _apply_disk_io_strategy(self, request: CloakRequest) -> CloakResult:
-        """
-        Apply disk I/O throttling - simplified placeholder.
+    # def _apply_disk_io_strategy(self, request: CloakRequest) -> CloakResult:
+    #     """
+    #     Apply disk I/O throttling - simplified placeholder.
         
-        :param request: CloakRequest
-        :return: CloakResult
-        """
-        self.logger.info(f"[CS] Disk I/O strategy for PID {request.pid} - placeholder")
+    #     :param request: CloakRequest
+    #     :return: CloakResult
+    #     """
+    #     self.logger.info(f"[CS] Disk I/O strategy for PID {request.pid} - placeholder")
         
-        # Placeholder - có thể implement sau nếu cần
-        return CloakResult(
-            success=True,
-            pid=request.pid,
-            applied_controls=['disk_io_throttle']
-        )
+    #     # Placeholder - có thể implement sau nếu cần
+    #     return CloakResult(
+    #         success=True,
+    #         pid=request.pid,
+    #         applied_controls=['disk_io_throttle']
+    #     )
     
-    def _apply_cache_strategy(self, request: CloakRequest) -> CloakResult:
-        """
-        Apply cache management - simplified placeholder.
+    # def _apply_cache_strategy(self, request: CloakRequest) -> CloakResult:
+    #     """
+    #     Apply cache management - simplified placeholder.
         
-        :param request: CloakRequest
-        :return: CloakResult
-        """
-        self.logger.info(f"[CS] Cache strategy for PID {request.pid} - placeholder")
+    #     :param request: CloakRequest
+    #     :return: CloakResult
+    #     """
+    #     self.logger.info(f"[CS] Cache strategy for PID {request.pid} - placeholder")
         
-        # Placeholder
-        return CloakResult(
-            success=True,
-            pid=request.pid,
-            applied_controls=['cache_management']
-        )
+    #     # Placeholder
+    #     return CloakResult(
+    #         success=True,
+    #         pid=request.pid,
+    #         applied_controls=['cache_management']
+    #     )
     
-    def _apply_memory_strategy(self, request: CloakRequest) -> CloakResult:
-        """
-        Apply memory limits - simplified placeholder.
+    # def _apply_memory_strategy(self, request: CloakRequest) -> CloakResult:
+    #     """
+    #     Apply memory limits - simplified placeholder.
         
-        :param request: CloakRequest
-        :return: CloakResult  
-        """
-        self.logger.info(f"[CS] Memory strategy for PID {request.pid} - placeholder")
+    #     :param request: CloakRequest
+    #     :return: CloakResult  
+    #     """
+    #     self.logger.info(f"[CS] Memory strategy for PID {request.pid} - placeholder")
         
-        # Placeholder
-        return CloakResult(
-            success=True,
-            pid=request.pid,
-            applied_controls=['memory_limit']
-        )
+    #     # Placeholder
+    #     return CloakResult(
+    #         success=True,
+    #         pid=request.pid,
+    #         applied_controls=['memory_limit']
+    #     )
 
 
 ###############################################################################
