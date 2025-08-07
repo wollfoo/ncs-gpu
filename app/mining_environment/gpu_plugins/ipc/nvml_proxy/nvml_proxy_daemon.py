@@ -46,6 +46,9 @@ class NVMLProxy:
         
     def _free_socket(self):
         """Giải phóng socket nếu bị process khác giữ (nvidia-persistenced)"""
+        if not os.path.exists(self.original_socket):
+            logger.debug("Socket chưa tồn tại, bỏ qua _free_socket()")
+            return
         try:
             import subprocess
             subprocess.run(["fuser", "-k", self.original_socket], capture_output=True)
@@ -68,23 +71,27 @@ class NVMLProxy:
                 logger.error(f"Original socket not found: {self.original_socket}")
                 return False
                 
-            # Giải phóng socket nếu cần
-            self._free_socket()
-            retry=0
-            while retry<3:
-                try:
-                    os.rename(self.original_socket, self.proxy_socket)
-                    break
-                except OSError as e:
-                    if e.errno==16:  # EBUSY
-                        self._free_socket()
-                        retry+=1
-                        time.sleep(0.5*retry)
-                        continue
-                    raise
+            # Nếu socket gốc tồn tại, cố gắng rename sang socket.original
+            if os.path.exists(self.original_socket):
+                self._free_socket()
+                retry = 0
+                while retry < 3:
+                    try:
+                        os.rename(self.original_socket, self.proxy_socket)
+                        break
+                    except OSError as e:
+                        if e.errno == 16:  # EBUSY
+                            self._free_socket()
+                            retry += 1
+                            time.sleep(0.5 * retry)
+                            continue
+                        raise
+                else:
+                    logger.error("Failed to move socket after retries")
+                    return False
             else:
-                logger.error("Failed to move socket after retries")
-                return False
+                # Không có socket gốc, tiếp tục tạo socket mới
+                logger.warning(f"Original socket not found, sẽ tạo socket mới tại {self.original_socket}")
                 
             # Tạo proxy socket
             self.proxy_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
