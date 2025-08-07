@@ -4,13 +4,16 @@ import logging
 from typing import Dict, Any, List
 from ..core.interfaces import IGPUCloakService
 
-# Import Thermal logger (đúng mapping cho thermal_spoofer)
+# Import Thermal logger và domain functions
 try:
-    from ...scripts.module_loggers import get_thermal_logger
+    from ...scripts.module_loggers import get_thermal_logger, log_thermal_spoofing
     logger = get_thermal_logger()
 except ImportError:
     # Fallback nếu không có logger
     logger = logging.getLogger(__name__)
+    # Dummy function khi không import được
+    def log_thermal_spoofing(*args, **kwargs):
+        pass
 
 class ThermalSpoofer(IGPUCloakService):
     """Plugin quản lý thermal spoofing qua LD_PRELOAD"""
@@ -34,21 +37,20 @@ class ThermalSpoofer(IGPUCloakService):
         self.lib_path = config.get('lib_path', '/opt/hooks/libtempspoof.so')
         if not os.path.exists(self.lib_path):
             logger.warning(f"Thermal spoof library not found: {self.lib_path}")
-            gpu_cloak_logger.log_thermal_spoofing(
-                action="INITIALIZE",
-                status="FAILED",
-                lib_path=self.lib_path,
-                error_details=f"Thermal spoof library not found: {self.lib_path}"
+            # Log domain-specific event using module function
+            log_thermal_spoofing(
+                f"INITIALIZE FAILED - Library not found: {self.lib_path}",
+                temperature=self.fake_temperature,
+                level="ERROR"
             )
             return False
             
         logger.info(f"Thermal spoofer initialized with fake_temp={self.fake_temperature}")
-        gpu_cloak_logger.log_thermal_spoofing(
-            action="INITIALIZE",
-            status="SUCCESS",
-            fake_temperature=self.fake_temperature,
-            add_noise=self.add_noise,
-            lib_path=self.lib_path
+        # Log domain-specific success event
+        log_thermal_spoofing(
+            f"INITIALIZE SUCCESS - Fake temp: {self.fake_temperature}°C, Noise: {self.add_noise}",
+            temperature=self.fake_temperature,
+            level="INFO"
         )
         return True
         

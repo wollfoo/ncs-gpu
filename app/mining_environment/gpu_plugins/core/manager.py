@@ -10,18 +10,15 @@ from .interfaces import IGPUPlugin, IGPUCloakService, IGPUHookManager
 # IGPUTelemetryFilter removed - telemetry functionality deprecated
 from .registry import gpu_plugin_registry
 
-# Import GPU optimization logger
+# Import GPU optimization logger và domain functions
 try:
-    from ...scripts.module_loggers import get_gpu_optimization_logger, log_gpu_optimization_operation
+    from ...scripts.module_loggers import (
+        get_gpu_optimization_logger, 
+        log_gpu_optimization_operation,
+        log_plugin_lifecycle,
+        log_gpu_optimization
+    )
     gpu_opt_logger = get_gpu_optimization_logger()
-    # Try to import the decorator
-    try:
-        from ...scripts.module_loggers import log_gpu_optimization
-    except ImportError:
-        def log_gpu_optimization(*args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
 except ImportError:
     # Fallback nếu không có logger
     class DummyLogger:
@@ -29,7 +26,10 @@ except ImportError:
         def error(self, *args, **kwargs): pass
         def warning(self, *args, **kwargs): pass
     gpu_opt_logger = DummyLogger()
+    
+    # Dummy functions khi không import được
     def log_gpu_optimization_operation(*args, **kwargs): pass
+    def log_plugin_lifecycle(*args, **kwargs): pass
     def log_gpu_optimization(*args, **kwargs):
         def decorator(func):
             return func
@@ -112,7 +112,7 @@ class GPUPluginManager:
         
         if name in self.active_plugins:
             logger.info(f"Plugin {name} already loaded")
-            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
+            log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
                                                {"reason": "already_loaded"})
             return True
             
@@ -122,7 +122,7 @@ class GPUPluginManager:
         # Check if plugin is enabled
         if not plugin_config.get('enabled', True):
             logger.info(f"Plugin {name} is disabled in config")
-            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "DISABLED", 
+            log_plugin_lifecycle(name, "LOAD", "DISABLED", 
                                                {"config": plugin_config})
             return False
             
@@ -131,7 +131,7 @@ class GPUPluginManager:
         if not plugin:
             error_msg = f"Failed to create plugin instance: {name}"
             logger.error(error_msg)
-            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+            log_plugin_lifecycle(name, "LOAD", "FAILED", 
                                                {"error": error_msg})
             return False
             
@@ -142,20 +142,20 @@ class GPUPluginManager:
                 execution_time = time.time() - start_time
                 
                 logger.info(f"Successfully loaded GPU plugin: {name}")
-                gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
+                log_plugin_lifecycle(name, "LOAD", "SUCCESS", 
                                                    {"config": plugin_config,
                                                     "execution_time": execution_time})
                 return True
             else:
                 error_msg = f"Failed to initialize plugin: {name}"
                 logger.error(error_msg)
-                gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+                log_plugin_lifecycle(name, "LOAD", "FAILED", 
                                                    {"error": error_msg, "config": plugin_config})
                 return False
         except Exception as e:
             error_msg = f"Error initializing plugin {name}: {e}"
             logger.error(error_msg)
-            gpu_opt_logger.log_plugin_lifecycle(name, "LOAD", "FAILED", 
+            log_plugin_lifecycle(name, "LOAD", "FAILED", 
                                                {"error": error_msg, "config": plugin_config})
             return False
             
@@ -202,7 +202,7 @@ class GPUPluginManager:
                 if not hasattr(plugin, 'start') or not callable(getattr(plugin, 'start')):
                     error_msg = f"Plugin {name} missing start() method"
                     logger.error(f"❌ {error_msg}")
-                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                    log_plugin_lifecycle(name, "START", "FAILED", 
                                                        {"error": error_msg, "reason": "missing_start_method"})
                     results[name] = False
                     continue
@@ -213,11 +213,11 @@ class GPUPluginManager:
                 
                 if results[name]:
                     logger.info(f"✅ Started GPU plugin: {name} (execution_time: {plugin_execution_time:.3f}s)")
-                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "SUCCESS", 
+                    log_plugin_lifecycle(name, "START", "SUCCESS", 
                                                        {"execution_time": plugin_execution_time})
                 else:
                     logger.error(f"❌ Failed to start GPU plugin: {name} (start() returned False)")
-                    gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                    log_plugin_lifecycle(name, "START", "FAILED", 
                                                        {"error": "plugin_start_returned_false", 
                                                         "execution_time": plugin_execution_time})
                     
@@ -239,7 +239,7 @@ class GPUPluginManager:
                 logger.debug(f"💥 Plugin {name} start exception traceback:")
                 logger.debug(traceback.format_exc())
                 
-                gpu_opt_logger.log_plugin_lifecycle(name, "START", "FAILED", 
+                log_plugin_lifecycle(name, "START", "FAILED", 
                                                    {"error": error_msg, 
                                                     "exception_type": type(e).__name__,
                                                     "execution_time": plugin_execution_time})
