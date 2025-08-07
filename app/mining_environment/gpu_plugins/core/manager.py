@@ -25,6 +25,7 @@ except ImportError:
         def info(self, *args, **kwargs): pass
         def error(self, *args, **kwargs): pass
         def warning(self, *args, **kwargs): pass
+        def log_function_call(self, *args, **kwargs): pass
     gpu_opt_logger = DummyLogger()
     
     # Dummy functions khi không import được

