@@ -388,10 +388,18 @@ class ResourceManager(IResourceManager):
                 self._ipc_enabled = False
                 return False
             
-            # **Register status check callback** (đăng ký callback kiểm tra trạng thái)
+            # **Register additional callbacks**
             self._ipc_server.register_callback(
                 IPCMessageType.STATUS_CHECK,
                 self._handle_ipc_status_check
+            )
+            self._ipc_server.register_callback(
+                IPCMessageType.HEARTBEAT,
+                self._handle_ipc_heartbeat
+            )
+            self._ipc_server.register_callback(
+                IPCMessageType.SHUTDOWN,
+                self._handle_ipc_shutdown
             )
             
             # **Start IPC Server** (khởi động IPC Server)
@@ -513,6 +521,29 @@ class ResourceManager(IResourceManager):
             self._ipc_stats['ipc_errors'] += 1
             return False
     
+    def _handle_ipc_heartbeat(self, ipc_message) -> bool:
+        """Handle heartbeat messages: update last seen timestamp."""
+        try:
+            self._last_heartbeat = time.time()
+            self.logger.debug(f"💓 [IPC-HEARTBEAT] Heartbeat received from {ipc_message.source_process}")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ [IPC-HEARTBEAT] Error handling heartbeat: {e}")
+            return False
+
+    def _handle_ipc_shutdown(self, ipc_message) -> bool:
+        """Handle shutdown messages: trigger graceful shutdown."""
+        try:
+            self.logger.warning("🛑 [IPC-SHUTDOWN] Shutdown request received via IPC – initiating shutdown…")
+            # Set flag to stop processing loops; actual shutdown will be handled by external orchestrator calling shutdown() later
+            self._stop_flag = True
+            # Optionally call shutdown immediately
+            threading.Thread(target=self.shutdown, name="RM-IPC-Shutdown", daemon=True).start()
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ [IPC-SHUTDOWN] Error handling shutdown: {e}")
+            return False
+
     def _handle_ipc_status_check(self, ipc_message) -> bool:
         """
         **🔥 Handle IPC Status Check** (xử lý kiểm tra trạng thái IPC)

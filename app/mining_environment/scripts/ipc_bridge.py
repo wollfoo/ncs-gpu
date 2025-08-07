@@ -45,6 +45,16 @@ from enum import Enum
 
 # Setup logger
 logger = logging.getLogger("ipc_bridge")
+# Ensure logging configured even when main app chưa gọi setup_logging()
+try:
+    from mining_environment.scripts.logging_config import setup_logging as _internal_setup_logging  # type: ignore
+    _internal_setup_logging()
+except Exception:
+    # Fallback basicConfig nếu không import được logging_config
+    logging.basicConfig(level=logging.INFO)
+
+# Global reference tới IPCServer đang chạy trong process (nếu có)
+_GLOBAL_ACTIVE_SERVER = None  # type: Optional["IPCServer"]
 
 class IPCMessageType(Enum):
     """**IPC Message Types** (các loại tin nhắn IPC)"""
@@ -133,7 +143,7 @@ class IPCBridgeConfig:
     IPC_DIRECTORY = Path("/tmp/ncs_ipc_bridge")
     MESSAGE_FILE_PREFIX = "ipc_msg_"
     MESSAGE_FILE_SUFFIX = ".json"
-    FILE_CLEANUP_AGE = 300  # 5 minutes
+    FILE_CLEANUP_AGE = 120  # giảm tuổi file xuống 2 phút để tránh rác khi TPS cao  # 5 minutes
     
     # **Process Identification** (nhận dạng process)
     MAIN_PROCESS_ID = "main_resource_manager"
@@ -154,7 +164,12 @@ class IPCConnectionError(IPCBridgeError):
 def _ensure_ipc_directory() -> bool:
     """**Ensure IPC Directory Exists** (đảm bảo thư mục IPC tồn tại)"""
     try:
-        IPCBridgeConfig.IPC_DIRECTORY.mkdir(mode=0o755, parents=True, exist_ok=True)
+        IPCBridgeConfig.IPC_DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Force directory permissions to 0700 (owner rwx only) for security
+        try:
+            os.chmod(IPCBridgeConfig.IPC_DIRECTORY, 0o700)
+        except Exception as chmod_err:
+            logger.warning(f"⚠️ [IPC-SETUP] Could not set directory permissions: {chmod_err}")
         
         # Test write permissions
         test_file = IPCBridgeConfig.IPC_DIRECTORY / f".test_{uuid.uuid4().hex[:8]}"
@@ -346,7 +361,20 @@ class IPCServer:
                 return True
                 
             except queue.Full:
-                logger.error(f"❌ [IPC-SERVER] Message queue full, dropping message: {message.message_id}")
+                # Retry logic when queue is full
+                retry_delay = 0.05  # 50 ms
+                max_retries = 3
+                for attempt in range(max_retries):
+                    time.sleep(retry_delay * (attempt + 1))
+                    try:
+                        self.message_queue.put(priority_tuple, block=False)
+                        with self.stats_lock:
+                            self.stats['messages_received'] += 1
+                        logger.warning(f"⚠️ [IPC-SERVER] Queue was full, succeeded on retry {attempt+1}")
+                        return True
+                    except queue.Full:
+                        continue
+                logger.error(f"❌ [IPC-SERVER] Message queue full after {max_retries} retries, dropping message: {message.message_id}")
                 return False
                 
         except Exception as e:
@@ -613,7 +641,13 @@ class IPCClient:
             
             logger.debug(f"📤 [IPC-CLIENT] Sending message: {message_type.value} (id: {message.message_id[:8]})")
             
-            # **Try File-Based Communication First** (thử file-based communication trước)
+            # **Try In-Process Queue First** (nếu server sống trong cùng process)
+            if _GLOBAL_ACTIVE_SERVER and _GLOBAL_ACTIVE_SERVER.is_running:
+                if self._send_via_queue(_GLOBAL_ACTIVE_SERVER, message):
+                    logger.debug(f"✅ [IPC-CLIENT] Message queued in-process: {message.message_id[:8]}")
+                    return True
+                logger.debug("⚠️ [IPC-CLIENT] Queue path failed or full – fallback file")
+            # **Try File-Based Communication** (fallback cross-process)
             # Trong cross-process scenario, file-based là most reliable
             success = self._send_via_file(message)
             
@@ -628,6 +662,21 @@ class IPCClient:
             logger.error(f"❌ [IPC-CLIENT] Error sending message: {e}")
             return False
     
+    def _send_via_queue(self, server_ref, message: "IPCMessage") -> bool:
+        """Attempt to queue message directly if server in same process"""
+        try:
+            max_retries = 3
+            retry_delay = 0.05
+            for attempt in range(max_retries):
+                queued = server_ref.send_message_to_queue(message)
+                if queued:
+                    return True
+                time.sleep(retry_delay * (attempt + 1))
+            return False
+        except Exception as err:
+            logger.debug(f"Queue send failed: {err}")
+            return False
+
     def _send_via_file(self, message: IPCMessage) -> bool:
         """
         **Send Message via File** (gửi tin nhắn qua file)
@@ -710,7 +759,12 @@ class IPCClient:
 
 # **Utility Functions** (các hàm tiện ích)
 
-def create_ipc_server() -> IPCServer:
+def create_ipc_server() -> "IPCServer":
+    """Create IPC Server Instance và lưu global reference"""
+    global _GLOBAL_ACTIVE_SERVER
+    server = IPCServer()
+    _GLOBAL_ACTIVE_SERVER = server
+    return server
     """**Create IPC Server Instance** (tạo instance máy chủ IPC)"""
     return IPCServer()
 
