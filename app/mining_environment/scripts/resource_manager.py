@@ -443,33 +443,6 @@ class ResourceManager(IResourceManager):
             self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
             return False
 
-    def _apply_strategies(self, process: MiningProcess, strategies: List[str]) -> bool:
-        """Legacy method removed – always returns False"""
-        return False
-        """Apply cloaking strategies to the process"""
-        success_count = 0
-        
-        for strategy_name in strategies:
-            self.logger.info(f"Applying strategy: {strategy_name} for PID {process.pid}")
-            
-            # Check strategy availability
-            if not self._is_strategy_available(strategy_name):
-                self.logger.warning(f"Strategy {strategy_name} not available, skipping")
-                continue
-            
-            try:
-                success = self.shared_resource_manager.apply_cloak_strategy(strategy_name, process)
-                if success:
-                    success_count += 1
-                    self.logger.info(f"Successfully applied {strategy_name} for PID {process.pid}")
-                else:
-                    self.logger.warning(f"Failed to apply {strategy_name} for PID {process.pid}")
-            except Exception as strategy_error:
-                self.logger.error(f"Strategy {strategy_name} error: {strategy_error}")
-        
-        self.logger.info(f"Cloaking summary: {success_count}/{len(strategies)} strategies successful for PID {process.pid}")
-        return success_count > 0
-
     def _determine_strategies(self, process: MiningProcess) -> List[str]:
         """Legacy method removed – returns empty list"""
         return []

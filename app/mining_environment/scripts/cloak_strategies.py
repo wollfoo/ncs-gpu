@@ -472,7 +472,7 @@ class GpuCloakStrategy:
             return {'success': False, 'error': str(e)}
 
     # ====================== INTELLIGENT COORDINATOR HELPER METHODS ======================
-    
+
     def _apply_adaptive_thermal_logic(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         ✅ INTELLIGENT: Adaptive thermal throttling based on real-time temperature
@@ -683,6 +683,10 @@ class GpuCloakStrategy:
             
         except Exception as e:
             self.logger.warning(f"⚠️ [STEALTH] Random sleep failed: {e}, continuing without delay")
+
+
+
+
 
 ###############################################################################
 #            NETWORK STRATEGY: NetworkCloakStrategy                           #
