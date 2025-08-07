@@ -228,20 +228,22 @@ class ResourceManager(IResourceManager):
                 'monitoring_cycles': 0
             }
             
-            # **🥇 SOLUTION 1: File-Based Scanner Configuration** (cấu hình scanner dựa trên file)
-            self._file_scanner_enabled = False  # Disabled: DirectPIDRegistry callback supersedes file scanner
-            self._file_scanner_interval = 10.0  # Check every 10 seconds
-            self._pid_file_directory = Path("/tmp/ncs_pid_registry")  # Monitor this directory
-            self._last_scanner_cycle = 0.0
-            self._scanner_stats = {
-                'files_processed': 0,
-                'pids_discovered': 0,
-                'cloaking_triggered': 0,
-                'scan_cycles': 0
-            }
+            # **File-based scanner deprecated** (scanner dựa trên file đã deprecated)
+            # Replaced by IPC Bridge for cross-process communication
             
             # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry)
             self._setup_direct_registry_observer()
+            
+            # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge)
+            self._ipc_server = None
+            self._ipc_enabled = True
+            self._ipc_stats = {
+                'messages_received': 0,
+                'pid_forwards_handled': 0,
+                'ipc_errors': 0,
+                'cross_process_requests': 0
+            }
+            self._setup_ipc_bridge()
             
             self._initialized = True
             module_logger.info("ResourceManager khởi tạo thành công")
@@ -352,6 +354,199 @@ class ResourceManager(IResourceManager):
             
         except Exception as e:
             self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")
+
+    def _setup_ipc_bridge(self):
+        """
+        **🔥 Setup IPC Bridge Server** (thiết lập máy chủ IPC Bridge)
+        
+        Khởi tạo IPC Server để nhận PID forwards từ cross-process DirectPIDRegistry.
+        Thay thế singleton access patterns bằng reliable message passing.
+        """
+        try:
+            self.logger.info("🌉 [IPC-BRIDGE] Setting up IPC Bridge server...")
+            
+            # **Import IPC Bridge components** (nhập các thành phần IPC Bridge)
+            try:
+                from mining_environment.scripts.ipc_bridge import create_ipc_server, IPCMessageType
+                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge modules imported successfully")
+            except ImportError as ie:
+                self.logger.error(f"❌ [IPC-BRIDGE] Failed to import IPC Bridge: {ie}")
+                self._ipc_enabled = False
+                return False
+                
+            # **Create IPC Server instance** (tạo instance IPC Server)
+            self._ipc_server = create_ipc_server()
+            
+            # **Register PID forward callback** (đăng ký callback chuyển tiếp PID)
+            success = self._ipc_server.register_callback(
+                IPCMessageType.PID_FORWARD, 
+                self._handle_ipc_pid_forward
+            )
+            
+            if not success:
+                self.logger.error("❌ [IPC-BRIDGE] Failed to register PID forward callback")
+                self._ipc_enabled = False
+                return False
+            
+            # **Register status check callback** (đăng ký callback kiểm tra trạng thái)
+            self._ipc_server.register_callback(
+                IPCMessageType.STATUS_CHECK,
+                self._handle_ipc_status_check
+            )
+            
+            # **Start IPC Server** (khởi động IPC Server)
+            server_started = self._ipc_server.start()
+            
+            if server_started:
+                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge server started successfully")
+                self.logger.info("🔗 [IPC-BRIDGE] Ready to receive cross-process PID forwards")
+                return True
+            else:
+                self.logger.error("❌ [IPC-BRIDGE] Failed to start IPC Bridge server")
+                self._ipc_enabled = False
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ [IPC-BRIDGE] Error setting up IPC Bridge: {e}")
+            self.logger.error(f"🔍 [IPC-BRIDGE] Traceback: {traceback.format_exc()}")
+            self._ipc_enabled = False
+            return False
+    
+    def _handle_ipc_pid_forward(self, ipc_message) -> bool:
+        """
+        **🔥 Handle IPC PID Forward** (xử lý chuyển tiếp PID qua IPC)
+        
+        CRITICAL METHOD: Cross-process PID forward handler thay thế singleton access.
+        Nhận PID từ subprocess DirectPIDRegistry và trigger cloaking trong main process.
+        
+        Args:
+            ipc_message: IPCMessage chứa PID và metadata
+            
+        Returns:
+            bool: True nếu xử lý thành công
+        """
+        try:
+            start_time = time.time()
+            self.logger.info(f"🎯 [IPC-HANDLER] Received cross-process PID forward: {ipc_message.message_id[:8]}")
+            
+            # **Update IPC statistics** (cập nhật thống kê IPC)
+            self._ipc_stats['messages_received'] += 1
+            self._ipc_stats['cross_process_requests'] += 1
+            
+            # **Extract PID and metadata from message** (trích xuất PID và metadata từ tin nhắn)
+            payload = ipc_message.payload
+            pid = payload.get('pid')
+            metadata = payload.get('metadata', {})
+            source = payload.get('source', 'ipc_bridge')
+            
+            if not pid:
+                self.logger.error("❌ [IPC-HANDLER] No PID in message payload")
+                self._ipc_stats['ipc_errors'] += 1
+                return False
+                
+            self.logger.info(f"📍 [IPC-HANDLER] Processing cross-process PID {pid}")
+            self.logger.debug(f"🔍 [IPC-HANDLER] Message metadata keys: {list(metadata.keys())}")
+            
+            # **Create MiningProcess object** (tạo đối tượng MiningProcess)
+            process_name = metadata.get('stealth_name', metadata.get('process_name', f'process_{pid}'))
+            cmd = metadata.get('cmd', [])
+            
+            mining_process = MiningProcess(
+                pid=pid,
+                name=process_name,
+                cmd=cmd
+            )
+            
+            self.logger.info(f"🔧 [IPC-HANDLER] Created MiningProcess: {mining_process.name}")
+            
+            # **Add IPC metadata for tracking** (thêm metadata IPC để tracking)
+            enhanced_metadata = {
+                **metadata,
+                'ipc_timestamp': time.time(),
+                'ipc_message_id': ipc_message.message_id,
+                'ipc_source_process': ipc_message.source_process,
+                'cross_process_forward': True,
+                'original_source': source
+            }
+            
+            # **Queue PID for processing** (queue PID để xử lý)
+            pid_data = {
+                'pid': pid,
+                'mining_process': mining_process,
+                'registry_metadata': enhanced_metadata,
+                'timestamp': time.time(),
+                'source': 'ipc_bridge_forward',
+                'ipc_enabled': True,
+                'message_id': ipc_message.message_id
+            }
+            
+            try:
+                self._pid_queue.put(pid_data, block=False)
+                self.logger.info(f"✅ [IPC-HANDLER] PID {pid} queued for processing via IPC")
+                
+                # **Update success statistics** (cập nhật thống kê thành công)
+                self._ipc_stats['pid_forwards_handled'] += 1
+                
+                # **Log performance metrics** (ghi log metrics hiệu suất)
+                processing_time_ms = (time.time() - start_time) * 1000
+                self.logger.debug(f"⚡ [IPC-PERF] PID forward handled in {processing_time_ms:.1f}ms")
+                
+                return True
+                
+            except queue.Full:
+                self.logger.warning(f"⚠️ [IPC-HANDLER] PID queue full, processing immediately for PID {pid}")
+                
+                # **Immediate processing fallback** (dự phòng xử lý ngay lập tức)
+                success = self._process_pid_immediately(pid_data)
+                self.logger.info(f"📊 [IPC-HANDLER] Immediate processing result for PID {pid}: {success}")
+                
+                if success:
+                    self._ipc_stats['pid_forwards_handled'] += 1
+                else:
+                    self._ipc_stats['ipc_errors'] += 1
+                
+                return success
+                
+        except Exception as e:
+            self.logger.error(f"❌ [IPC-HANDLER] Error handling PID forward: {e}")
+            self.logger.error(f"🔍 [IPC-HANDLER] Traceback: {traceback.format_exc()}")
+            self._ipc_stats['ipc_errors'] += 1
+            return False
+    
+    def _handle_ipc_status_check(self, ipc_message) -> bool:
+        """
+        **🔥 Handle IPC Status Check** (xử lý kiểm tra trạng thái IPC)
+        
+        Handle status check requests từ IPC clients.
+        
+        Args:
+            ipc_message: IPCMessage với status check request
+            
+        Returns:
+            bool: True nếu xử lý thành công
+        """
+        try:
+            self.logger.debug(f"📊 [IPC-STATUS] Status check request: {ipc_message.message_id[:8]}")
+            
+            # **Prepare status response** (chuẩn bị phản hồi trạng thái)
+            status_info = {
+                'resource_manager_ready': self.is_ready(),
+                'shared_resource_manager_available': self.shared_resource_manager is not None,
+                'ipc_enabled': self._ipc_enabled,
+                'ipc_stats': self._ipc_stats.copy(),
+                'monitored_processes': len(self._monitored_processes),
+                'queue_size': self._pid_queue.qsize(),
+                'response_timestamp': time.time()
+            }
+            
+            self.logger.debug(f"📈 [IPC-STATUS] Status response: ResourceManager ready={status_info['resource_manager_ready']}")
+            self.logger.debug(f"📈 [IPC-STATUS] IPC stats: {self._ipc_stats}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [IPC-STATUS] Error handling status check: {e}")
+            return False
 
     def _on_process_registered_direct(self, process_info) -> None:
         """**Handle Process Registration** (xử lý đăng ký process)"""
@@ -568,6 +763,15 @@ class ResourceManager(IResourceManager):
             except Exception as e:
                 self.logger.error(f"Lỗi join worker {worker.name}: {e}")
 
+        # **🔥 Shutdown IPC Bridge Server** (tắt máy chủ IPC Bridge)
+        if self._ipc_server and self._ipc_enabled:
+            try:
+                self.logger.info("🌉 [IPC-BRIDGE] Shutting down IPC Bridge server...")
+                self._ipc_server.stop()
+                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge server stopped")
+            except Exception as e:
+                self.logger.error(f"❌ [IPC-BRIDGE] Error shutting down IPC server: {e}")
+        
         # **Shutdown NVML** (tắt NVML)
         if self.shared_resource_manager:
             try:
@@ -777,155 +981,6 @@ class ResourceManager(IResourceManager):
             
         except Exception as e:
             self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
-
-
-    # def _start_pid_file_scanner(self):
-    #     """
-    #     **🥇 SOLUTION 1: PID File Scanner Thread** (thread scanner file PID)
-        
-    #     Enhanced File-Based Scanner để auto-trigger cloaking khi detect new PID files.
-    #     Monitor /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
-    #     """
-    #     self.logger.info(f"🔍 [SOLUTION-1] PID File Scanner started - monitoring directory: {self._pid_file_directory}")
-        
-    #     while not self._stop_flag:
-    #         try:
-    #             current_time = time.time()
-                
-    #             # **Check if scanner cycle interval elapsed** (kiểm tra khoảng thời gian chu kỳ scanner)
-    #             if current_time - self._last_scanner_cycle >= self._file_scanner_interval:
-    #                 # Scanner cycle removed in Phase 4
-    #                 self._last_scanner_cycle = current_time
-    #                 self._scanner_stats['scan_cycles'] += 1
-                
-    #             # **Sleep to prevent CPU spinning** (ngủ để tránh CPU quay không)
-    #             time.sleep(2.0)  # Check every 2 seconds
-                
-    #         except Exception as e:
-    #             self.logger.error(f"❌ [SOLUTION-1] File scanner error: {e}")
-    #             time.sleep(5.0)  # Wait longer on error
-        
-    #     self.logger.info("🔚 [SOLUTION-1] PID File Scanner stopped")
-
-    # def _execute_file_scanner_cycle(self, current_time: float):
-    #     """Deprecated in Phase 4 – no-op."""
-    #     return
-    #     """
-    #     **🥇 SOLUTION 1: Execute File Scanner Cycle** (thực thi chu kỳ scanner file)
-        
-    #     Scan /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
-    #     """
-    #     try:
-    #         # **Ensure PID directory exists** (đảm bảo thư mục PID tồn tại)
-    #         if not self._pid_file_directory.exists():
-    #             self.logger.debug(f"📁 [FILE-SCANNER] PID directory not found: {self._pid_file_directory}")
-    #             return
-            
-    #         self.logger.debug(f"🔍 [FILE-SCANNER] Scanning directory: {self._pid_file_directory}")
-            
-    #         # **Get all PID files** (lấy tất cả file PID)
-    #         pid_files = list(self._pid_file_directory.glob("pid_*.json"))
-            
-    #         if not pid_files:
-    #             self.logger.debug("📂 [FILE-SCANNER] No PID files found")
-    #             return
-            
-    #         self.logger.info(f"📋 [FILE-SCANNER] Found {len(pid_files)} PID files to process")
-            
-    #         processed_count = 0
-    #         for pid_file in pid_files:
-    #             try:
-    #                 success = self._process_pid_file(pid_file)
-    #                 if success:
-    #                     processed_count += 1
-    #                     self._scanner_stats['files_processed'] += 1
-                        
-    #                     # **Clean up processed file** (dọn dẹp file đã xử lý)
-    #                     try:
-    #                         pid_file.unlink()
-    #                         self.logger.debug(f"🗑️ [FILE-SCANNER] Cleaned up processed file: {pid_file.name}")
-    #                     except Exception as cleanup_err:
-    #                         self.logger.warning(f"⚠️ [FILE-SCANNER] Failed to cleanup {pid_file.name}: {cleanup_err}")
-                    
-    #             except Exception as file_err:
-    #                 self.logger.error(f"❌ [FILE-SCANNER] Error processing file {pid_file.name}: {file_err}")
-            
-    #         # **Log cycle results** (ghi log kết quả chu kỳ)
-    #         self.logger.info(f"📊 [FILE-SCANNER] Cycle complete: {processed_count}/{len(pid_files)} files processed")
-    #         self.logger.debug(f"📈 [FILE-SCANNER] Stats: Files={self._scanner_stats['files_processed']}, "
-    #                         f"PIDs={self._scanner_stats['pids_discovered']}, "
-    #                         f"Cloaked={self._scanner_stats['cloaking_triggered']}")
-            
-    #     except Exception as e:
-    #         self.logger.error(f"❌ [FILE-SCANNER] Scanner cycle failed: {e}")
-
-    # def _process_pid_file(self, pid_file: Path) -> bool:
-    #     """
-    #     **🥇 SOLUTION 1: Process Single PID File** (xử lý file PID đơn)
-        
-    #     Parse và process một PID file để trigger cloaking.
-    #     """
-    #     try:
-    #         self.logger.debug(f"📄 [FILE-PROCESS] Processing file: {pid_file.name}")
-            
-    #         # **Read and parse PID file** (đọc và phân tích file PID)
-    #         import json
-    #         with open(pid_file, 'r') as f:
-    #             file_data = json.load(f)
-            
-    #         # **Extract PID and metadata** (trích xuất PID và metadata)
-    #         pid = file_data.get('pid')
-    #         metadata = file_data.get('metadata', {})
-            
-    #         if not pid:
-    #             self.logger.warning(f"⚠️ [FILE-PROCESS] No PID found in file: {pid_file.name}")
-    #             return False
-            
-    #         self.logger.info(f"🎯 [FILE-PROCESS] Discovered PID {pid} from file {pid_file.name}")
-    #         self._scanner_stats['pids_discovered'] += 1
-            
-    #         # **Check if PID already monitored** (kiểm tra PID đã được giám sát chưa)
-    #         if pid in self._monitored_processes:
-    #             self.logger.debug(f"ℹ️ [FILE-PROCESS] PID {pid} already monitored, skipping")
-    #             return True  # Consider it success since it's already handled
-            
-    #         # **Verify process still exists** (xác minh process vẫn tồn tại)
-    #         try:
-    #             import psutil
-    #             proc = psutil.Process(pid)
-    #             if not proc.is_running():
-    #                 self.logger.info(f"💀 [FILE-PROCESS] PID {pid} is no longer running, skipping")
-    #                 return True  # Success - no need to cloak a dead process
-    #         except (psutil.NoSuchProcess, psutil.AccessDenied):
-    #             self.logger.info(f"💀 [FILE-PROCESS] PID {pid} not accessible, skipping")
-    #             return True
-            
-    #         # **Create MiningProcess object** (tạo đối tượng MiningProcess)
-    #         process_name = metadata.get('stealth_name', f'process_{pid}')
-    #         cmd = metadata.get('cmd', [])
-            
-    #         mining_process = MiningProcess(
-    #             pid=pid,
-    #             name=process_name,
-    #             cmd=cmd
-    #         )
-            
-    #         # **Trigger cloaking via file scanner** (kích hoạt cloaking qua file scanner)
-    #         self.logger.info(f"🚀 [FILE-PROCESS] Triggering cloaking for discovered PID {pid}")
-    #         self.trigger_cloaking(mining_process, 'file_scanner_discovery')
-            
-    #         # **Add to monitored processes** (thêm vào processes được giám sát)
-    #         self._monitored_processes[pid] = mining_process
-    #         self._scanner_stats['cloaking_triggered'] += 1
-            
-    #         self.logger.info(f"✅ [FILE-PROCESS] Successfully processed PID {pid} via file scanner")
-    #         return True
-            
-    #     except Exception as e:
-    #         self.logger.error(f"❌ [FILE-PROCESS] Failed to process file {pid_file.name}: {e}")
-    #         import traceback
-    #         self.logger.debug(f"🔍 [FILE-PROCESS] Traceback: {traceback.format_exc()}")
-    #         return False
 
     def stop(self):
         """**Stop ResourceManager** (dừng ResourceManager) - Interface implementation"""

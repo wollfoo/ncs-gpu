@@ -1,0 +1,764 @@
+"""
+IPC Bridge Infrastructure for Cross-Process Communication
+=======================================================
+
+Queue-based cross-process communication solution để khắc phục Cross-Process Singleton Access Failure
+trong GPU mining system. Cung cấp reliable message passing giữa subprocess và main process.
+
+Key Features:
+- Queue-based reliable message passing
+- Thread-safe operations với timeout support
+- Error recovery mechanisms và graceful degradation
+- High-performance design (target: 1-5ms latency)
+- Comprehensive logging và monitoring
+
+Architecture:
+- IPC Server (chạy trong main process) 
+- IPC Client (chạy trong subprocess)
+- Message queue với priority support
+- Callback-based message handling
+- Automatic retry logic với exponential backoff
+
+Usage:
+    # Server side (main process)
+    server = IPCServer()
+    server.register_callback('pid_forward', handle_pid_callback)
+    server.start()
+    
+    # Client side (subprocess) 
+    client = IPCClient()
+    client.send_message('pid_forward', {'pid': 704, 'metadata': {...}})
+"""
+
+import threading
+import queue
+import time
+import json
+import logging
+import traceback
+import uuid
+import os
+from pathlib import Path
+from typing import Dict, Any, Callable, Optional, List, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
+
+# Setup logger
+logger = logging.getLogger("ipc_bridge")
+
+class IPCMessageType(Enum):
+    """**IPC Message Types** (các loại tin nhắn IPC)"""
+    PID_FORWARD = "pid_forward"
+    STATUS_CHECK = "status_check" 
+    SHUTDOWN = "shutdown"
+    HEARTBEAT = "heartbeat"
+    ACKNOWLEDGMENT = "acknowledgment"
+
+class IPCPriority(Enum):
+    """**IPC Message Priority** (độ ưu tiên tin nhắn IPC)"""
+    LOW = 3
+    NORMAL = 2 
+    HIGH = 1
+    CRITICAL = 0
+
+@dataclass
+class IPCMessage:
+    """
+    **IPC Message Model** (mô hình tin nhắn IPC)
+    
+    Cấu trúc tin nhắn chuẩn cho cross-process communication.
+    """
+    message_id: str
+    message_type: IPCMessageType
+    payload: Dict[str, Any]
+    timestamp: float = field(default_factory=time.time)
+    priority: IPCPriority = IPCPriority.NORMAL
+    source_process: str = "unknown"
+    target_process: str = "main"
+    retry_count: int = 0
+    max_retries: int = 3
+    timeout_seconds: float = 5.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            'message_id': self.message_id,
+            'message_type': self.message_type.value,
+            'payload': self.payload,
+            'timestamp': self.timestamp,
+            'priority': self.priority.value,
+            'source_process': self.source_process,
+            'target_process': self.target_process,
+            'retry_count': self.retry_count,
+            'max_retries': self.max_retries,
+            'timeout_seconds': self.timeout_seconds
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'IPCMessage':
+        """Create from dictionary"""
+        return cls(
+            message_id=data['message_id'],
+            message_type=IPCMessageType(data['message_type']),
+            payload=data['payload'],
+            timestamp=data.get('timestamp', time.time()),
+            priority=IPCPriority(data.get('priority', IPCPriority.NORMAL.value)),
+            source_process=data.get('source_process', 'unknown'),
+            target_process=data.get('target_process', 'main'),
+            retry_count=data.get('retry_count', 0),
+            max_retries=data.get('max_retries', 3),
+            timeout_seconds=data.get('timeout_seconds', 5.0)
+        )
+
+class IPCBridgeConfig:
+    """**IPC Bridge Configuration** (cấu hình IPC Bridge)"""
+    
+    # **Queue Configuration** (cấu hình queue)
+    MAX_QUEUE_SIZE = 1000
+    MESSAGE_TIMEOUT = 5.0  # seconds
+    HEARTBEAT_INTERVAL = 10.0  # seconds
+    
+    # **Retry Configuration** (cấu hình thử lại)
+    MAX_RETRIES = 3
+    INITIAL_RETRY_DELAY = 0.1  # 100ms
+    BACKOFF_MULTIPLIER = 2.0
+    MAX_RETRY_DELAY = 2.0  # 2 seconds
+    
+    # **Performance Targets** (mục tiêu hiệu suất)
+    TARGET_LATENCY_MS = 5.0  # 5ms target
+    WARNING_LATENCY_MS = 10.0  # 10ms warning
+    CRITICAL_LATENCY_MS = 50.0  # 50ms critical
+    
+    # **File-based IPC Configuration** (cấu hình IPC dựa trên file)
+    IPC_DIRECTORY = Path("/tmp/ncs_ipc_bridge")
+    MESSAGE_FILE_PREFIX = "ipc_msg_"
+    MESSAGE_FILE_SUFFIX = ".json"
+    FILE_CLEANUP_AGE = 300  # 5 minutes
+    
+    # **Process Identification** (nhận dạng process)
+    MAIN_PROCESS_ID = "main_resource_manager"
+    SUBPROCESS_PREFIX = "subprocess_"
+
+class IPCBridgeError(Exception):
+    """**Base IPC Bridge Exception** (exception cơ bản IPC Bridge)"""
+    pass
+
+class IPCTimeoutError(IPCBridgeError):
+    """**IPC Timeout Exception** (exception timeout IPC)"""
+    pass
+
+class IPCConnectionError(IPCBridgeError):
+    """**IPC Connection Exception** (exception kết nối IPC)"""
+    pass
+
+def _ensure_ipc_directory() -> bool:
+    """**Ensure IPC Directory Exists** (đảm bảo thư mục IPC tồn tại)"""
+    try:
+        IPCBridgeConfig.IPC_DIRECTORY.mkdir(mode=0o755, parents=True, exist_ok=True)
+        
+        # Test write permissions
+        test_file = IPCBridgeConfig.IPC_DIRECTORY / f".test_{uuid.uuid4().hex[:8]}"
+        try:
+            test_file.write_text("test")
+            test_file.unlink()
+            logger.debug(f"✅ [IPC-SETUP] Directory ready: {IPCBridgeConfig.IPC_DIRECTORY}")
+            return True
+        except Exception as perm_err:
+            logger.error(f"❌ [IPC-SETUP] Directory not writable: {perm_err}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ [IPC-SETUP] Failed to ensure IPC directory: {e}")
+        return False
+
+class IPCServer:
+    """
+    **IPC Server** (máy chủ IPC)
+    
+    Chạy trong main process để nhận messages từ subprocesses.
+    Sử dụng priority queue và callback-based message handling.
+    """
+    
+    def __init__(self, process_id: str = IPCBridgeConfig.MAIN_PROCESS_ID):
+        """Initialize IPC Server"""
+        self.process_id = process_id
+        self.is_running = False
+        self.is_started = False
+        
+        # **Message Queue với Priority Support** (queue tin nhắn với hỗ trợ độ ưu tiên)
+        self.message_queue = queue.PriorityQueue(maxsize=IPCBridgeConfig.MAX_QUEUE_SIZE)
+        
+        # **Callback Registry** (registry callback)
+        self.callbacks: Dict[IPCMessageType, List[Callable[[IPCMessage], bool]]] = {}
+        self.callback_lock = threading.RLock()
+        
+        # **Worker Threads** (worker threads)
+        self.workers: List[threading.Thread] = []
+        self.worker_count = 2  # 2 worker threads for message processing
+        self.stop_event = threading.Event()
+        
+        # **Statistics** (thống kê)
+        self.stats = {
+            'messages_received': 0,
+            'messages_processed': 0,
+            'messages_failed': 0,
+            'callbacks_executed': 0,
+            'average_latency_ms': 0.0,
+            'server_start_time': None
+        }
+        self.stats_lock = threading.Lock()
+        
+        # **File-based Message Monitoring** (giám sát tin nhắn dựa trên file)
+        self.file_monitor_thread: Optional[threading.Thread] = None
+        
+        logger.info(f"🏗️ [IPC-SERVER] IPCServer initialized with process_id: {self.process_id}")
+    
+    def register_callback(self, message_type: IPCMessageType, callback: Callable[[IPCMessage], bool]) -> bool:
+        """
+        **Register Message Callback** (đăng ký callback tin nhắn)
+        
+        Args:
+            message_type: Loại tin nhắn cần xử lý
+            callback: Function callback nhận IPCMessage và trả về bool (success)
+            
+        Returns:
+            bool: True nếu đăng ký thành công
+        """
+        try:
+            with self.callback_lock:
+                if message_type not in self.callbacks:
+                    self.callbacks[message_type] = []
+                
+                if callback not in self.callbacks[message_type]:
+                    self.callbacks[message_type].append(callback)
+                    logger.info(f"✅ [IPC-SERVER] Callback registered for {message_type.value}")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [IPC-SERVER] Callback already registered for {message_type.value}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ [IPC-SERVER] Failed to register callback: {e}")
+            return False
+    
+    def start(self) -> bool:
+        """
+        **Start IPC Server** (khởi động máy chủ IPC)
+        
+        Returns:
+            bool: True nếu khởi động thành công
+        """
+        try:
+            if self.is_started:
+                logger.warning("⚠️ [IPC-SERVER] Server already started")
+                return True
+            
+            logger.info("🚀 [IPC-SERVER] Starting IPC Server...")
+            
+            # **Ensure IPC Directory** (đảm bảo thư mục IPC)
+            if not _ensure_ipc_directory():
+                logger.error("❌ [IPC-SERVER] Failed to setup IPC directory")
+                return False
+            
+            # **Start Worker Threads** (khởi động worker threads)
+            self.is_running = True
+            self.stop_event.clear()
+            
+            for i in range(self.worker_count):
+                worker = threading.Thread(
+                    target=self._worker_loop,
+                    name=f"IPCServer-Worker-{i+1}",
+                    daemon=True
+                )
+                worker.start()
+                self.workers.append(worker)
+            
+            # **Start File Monitor Thread** (khởi động file monitor thread)
+            self.file_monitor_thread = threading.Thread(
+                target=self._file_monitor_loop,
+                name="IPCServer-FileMonitor",
+                daemon=True
+            )
+            self.file_monitor_thread.start()
+            
+            # **Update Statistics** (cập nhật thống kê)
+            with self.stats_lock:
+                self.stats['server_start_time'] = time.time()
+            
+            self.is_started = True
+            logger.info(f"✅ [IPC-SERVER] Server started successfully with {self.worker_count} workers")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [IPC-SERVER] Failed to start server: {e}")
+            return False
+    
+    def stop(self) -> None:
+        """**Stop IPC Server** (dừng máy chủ IPC)"""
+        logger.info("🔚 [IPC-SERVER] Stopping IPC Server...")
+        
+        self.is_running = False
+        self.stop_event.set()
+        
+        # **Wait for Workers** (chờ workers)
+        for worker in self.workers:
+            try:
+                worker.join(timeout=2.0)
+                if worker.is_alive():
+                    logger.warning(f"⚠️ [IPC-SERVER] Worker {worker.name} still alive")
+            except Exception as e:
+                logger.error(f"❌ [IPC-SERVER] Error joining worker {worker.name}: {e}")
+        
+        # **Wait for File Monitor** (chờ file monitor)
+        if self.file_monitor_thread and self.file_monitor_thread.is_alive():
+            try:
+                self.file_monitor_thread.join(timeout=2.0)
+            except Exception as e:
+                logger.error(f"❌ [IPC-SERVER] Error joining file monitor: {e}")
+        
+        logger.info("✅ [IPC-SERVER] Server stopped")
+    
+    def send_message_to_queue(self, message: IPCMessage) -> bool:
+        """
+        **Send Message to Processing Queue** (gửi tin nhắn vào queue xử lý)
+        
+        Args:
+            message: IPCMessage cần xử lý
+            
+        Returns:
+            bool: True nếu queued thành công
+        """
+        try:
+            if not self.is_running:
+                logger.warning("⚠️ [IPC-SERVER] Server not running, cannot queue message")
+                return False
+            
+            # **Priority-based queuing** (queuing theo độ ưu tiên)
+            priority_tuple = (message.priority.value, time.time(), message)
+            
+            try:
+                self.message_queue.put(priority_tuple, block=False)
+                
+                with self.stats_lock:
+                    self.stats['messages_received'] += 1
+                
+                logger.debug(f"📥 [IPC-SERVER] Message queued: {message.message_type.value} (id: {message.message_id[:8]})")
+                return True
+                
+            except queue.Full:
+                logger.error(f"❌ [IPC-SERVER] Message queue full, dropping message: {message.message_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-SERVER] Failed to queue message: {e}")
+            return False
+    
+    def _worker_loop(self) -> None:
+        """**Worker Loop** (vòng lặp worker)"""
+        worker_name = threading.current_thread().name
+        logger.info(f"🔄 [IPC-WORKER] {worker_name} started")
+        
+        while self.is_running:
+            try:
+                # **Get Message with Timeout** (lấy tin nhắn với timeout)
+                try:
+                    priority, queued_time, message = self.message_queue.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                
+                # **Calculate Queue Latency** (tính latency queue)
+                queue_latency_ms = (time.time() - queued_time) * 1000
+                
+                # **Process Message** (xử lý tin nhắn)
+                start_time = time.time()
+                success = self._process_message(message)
+                processing_time_ms = (time.time() - start_time) * 1000
+                
+                total_latency_ms = queue_latency_ms + processing_time_ms
+                
+                # **Update Statistics** (cập nhật thống kê)
+                with self.stats_lock:
+                    if success:
+                        self.stats['messages_processed'] += 1
+                    else:
+                        self.stats['messages_failed'] += 1
+                    
+                    # **Update Average Latency** (cập nhật latency trung bình)
+                    if self.stats['messages_processed'] > 0:
+                        old_avg = self.stats['average_latency_ms']
+                        count = self.stats['messages_processed']
+                        self.stats['average_latency_ms'] = (old_avg * (count - 1) + total_latency_ms) / count
+                
+                # **Performance Monitoring** (giám sát hiệu suất)
+                if total_latency_ms > IPCBridgeConfig.CRITICAL_LATENCY_MS:
+                    logger.warning(f"🐌 [IPC-PERF] Critical latency: {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
+                elif total_latency_ms > IPCBridgeConfig.WARNING_LATENCY_MS:
+                    logger.debug(f"⚡ [IPC-PERF] Warning latency: {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
+                
+                self.message_queue.task_done()
+                
+            except Exception as e:
+                logger.error(f"❌ [IPC-WORKER] {worker_name} processing error: {e}")
+                logger.debug(f"🔍 [IPC-WORKER] {worker_name} traceback: {traceback.format_exc()}")
+                time.sleep(0.1)  # Brief pause on error
+        
+        logger.info(f"🔚 [IPC-WORKER] {worker_name} stopped")
+    
+    def _process_message(self, message: IPCMessage) -> bool:
+        """
+        **Process Single Message** (xử lý tin nhắn đơn)
+        
+        Args:
+            message: IPCMessage cần xử lý
+            
+        Returns:
+            bool: True nếu xử lý thành công
+        """
+        try:
+            logger.debug(f"🎯 [IPC-PROCESS] Processing message: {message.message_type.value} (id: {message.message_id[:8]})")
+            
+            # **Find Callbacks** (tìm callbacks)
+            with self.callback_lock:
+                callbacks = self.callbacks.get(message.message_type, [])
+            
+            if not callbacks:
+                logger.warning(f"⚠️ [IPC-PROCESS] No callbacks registered for {message.message_type.value}")
+                return False
+            
+            # **Execute Callbacks** (thực thi callbacks)
+            success_count = 0
+            for callback in callbacks:
+                try:
+                    callback_start = time.time()
+                    result = callback(message)
+                    callback_duration_ms = (time.time() - callback_start) * 1000
+                    
+                    if result:
+                        success_count += 1
+                        logger.debug(f"✅ [IPC-CALLBACK] Callback successful ({callback_duration_ms:.1f}ms)")
+                    else:
+                        logger.warning(f"❌ [IPC-CALLBACK] Callback returned False")
+                        
+                    with self.stats_lock:
+                        self.stats['callbacks_executed'] += 1
+                        
+                except Exception as callback_error:
+                    logger.error(f"❌ [IPC-CALLBACK] Callback exception: {callback_error}")
+                    logger.debug(f"🔍 [IPC-CALLBACK] Callback traceback: {traceback.format_exc()}")
+            
+            # **Success if any callback succeeded** (thành công nếu bất kỳ callback nào thành công)
+            overall_success = success_count > 0
+            
+            logger.debug(f"📊 [IPC-PROCESS] Message processed: {success_count}/{len(callbacks)} callbacks successful")
+            return overall_success
+            
+        except Exception as e:
+            logger.error(f"❌ [IPC-PROCESS] Message processing failed: {e}")
+            return False
+    
+    def _file_monitor_loop(self) -> None:
+        """
+        **File Monitor Loop** (vòng lặp giám sát file)
+        
+        Monitor file-based messages from subprocesses as fallback communication method.
+        """
+        logger.info("🔍 [IPC-MONITOR] File monitor started")
+        
+        while self.is_running:
+            try:
+                if not IPCBridgeConfig.IPC_DIRECTORY.exists():
+                    time.sleep(1.0)
+                    continue
+                
+                # **Scan for Message Files** (quét các file tin nhắn)
+                message_files = list(IPCBridgeConfig.IPC_DIRECTORY.glob(
+                    f"{IPCBridgeConfig.MESSAGE_FILE_PREFIX}*{IPCBridgeConfig.MESSAGE_FILE_SUFFIX}"
+                ))
+                
+                for message_file in message_files:
+                    try:
+                        self._process_message_file(message_file)
+                    except Exception as file_error:
+                        logger.error(f"❌ [IPC-MONITOR] Error processing file {message_file.name}: {file_error}")
+                
+                # **Cleanup Old Files** (dọn dẹp file cũ)
+                self._cleanup_old_message_files()
+                
+                time.sleep(0.5)  # Check every 500ms
+                
+            except Exception as e:
+                logger.error(f"❌ [IPC-MONITOR] File monitor error: {e}")
+                time.sleep(2.0)
+        
+        logger.info("🔚 [IPC-MONITOR] File monitor stopped")
+    
+    def _process_message_file(self, message_file: Path) -> None:
+        """
+        **Process Message File** (xử lý file tin nhắn)
+        
+        Args:
+            message_file: Path to message file
+        """
+        try:
+            # **Read and Parse Message** (đọc và phân tích tin nhắn)
+            with open(message_file, 'r') as f:
+                file_data = json.load(f)
+            
+            # **Create IPCMessage** (tạo IPCMessage)
+            message = IPCMessage.from_dict(file_data)
+            
+            # **Queue Message for Processing** (queue tin nhắn để xử lý)
+            queued = self.send_message_to_queue(message)
+            
+            if queued:
+                logger.debug(f"📁 [IPC-MONITOR] File message queued: {message_file.name}")
+                
+                # **Remove Processed File** (xóa file đã xử lý)
+                try:
+                    message_file.unlink()
+                    logger.debug(f"🗑️ [IPC-MONITOR] Cleaned up file: {message_file.name}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ [IPC-MONITOR] Failed to cleanup file {message_file.name}: {cleanup_error}")
+            else:
+                logger.warning(f"❌ [IPC-MONITOR] Failed to queue file message: {message_file.name}")
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-MONITOR] Failed to process message file {message_file.name}: {e}")
+    
+    def _cleanup_old_message_files(self) -> None:
+        """**Cleanup Old Message Files** (dọn dẹp file tin nhắn cũ)"""
+        try:
+            current_time = time.time()
+            cleanup_count = 0
+            
+            for file_path in IPCBridgeConfig.IPC_DIRECTORY.glob(f"{IPCBridgeConfig.MESSAGE_FILE_PREFIX}*{IPCBridgeConfig.MESSAGE_FILE_SUFFIX}"):
+                try:
+                    file_age = current_time - file_path.stat().st_mtime
+                    if file_age > IPCBridgeConfig.FILE_CLEANUP_AGE:
+                        file_path.unlink()
+                        cleanup_count += 1
+                        logger.debug(f"🧹 [IPC-CLEANUP] Removed old file: {file_path.name} (age: {file_age:.1f}s)")
+                except Exception as file_err:
+                    logger.debug(f"⚠️ [IPC-CLEANUP] Could not process file {file_path.name}: {file_err}")
+            
+            if cleanup_count > 0:
+                logger.debug(f"🧹 [IPC-CLEANUP] Cleaned up {cleanup_count} old message files")
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-CLEANUP] Cleanup failed: {e}")
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """**Get Server Statistics** (lấy thống kê máy chủ)"""
+        with self.stats_lock:
+            stats = self.stats.copy()
+        
+        stats.update({
+            'is_running': self.is_running,
+            'is_started': self.is_started,
+            'queue_size': self.message_queue.qsize(),
+            'worker_count': len(self.workers),
+            'callback_count': sum(len(callbacks) for callbacks in self.callbacks.values()),
+            'uptime_seconds': time.time() - stats['server_start_time'] if stats['server_start_time'] else 0
+        })
+        
+        return stats
+
+class IPCClient:
+    """
+    **IPC Client** (client IPC)
+    
+    Sử dụng trong subprocess để gửi messages đến main process.
+    Hỗ trợ both direct queue communication và file-based fallback.
+    """
+    
+    def __init__(self, process_id: str = None):
+        """Initialize IPC Client"""
+        self.process_id = process_id or f"{IPCBridgeConfig.SUBPROCESS_PREFIX}{os.getpid()}"
+        
+        # **Connection State** (trạng thái kết nối)
+        self.connected = False
+        self.connection_attempted = False
+        
+        # **Retry Configuration** (cấu hình thử lại)
+        self.max_retries = IPCBridgeConfig.MAX_RETRIES
+        self.retry_delay = IPCBridgeConfig.INITIAL_RETRY_DELAY
+        
+        logger.info(f"🏗️ [IPC-CLIENT] IPCClient initialized with process_id: {self.process_id}")
+    
+    def send_message(self, message_type: IPCMessageType, payload: Dict[str, Any], 
+                    priority: IPCPriority = IPCPriority.NORMAL, 
+                    timeout: float = IPCBridgeConfig.MESSAGE_TIMEOUT) -> bool:
+        """
+        **Send Message** (gửi tin nhắn)
+        
+        Args:
+            message_type: Loại tin nhắn
+            payload: Nội dung tin nhắn
+            priority: Độ ưu tiên tin nhắn
+            timeout: Timeout cho tin nhắn
+            
+        Returns:
+            bool: True nếu gửi thành công
+        """
+        try:
+            # **Create Message** (tạo tin nhắn)
+            message = IPCMessage(
+                message_id=str(uuid.uuid4()),
+                message_type=message_type,
+                payload=payload,
+                priority=priority,
+                source_process=self.process_id,
+                timeout_seconds=timeout
+            )
+            
+            logger.debug(f"📤 [IPC-CLIENT] Sending message: {message_type.value} (id: {message.message_id[:8]})")
+            
+            # **Try File-Based Communication First** (thử file-based communication trước)
+            # Trong cross-process scenario, file-based là most reliable
+            success = self._send_via_file(message)
+            
+            if success:
+                logger.debug(f"✅ [IPC-CLIENT] Message sent successfully via file: {message.message_id[:8]}")
+                return True
+            else:
+                logger.warning(f"❌ [IPC-CLIENT] Failed to send message: {message.message_id[:8]}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-CLIENT] Error sending message: {e}")
+            return False
+    
+    def _send_via_file(self, message: IPCMessage) -> bool:
+        """
+        **Send Message via File** (gửi tin nhắn qua file)
+        
+        File-based message passing for cross-process communication.
+        
+        Args:
+            message: IPCMessage cần gửi
+            
+        Returns:
+            bool: True nếu gửi thành công
+        """
+        try:
+            # **Ensure IPC Directory** (đảm bảo thư mục IPC)
+            if not _ensure_ipc_directory():
+                return False
+            
+            # **Create Message File** (tạo file tin nhắn)
+            message_filename = f"{IPCBridgeConfig.MESSAGE_FILE_PREFIX}{message.message_id}{IPCBridgeConfig.MESSAGE_FILE_SUFFIX}"
+            message_file = IPCBridgeConfig.IPC_DIRECTORY / message_filename
+            
+            # **Atomic Write** (ghi nguyên tử)
+            temp_file = IPCBridgeConfig.IPC_DIRECTORY / f".tmp_{message.message_id}"
+            
+            try:
+                with open(temp_file, 'w') as f:
+                    json.dump(message.to_dict(), f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                
+                # **Atomic Move** (di chuyển nguyên tử)
+                temp_file.rename(message_file)
+                
+                logger.debug(f"📁 [IPC-CLIENT] Message file written: {message_filename}")
+                return True
+                
+            except Exception as write_error:
+                # **Cleanup on Error** (dọn dẹp khi lỗi)
+                try:
+                    if temp_file.exists():
+                        temp_file.unlink()
+                except Exception:
+                    pass
+                raise write_error
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-CLIENT] File-based send failed: {e}")
+            return False
+    
+    def send_pid_forward(self, pid: int, metadata: Dict[str, Any]) -> bool:
+        """
+        **Send PID Forward Message** (gửi tin nhắn chuyển tiếp PID)
+        
+        Convenience method để gửi PID forward message với metadata.
+        
+        Args:
+            pid: Process ID cần forward
+            metadata: Process metadata
+            
+        Returns:
+            bool: True nếu gửi thành công
+        """
+        try:
+            payload = {
+                'pid': pid,
+                'metadata': metadata,
+                'timestamp': time.time(),
+                'source': 'direct_registry_ipc'
+            }
+            
+            return self.send_message(
+                message_type=IPCMessageType.PID_FORWARD,
+                payload=payload,
+                priority=IPCPriority.HIGH  # PID forwards có priority cao
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ [IPC-CLIENT] Error sending PID forward: {e}")
+            return False
+
+# **Utility Functions** (các hàm tiện ích)
+
+def create_ipc_server() -> IPCServer:
+    """**Create IPC Server Instance** (tạo instance máy chủ IPC)"""
+    return IPCServer()
+
+def create_ipc_client(process_id: str = None) -> IPCClient:
+    """**Create IPC Client Instance** (tạo instance client IPC)"""
+    return IPCClient(process_id=process_id)
+
+def test_ipc_bridge() -> bool:
+    """
+    **Test IPC Bridge Functionality** (kiểm tra chức năng IPC Bridge)
+    
+    Basic functionality test cho IPC Bridge system.
+    
+    Returns:
+        bool: True nếu test thành công
+    """
+    try:
+        logger.info("🧪 [IPC-TEST] Starting IPC Bridge test...")
+        
+        # **Test Message Creation** (kiểm tra tạo tin nhắn)
+        test_message = IPCMessage(
+            message_id="test_001",
+            message_type=IPCMessageType.PID_FORWARD,
+            payload={'pid': 12345, 'test': True}
+        )
+        
+        # **Test Serialization** (kiểm tra tuần tự hóa)
+        message_dict = test_message.to_dict()
+        restored_message = IPCMessage.from_dict(message_dict)
+        
+        if restored_message.message_id != test_message.message_id:
+            logger.error("❌ [IPC-TEST] Message serialization failed")
+            return False
+        
+        # **Test Directory Creation** (kiểm tra tạo thư mục)
+        if not _ensure_ipc_directory():
+            logger.error("❌ [IPC-TEST] Directory creation failed")
+            return False
+        
+        logger.info("✅ [IPC-TEST] IPC Bridge basic test passed")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ [IPC-TEST] Test failed: {e}")
+        return False
+
+if __name__ == "__main__":
+    # **Basic Test** (kiểm tra cơ bản)
+    logging.basicConfig(level=logging.DEBUG)
+    test_result = test_ipc_bridge()
+    print(f"IPC Bridge Test Result: {'PASS' if test_result else 'FAIL'}")

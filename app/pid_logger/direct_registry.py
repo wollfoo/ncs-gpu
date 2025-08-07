@@ -349,6 +349,17 @@ class DirectPIDRegistry:
         self._resource_manager = None  # Will be set via register_resource_manager()
         self._resource_manager_lock = threading.Lock()
         
+        # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge)
+        self._ipc_client = None
+        self._ipc_enabled = True
+        self._ipc_stats = {
+            'messages_sent': 0,
+            'pid_forwards_sent': 0,
+            'ipc_errors': 0,
+            'fallback_used': 0
+        }
+        self._setup_ipc_client()
+        
         logger.info("🏗️ DirectPIDRegistry initialized with thread-safe operations")
         self._start_cleanup_thread()
     
@@ -688,11 +699,48 @@ class DirectPIDRegistry:
         retry_delay = config['initial_delay']
         backoff_multiplier = config['backoff_multiplier']
         
-        logger.info(f"🎯 [RM-FORWARD] Enhanced forwarding PID {pid} to ResourceManager (PHASE 1)")
+        logger.info(f"🎯 [RM-FORWARD] Enhanced forwarding PID {pid} to ResourceManager (IPC BRIDGE ENABLED)")
         
-        # **Import ResourceManager** (nhập ResourceManager)
+        # **🔥 PRIMARY: Try IPC Bridge first** (ưu tiên IPC Bridge trước)
+        if self._ipc_enabled and self._ipc_client:
+            logger.info(f"🌉 [IPC-PRIMARY] Attempting IPC Bridge forward for PID {pid}")
+            
+            # **Enhanced metadata for IPC** (metadata nâng cao cho IPC)
+            ipc_metadata = {
+                **coordinator_metadata,
+                'ipc_forward_timestamp': time.time(),
+                'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry_ipc'],
+                'process_info': {
+                    'pid': pid,
+                    'process_type': process_info.process_type,
+                    'process_name': process_info.process_name,
+                    'registered_at': process_info.registered_at
+                },
+                'cross_process_communication': True
+            }
+            
+            # **Send via IPC Bridge** (gửi qua IPC Bridge)
+            ipc_success = self._send_pid_via_ipc(pid, ipc_metadata)
+            
+            if ipc_success:
+                logger.info(f"✅ [IPC-PRIMARY] PID {pid} forwarded successfully via IPC Bridge")
+                
+                # **Update process coordination state** (cập nhật trạng thái coordination của process)
+                process_info.coordination_state = "ipc_forwarded"
+                process_info.metadata['ipc_forwarded'] = True
+                process_info.metadata['ipc_timestamp'] = time.time()
+                
+                return True
+            else:
+                logger.warning(f"⚠️ [IPC-PRIMARY] IPC Bridge forward failed for PID {pid}, trying fallback")
+                self._ipc_stats['fallback_used'] += 1
+        else:
+            logger.info(f"🔄 [IPC-FALLBACK] IPC Bridge not available, using legacy methods for PID {pid}")
+        
+        # **FALLBACK: Import ResourceManager for singleton access** (dự phòng: nhập ResourceManager cho singleton access)
         ResourceManager = self._import_resource_manager()
         if not ResourceManager:
+            logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager for PID {pid}")
             return False
         
         # **Enhanced Retry Loop với Readiness Signaling Integration** (vòng lặp thử lại nâng cao với tích hợp tín hiệu sẵn sàng)
@@ -1237,6 +1285,82 @@ class DirectPIDRegistry:
         )
         self._cleanup_thread.start()
     
+    def _setup_ipc_client(self):
+        """
+        **🔥 Setup IPC Client** (thiết lập client IPC)
+        
+        Khởi tạo IPC Client để gửi PID forwards đến ResourceManager trong main process.
+        Thay thế singleton access patterns bằng reliable cross-process messaging.
+        """
+        try:
+            logger.info("🌉 [IPC-CLIENT] Setting up IPC Bridge client...")
+            
+            # **Import IPC Bridge components** (nhập các thành phần IPC Bridge)
+            try:
+                # Setup module path for IPC Bridge
+                if not _setup_module_path("mining_environment/scripts", "IPCClient"):
+                    logger.warning("⚠️ [IPC-CLIENT] Failed to setup IPC Bridge import path")
+                
+                from mining_environment.scripts.ipc_bridge import create_ipc_client
+                logger.info("✅ [IPC-CLIENT] IPC Bridge modules imported successfully")
+                
+                # **Create IPC Client instance** (tạo instance IPC Client)
+                process_id = f"direct_registry_{os.getpid()}"
+                self._ipc_client = create_ipc_client(process_id=process_id)
+                
+                logger.info(f"✅ [IPC-CLIENT] IPC Bridge client created with process_id: {process_id}")
+                self._ipc_enabled = True
+                return True
+                
+            except ImportError as ie:
+                logger.warning(f"⚠️ [IPC-CLIENT] Failed to import IPC Bridge: {ie}")
+                logger.info("🔄 [IPC-CLIENT] Falling back to singleton access patterns")
+                self._ipc_enabled = False
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-CLIENT] Error setting up IPC client: {e}")
+            self._ipc_enabled = False
+            return False
+    
+    def _send_pid_via_ipc(self, pid: int, metadata: Dict[str, Any]) -> bool:
+        """
+        **🔥 Send PID via IPC Bridge** (gửi PID qua IPC Bridge)
+        
+        PRIMARY cross-process communication method thay thế singleton access.
+        
+        Args:
+            pid: Process ID cần forward
+            metadata: Process metadata
+            
+        Returns:
+            bool: True nếu gửi thành công
+        """
+        try:
+            if not self._ipc_enabled or not self._ipc_client:
+                logger.debug("🔍 [IPC-SEND] IPC not enabled or client not available")
+                return False
+            
+            logger.info(f"📤 [IPC-SEND] Sending PID {pid} to ResourceManager via IPC")
+            
+            # **Send PID forward message** (gửi tin nhắn chuyển tiếp PID)
+            success = self._ipc_client.send_pid_forward(pid, metadata)
+            
+            if success:
+                self._ipc_stats['messages_sent'] += 1
+                self._ipc_stats['pid_forwards_sent'] += 1
+                logger.info(f"✅ [IPC-SEND] PID {pid} sent successfully via IPC")
+                return True
+            else:
+                self._ipc_stats['ipc_errors'] += 1
+                logger.error(f"❌ [IPC-SEND] Failed to send PID {pid} via IPC")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [IPC-SEND] Error sending PID {pid} via IPC: {e}")
+            self._ipc_stats['ipc_errors'] += 1
+            return False
+    
     def _cleanup_dead_processes(self) -> None:
         """
         **Cleanup Dead Processes** (dọn dẹp tiến trình đã chết)
@@ -1316,6 +1440,17 @@ class DirectPIDRegistry:
         # **Clear observers** (xóa observers)
         with self._observer_lock:
             self._observers.clear()
+        
+        # **🔥 Cleanup IPC Client** (dọn dẹp IPC Client)
+        if self._ipc_enabled and self._ipc_client:
+            try:
+                logger.info("🌉 [IPC-CLIENT] Shutting down IPC Bridge client...")
+                # Note: IPCClient doesn't need explicit shutdown in current implementation
+                self._ipc_client = None
+                self._ipc_enabled = False
+                logger.info("✅ [IPC-CLIENT] IPC Bridge client shutdown complete")
+            except Exception as e:
+                logger.error(f"❌ [IPC-CLIENT] Error shutting down IPC client: {e}")
         
         # **Clear registry** (xóa registry)
         with self._lock:
