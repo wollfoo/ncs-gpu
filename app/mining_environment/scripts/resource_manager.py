@@ -539,16 +539,7 @@ class ResourceManager(IResourceManager):
         pid_worker.start()
         self.workers.append(pid_worker)
         
-        # **🥇 SOLUTION 1: Add File-Based Scanner Thread** (thêm thread scanner dựa trên file)
-        if self._file_scanner_enabled:
-            scanner_worker = threading.Thread(
-                target=self._start_pid_file_scanner,
-                name="PIDFileScanner",
-                daemon=True
-            )
-            scanner_worker.start()
-            self.workers.append(scanner_worker)
-            self.logger.info("✅ [SOLUTION-1] PID File Scanner worker thread started")
+        # File-based PID scanner deprecated and fully removed in Phase 4
         
         self.logger.info(f"Worker threads đã khởi động: {len(self.workers)} threads active")
 
@@ -805,7 +796,7 @@ class ResourceManager(IResourceManager):
                 
                 # **Check if scanner cycle interval elapsed** (kiểm tra khoảng thời gian chu kỳ scanner)
                 if current_time - self._last_scanner_cycle >= self._file_scanner_interval:
-                    self._execute_file_scanner_cycle(current_time)
+                    # Scanner cycle removed in Phase 4
                     self._last_scanner_cycle = current_time
                     self._scanner_stats['scan_cycles'] += 1
                 
@@ -819,6 +810,8 @@ class ResourceManager(IResourceManager):
         self.logger.info("🔚 [SOLUTION-1] PID File Scanner stopped")
     
     def _execute_file_scanner_cycle(self, current_time: float):
+        """Deprecated in Phase 4 – no-op."""
+        return
         """
         **🥇 SOLUTION 1: Execute File Scanner Cycle** (thực thi chu kỳ scanner file)
         

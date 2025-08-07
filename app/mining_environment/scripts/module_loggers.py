@@ -451,11 +451,11 @@ def log_time_based_evasion(window_type: str, action: str, duration: int = None, 
 initialize_plugin_logging()
 
 # ✅ PHASE 2 COMPLETION: Log successful refactoring
-print("✅ [PHASE-2-COMPLETE] Module loggers refactored - monkey patching eliminated")
+
 # Đếm số loggers đã khởi tạo (không dùng _logger_factory vì chưa định nghĩa)
-print(f"🎯 [PHASE-2-COMPLETE] 20+ GPU component loggers available")
-print("🧹 [PHASE-2-COMPLETE] Clean architecture implemented with proper delegation")
-print("⚡ [PHASE-2-COMPLETE] Enhanced logging with domain intelligence active")
+
+
+
 
 ###############################################################################
 #                    PHASE 2 SUCCESS METRICS                               #
