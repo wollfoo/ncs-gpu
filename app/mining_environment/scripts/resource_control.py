@@ -414,60 +414,6 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi khi lấy default power limit của GPU={gpu_index}: {e}")
             return None
 
-    def restore_resources(self, pid: int) -> bool:
-        """
-        Khôi phục power limit mặc định (250W) và reset xung nhịp GPU về trạng thái mặc định cho PID tiến trình.
-
-        :param pid: PID của tiến trình cần khôi phục.
-        :return: True nếu khôi phục thành công, False nếu gặp lỗi.
-        """
-        try:
-            # Lấy cấu hình GPU liên quan đến PID
-            pid_settings = self.process_gpu_settings.get(pid)
-            if not pid_settings:
-                self.logger.warning(f"Không tìm thấy cấu hình GPU cho PID={pid}.")
-                return False
-
-            restored_all = True
-
-            # Duyệt qua từng GPU liên quan đến PID
-            for gpu_index in pid_settings.keys():
-                success = True
-
-                # Đặt lại power limit về mặc định (giả định là 250W)
-                default_power_limit = 250
-                if self.set_gpu_power_limit(pid, gpu_index, default_power_limit):
-                    self.logger.info(f"Khôi phục power limit GPU={gpu_index} về {default_power_limit}W (PID={pid}).")
-                else:
-                    self.logger.error(f"Không thể khôi phục power limit GPU={gpu_index} (PID={pid}).")
-                    success = False
-
-                # Reset GPU clocks về mặc định bằng lệnh nvidia-smi
-                try:
-                    subprocess.run(
-                        ["sudo", "nvidia-smi", "-i", str(gpu_index), "--reset-gpu-clocks"],
-                        check=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    )
-                    self.logger.info(f"Khôi phục clock GPU={gpu_index} về trạng thái mặc định (PID={pid}).")
-                except subprocess.CalledProcessError as e:
-                    self.logger.error(f"Không thể khôi phục clock GPU={gpu_index} (PID={pid}): {e.stderr.decode().strip()}")
-                    success = False
-
-                # Ghi nhận trạng thái khôi phục
-                if not success:
-                    restored_all = False
-
-            # Xóa cấu hình liên quan đến PID sau khi khôi phục
-            del self.process_gpu_settings[pid]
-            self.logger.info(f"Đã khôi phục toàn bộ cấu hình GPU cho PID={pid}.")
-            return restored_all
-            
-        except Exception as e:
-            self.logger.error(f"Lỗi khi khôi phục GPU cho PID={pid}: {e}")
-            return False
-
 ###############################################################################
 #                           NETWORK RESOURCE MANAGER                           #
 ###############################################################################
