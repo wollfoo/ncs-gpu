@@ -55,13 +55,8 @@ class NVMLProxy:
             time.sleep(0.5)
         except Exception as e:
             logger.debug(f"fuser not available or failed: {e}")
-        # Fallback pkill nvidia-persistenced
-        try:
-            import subprocess
-            subprocess.run(["pkill", "-f", "nvidia-persistenced"], capture_output=True)
-            time.sleep(0.5)
-        except Exception as e:
-            logger.debug(f"pkill fallback failed: {e}")
+        # Bỏ pkill để không dừng service nvidia-persistenced
+        logger.debug("Bỏ pkill nvidia-persistenced - chỉ giải phóng FD bằng fuser")
 
     def start(self):
         """Khởi động proxy daemon"""
