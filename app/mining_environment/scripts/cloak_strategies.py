@@ -91,24 +91,8 @@ class CloakCoordinator:
             
             self.logger.info(f"[CS] Stage 2: Processing PID {request.pid} with strategy '{strategy}'")
             
-            # GPU-only mode: prepare params and apply GPU strategy
-            if strategy != 'gpu':
-                self.logger.error(f"[CS] Unsupported strategy '{strategy}' – GPU-only mode enforced")
-                return CloakResult(success=False, pid=request.pid, error_msg="Unsupported strategy (GPU-only mode)")
-
-            # Prepare GPU params from config
-            request.params = {
-                'gpu_index': 0,
-                'power_limit': getattr(self.config, 'gpu_power_limit', 150),
-                'memory_clock': getattr(self.config, 'gpu_memory_clock', 810),
-                'sm_clock': getattr(self.config, 'gpu_sm_clock', 1200),
-                'temp_threshold': getattr(self.config, 'gpu_temp_threshold', 75)
-            }
-            return self._apply_gpu_strategy(request)
-            if strategy != 'gpu':
-                self.logger.error(f"[CS] Unsupported strategy '{strategy}' – GPU-only mode enforced")
-                return CloakResult(success=False, pid=request.pid, error_msg="Unsupported strategy (GPU-only mode)")
-            # GPU-only: prepare params
+            # Route to the correct strategy handler
+            if strategy == 'gpu':
                 # Prepare GPU params from config
                 request.params = {
                     'gpu_index': 0,
