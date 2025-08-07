@@ -229,7 +229,7 @@ class ResourceManager(IResourceManager):
             }
             
             # **🥇 SOLUTION 1: File-Based Scanner Configuration** (cấu hình scanner dựa trên file)
-            self._file_scanner_enabled = True
+            self._file_scanner_enabled = False  # Disabled: DirectPIDRegistry callback supersedes file scanner
             self._file_scanner_interval = 10.0  # Check every 10 seconds
             self._pid_file_directory = Path("/tmp/ncs_pid_registry")  # Monitor this directory
             self._last_scanner_cycle = 0.0

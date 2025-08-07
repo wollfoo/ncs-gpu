@@ -41,6 +41,24 @@ def signal_handler(signum, frame):
     
     sys.exit(0)
 
+def monitor_and_log_output(process, process_name):
+    """
+    **[Output Monitor Thread]** (luồng giám sát đầu ra)
+    Đọc stdout và stderr từ tiến trình con và ghi lại bằng logger.
+    """
+    def log_stream(stream, stream_name):
+        for line in iter(stream.readline, ''):
+            if line.strip():
+                logger.info(f"[{process_name}-{stream_name}] {line.strip()}")
+        stream.close()
+
+    stdout_thread = threading.Thread(target=log_stream, args=(process.stdout, 'stdout'))
+    stderr_thread = threading.Thread(target=log_stream, args=(process.stderr, 'stderr'))
+    stdout_thread.start()
+    stderr_thread.start()
+    stdout_thread.join()
+    stderr_thread.join()
+
 def create_enhanced_gpu_environment():
     """
     **[Enhanced GPU Environment Creator]** (tạo môi trường GPU tối ưu)
@@ -511,12 +529,18 @@ def main():
                 # Run inference-cuda as subprocess
                 process = subprocess.Popen(
                     exec_command,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
                     env=clean_env  # Use clean environment for fallback subprocess too
                 )
                 
                 logger.info(f"✅ [GPU-STEALTH-WRAPPER] inference-cuda started as subprocess PID: {process.pid}")
+
+                # Start monitoring output in a separate thread
+                monitor_thread = threading.Thread(target=monitor_and_log_output, args=(process, 'inference-cuda-fallback'))
+                monitor_thread.daemon = True
+                monitor_thread.start()
                 
                 # Wait for subprocess to complete
                 return_code = process.wait()
