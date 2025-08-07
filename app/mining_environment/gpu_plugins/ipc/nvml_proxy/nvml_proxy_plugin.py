@@ -25,7 +25,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
-class NVMLProxyPlugin(IGPUPlugin, IGPUCloakService, INVMLProxyPlugin):
+class NVMLProxyPlugin(IGPUCloakService, INVMLProxyPlugin):
     """Plugin wrapper cho NVML Proxy Daemon"""
     
     def __init__(self, target_pid: Optional[int] = None):
