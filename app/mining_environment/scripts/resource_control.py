@@ -954,8 +954,8 @@ class HardwareController:
         # Initialize GPU manager
         self.gpu_manager = GPUResourceManager(config, self.logger)
         
-        # Initialize Network manager if needed
-        self.network_manager = NetworkResourceManager(config, self.logger)
+        # GPU-only mode: NetworkResourceManager disabled
+        self.network_manager = None  # type: ignore
         
         self.logger.info("[RC] HardwareController initialized - Stage 3 ready")
     
