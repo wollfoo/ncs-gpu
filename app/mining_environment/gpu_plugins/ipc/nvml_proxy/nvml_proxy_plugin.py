@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from ..core.interfaces import IGPUPlugin, IGPUCloakService
+from ...core.interfaces import IGPUPlugin, IGPUCloakService
 from .nvml_proxy_interface import INVMLProxyPlugin
 
 # Import NVML Proxy logger
