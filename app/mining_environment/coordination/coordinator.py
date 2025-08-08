@@ -1400,24 +1400,24 @@ class HookCoordinator:
                         retry_config['base_delay'] * (retry_config['backoff_factor'] ** attempt),
                         retry_config['max_delay']
                     )
-                    # Add jitter to prevent thundering herd
+                    # **Add jitter to prevent thundering herd** (thêm jitter để ngăn hiệu ứng bầy đàn)
                     jitter = random.uniform(0, 0.1)
                     total_delay = delay + jitter
                     
                     if self.logger:
-                        self.logger.debug(f"🔄 [VERIFY] PID {pid} retry {attempt + 1}/{retry_config['max_retries']} after {total_delay:.3f}s")
+                        self.logger.debug(f"🔄 **[VERIFY] PID {pid} retry {attempt + 1}/{retry_config['max_retries']} after {total_delay:.3f}s** ([XÁC MINH] PID {pid} thử lại {attempt + 1}/{retry_config['max_retries']} sau {total_delay:.3f}s)")
                     
                     time.sleep(total_delay)
                     continue
                 else:
-                    # Final failure or non-retryable error
+                    # **Final failure or non-retryable error** (thất bại cuối cùng hoặc lỗi không thể thử lại)
                     if self.logger:
-                        self.logger.warning(f"⚠️ [HEALTH] PID {pid} verification failed after {attempt + 1} attempts")
+                        self.logger.warning(f"⚠️ **[HEALTH] PID {pid} verification failed after {attempt + 1} attempts** ([SỨC KHỎE] Xác minh PID {pid} thất bại sau {attempt + 1} lần thử)")
                     return False
                     
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"❌ [HEALTH] Error verifying PID {pid} status (attempt {attempt + 1}): {e}")
+                    self.logger.error(f"❌ **[HEALTH] Error verifying PID {pid} status (attempt {attempt + 1})** ([SỨC KHỎE] Lỗi xác minh trạng thái PID {pid} (lần thử {attempt + 1})): {e}")
                 
                 if attempt < retry_config['max_retries'] - 1:
                     time.sleep(retry_config['base_delay'])
@@ -1429,40 +1429,42 @@ class HookCoordinator:
     
     def _sync_hooks_ready_state(self, pid: int, ready_state: bool) -> bool:
         """
-        **Sync Hooks Ready State** (đồng bộ trạng thái hooks)
+        **Sync Hooks Ready State** (đồng bộ trạng thái hooks sẵn sàng)
         
-        ✅ PRIORITY 2: STATE SYNCHRONIZATION với comprehensive retry mechanism và exponential backoff
-        Enhanced thread-safe synchronization với systematic retry, state verification, và graceful error handling.
+        **✅ PRIORITY 2: STATE SYNCHRONIZATION with comprehensive retry mechanism and exponential backoff**
+        (ưu tiên 2: đồng bộ trạng thái với cơ chế thử lại toàn diện và backoff theo cấp số nhân)
+        **Enhanced thread-safe synchronization with systematic retry, state verification, and graceful error handling**
+        (đồng bộ an toàn luồng nâng cao với thử lại có hệ thống, xác minh trạng thái và xử lý lỗi mượt mà).
         """
-        # ✅ RETRY CONFIGURATION: Enhanced retry parameters for better reliability
+        # **✅ RETRY CONFIGURATION: Enhanced retry parameters for better reliability** (cấu hình thử lại: tham số thử lại nâng cao để tin cậy hơn)
         max_retries = 3
-        base_delay = 0.1  # 100ms base delay
-        backoff_factor = 2  # Exponential backoff multiplier
-        max_delay = 1.0  # Maximum delay cap (1 second)
+        base_delay = 0.1  # **100ms base delay** (độ trễ cơ bản 100ms)
+        backoff_factor = 2  # **Exponential backoff multiplier** (hệ số nhân backoff theo cấp số nhân)
+        max_delay = 1.0  # **Maximum delay cap (1 second)** (giới hạn độ trễ tối đa - 1 giây)
         
         for attempt in range(max_retries):
             try:
-                # ✅ EXPONENTIAL BACKOFF: Calculate delay for current attempt
+                # **✅ EXPONENTIAL BACKOFF: Calculate delay for current attempt** (backoff theo cấp số nhân: tính toán độ trễ cho lần thử hiện tại)
                 if attempt > 0:
                     delay = min(base_delay * (backoff_factor ** (attempt - 1)), max_delay)
-                    # Add jitter to prevent thundering herd
+                    # **Add jitter to prevent thundering herd** (thêm jitter để ngăn hiệu ứng bầy đàn)
                     jitter = random.uniform(0, delay * 0.1)
                     total_delay = delay + jitter
                     
                     if self.logger:
-                        self.logger.debug(f"🔄 [STATE-SYNC] PID {pid} retry {attempt + 1}/{max_retries} after {total_delay:.3f}s")
+                        self.logger.debug(f"🔄 **[STATE-SYNC] PID {pid} retry {attempt + 1}/{max_retries} after {total_delay:.3f}s** ([ĐỒNG BỘ TRẠNG THÁI] PID {pid} thử lại {attempt + 1}/{max_retries} sau {total_delay:.3f}s)")
                     
                     time.sleep(total_delay)
                 
-                # ✅ ATOMIC OPERATION: Double-lock pattern for maximum consistency
+                # **✅ ATOMIC OPERATION: Double-lock pattern for maximum consistency** (thao tác nguyên tử: mẫu khóa kép để nhất quán tối đa)
                 with self.environment_sync_lock:
                     with self.lock:
-                        # Store previous state for rollback capability
+                        # **Store previous state for rollback capability** (lưu trạng thái trước đó để có khả năng rollback)
                         previous_internal_state = self.hooks_ready.get(pid, False)
                         env_var = f'HOOKS_READY_PID_{pid}'
                         previous_env_state = os.environ.get(env_var) == '1'
                         
-                        # Record synchronization attempt with retry context
+                        # **Record synchronization attempt with retry context** (ghi lại lần thử đồng bộ với ngữ cảnh thử lại)
                         sync_timestamp = time.time()
                         sync_context = {
                             'attempt': attempt + 1,
@@ -1474,174 +1476,181 @@ class HookCoordinator:
                         }
                         
                         if self.logger:
-                            self.logger.debug(f"🔄 [STATE-SYNC] PID {pid} synchronization attempt {attempt + 1}/{max_retries} - "
+                            self.logger.debug(f"🔄 **[STATE-SYNC] PID {pid} synchronization attempt {attempt + 1}/{max_retries}** "
+                                            f"([ĐỒNG BỘ TRẠNG THÁI] PID {pid} lần thử đồng bộ {attempt + 1}/{max_retries}) - "
                                             f"target: {ready_state}, current_internal: {previous_internal_state}, current_env: {previous_env_state}")
                         
                         try:
-                            # ✅ Step 1: Update internal state
+                            # **✅ Step 1: Update internal state** (bước 1: cập nhật trạng thái nội bộ)
                             success = self._update_internal_state(pid, ready_state)
                             if not success:
                                 raise Exception("Failed to update internal state")
                             
-                            # ✅ Step 2: Sync environment variable with verification
+                            # **✅ Step 2: Sync environment variable with verification** (bước 2: đồng bộ biến môi trường với xác minh)
                             success = self._sync_environment_variable(pid, ready_state)
                             if not success:
                                 raise Exception("Failed to sync environment variable")
                             
-                            # ✅ Step 3: Verify state consistency between internal and external state
+                            # **✅ Step 3: Verify state consistency between internal and external state** (bước 3: xác minh tính nhất quán trạng thái giữa nội bộ và bên ngoài)
                             if self._verify_state_consistency(pid):
-                                # ✅ SUCCESS: Record successful synchronization
+                                # **✅ SUCCESS: Record successful synchronization** (thành công: ghi lại đồng bộ thành công)
                                 self._record_sync_success(pid, ready_state, sync_timestamp, sync_context)
                                 
                                 if self.logger:
-                                    self.logger.info(f"✅ [STATE-SYNC] PID {pid} state synchronized successfully: {ready_state} "
+                                    self.logger.info(f"✅ **[STATE-SYNC] PID {pid} state synchronized successfully: {ready_state}** "
+                                                   f"([ĐỒNG BỘ TRẠNG THÁI] PID {pid} đồng bộ trạng thái thành công: {ready_state}) "
                                                    f"(attempt: {attempt + 1}, duration: {(time.time() - sync_timestamp)*1000:.1f}ms)")
                                 return True
                             else:
                                 raise Exception("State consistency verification failed")
                                 
                         except Exception as sync_error:
-                            # ✅ ROLLBACK: Restore previous state on failure
+                            # **✅ ROLLBACK: Restore previous state on failure** (hoàn nguyên: khôi phục trạng thái trước đó khi thất bại)
                             rollback_success = self._rollback_state(pid, previous_internal_state, previous_env_state, env_var)
                             
                             if self.logger:
-                                self.logger.warning(f"⚠️ [STATE-SYNC] PID {pid} sync failed (attempt {attempt + 1}): {sync_error} "
+                                self.logger.warning(f"⚠️ **[STATE-SYNC] PID {pid} sync failed (attempt {attempt + 1})** "
+                                                 f"([ĐỒNG BỘ TRẠNG THÁI] PID {pid} đồng bộ thất bại (lần thử {attempt + 1})): {sync_error} "
                                                  f"(rollback: {'success' if rollback_success else 'failed'})")
                             
-                            # Record failure attempt
+                            # **Record failure attempt** (ghi lại lần thử thất bại)
                             self._record_sync_failure(pid, ready_state, sync_timestamp, sync_context, str(sync_error))
                             
-                            # If this is the last attempt, fail permanently
+                            # **If this is the last attempt, fail permanently** (nếu đây là lần thử cuối cùng, thất bại vĩnh viễn)
                             if attempt == max_retries - 1:
                                 if self.logger:
-                                    self.logger.error(f"❌ [STATE-SYNC] PID {pid} state sync failed after {max_retries} attempts: {sync_error}")
+                                    self.logger.error(f"❌ **[STATE-SYNC] PID {pid} state sync failed after {max_retries} attempts** ([ĐỒNG BỘ TRẠNG THÁI] PID {pid} đồng bộ trạng thái thất bại sau {max_retries} lần thử): {sync_error}")
                                 return False
                             
-                            # Continue to next retry attempt
+                            # **Continue to next retry attempt** (tiếp tục lần thử lại tiếp theo)
                             continue
                             
             except Exception as e:
-                # ✅ COMPREHENSIVE ERROR HANDLING: Handle unexpected errors
+                # **✅ COMPREHENSIVE ERROR HANDLING: Handle unexpected errors** (xử lý lỗi toàn diện: xử lý các lỗi không mong đợi)
                 if self.logger:
-                    self.logger.error(f"❌ [STATE-SYNC] Critical error in state sync for PID {pid} (attempt {attempt + 1}): {e}")
+                    self.logger.error(f"❌ **[STATE-SYNC] Critical error in state sync for PID {pid} (attempt {attempt + 1})** ([ĐỒNG BỘ TRẠNG THÁI] Lỗi nghiêm trọng trong đồng bộ trạng thái cho PID {pid} (lần thử {attempt + 1})): {e}")
                 
                 if attempt == max_retries - 1:
                     if self.logger:
-                        self.logger.error(f"❌ [STATE-SYNC] State sync failed after {max_retries} attempts: {e}")
+                        self.logger.error(f"❌ **[STATE-SYNC] State sync failed after {max_retries} attempts** ([ĐỒNG BỘ TRẠNG THÁI] Đồng bộ trạng thái thất bại sau {max_retries} lần thử): {e}")
                     return False
                 
-                # Continue to next retry attempt even on critical errors
+                # **Continue to next retry attempt even on critical errors** (tiếp tục lần thử lại tiếp theo ngay cả khi có lỗi nghiêm trọng)
                 continue
         
-        # All retry attempts exhausted
+        # **All retry attempts exhausted** (đã hết tất cả lần thử lại)
         if self.logger:
-            self.logger.error(f"❌ [STATE-SYNC] All {max_retries} state sync attempts failed for PID {pid}")
+            self.logger.error(f"❌ **[STATE-SYNC] All {max_retries} state sync attempts failed for PID {pid}** ([ĐỒNG BỘ TRẠNG THÁI] Tất cả {max_retries} lần thử đồng bộ trạng thái đã thất bại cho PID {pid})")
         return False
     
     def _update_internal_state(self, pid: int, ready_state: bool) -> bool:
         """
-        **Update Internal State** (cập nhật trạng thái internal)
+        **Update Internal State** (cập nhật trạng thái nội bộ)
         
-        Safely update internal hooks_ready state with validation.
+        **Safely update internal hooks_ready state with validation** 
+        (cập nhật an toàn trạng thái hooks_ready nội bộ với xác thực).
         """
         try:
             self.hooks_ready[pid] = ready_state
             
-            # Verify update was successful
+            # **Verify update was successful** (xác minh cập nhật thành công)
             actual_state = self.hooks_ready.get(pid, False)
             if actual_state == ready_state:
                 if self.logger:
-                    self.logger.debug(f"🔄 [INTERNAL-UPDATE] PID {pid} internal state updated: {ready_state}")
+                    self.logger.debug(f"🔄 **[INTERNAL-UPDATE] PID {pid} internal state updated: {ready_state}** ([CẬP NHẬT NỘI BỘ] PID {pid} trạng thái nội bộ đã cập nhật: {ready_state})")
                 return True
             else:
                 if self.logger:
-                    self.logger.error(f"❌ [INTERNAL-UPDATE] PID {pid} state update failed - expected: {ready_state}, actual: {actual_state}")
+                    self.logger.error(f"❌ **[INTERNAL-UPDATE] PID {pid} state update failed** ([CẬP NHẬT NỘI BỘ] PID {pid} cập nhật trạng thái thất bại) - expected: {ready_state}, actual: {actual_state}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [INTERNAL-UPDATE] Error updating internal state for PID {pid}: {e}")
+                self.logger.error(f"❌ **[INTERNAL-UPDATE] Error updating internal state for PID {pid}** ([CẬP NHẬT NỘI BỘ] Lỗi cập nhật trạng thái nội bộ cho PID {pid}): {e}")
             return False
     
     def _sync_environment_variable(self, pid: int, ready_state: bool) -> bool:
         """
         **Sync Environment Variable** (đồng bộ biến môi trường)
         
-        Update environment variable with fallback mechanism và verification.
+        **Update environment variable with fallback mechanism and verification**
+        (cập nhật biến môi trường với cơ chế dự phòng và xác minh).
         """
         try:
             env_var = f'HOOKS_READY_PID_{pid}'
             
-            # Update environment variable based on state
+            # **Update environment variable based on state** (cập nhật biến môi trường dựa trên trạng thái)
             if ready_state:
                 os.environ[env_var] = '1'
             else:
                 os.environ.pop(env_var, None)
             
-            # ✅ VERIFICATION: Verify environment variable was set correctly
+            # **✅ VERIFICATION: Verify environment variable was set correctly** (xác minh: kiểm tra biến môi trường được thiết lập chính xác)
             actual_env_state = os.environ.get(env_var) == '1'
             if actual_env_state == ready_state:
                 if self.logger:
-                    self.logger.debug(f"🔄 [ENV-SYNC] PID {pid} environment variable synced: {ready_state}")
+                    self.logger.debug(f"🔄 **[ENV-SYNC] PID {pid} environment variable synced: {ready_state}** ([ĐỒNG BỘ MÔI TRƯỜNG] PID {pid} biến môi trường đã đồng bộ: {ready_state})")
                 return True
             else:
                 if self.logger:
-                    self.logger.error(f"❌ [ENV-SYNC] PID {pid} environment sync failed - expected: {ready_state}, actual: {actual_env_state}")
+                    self.logger.error(f"❌ **[ENV-SYNC] PID {pid} environment sync failed** ([ĐỒNG BỘ MÔI TRƯỜNG] PID {pid} đồng bộ môi trường thất bại) - expected: {ready_state}, actual: {actual_env_state}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ENV-SYNC] Error syncing environment variable for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ENV-SYNC] Error syncing environment variable for PID {pid}** ([ĐỒNG BỘ MÔI TRƯỜNG] Lỗi đồng bộ biến môi trường cho PID {pid}): {e}")
             return False
     
     def _verify_state_consistency(self, pid: int) -> bool:
         """
         **Verify State Consistency** (xác minh tính nhất quán trạng thái)
         
-        Compare internal hooks_ready[pid] vs environment variable để ensure consistency.
+        **Compare internal hooks_ready[pid] vs environment variable to ensure consistency**
+        (so sánh hooks_ready[pid] nội bộ với biến môi trường để đảm bảo tính nhất quán).
         """
         try:
-            # Get internal state
+            # **Get internal state** (lấy trạng thái nội bộ)
             internal_state = self.hooks_ready.get(pid, False)
             
-            # Get environment variable state
+            # **Get environment variable state** (lấy trạng thái biến môi trường)
             env_var = f'HOOKS_READY_PID_{pid}'
             env_state = os.environ.get(env_var) == '1'
             
-            # Check consistency
+            # **Check consistency** (kiểm tra tính nhất quán)
             is_consistent = (internal_state == env_state)
             
             if self.logger:
                 if is_consistent:
-                    self.logger.debug(f"✅ [CONSISTENCY] PID {pid} state consistent - internal: {internal_state}, env: {env_state}")
+                    self.logger.debug(f"✅ **[CONSISTENCY] PID {pid} state consistent** ([NHẤT QUÁN] PID {pid} trạng thái nhất quán) - internal: {internal_state}, env: {env_state}")
                 else:
-                    self.logger.warning(f"⚠️ [CONSISTENCY] PID {pid} state inconsistent - internal: {internal_state}, env: {env_state}")
+                    self.logger.warning(f"⚠️ **[CONSISTENCY] PID {pid} state inconsistent** ([NHẤT QUÁN] PID {pid} trạng thái không nhất quán) - internal: {internal_state}, env: {env_state}")
             
             return is_consistent
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [CONSISTENCY] Error verifying state consistency for PID {pid}: {e}")
+                self.logger.error(f"❌ **[CONSISTENCY] Error verifying state consistency for PID {pid}** ([NHẤT QUÁN] Lỗi xác minh tính nhất quán trạng thái cho PID {pid}): {e}")
             return False
     
     def _rollback_state(self, pid: int, previous_internal_state: bool, previous_env_state: bool, env_var: str) -> bool:
         """
-        **Rollback State** (khôi phục trạng thái)
+        **Rollback State** (hoàn nguyên trạng thái)
         
-        Restore previous state on synchronization failure.
+        **Restore previous state on synchronization failure**
+        (khôi phục trạng thái trước đó khi đồng bộ thất bại).
         """
         try:
             rollback_success = True
             
-            # Restore internal state
+            # **Restore internal state** (khôi phục trạng thái nội bộ)
             try:
                 self.hooks_ready[pid] = previous_internal_state
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"❌ [ROLLBACK] Failed to restore internal state for PID {pid}: {e}")
+                    self.logger.error(f"❌ **[ROLLBACK] Failed to restore internal state for PID {pid}** ([HOÀN NGUYÊN] Thất bại khôi phục trạng thái nội bộ cho PID {pid}): {e}")
                 rollback_success = False
             
-            # Restore environment variable
+            # **Restore environment variable** (khôi phục biến môi trường)
             try:
                 if previous_env_state:
                     os.environ[env_var] = '1'
@@ -1649,27 +1658,28 @@ class HookCoordinator:
                     os.environ.pop(env_var, None)
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"❌ [ROLLBACK] Failed to restore environment variable for PID {pid}: {e}")
+                    self.logger.error(f"❌ **[ROLLBACK] Failed to restore environment variable for PID {pid}** ([HOÀN NGUYÊN] Thất bại khôi phục biến môi trường cho PID {pid}): {e}")
                 rollback_success = False
             
             if self.logger:
                 if rollback_success:
-                    self.logger.debug(f"🔄 [ROLLBACK] PID {pid} state rollback successful")
+                    self.logger.debug(f"🔄 **[ROLLBACK] PID {pid} state rollback successful** ([HOÀN NGUYÊN] PID {pid} hoàn nguyên trạng thái thành công)")
                 else:
-                    self.logger.warning(f"⚠️ [ROLLBACK] PID {pid} partial rollback failure")
+                    self.logger.warning(f"⚠️ **[ROLLBACK] PID {pid} partial rollback failure** ([HOÀN NGUYÊN] PID {pid} hoàn nguyên một phần thất bại)")
             
             return rollback_success
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ROLLBACK] Critical error during rollback for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ROLLBACK] Critical error during rollback for PID {pid}** ([HOÀN NGUYÊN] Lỗi nghiêm trọng trong khi hoàn nguyên cho PID {pid}): {e}")
             return False
     
     def _record_sync_success(self, pid: int, ready_state: bool, timestamp: float, context: Dict[str, Any]) -> None:
         """
-        **Record Sync Success** (ghi lại thành công sync)
+        **Record Sync Success** (ghi lại đồng bộ thành công)
         
-        Record successful state synchronization event với comprehensive context.
+        **Record successful state synchronization event with comprehensive context**
+        (ghi lại sự kiện đồng bộ trạng thái thành công với ngữ cảnh toàn diện).
         """
         try:
             sync_duration = time.time() - timestamp
@@ -1697,17 +1707,18 @@ class HookCoordinator:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
             if self.logger:
-                self.logger.debug(f"📝 [SYNC-SUCCESS] Recorded successful sync for PID {pid} (attempt: {context.get('attempt', 1)})")
+                self.logger.debug(f"📝 **[SYNC-SUCCESS] Recorded successful sync for PID {pid}** ([ĐỒNG BỘ THÀNH CÔNG] Đã ghi lại đồng bộ thành công cho PID {pid}) (attempt: {context.get('attempt', 1)})")
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [SYNC-SUCCESS] Error recording sync success for PID {pid}: {e}")
+                self.logger.error(f"❌ **[SYNC-SUCCESS] Error recording sync success for PID {pid}** ([ĐỒNG BỘ THÀNH CÔNG] Lỗi ghi lại đồng bộ thành công cho PID {pid}): {e}")
     
     def _record_sync_failure(self, pid: int, ready_state: bool, timestamp: float, context: Dict[str, Any], error_msg: str) -> None:
         """
-        **Record Sync Failure** (ghi lại thất bại sync)
+        **Record Sync Failure** (ghi lại đồng bộ thất bại)
         
-        Record failed synchronization attempt với detailed error context.
+        **Record failed synchronization attempt with detailed error context**
+        (ghi lại lần thử đồng bộ thất bại với ngữ cảnh lỗi chi tiết).
         """
         try:
             sync_duration = time.time() - timestamp
@@ -1736,30 +1747,33 @@ class HookCoordinator:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
             if self.logger:
-                self.logger.debug(f"📝 [SYNC-FAILURE] Recorded sync failure for PID {pid} (attempt: {context.get('attempt', 1)})")
+                self.logger.debug(f"📝 **[SYNC-FAILURE] Recorded sync failure for PID {pid}** ([ĐỒNG BỘ THẤT BẠI] Đã ghi lại đồng bộ thất bại cho PID {pid}) (attempt: {context.get('attempt', 1)})")
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [SYNC-FAILURE] Error recording sync failure for PID {pid}: {e}")
+                self.logger.error(f"❌ **[SYNC-FAILURE] Error recording sync failure for PID {pid}** ([ĐỒNG BỘ THẤT BẠI] Lỗi ghi lại đồng bộ thất bại cho PID {pid}): {e}")
     
     def _validate_atomic_sync(self, pid: int, expected_state: bool, sync_timestamp: float) -> Dict[str, Any]:
         """
-        **Validate Atomic Sync** (xác thực atomic sync)
+        **Validate Atomic Sync** (xác thực đồng bộ nguyên tử)
         
-        ✅ LEGACY SUPPORT: Maintained for compatibility with existing verification calls.
-        Now serves as a wrapper around the enhanced _verify_state_consistency method.
+        **✅ LEGACY SUPPORT: Maintained for compatibility with existing verification calls**
+        (hỗ trợ kế thừa: duy trì để tương thích với các lệnh gọi xác minh hiện có)
+        **Now serves as a wrapper around the enhanced _verify_state_consistency method**
+        (hiện đóng vai trò là wrapper cho phương thức _verify_state_consistency nâng cao)
         
         Returns:
-            Dict với success status và validation details
+            **Dict with success status and validation details**
+            (từ điển với trạng thái thành công và chi tiết xác thực)
         """
         try:
-            # Multi-layer validation using enhanced consistency check
+            # **Multi-layer validation using enhanced consistency check** (xác thực đa lớp sử dụng kiểm tra nhất quán nâng cao)
             sync_duration = time.time() - sync_timestamp
             
-            # Use enhanced consistency verification
+            # **Use enhanced consistency verification** (sử dụng xác minh nhất quán nâng cao)
             is_consistent = self._verify_state_consistency(pid)
             
-            # Additional validations for backward compatibility
+            # **Additional validations for backward compatibility** (xác thực bổ sung để tương thích ngược)
             internal_state = self.hooks_ready.get(pid, False)
             env_var = f'HOOKS_READY_PID_{pid}'
             env_state = os.environ.get(env_var) == '1'
@@ -1768,11 +1782,11 @@ class HookCoordinator:
                 'internal_state': (internal_state == expected_state),
                 'env_state': (env_state == expected_state),
                 'cross_state_sync': is_consistent,
-                'timing': (sync_duration < 0.1),  # Increased to 100ms for retry scenarios
+                'timing': (sync_duration < 0.1),  # **Increased to 100ms for retry scenarios** (tăng lên 100ms cho các tình huống thử lại)
                 'pid_tracking': (pid in self.active_processes)
             }
             
-            # Overall success
+            # **Overall success** (thành công tổng thể)
             all_valid = all(validations.values())
             
             return {
@@ -1786,7 +1800,7 @@ class HookCoordinator:
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [VALIDATE-ATOMIC] Error in atomic sync validation for PID {pid}: {e}")
+                self.logger.error(f"❌ **[VALIDATE-ATOMIC] Error in atomic sync validation for PID {pid}** ([XÁC THỰC NGUYÊN TỬ] Lỗi trong xác thực đồng bộ nguyên tử cho PID {pid}): {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -1795,12 +1809,13 @@ class HookCoordinator:
     
     def _record_atomic_sync_success(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int) -> None:
         """
-        **Record Atomic Sync Success** (ghi lại thành công atomic sync)
+        **Record Atomic Sync Success** (ghi lại đồng bộ nguyên tử thành công)
         
-        ✅ LEGACY SUPPORT: Wrapper around enhanced sync success recording.
+        **✅ LEGACY SUPPORT: Wrapper around enhanced sync success recording**
+        (hỗ trợ kế thừa: wrapper cho ghi lại đồng bộ thành công nâng cao).
         """
         try:
-            # Use enhanced sync success recording with legacy compatibility
+            # **Use enhanced sync success recording with legacy compatibility** (sử dụng ghi lại đồng bộ thành công nâng cao với tương thích kế thừa)
             context = {
                 'attempt': attempt_number,
                 'max_retries': 3,  # Default for legacy calls
@@ -1812,16 +1827,17 @@ class HookCoordinator:
                     
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording legacy success for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ATOMIC-SYNC] Error recording legacy success for PID {pid}** ([ĐỒNG BỘ NGUYÊN TỬ] Lỗi ghi lại thành công kế thừa cho PID {pid}): {e}")
     
     def _record_atomic_sync_failure(self, pid: int, ready_state: bool, timestamp: float, attempt_number: int, validation_results: Dict[str, Any]) -> None:
         """
-        **Record Atomic Sync Failure** (ghi lại thất bại atomic sync)
+        **Record Atomic Sync Failure** (ghi lại đồng bộ nguyên tử thất bại)
         
-        ✅ LEGACY SUPPORT: Wrapper around enhanced sync failure recording.
+        **✅ LEGACY SUPPORT: Wrapper around enhanced sync failure recording**
+        (hỗ trợ kế thừa: wrapper cho ghi lại đồng bộ thất bại nâng cao).
         """
         try:
-            # Use enhanced sync failure recording with legacy compatibility
+            # **Use enhanced sync failure recording with legacy compatibility** (sử dụng ghi lại đồng bộ thất bại nâng cao với tương thích kế thừa)
             context = {
                 'attempt': attempt_number,
                 'max_retries': 3,  # Default for legacy calls
@@ -1834,36 +1850,38 @@ class HookCoordinator:
                     
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ATOMIC-SYNC] Error recording legacy failure for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ATOMIC-SYNC] Error recording legacy failure for PID {pid}** ([ĐỒNG BỘ NGUYÊN TỬ] Lỗi ghi lại thất bại kế thừa cho PID {pid}): {e}")
     
     def _verify_with_retry(self, pid: int, attempt: int) -> Dict[str, any]:
         """
-        **Verify With Retry** (xác minh với retry)
+        **Verify With Retry** (xác minh với thử lại)
         
-        ✅ SOLUTION 3: HEALTH CHECK REFINEMENT với handoff-aware validation
-        Single verification attempt với detailed result và handoff coordination awareness.
+        **✅ SOLUTION 3: HEALTH CHECK REFINEMENT with handoff-aware validation**
+        (giải pháp 3: tinh chỉnh kiểm tra sức khỏe với xác thực nhận biết bàn giao)
+        **Single verification attempt with detailed result and handoff coordination awareness**
+        (một lần thử xác minh với kết quả chi tiết và nhận biết phối hợp bàn giao).
         """
         try:
             verification_start_time = time.time()
             
-            # ✅ HANDOFF AWARENESS: Check for recent handoffs that might affect verification
+            # **✅ HANDOFF AWARENESS: Check for recent handoffs that might affect verification** (nhận biết bàn giao: kiểm tra các bàn giao gần đây có thể ảnh hưởng xác minh)
             with self.lock:
                 hooks_ready = self.hooks_ready.get(pid, False)
                 
-                # Get handoff timing information for context
+                # **Get handoff timing information for context** (lấy thông tin thời gian bàn giao cho ngữ cảnh)
                 last_handoff_time = self.handoff_timestamps.get(pid, 0)
                 time_since_handoff = verification_start_time - last_handoff_time
                 current_sequence = self.handoff_sequence_numbers.get(pid, 0)
             
-            # Check environment variable consistency
+            # **Check environment variable consistency** (kiểm tra tính nhất quán biến môi trường)
             env_var = f'HOOKS_READY_PID_{pid}'
             env_status = os.environ.get(env_var) == '1'
             
-            # ✅ HANDOFF-AWARE TIMING: Allow grace period for recent handoffs
-            handoff_grace_period = 3.0  # 3-second grace period after handoff (increased from 2.0s for enhanced stability)
+            # **✅ HANDOFF-AWARE TIMING: Allow grace period for recent handoffs** (thời gian nhận biết bàn giao: cho phép thời gian ân hạn cho bàn giao gần đây)
+            handoff_grace_period = 3.0  # **3-second grace period after handoff (increased from 2.0s for enhanced stability)** (thời gian ân hạn 3 giây sau bàn giao - tăng từ 2.0s để ổn định hơn)
             is_recent_handoff = time_since_handoff < handoff_grace_period
             
-            # Enhanced verification với handoff context
+            # **Enhanced verification with handoff context** (xác minh nâng cao với ngữ cảnh bàn giao)
             verification_context = {
                 'verification_timestamp': verification_start_time,
                 'last_handoff_time': last_handoff_time,
@@ -1874,11 +1892,11 @@ class HookCoordinator:
             }
             
             if self.logger:
-                self.logger.debug(f"🔍 [VERIFY-ENHANCED] PID {pid} verification context: "
+                self.logger.debug(f"🔍 **[VERIFY-ENHANCED] PID {pid} verification context** ([XÁC MINH NÂNG CAO] Ngữ cảnh xác minh PID {pid}): "
                                 f"recent_handoff={is_recent_handoff}, time_since={time_since_handoff:.2f}s, "
                                 f"seq={current_sequence}, attempt={attempt + 1}")
             
-            # Verify consistency between internal state and environment variable
+            # **Verify consistency between internal state and environment variable** (xác minh tính nhất quán giữa trạng thái nội bộ và biến môi trường)
             if hooks_ready != env_status:
                 inconsistency_severity = self._assess_inconsistency_severity(
                     pid, hooks_ready, env_status, verification_context
@@ -1889,14 +1907,14 @@ class HookCoordinator:
                     if is_recent_handoff:
                         severity_msg += f" (recent_handoff_tolerance)"
                     
-                    self.logger.warning(f"⚠️ [VERIFY-ENHANCED] PID {pid} inconsistency (attempt {attempt + 1}): "
+                    self.logger.warning(f"⚠️ **[VERIFY-ENHANCED] PID {pid} inconsistency** ([XÁC MINH NÂNG CAO] PID {pid} không nhất quán) (attempt {attempt + 1}): "
                                       f"internal={hooks_ready}, env={env_status}, {severity_msg}")
                 
-                # ✅ HANDOFF-AWARE RECOVERY: Different strategies based on handoff timing
+                # **✅ HANDOFF-AWARE RECOVERY: Different strategies based on handoff timing** (phục hồi nhận biết bàn giao: các chiến lược khác nhau dựa trên thời gian bàn giao)
                 if is_recent_handoff and inconsistency_severity['level'] == 'low':
-                    # For recent handoffs with low severity, allow more recovery attempts
+                    # **For recent handoffs with low severity, allow more recovery attempts** (với bàn giao gần đây có mức độ thấp, cho phép nhiều lần phục hồi hơn)
                     if attempt < self.verification_retry_config['max_retries'] - 1:
-                        # Try enhanced synchronization for recent handoffs
+                        # **Try enhanced synchronization for recent handoffs** (thử đồng bộ nâng cao cho bàn giao gần đây)
                         sync_success = self._enhanced_sync_for_handoff(pid, verification_context)
                         
                         return {
@@ -1910,7 +1928,7 @@ class HookCoordinator:
                             'recovery_strategy': 'handoff_aware_sync'
                         }
                 else:
-                    # Standard recovery for non-recent handoffs or high severity
+                    # **Standard recovery for non-recent handoffs or high severity** (phục hồi tiêu chuẩn cho bàn giao không gần đây hoặc mức độ cao)
                     if attempt < self.verification_retry_config['max_retries'] - 1:
                         sync_success = self.sync_environment_state(pid)
                         return {
@@ -1924,7 +1942,7 @@ class HookCoordinator:
                             'recovery_strategy': 'standard_sync'
                         }
                 
-                # Final attempt or unrecoverable inconsistency
+                # **Final attempt or unrecoverable inconsistency** (lần thử cuối cùng hoặc không nhất quán không thể phục hồi)
                 return {
                     'success': False,
                     'should_retry': False,
@@ -1935,14 +1953,14 @@ class HookCoordinator:
                     'recovery_strategy': 'none_final_attempt'
                 }
             
-            # ✅ CONSISTENT STATES: Perform additional validation for recent handoffs
+            # **✅ CONSISTENT STATES: Perform additional validation for recent handoffs** (trạng thái nhất quán: thực hiện xác thực bổ sung cho bàn giao gần đây)
             if is_recent_handoff:
-                # Additional validation for recent handoffs to ensure stability
+                # **Additional validation for recent handoffs to ensure stability** (xác thực bổ sung cho bàn giao gần đây để đảm bảo ổn định)
                 additional_validation = self._validate_handoff_stability(pid, verification_context)
                 
                 if not additional_validation['stable']:
                     if self.logger:
-                        self.logger.debug(f"🔍 [VERIFY-ENHANCED] PID {pid} handoff stability check failed: "
+                        self.logger.debug(f"🔍 **[VERIFY-ENHANCED] PID {pid} handoff stability check failed** ([XÁC MINH NÂNG CAO] PID {pid} kiểm tra ổn định bàn giao thất bại): "
                                         f"{additional_validation['details']}")
                     
                     if attempt < self.verification_retry_config['max_retries'] - 1:
@@ -1956,7 +1974,7 @@ class HookCoordinator:
                             'recovery_strategy': 'stability_recheck'
                         }
             
-            # ✅ SUCCESS: States are consistent and stable
+            # **✅ SUCCESS: States are consistent and stable** (thành công: trạng thái nhất quán và ổn định)
             verification_duration = time.time() - verification_start_time
             
             return {
@@ -1971,11 +1989,11 @@ class HookCoordinator:
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [VERIFY-ENHANCED] Error in verification attempt {attempt + 1} for PID {pid}: {e}")
+                self.logger.error(f"❌ **[VERIFY-ENHANCED] Error in verification attempt {attempt + 1} for PID {pid}** ([XÁC MINH NÂNG CAO] Lỗi trong lần xác minh {attempt + 1} cho PID {pid}): {e}")
             
             return {
                 'success': False,
-                'should_retry': True,  # Retry on exception unless it's the last attempt
+                'should_retry': True,  # **Retry on exception unless it's the last attempt** (thử lại khi có ngoại lệ trừ khi là lần thử cuối cùng)
                 'hooks_ready': False,
                 'error': str(e),
                 'verification_context': {
@@ -1987,9 +2005,10 @@ class HookCoordinator:
     
     def _assess_inconsistency_severity(self, pid: int, internal_state: bool, env_state: bool, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        **Assess Inconsistency Severity** (đánh giá mức độ nghiêm trọng inconsistency)
+        **Assess Inconsistency Severity** (đánh giá mức độ nghiêm trọng không nhất quán)
         
-        Evaluates severity của state inconsistency dựa trên handoff timing và patterns.
+        **Evaluates severity of state inconsistency based on handoff timing and patterns**
+        (đánh giá mức độ nghiêm trọng của sự không nhất quán trạng thái dựa trên thời gian bàn giao và các mẫu).
         """
         try:
             severity_factors = {
@@ -1999,13 +2018,13 @@ class HookCoordinator:
                 'attempt_number': context.get('attempt_number', 1)
             }
             
-            # Calculate severity level
+            # **Calculate severity level** (tính toán mức độ nghiêm trọng)
             if severity_factors['is_recent_handoff'] and severity_factors['time_since_handoff'] < 0.5:
-                level = 'low'  # Very recent handoff, inconsistency might be temporary
+                level = 'low'  # **Very recent handoff, inconsistency might be temporary** (bàn giao rất gần đây, không nhất quán có thể tạm thời)
             elif severity_factors['time_since_handoff'] < 2.0:
-                level = 'medium'  # Recent handoff, worth retrying
+                level = 'medium'  # **Recent handoff, worth retrying** (bàn giao gần đây, đáng thử lại)
             else:
-                level = 'high'  # Old handoff, inconsistency is problematic
+                level = 'high'  # **Old handoff, inconsistency is problematic** (bàn giao cũ, không nhất quán là vấn đề)
             
             return {
                 'level': level,
@@ -2022,22 +2041,23 @@ class HookCoordinator:
     
     def _enhanced_sync_for_handoff(self, pid: int, context: Dict[str, Any]) -> bool:
         """
-        **Enhanced Sync for Handoff** (đồng bộ nâng cao cho handoff)
+        **Enhanced Sync for Handoff** (đồng bộ nâng cao cho bàn giao)
         
-        Special synchronization method cho recent handoffs với additional validation.
+        **Special synchronization method for recent handoffs with additional validation**
+        (phương thức đồng bộ đặc biệt cho bàn giao gần đây với xác thực bổ sung).
         """
         try:
             if self.logger:
-                self.logger.debug(f"🔄 [ENHANCED-SYNC] Performing handoff-aware sync for PID {pid}")
+                self.logger.debug(f"🔄 **[ENHANCED-SYNC] Performing handoff-aware sync for PID {pid}** ([ĐỒNG BỘ NÂNG CAO] Thực hiện đồng bộ nhận biết bàn giao cho PID {pid})")
             
-            # Use the enhanced atomic sync method
+            # **Use the enhanced atomic sync method** (sử dụng phương thức đồng bộ nguyên tử nâng cao)
             sync_success = self._sync_hooks_ready_state(pid, self.hooks_ready.get(pid, False))
             
             if sync_success:
-                # Additional verification after sync
-                time.sleep(0.001)  # Brief stabilization delay
+                # **Additional verification after sync** (xác thực bổ sung sau đồng bộ)
+                time.sleep(0.001)  # **Brief stabilization delay** (độ trễ ổn định ngắn)
                 
-                # Re-verify consistency
+                # **Re-verify consistency** (xác minh lại tính nhất quán)
                 with self.lock:
                     internal_state = self.hooks_ready.get(pid, False)
                 
@@ -2047,7 +2067,7 @@ class HookCoordinator:
                 final_consistency = (internal_state == env_state)
                 
                 if self.logger:
-                    self.logger.debug(f"🔄 [ENHANCED-SYNC] PID {pid} post-sync verification: "
+                    self.logger.debug(f"🔄 **[ENHANCED-SYNC] PID {pid} post-sync verification** ([ĐỒNG BỘ NÂNG CAO] Xác minh sau đồng bộ PID {pid}): "
                                     f"consistent={final_consistency}, state={internal_state}")
                 
                 return final_consistency
@@ -2056,35 +2076,36 @@ class HookCoordinator:
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ENHANCED-SYNC] Error in enhanced sync for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ENHANCED-SYNC] Error in enhanced sync for PID {pid}** ([ĐỒNG BỘ NÂNG CAO] Lỗi trong đồng bộ nâng cao cho PID {pid}): {e}")
             return False
     
     def _validate_handoff_stability(self, pid: int, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        **Validate Handoff Stability** (xác thực tính ổn định handoff)
+        **Validate Handoff Stability** (xác thực tính ổn định bàn giao)
         
-        Additional validation cho recent handoffs để ensure state stability.
+        **Additional validation for recent handoffs to ensure state stability**
+        (xác thực bổ sung cho bàn giao gần đây để đảm bảo tính ổn định trạng thái).
         """
         try:
-            # Check for rapid state changes that might indicate instability
+            # **Check for rapid state changes that might indicate instability** (kiểm tra thay đổi trạng thái nhanh có thể chỉ ra sự không ổn định)
             with self.lock:
                 recent_history = self.hook_status_history.get(pid, [])
                 
-            # Look for recent state changes
+            # **Look for recent state changes** (tìm kiếm thay đổi trạng thái gần đây)
             current_time = time.time()
             recent_changes = [
-                event for event in recent_history[-5:]  # Last 5 events
-                if current_time - event.get('timestamp', 0) < 2.0  # Within 2 seconds
+                event for event in recent_history[-5:]  # **Last 5 events** (5 sự kiện cuối cùng)
+                if current_time - event.get('timestamp', 0) < 2.0  # **Within 2 seconds** (trong vòng 2 giây)
             ]
             
-            # Stability indicators
+            # **Stability indicators** (chỉ báo ổn định)
             stability_checks = {
-                'rapid_changes': len(recent_changes) > 3,  # More than 3 changes in 2 seconds
+                'rapid_changes': len(recent_changes) > 3,  # **More than 3 changes in 2 seconds** (hơn 3 thay đổi trong 2 giây)
                 'state_oscillation': self._detect_state_oscillation(recent_changes),
-                'handoff_completion': context.get('time_since_handoff', 0) > 0.1  # ✅ ENHANCED: Increased to 100ms for stability with longer grace periods
+                'handoff_completion': context.get('time_since_handoff', 0) > 0.1  # **✅ ENHANCED: Increased to 100ms for stability with longer grace periods** (nâng cao: tăng lên 100ms để ổn định với thời gian ân hạn dài hơn)
             }
             
-            # Overall stability
+            # **Overall stability** (tính ổn định tổng thể)
             is_stable = not any([
                 stability_checks['rapid_changes'],
                 stability_checks['state_oscillation']
@@ -2104,15 +2125,20 @@ class HookCoordinator:
             }
     
     def _detect_state_oscillation(self, recent_events: list) -> bool:
-        """**Detect State Oscillation** (phát hiện dao động trạng thái)"""
+        """
+        **Detect State Oscillation** (phát hiện dao động trạng thái)
+        
+        **Detects alternating success/failure patterns indicating instability**
+        (phát hiện các mẫu thành công/thất bại xen kẽ chỉ ra sự không ổn định).
+        """
         try:
             if len(recent_events) < 3:
                 return False
             
-            # Look for alternating success/failure patterns
+            # **Look for alternating success/failure patterns** (tìm kiếm các mẫu thành công/thất bại xen kẽ)
             success_pattern = [event.get('success', True) for event in recent_events[-3:]]
             
-            # Detect oscillation: True->False->True or False->True->False
+            # **Detect oscillation: True->False->True or False->True->False** (phát hiện dao động: Đúng->Sai->Đúng hoặc Sai->Đúng->Sai)
             if len(success_pattern) >= 3:
                 return (success_pattern[0] != success_pattern[1] and 
                        success_pattern[1] != success_pattern[2])
@@ -2123,7 +2149,12 @@ class HookCoordinator:
             return False
     
     def sync_environment_state(self, pid: int) -> bool:
-        """**Sync Environment State** (đồng bộ trạng thái environment - force sync environment variable với internal state)"""
+        """
+        **Sync Environment State** (đồng bộ trạng thái môi trường)
+        
+        **Force sync environment variable with internal state**
+        (bắt buộc đồng bộ biến môi trường với trạng thái nội bộ).
+        """
         try:
             with self.environment_sync_lock:
                 with self.lock:
@@ -2131,50 +2162,55 @@ class HookCoordinator:
                 
                 env_var = f'HOOKS_READY_PID_{pid}'
                 
-                # Sync environment to match internal state
+                # **Sync environment to match internal state** (đồng bộ môi trường để khớp với trạng thái nội bộ)
                 if internal_state:
                     os.environ[env_var] = '1'
                 else:
                     os.environ.pop(env_var, None)
                 
-                # Verify sync success
+                # **Verify sync success** (xác minh đồng bộ thành công)
                 env_state = os.environ.get(env_var) == '1'
                 sync_success = (internal_state == env_state)
                 
                 if self.logger:
                     if sync_success:
-                        self.logger.debug(f"🔄 [ENV_SYNC] PID {pid} environment synced to: {internal_state}")
+                        self.logger.debug(f"🔄 **[ENV_SYNC] PID {pid} environment synced to: {internal_state}** ([ĐỒNG BỘ MÔI TRƯỜNG] PID {pid} môi trường đã đồng bộ thành: {internal_state})")
                     else:
-                        self.logger.error(f"❌ [ENV_SYNC] PID {pid} sync failed: internal={internal_state}, env={env_state}")
+                        self.logger.error(f"❌ **[ENV_SYNC] PID {pid} sync failed** ([ĐỒNG BỘ MÔI TRƯỜNG] PID {pid} đồng bộ thất bại): internal={internal_state}, env={env_state}")
                 
                 return sync_success
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ENV_SYNC] Error syncing environment for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ENV_SYNC] Error syncing environment for PID {pid}** ([ĐỒNG BỘ MÔI TRƯỜNG] Lỗi đồng bộ môi trường cho PID {pid}): {e}")
             return False
     
     def attempt_hook_recovery(self, pid: int) -> bool:
-        """**Attempt Hook Recovery** (thử phục hồi hook - comprehensive recovery với enhanced synchronization và state validation)"""
+        """
+        **Attempt Hook Recovery** (thử phục hồi hook)
+        
+        **Comprehensive recovery with enhanced synchronization and state validation**
+        (phục hồi toàn diện với đồng bộ nâng cao và xác thực trạng thái).
+        """
         try:
             with self.lock:
                 current_attempts = self.recovery_attempts.get(pid, 0)
                 
                 if current_attempts >= self.max_recovery_attempts:
                     if self.logger:
-                        self.logger.error(f"💀 [RECOVERY] PID {pid} exceeded max recovery attempts ({self.max_recovery_attempts}) - removing from tracking")
+                        self.logger.error(f"💀 **[RECOVERY] PID {pid} exceeded max recovery attempts ({self.max_recovery_attempts})** ([PHỤC HỒI] PID {pid} vượt quá số lần phục hồi tối đa) - removing from tracking")
                     self.cleanup_pid(pid)
                     return False
                 
-                # Increment recovery attempts
+                # **Increment recovery attempts** (tăng số lần thử phục hồi)
                 self.recovery_attempts[pid] = current_attempts + 1
             
             if self.logger:
-                self.logger.info(f"🔧 [RECOVERY] Enhanced recovery for PID {pid} (attempt {current_attempts + 1}/{self.max_recovery_attempts})")
+                self.logger.info(f"🔧 **[RECOVERY] Enhanced recovery for PID {pid}** ([PHỤC HỒI] Phục hồi nâng cao cho PID {pid}) (attempt {current_attempts + 1}/{self.max_recovery_attempts})")
             
-            # Enhanced Recovery Strategy:
+            # **Enhanced Recovery Strategy** (chiến lược phục hồi nâng cao):
             
-            # Step 1: Comprehensive state validation
+            # **Step 1: Comprehensive state validation** (bước 1: xác thực trạng thái toàn diện)
             process_exists = psutil.pid_exists(pid)
             if not process_exists:
                 if self.logger:
