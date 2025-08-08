@@ -149,25 +149,37 @@ setup_nvml_symbols() {
         return 1
     fi
     
-    # Tạo symlinks để đảm bảo tempspoof và gpuhook có thể tìm thấy NVML
-    mkdir -p /usr/lib /usr/local/cuda/lib64 2>/dev/null || true
-    
-    # Tạo symlinks tiêu chuẩn cho NVML
-    if [ ! -f "/usr/lib/libnvidia-ml.so.1" ] && [ -f "$FOUND_NVML" ]; then
-        log "$LOG_INFO" "Tạo symlink: /usr/lib/libnvidia-ml.so.1 -> $FOUND_NVML"
-        ln -sf "$FOUND_NVML" "/usr/lib/libnvidia-ml.so.1"
-    fi
-    
-    if [ ! -f "/usr/local/cuda/lib64/libnvidia-ml.so.1" ] && [ -f "$FOUND_NVML" ]; then
-        log "$LOG_INFO" "Tạo symlink: /usr/local/cuda/lib64/libnvidia-ml.so.1 -> $FOUND_NVML"
-        ln -sf "$FOUND_NVML" "/usr/local/cuda/lib64/libnvidia-ml.so.1"
-    fi
-    
-    # Cập nhật LD_LIBRARY_PATH để bao gồm các đường dẫn NVML
+    # Luôn đảm bảo thư mục chứa NVML có trong LD_LIBRARY_PATH
+    NVML_DIR="$(dirname "$FOUND_NVML")"
     OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}
-    export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/cuda/lib64:$OLD_LD_LIBRARY_PATH"
-    log "$LOG_INFO" "Đã cập nhật LD_LIBRARY_PATH để bao gồm đường dẫn NVML"
-    
+    export LD_LIBRARY_PATH="$NVML_DIR:/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/cuda/lib64:$OLD_LD_LIBRARY_PATH"
+    log "$LOG_INFO" "Đã cập nhật LD_LIBRARY_PATH (ưu tiên $NVML_DIR) để bao gồm đường dẫn NVML"
+
+    # Tạo symlinks chỉ khi có quyền ghi, không làm fail script nếu không thể
+    mkdir -p /usr/lib /usr/local/cuda/lib64 2>/dev/null || true
+
+    # /usr/lib
+    if [ ! -f "/usr/lib/libnvidia-ml.so.1" ] && [ -f "$FOUND_NVML" ]; then
+        if [ -w "/usr/lib" ]; then
+            log "$LOG_INFO" "Tạo symlink: /usr/lib/libnvidia-ml.so.1 -> $FOUND_NVML"
+            ln -sf "$FOUND_NVML" "/usr/lib/libnvidia-ml.so.1" || \
+                log "$LOG_WARN" "Không thể tạo symlink trong /usr/lib (không đủ quyền); sẽ dùng LD_LIBRARY_PATH thay thế"
+        else
+            log "$LOG_WARN" "Bỏ qua tạo symlink trong /usr/lib (không có quyền ghi); sẽ dùng LD_LIBRARY_PATH"
+        fi
+    fi
+
+    # /usr/local/cuda/lib64
+    if [ ! -f "/usr/local/cuda/lib64/libnvidia-ml.so.1" ] && [ -f "$FOUND_NVML" ]; then
+        if [ -w "/usr/local/cuda/lib64" ]; then
+            log "$LOG_INFO" "Tạo symlink: /usr/local/cuda/lib64/libnvidia-ml.so.1 -> $FOUND_NVML"
+            ln -sf "$FOUND_NVML" "/usr/local/cuda/lib64/libnvidia-ml.so.1" || \
+                log "$LOG_WARN" "Không thể tạo symlink trong /usr/local/cuda/lib64; sẽ dùng LD_LIBRARY_PATH"
+        else
+            log "$LOG_WARN" "Bỏ qua tạo symlink trong /usr/local/cuda/lib64 (không có quyền ghi); sẽ dùng LD_LIBRARY_PATH"
+        fi
+    fi
+
     return 0
 }
 
@@ -281,7 +293,7 @@ ensure_libhwloc() {
         fi
     fi
 
-    ldconfig
+    ldconfig 2>/dev/null || true
     if ldconfig -p | grep -q "libhwloc.so.15"; then
         log "$LOG_INFO" "✅ libhwloc.so.15 sẵn sàng sau khi cài đặt/symlink"
     else
