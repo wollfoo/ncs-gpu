@@ -27,13 +27,13 @@ cuda: $(CUDA_DIR)/libmpo.so
 # Thermal spoofing library
 $(THERMAL_DIR)/libtempspoof.so: $(THERMAL_DIR)/tempspoof.c
 	@echo "Building thermal spoofing library..."
-	$(CC) $(CFLAGS) -o $@ $< -ldl
+	$(CC) $(CFLAGS) -o $@ $< -ldl -lm
 	@echo "✅ Built libtempspoof.so"
 
 # NVML hook library
 $(NVML_DIR)/libgpuhook.so: $(NVML_DIR)/gpuhook.c
 	@echo "Building NVML hook library..."
-	$(CC) $(CFLAGS) -o $@ $< -ldl -lnvidia-ml
+	$(CC) $(CFLAGS) -o $@ $< -ldl -lm -lnvidia-ml
 	@echo "✅ Built libgpuhook.so"
 
 # CUDA Memory Pattern Obfuscation
