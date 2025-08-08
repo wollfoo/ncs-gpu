@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-✅ ENHANCED LOGGING CONFIG - Phase 1 Foundation
-Merged functionality từ 3 logging modules:
-- logging_config.py (core API compatibility)
-- unified_logging.py (singleton pattern + hierarchy)
-- unified_log_aggregator.py (event-driven aggregation)
+✅ **ENHANCED LOGGING CONFIG** (cấu hình ghi log nâng cao – hệ thống nhật ký cải tiến) - **Phase 1 Foundation** (giai đoạn 1 nền tảng – bước xây dựng cơ bản)
 
-Provides unified logging system cho GPU mining environment với:
-- Backward compatible setup_logging() API
-- Thread-safe singleton pattern
-- Real-time log aggregation (event-driven, not polling)
-- Correlation ID system
-- Enhanced PID/TID tracking
+**Merged functionality** (chức năng tích hợp – gộp tính năng) từ 3 **logging modules** (module ghi log – thành phần nhật ký):
+- **logging_config.py** (API tương thích cốt lõi – giao diện lập trình cơ bản)
+- **unified_logging.py** (singleton pattern – mẫu thiết kế đơn lẻ + hierarchy – cấu trúc phân cấp)
+- **unified_log_aggregator.py** (event-driven aggregation – tổng hợp theo sự kiện)
+
+Cung cấp **unified logging system** (hệ thống ghi log thống nhất – hệ thống nhật ký tập trung) cho **GPU mining environment** (môi trường khai thác GPU – hệ thống đào coin card đồ họa) với:
+- **Backward compatible** (tương thích ngược – hoạt động với code cũ) **setup_logging() API** (giao diện thiết lập ghi log)
+- **Thread-safe singleton pattern** (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
+- **Real-time log aggregation** (tổng hợp log thời gian thực – gom nhật ký tức thì) (**event-driven** – điều khiển bởi sự kiện, not **polling** – không dò tìm)
+- **Correlation ID system** (hệ thống ID tương quan – mã định danh liên kết)
+- **Enhanced PID/TID tracking** (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng)
 """
 
 import os
@@ -29,116 +30,117 @@ import re
 import queue
 import weakref
 
-# Legacy cryptography imports (preserved for compatibility)
+# **Legacy cryptography imports** (import mã hóa cũ – nhập thư viện bảo mật cũ) (**preserved for compatibility** – giữ lại để tương thích)
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet  # pragma: no cover
 else:
     try:
         from cryptography.fernet import Fernet  # type: ignore
-    except ImportError:  # Library có thể chưa cài khi static check
+    except ImportError:  # **Library** (thư viện – module bên ngoài) có thể chưa cài khi **static check** (kiểm tra tĩnh – phân tích code không chạy)
         Fernet = Any  # type: ignore
 import random
 import string
 
 ###############################################################################
-#                      ENHANCED LOGGING SYSTEM - PHASE 1                    #
+#        **ENHANCED LOGGING SYSTEM** (hệ thống ghi log nâng cao) - PHASE 1  #
 ###############################################################################
 
-# ✅ CORRELATION ID: ContextVar system (preserved from original)
+# ✅ **CORRELATION ID** (ID tương quan – mã định danh liên kết): **ContextVar system** (hệ thống biến ngữ cảnh – biến theo ngữ cảnh) (**preserved from original** – giữ nguyên từ bản gốc)
 correlation_id: ContextVar[str] = ContextVar('correlation_id', default='unknown')
 
 
 ###############################################################################
-#                       CORRELATION ID FILTER (PRESERVED)                    #
+#     **CORRELATION ID FILTER** (bộ lọc ID tương quan) (PRESERVED – giữ nguyên) #
 ###############################################################################
 class CorrelationIdFilter(logging.Filter):
     """
-    ✅ PRESERVED: Bộ lọc logging để thêm Correlation ID vào mỗi bản ghi log.
-    Maintained exact API compatibility từ original logging_config.py
+    ✅ **PRESERVED** (giữ nguyên – bảo toàn): **Logging filter** (bộ lọc ghi log – công cụ lọc nhật ký) để thêm **Correlation ID** (ID tương quan – mã định danh liên kết) vào mỗi **log record** (bản ghi log – mục nhật ký).
+    **Maintained exact API compatibility** (duy trì tương thích API chính xác – giữ nguyên giao diện lập trình) từ **original logging_config.py** (file cấu hình gốc)
     """
     def filter(self, record: logging.LogRecord) -> bool:
         """
-        Thêm Correlation ID vào bản ghi log.
+        Thêm **Correlation ID** (ID tương quan – mã định danh liên kết) vào **log record** (bản ghi log – mục nhật ký).
         
         Args:
-            record (logging.LogRecord): Bản ghi log hiện tại.
+            record (logging.LogRecord): **Current log record** (bản ghi log hiện tại – mục nhật ký đang xử lý).
         
         Returns:
-            bool: Luôn trả về True để cho phép bản ghi log được xử lý.
+            bool: Luôn trả về **True** để cho phép **log record** (bản ghi log) được **processed** (xử lý – thực thi).
         """
         record.correlation_id = correlation_id.get()
         return True
 
 
 ###############################################################################
-#                         ENHANCED LOG MANAGER CLASS                         #
+#     **ENHANCED LOG MANAGER CLASS** (lớp quản lý log nâng cao)             #
 ###############################################################################
 class EnhancedLogManager:
     """
-    ✅ UNIFIED LOGGING MANAGER - Phase 1 Foundation
-    Merges functionality từ 3 modules:
-    1. logging_config.py: setup_logging() API + CorrelationIdFilter
-    2. unified_logging.py: Singleton pattern + logger hierarchy
-    3. unified_log_aggregator.py: Event-driven log aggregation
+    ✅ **UNIFIED LOGGING MANAGER** (trình quản lý log thống nhất – hệ thống điều khiển nhật ký tập trung) - **Phase 1 Foundation** (giai đoạn 1 nền tảng)
     
-    Features:
-    - Thread-safe singleton pattern
-    - Backward compatible setup_logging() API
-    - Enhanced PID/TID tracking  
-    - Real-time log aggregation (event-driven)
-    - Centralized logger hierarchy management
+    **Merges functionality** (tích hợp chức năng – gộp tính năng) từ 3 **modules** (mô-đun – thành phần):
+    1. **logging_config.py**: **setup_logging() API** (giao diện thiết lập log) + **CorrelationIdFilter** (bộ lọc ID tương quan)
+    2. **unified_logging.py**: **Singleton pattern** (mẫu đơn lẻ – thiết kế duy nhất) + **logger hierarchy** (phân cấp logger – cấu trúc cây nhật ký)
+    3. **unified_log_aggregator.py**: **Event-driven log aggregation** (tổng hợp log theo sự kiện – gom nhật ký kích hoạt)
+    
+    **Features** (tính năng – chức năng chính):
+    - **Thread-safe singleton pattern** (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
+    - **Backward compatible** (tương thích ngược) **setup_logging() API** (giao diện thiết lập log)
+    - **Enhanced PID/TID tracking** (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng cải tiến)  
+    - **Real-time log aggregation** (tổng hợp log thời gian thực – gom nhật ký tức thì) (**event-driven** – điều khiển bởi sự kiện)
+    - **Centralized logger hierarchy management** (quản lý phân cấp logger tập trung – điều khiển cấu trúc nhật ký trung tâm)
     """
     
-    # ✅ SINGLETON: Thread-safe instance management
+    # ✅ **SINGLETON** (đơn lẻ – duy nhất): **Thread-safe instance management** (quản lý thể hiện an toàn luồng – điều khiển đối tượng không xung đột)
     _instance: Optional['EnhancedLogManager'] = None
     _lock = threading.RLock()
     
-    # ✅ ENHANCED FORMATS: PID/TID tracking từ unified_logging.py
+    # ✅ **ENHANCED FORMATS** (định dạng nâng cao – cấu trúc cải tiến): **PID/TID tracking** (theo dõi PID/TID – giám sát ID tiến trình/luồng) từ **unified_logging.py**
     STANDARD_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
     ENHANCED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - [PID:%(process)d|TID:%(thread)d] - %(correlation_id)s - %(message)s'
     DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
     
-    # ✅ LOGGER HIERARCHY: Từ unified_logging.py (merged)
+    # ✅ **LOGGER HIERARCHY** (phân cấp logger – cấu trúc cây nhật ký): Từ **unified_logging.py** (**merged** – đã tích hợp)
     LOGGER_HIERARCHY = {
         'mining_environment': {
             'level': logging.INFO,
             'file': 'mining_environment.log',
-            'description': 'Main mining environment logger'
+            'description': '**Main mining environment logger** (logger môi trường khai thác chính – bộ ghi nhật ký hệ thống đào coin)'
         },
         'mining_environment.resource_manager': {
             'level': logging.INFO,
             'file': 'resource_manager.log',
-            'description': 'Resource management operations'
+            'description': '**Resource management operations** (hoạt động quản lý tài nguyên – điều khiển CPU/GPU/RAM)'
         },
         'mining_environment.cloak_strategies': {
             'level': logging.DEBUG,
             'file': 'cloak_strategies.log',
-            'description': 'Cloaking strategy implementations'
+            'description': '**Cloaking strategy implementations** (triển khai chiến lược ngụy trang – che giấu hoạt động khai thác)'
         },
         'mining_environment.cpu_cloaking': {
             'level': logging.DEBUG,
             'file': 'cpu_cloaking_manager.log',
-            'description': 'CPU cloaking legacy operations'
+            'description': '**CPU cloaking legacy operations** (hoạt động ngụy trang CPU cũ – che giấu sử dụng vi xử lý)'
         },
         'mining_environment.gpu_cloaking': {
             'level': logging.DEBUG,
             'file': 'gpu_cloaking_manager.log',
-            'description': 'GPU cloaking and thermal spoofing operations'
+            'description': '**GPU cloaking and thermal spoofing operations** (ngụy trang GPU và giả mạo nhiệt độ – che giấu card đồ họa)'
         },
         'mining_environment.resource_control': {
             'level': logging.DEBUG,
             'file': 'resource_control.log',
-            'description': 'Low-level resource control operations'
+            'description': '**Low-level resource control operations** (hoạt động điều khiển tài nguyên cấp thấp – quản lý trực tiếp phần cứng)'
         },
         'mining_environment.coordination': {
             'level': logging.DEBUG,
             'file': 'coordination.log',
-            'description': 'Hook coordination và PHASE 3++ sequencing operations'
+            'description': '**Hook coordination** (điều phối hook – đồng bộ móc nối) và **PHASE 3++ sequencing operations** (hoạt động tuần tự giai đoạn 3++ – quy trình nâng cao)'
         },
     }
     
     def __new__(cls) -> 'EnhancedLogManager':
-        """✅ SINGLETON: Thread-safe singleton pattern implementation"""
+        """✅ **SINGLETON** (đơn lẻ – duy nhất): **Thread-safe singleton pattern implementation** (triển khai mẫu singleton an toàn luồng – thiết kế đối tượng duy nhất không xung đột)"""
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -146,7 +148,7 @@ class EnhancedLogManager:
             return cls._instance
     
     def __init__(self):
-        """✅ INITIALIZE: Setup enhanced logging system"""
+        """✅ **INITIALIZE** (khởi tạo – thiết lập ban đầu): **Setup enhanced logging system** (thiết lập hệ thống ghi log nâng cao – cấu hình nhật ký cải tiến)"""
         if getattr(self, '_initialized', False):
             return
             
@@ -154,17 +156,17 @@ class EnhancedLogManager:
         self._loggers: Dict[str, logging.Logger] = {}
         self._handlers: Dict[str, logging.Handler] = {}
         
-        # ✅ LOG DIRECTORY: Centralized log location  
+        # ✅ **LOG DIRECTORY** (thư mục log – nơi lưu nhật ký): **Centralized log location** (vị trí log tập trung – thư mục nhật ký chung)  
         try:
             self.log_dir = Path('/app/mining_environment/logs')
             self.log_dir.mkdir(parents=True, exist_ok=True)
         except PermissionError:
-            # Fallback to local directory if /app is not accessible
+            # **Fallback** (dự phòng – phương án thay thế) sang **local directory** (thư mục cục bộ) nếu **/app** không **accessible** (truy cập được – có quyền vào)
             self.log_dir = Path('./logs')
             self.log_dir.mkdir(parents=True, exist_ok=True)
-            print(f"⚠️ [EnhancedLogging] Using fallback log directory: {self.log_dir.absolute()}")
+            print(f"⚠️ [**EnhancedLogging** (ghi log nâng cao)] Sử dụng **fallback log directory** (thư mục log dự phòng – thư mục nhật ký thay thế): {self.log_dir.absolute()}")
         
-        # ✅ AGGREGATION: Event-driven log aggregation setup
+        # ✅ **AGGREGATION** (tổng hợp – gom nhật ký): **Event-driven log aggregation setup** (thiết lập tổng hợp log theo sự kiện – cấu hình gom nhật ký kích hoạt)
         self.unified_log_path = self.log_dir / "unified.log"
         self.last_positions: Dict[str, int] = {}
         self.aggregation_queue = queue.Queue()
@@ -172,14 +174,14 @@ class EnhancedLogManager:
         self.aggregation_running = False
         self.timestamp_pattern = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
         
-        # ✅ SETUP: Initialize logger hierarchy
+        # ✅ **SETUP** (thiết lập – cấu hình): **Initialize logger hierarchy** (khởi tạo phân cấp logger – tạo cấu trúc cây nhật ký)
         self._setup_logger_hierarchy()
         self._start_aggregation()
         
-        print(f"✅ [EnhancedLogging] Initialized {len(self._loggers)} loggers với event-driven aggregation")
+        print(f"✅ [**EnhancedLogging** (ghi log nâng cao)] **Initialized** (đã khởi tạo) {len(self._loggers)} **loggers** (bộ ghi nhật ký) với **event-driven aggregation** (tổng hợp theo sự kiện – gom nhật ký kích hoạt)")
     
     def _setup_logger_hierarchy(self) -> None:
-        """✅ HIERARCHY: Setup complete logger hierarchy với standardized configuration"""
+        """✅ **HIERARCHY** (phân cấp – cấu trúc cây): **Setup complete logger hierarchy** (thiết lập phân cấp logger hoàn chỉnh – tạo cấu trúc nhật ký đầy đủ) với **standardized configuration** (cấu hình chuẩn hóa – thiết lập thống nhất)"""
         try:
             for logger_name, config in self.LOGGER_HIERARCHY.items():
                 self._create_hierarchical_logger(
@@ -189,60 +191,60 @@ class EnhancedLogManager:
                     description=config['description']
                 )
             
-            # ✅ ROOT LOGGER: Setup root logger for fallback
+            # ✅ **ROOT LOGGER** (logger gốc – bộ ghi nhật ký cấp cao nhất): **Setup root logger for fallback** (thiết lập logger gốc cho dự phòng – cấu hình nhật ký dự phòng)
             root_logger = logging.getLogger()
-            root_logger.setLevel(logging.WARNING)  # Only critical messages to root
+            root_logger.setLevel(logging.WARNING)  # Chỉ **critical messages** (thông báo quan trọng – cảnh báo nghiêm trọng) tới **root** (gốc)
             
         except Exception as e:
-            print(f"❌ [EnhancedLogging] Failed to setup logger hierarchy: {e}")
+            print(f"❌ [**EnhancedLogging** (ghi log nâng cao)] **Failed to setup** (thất bại thiết lập) **logger hierarchy** (phân cấp logger – cấu trúc cây nhật ký): {e}")
             raise
     
     def _create_hierarchical_logger(self, name: str, level: int, log_file: str, description: str) -> logging.Logger:
-        """✅ CREATE: Individual logger với standardized configuration"""
+        """✅ **CREATE** (tạo – khởi tạo): **Individual logger** (logger riêng lẻ – bộ ghi nhật ký độc lập) với **standardized configuration** (cấu hình chuẩn hóa – thiết lập thống nhất)"""
         try:
             logger = logging.getLogger(name)
             
-            # ✅ PREVENT DUPLICATES: Clear existing handlers
+            # ✅ **PREVENT DUPLICATES** (ngăn trùng lặp – tránh nhân bản): **Clear existing handlers** (xóa handlers hiện có – loại bỏ bộ xử lý cũ)
             for handler in logger.handlers[:]:
                 logger.removeHandler(handler)
             
             logger.setLevel(level)
-            logger.propagate = False  # Prevent propagation to avoid duplicates
+            logger.propagate = False  # **Prevent propagation** (ngăn lan truyền – không cho phép truyền lên) để **avoid duplicates** (tránh trùng lặp – không tạo bản sao)
             
-            # ✅ FILE HANDLER: Rotating file handler cho log rotation
+            # ✅ **FILE HANDLER** (bộ xử lý file – công cụ ghi file): **Rotating file handler** (bộ xử lý file xoay vòng – công cụ lưu nhật ký luân phiên) cho **log rotation** (xoay vòng log – chia nhỏ file nhật ký)
             log_path = self.log_dir / log_file
             file_handler = RotatingFileHandler(
                 log_path,
-                maxBytes=10*1024*1024,  # 10MB max per file
-                backupCount=5,           # Keep 5 backup files
+                maxBytes=10*1024*1024,  # 10MB **max per file** (tối đa mỗi file – giới hạn kích thước)
+                backupCount=5,           # Giữ 5 **backup files** (file sao lưu – bản dự phòng)
                 encoding='utf-8'
             )
             file_handler.setLevel(level)
             
-            # ✅ MEMORY HANDLER: Buffer và immediate flush (preserved pattern)
+            # ✅ **MEMORY HANDLER** (bộ xử lý bộ nhớ – công cụ đệm nhật ký): **Buffer** (bộ đệm – lưu tạm thời) và **immediate flush** (xả tức thì – ghi ngay lập tức) (**preserved pattern** – giữ nguyên mẫu)
             memory_handler = MemoryHandler(
-                capacity=1,  # Flush sau 1 bản ghi (preserve original behavior)
+                capacity=1,  # **Flush** (xả – ghi ra file) sau 1 **record** (bản ghi – mục nhật ký) (**preserve original behavior** – giữ hành vi gốc)
                 target=file_handler,
-                flushLevel=logging.INFO  # Force flush khi có INFO+
+                flushLevel=logging.INFO  # **Force flush** (buộc xả – ghi bắt buộc) khi có **INFO+** (mức INFO trở lên)
             )
             
-            # ✅ ENHANCED FORMATTING: PID/TID tracking
+            # ✅ **ENHANCED FORMATTING** (định dạng nâng cao – cấu trúc cải tiến): **PID/TID tracking** (theo dõi PID/TID – giám sát ID tiến trình/luồng)
             formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
             memory_handler.setFormatter(formatter)
             memory_handler.addFilter(CorrelationIdFilter())
             
-            # ✅ CONSOLE HANDLER: Console output cho important messages
+            # ✅ **CONSOLE HANDLER** (bộ xử lý console – công cụ xuất màn hình): **Console output** (xuất ra console – hiển thị terminal) cho **important messages** (thông báo quan trọng – tin nhắn cần thiết)
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setLevel(logging.WARNING)  # Only warnings+ to console
+            console_handler.setLevel(logging.WARNING)  # Chỉ **warnings+** (cảnh báo trở lên – mức WARNING cao hơn) tới **console** (màn hình – terminal)
             console_formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
             console_handler.setFormatter(console_formatter)
             console_handler.addFilter(CorrelationIdFilter())
             
-            # ✅ ADD HANDLERS
+            # ✅ **ADD HANDLERS** (thêm bộ xử lý – gắn công cụ xử lý)
             logger.addHandler(memory_handler)
             logger.addHandler(console_handler)
             
-            # ✅ STORE REFERENCES
+            # ✅ **STORE REFERENCES** (lưu tham chiếu – giữ liên kết)
             self._loggers[name] = logger
             self._handlers[f"{name}_memory"] = memory_handler
             self._handlers[f"{name}_file"] = file_handler
@@ -300,7 +302,7 @@ class EnhancedLogManager:
             memory_handler = MemoryHandler(
                 capacity=1,  # Flush sau 1 bản ghi (preserve original)
                 target=file_handler,
-                flushLevel=logging.INFO  # Force flush khi có INFO+
+                flushLevel=logging.INFO  # **Force flush** (buộc xả – ghi bắt buộc) khi có **INFO+** (mức INFO trở lên)
             )
             memory_handler.addFilter(CorrelationIdFilter())
             

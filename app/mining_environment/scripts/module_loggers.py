@@ -1,23 +1,23 @@
 # module_loggers.py
 
 """
-**Module Loggers Configuration** (Cấu hình Logger Mô-đun)
+**Module Loggers Configuration** (Cấu hình Logger Mô-đun – thiết lập bộ ghi nhật ký thành phần)
 
-Tạo và quản lý **dedicated loggers** (logger chuyên dụng) cho các **mining modules** (mô-đun khai thác)
-và **plugin systems** (hệ thống plugin).
+Tạo và quản lý **dedicated loggers** (logger chuyên dụng – bộ ghi nhật ký riêng biệt) cho các **mining modules** (mô-đun khai thác – thành phần đào coin)
+và **plugin systems** (hệ thống plugin – cơ chế mở rộng).
 """
 
 import os
 from pathlib import Path
 from mining_environment.scripts.logging_config import setup_logging
 
-# **Log directory setup** (thiết lập thư mục log)
+# **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
-# **Dedicated Module Loggers** (Logger mô-đun chuyên dụng)
+# **Dedicated Module Loggers** (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
-gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # Fixed: cloak_strategies.log instead of gpu_cloaking.log
+gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # **Fixed** (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
 gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
@@ -25,76 +25,76 @@ gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gp
 
 def get_gpu_plugin_logger():
     """
-    **Get GPU plugin logger** (Lấy logger plugin GPU) - Dedicated logger cho **GPU plugin operations** (hoạt động plugin GPU).
+    **Get GPU plugin logger** (Lấy logger plugin GPU – truy xuất bộ ghi nhật ký plugin card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU plugin operations** (hoạt động plugin GPU – thao tác mở rộng card đồ họa).
     
     Returns:
-        Logger: GPU plugin logger instance
+        Logger: **GPU plugin logger instance** (thực thể logger plugin GPU – đối tượng ghi nhật ký plugin)
     """
     return gpu_plugin_logger
 
 def get_gpu_cloaking_logger():
     """
-    **Get GPU cloaking logger** (Lấy logger che giấu GPU) - Dedicated logger cho **GPU cloaking operations** (hoạt động che giấu GPU).
+    **Get GPU cloaking logger** (Lấy logger che giấu GPU – truy xuất bộ ghi nhật ký ngụy trang card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU cloaking operations** (hoạt động che giấu GPU – thao tác ngụy trang card đồ họa).
     
     Returns:
-        Logger: GPU cloaking logger instance
+        Logger: **GPU cloaking logger instance** (thực thể logger che giấu GPU – đối tượng ghi nhật ký ngụy trang)
     """
     return gpu_cloaking_logger
 
 def get_gpu_optimization_logger():
     """
-    **Get GPU optimization logger** (Lấy logger tối ưu GPU) - Dedicated logger cho **GPU optimization operations** (hoạt động tối ưu GPU).
+    **Get GPU optimization logger** (Lấy logger tối ưu GPU – truy xuất bộ ghi nhật ký tối ưu hóa card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU optimization operations** (hoạt động tối ưu GPU – thao tác tối ưu hóa card đồ họa).
     
     Returns:
-        Logger: GPU optimization logger instance
+        Logger: **GPU optimization logger instance** (thực thể logger tối ưu GPU – đối tượng ghi nhật ký tối ưu)
     """
     return gpu_optimization_logger
 
 def get_mining_performance_logger():
     """
-    **Get mining performance logger** (Lấy logger hiệu suất khai thác) - Dedicated logger cho **mining performance tracking** (theo dõi hiệu suất khai thác).
+    **Get mining performance logger** (Lấy logger hiệu suất khai thác – truy xuất bộ ghi nhật ký hiệu năng đào coin) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **mining performance tracking** (theo dõi hiệu suất khai thác – giám sát hiệu năng đào coin).
     
     Returns:
-        Logger: Mining performance logger instance
+        Logger: **Mining performance logger instance** (thực thể logger hiệu suất khai thác – đối tượng ghi nhật ký hiệu năng)
     """
     return mining_performance_logger
 
 def get_audit_integration_logger():
     """
-    **Get audit integration logger** (Lấy logger tích hợp kiểm toán) - Dedicated logger cho **audit integration operations** (hoạt động tích hợp kiểm toán).
+    **Get audit integration logger** (Lấy logger tích hợp kiểm toán – truy xuất bộ ghi nhật ký tích hợp kiểm tra) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **audit integration operations** (hoạt động tích hợp kiểm toán – thao tác kết nối kiểm tra).
     
     Returns:
-        Logger: Audit integration logger instance
+        Logger: **Audit integration logger instance** (thực thể logger tích hợp kiểm toán – đối tượng ghi nhật ký kiểm tra)
     """
     return audit_integration_logger
 
 def get_gpu_monitoring_logger():
     """
-    **Get GPU monitoring logger** (Lấy logger giám sát GPU) - Dedicated logger cho **GPU monitoring operations** (hoạt động giám sát GPU).
+    **Get GPU monitoring logger** (Lấy logger giám sát GPU – truy xuất bộ ghi nhật ký theo dõi card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU monitoring operations** (hoạt động giám sát GPU – thao tác theo dõi card đồ họa).
     
     Returns:
-        Logger: GPU monitoring logger instance
+        Logger: **GPU monitoring logger instance** (thực thể logger giám sát GPU – đối tượng ghi nhật ký theo dõi)
     """
     return gpu_monitoring_logger
 
-# ===== NEW GPU COMPONENT LOGGERS (Phase 2) =====
-# Thêm 12 logger functions mới cho các GPU components còn thiếu
+# ===== **NEW GPU COMPONENT LOGGERS** (Logger thành phần GPU mới – bộ ghi nhật ký cho các thành phần card đồ họa mới) **(Phase 2)** (Giai đoạn 2) =====
+# Thêm 12 **logger functions** (hàm logger – chức năng ghi nhật ký) mới cho các **GPU components** (thành phần GPU – bộ phận card đồ họa) còn thiếu
 
 def get_stealth_inference_logger():
     """
-    **Get stealth inference logger** (Lấy logger suy luận ẩn) - Logger cho **stealth inference CUDA operations** (hoạt động suy luận CUDA ẩn).
+    **Get stealth inference logger** (Lấy logger suy luận ẩn – truy xuất bộ ghi nhật ký suy diễn bí mật) - Logger cho **stealth inference CUDA operations** (hoạt động suy luận CUDA ẩn – thao tác suy diễn CUDA bí mật).
     
     Returns:
-        Logger: Stealth inference logger instance
+        Logger: **Stealth inference logger instance** (thực thể logger suy luận ẩn – đối tượng ghi nhật ký suy diễn bí mật)
     """
     return setup_logging('stealth_inference', str(Path(LOGS_DIR) / 'stealth_inference_cuda.log'), 'DEBUG')
 
 def get_coordination_logger():
     """
-    **Get coordination logger** (Lấy logger điều phối) - Logger cho **HookCoordinator operations** (hoạt động điều phối hook).
+    **Get coordination logger** (Lấy logger điều phối – truy xuất bộ ghi nhật ký phối hợp) - Logger cho **HookCoordinator operations** (hoạt động điều phối hook – thao tác phối hợp móc nối).
     
     Returns:
-        Logger: Coordination logger instance
+        Logger: **Coordination logger instance** (thực thể logger điều phối – đối tượng ghi nhật ký phối hợp)
     """
     return setup_logging('coordination', str(Path(LOGS_DIR) / 'coordination.log'), 'DEBUG')
 

@@ -1,6 +1,6 @@
 """
-**[GPU Resource Manager Monitor] (bộ giám sát trình quản lý tài nguyên GPU)**
-[Comprehensive monitoring] (giám sát toàn diện) và [health checking] (kiểm tra sức khỏe) cho [GPUResourceManager] (trình quản lý GPU)
+GPU Resource Manager Monitor
+Comprehensive monitoring và health checking cho GPUResourceManager
 """
 
 import os
@@ -13,12 +13,12 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from concurrent.futures import ThreadPoolExecutor
 
-# ✅ [UNIFIED LOGGING] (hệ thống ghi log thống nhất): Sử dụng [centralized logging system] (hệ thống ghi log tập trung)
+# ✅ UNIFIED LOGGING: Use centralized logging system
 from .module_loggers import get_gpu_monitoring_logger
 
 @dataclass
 class GPUHealthMetrics:
-    """**[GPU Health Metrics Data Class] (lớp dữ liệu chỉ số sức khỏe GPU)**"""
+    """**GPU Health Metrics Data Class** (lớp dữ liệu chỉ số sức khỏe GPU)"""
     timestamp: float
     gpu_count: int
     nvml_initialized: bool
@@ -33,7 +33,7 @@ class GPUHealthMetrics:
 
 @dataclass 
 class GPUManagerStatus:
-    """**[GPU Manager Status Data Class] (lớp dữ liệu trạng thái quản lý GPU)**"""
+    """**GPU Manager Status Data Class** (lớp dữ liệu trạng thái quản lý GPU)"""
     manager_type: str
     is_active: bool
     initialization_time: float
@@ -47,22 +47,22 @@ class GPUManagerStatus:
 
 class GPUResourceManagerMonitor:
     """
-    **[Comprehensive GPU Resource Manager Monitor] (giám sát quản lý tài nguyên GPU toàn diện)**
+    **Comprehensive GPU Resource Manager Monitor** (giám sát quản lý tài nguyên GPU toàn diện)
     
     Chức năng:
-    - **[Real-time monitoring] (giám sát thời gian thực)** của [GPUResourceManager] (trình quản lý GPU)
-    - **[Health checks] (kiểm tra sức khỏe)** định kỳ
-    - **[Performance metrics] (chỉ số hiệu năng)** [collection] (thu thập)
-    - **[Dashboard data] (dữ liệu bảng điều khiển)** [generation] (tạo dữ liệu)
+    - **Real-time monitoring** (giám sát thời gian thực) của GPUResourceManager
+    - **Health checks** (kiểm tra sức khỏe) định kỳ
+    - **Performance metrics** (chỉ số hiệu năng) collection
+    - **Dashboard data** (dữ liệu dashboard) generation
     """
     
     def __init__(self, gpu_manager=None, config: Dict[str, Any] = None):
         """
-        Khởi tạo [GPU Resource Manager Monitor] (bộ giám sát trình quản lý tài nguyên GPU)
+        Khởi tạo GPU Resource Manager Monitor
         
         Args:
-            gpu_manager: Instance của [GPUResourceManager] (trình quản lý GPU)
-            config: [Configuration] (cấu hình) cho [monitoring] (giám sát)
+            gpu_manager: Instance của GPUResourceManager
+            config: Configuration cho monitoring
         """
         self.logger = get_gpu_monitoring_logger()
         self.gpu_manager = gpu_manager
@@ -94,32 +94,32 @@ class GPUResourceManagerMonitor:
         self.operation_times: List[float] = []
         self.cloaked_processes: Dict[int, Dict[str, Any]] = {}
         
-        self.logger.info("🎮 [GPU MONITOR] Khởi tạo thành công [GPUResourceManagerMonitor] (bộ giám sát trình quản lý tài nguyên GPU)")
+        self.logger.info("🎮 [GPU MONITOR] GPUResourceManagerMonitor initialized successfully")
     
     def set_gpu_manager(self, gpu_manager) -> None:
         """
-        **[Set GPU Manager Instance] (thiết lập instance quản lý GPU)**
+        **Set GPU Manager Instance** (thiết lập instance quản lý GPU)
         
         Args:
-            gpu_manager: [GPUResourceManager] (trình quản lý GPU) instance
+            gpu_manager: GPUResourceManager instance
         """
         self.gpu_manager = gpu_manager
         self.manager_status.is_active = True
-        self.logger.info("✅ [GPU MONITOR] Đã kết nối [GPU Manager] (trình quản lý GPU)")
+        self.logger.info("✅ [GPU MONITOR] GPU Manager instance connected")
     
     def start_monitoring(self) -> bool:
         """
-        **[Start Real-time Monitoring] (bắt đầu giám sát thời gian thực)**
+        **Start Real-time Monitoring** (bắt đầu giám sát thời gian thực)
         
         Returns:
-            bool: True nếu [monitoring] (giám sát) bắt đầu thành công
+            bool: True nếu monitoring started thành công
         """
         if self.is_monitoring:
-            self.logger.warning("⚠️ [GPU MONITOR] Đã ở trạng thái [monitoring] (đang giám sát) - bỏ qua yêu cầu khởi động")
+            self.logger.warning("⚠️ [GPU MONITOR] Already monitoring - ignoring start request")
             return True
             
         if not self.gpu_manager:
-            self.logger.error("❌ [GPU MONITOR] Không thể bắt đầu [monitoring] (giám sát) - thiếu instance [GPU manager] (trình quản lý GPU)")
+            self.logger.error("❌ [GPU MONITOR] Cannot start monitoring - no GPU manager instance")
             return False
             
         self.is_monitoring = True
@@ -130,19 +130,19 @@ class GPUResourceManagerMonitor:
         )
         self.monitor_thread.start()
         
-        self.logger.info(f"🚀 [GPU MONITOR] Đã bắt đầu [real-time monitoring] (giám sát thời gian thực) (khoảng lặp: {self.health_check_interval}s)")
+        self.logger.info(f"🚀 [GPU MONITOR] Real-time monitoring started (interval: {self.health_check_interval}s)")
         return True
     
     def stop_monitoring(self) -> None:
-        """**[Stop Real-time Monitoring] (dừng giám sát thời gian thực)**"""
+        """**Stop Real-time Monitoring** (dừng giám sát thời gian thực)"""
         self.is_monitoring = False
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=5)
-        self.logger.info("🛑 [GPU MONITOR] Đã dừng [real-time monitoring] (giám sát thời gian thực)")
+        self.logger.info("🛑 [GPU MONITOR] Real-time monitoring stopped")
     
     def _monitoring_loop(self) -> None:
-        """**[Main Monitoring Loop] (vòng lặp giám sát chính)**"""
-        self.logger.info("🔄 [GPU MONITOR] Vòng lặp [monitoring] (giám sát) đã khởi động")
+        """**Main Monitoring Loop** (vòng lặp giám sát chính)"""
+        self.logger.info("🔄 [GPU MONITOR] Monitoring loop started")
         
         while self.is_monitoring:
             try:
@@ -161,7 +161,7 @@ class GPUResourceManagerMonitor:
                     self._log_comprehensive_status()
                 
             except Exception as e:
-                self.logger.error(f"❌ [GPU MONITOR] Lỗi trong vòng lặp [monitoring] (giám sát): {e}")
+                self.logger.error(f"❌ [GPU MONITOR] Error in monitoring loop: {e}")
                 self.manager_status.failed_operations += 1
             
             # ✅ SLEEP: Chờ interval tiếp theo
@@ -169,10 +169,10 @@ class GPUResourceManagerMonitor:
     
     def perform_health_check(self) -> GPUHealthMetrics:
         """
-        **[Perform Comprehensive Health Check] (thực hiện kiểm tra sức khỏe toàn diện)**
+        **Perform Comprehensive Health Check** (thực hiện kiểm tra sức khỏe toàn diện)
         
         Returns:
-            GPUHealthMetrics: [Comprehensive health data] (dữ liệu sức khỏe tổng hợp)
+            GPUHealthMetrics: Comprehensive health data
         """
         start_time = time.time()
         
@@ -238,7 +238,7 @@ class GPUResourceManagerMonitor:
             )
     
     def _get_gpu_memory_usage(self) -> float:
-        """**[Get GPU Memory Usage] (lấy mức sử dụng bộ nhớ GPU)**"""
+        """**Get GPU Memory Usage** (lấy mức sử dụng bộ nhớ GPU)"""
         try:
             if not self.gpu_manager or not self.gpu_manager.is_nvml_initialized():
                 return 0.0
@@ -259,7 +259,7 @@ class GPUResourceManagerMonitor:
             return 0.0
     
     def _get_gpu_temperature(self) -> int:
-        """**[Get GPU Temperature] (lấy nhiệt độ GPU)**"""
+        """**Get GPU Temperature** (lấy nhiệt độ GPU)"""
         try:
             if not self.gpu_manager or not self.gpu_manager.is_nvml_initialized():
                 return 0
@@ -279,7 +279,7 @@ class GPUResourceManagerMonitor:
             return 0
     
     def _get_gpu_power_usage(self) -> float:
-        """**[Get GPU Power Usage] (lấy mức tiêu thụ điện GPU)**"""
+        """**Get GPU Power Usage** (lấy mức tiêu thụ điện GPU)"""
         try:
             if not self.gpu_manager or not self.gpu_manager.is_nvml_initialized():
                 return 0.0
@@ -299,7 +299,7 @@ class GPUResourceManagerMonitor:
             return 0.0
     
     def _get_gpu_utilization(self) -> int:
-        """**[Get GPU Utilization] (lấy mức sử dụng GPU)**"""
+        """**Get GPU Utilization** (lấy mức sử dụng GPU)"""
         try:
             if not self.gpu_manager or not self.gpu_manager.is_nvml_initialized():
                 return 0
@@ -319,13 +319,13 @@ class GPUResourceManagerMonitor:
             return 0
     
     def _calculate_success_rate(self) -> float:
-        """**[Calculate Cloaking Success Rate] (tính tỷ lệ thành công che giấu)**"""
+        """**Calculate Cloaking Success Rate** (tính tỷ lệ thành công che giấu)"""
         if self.manager_status.total_operations == 0:
             return 0.0
         return (self.manager_status.successful_operations / self.manager_status.total_operations) * 100.0
     
     def _add_health_record(self, health_metrics: GPUHealthMetrics) -> None:
-        """**[Add Health Record to History] (thêm bản ghi sức khỏe vào lịch sử)**"""
+        """**Add Health Record to History** (thêm bản ghi sức khỏe vào lịch sử)"""
         self.health_history.append(health_metrics)
         
         # ✅ LIMIT HISTORY SIZE: Giới hạn kích thước lịch sử
@@ -333,7 +333,7 @@ class GPUResourceManagerMonitor:
             self.health_history.pop(0)
     
     def _cleanup_old_records(self) -> None:
-        """**[Cleanup Old Records] (dọn dẹp bản ghi cũ)**"""
+        """**Cleanup Old Records** (dọn dẹp bản ghi cũ)"""
         cutoff_time = time.time() - (self.history_retention_hours * 3600)
         self.health_history = [
             record for record in self.health_history 
@@ -341,7 +341,7 @@ class GPUResourceManagerMonitor:
         ]
     
     def _update_manager_status(self, health_metrics: GPUHealthMetrics) -> None:
-        """**[Update Manager Status] (cập nhật trạng thái trình quản lý)**"""
+        """**Update Manager Status** (cập nhật trạng thái manager)"""
         # ✅ AVERAGE RESPONSE TIME: Thời gian phản hồi trung bình
         if self.operation_times:
             self.manager_status.average_response_time_ms = sum(self.operation_times) / len(self.operation_times)
@@ -361,7 +361,7 @@ class GPUResourceManagerMonitor:
         }
     
     def _log_comprehensive_status(self) -> None:
-        """**[Log Comprehensive Status] (ghi log trạng thái toàn diện)**"""
+        """**Log Comprehensive Status** (ghi log trạng thái toàn diện)"""
         if not self.health_history:
             return
             
@@ -369,18 +369,18 @@ class GPUResourceManagerMonitor:
         avg_response = self.manager_status.average_response_time_ms
         success_rate = self._calculate_success_rate()
         
-        self.logger.info(f"📊 [GPU MONITOR] [COMPREHENSIVE STATUS] (trạng thái tổng quát):")
-        self.logger.info(f"🎮 [GPUs] (số lượng GPU): {latest.gpu_count}, [NVML] (thư viện NVML): {latest.nvml_initialized}, [Active] (đang hoạt động): {latest.manager_active}")
-        self.logger.info(f"⚡ [Memory] (bộ nhớ): {latest.memory_usage_mb:.1f}MB, [Temp] (nhiệt độ): {latest.temperature_celsius}°C, [Power] (công suất): {latest.power_usage_watts:.1f}W")
-        self.logger.info(f"🔒 [Processes Cloaked] (tiến trình đã che giấu): {latest.processes_cloaked}, [Success Rate] (tỷ lệ thành công): {success_rate:.1f}%")
-        self.logger.info(f"📈 [Avg Response] (thời gian phản hồi trung bình): {avg_response:.1f}ms, [Total Ops] (tổng số thao tác): {self.manager_status.total_operations}")
+        self.logger.info(f"📊 [GPU MONITOR] COMPREHENSIVE STATUS:")
+        self.logger.info(f"🎮 GPUs: {latest.gpu_count}, NVML: {latest.nvml_initialized}, Active: {latest.manager_active}")
+        self.logger.info(f"⚡ Memory: {latest.memory_usage_mb:.1f}MB, Temp: {latest.temperature_celsius}°C, Power: {latest.power_usage_watts:.1f}W")
+        self.logger.info(f"🔒 Processes Cloaked: {latest.processes_cloaked}, Success Rate: {success_rate:.1f}%")
+        self.logger.info(f"📈 Avg Response: {avg_response:.1f}ms, Total Ops: {self.manager_status.total_operations}")
     
     def get_dashboard_data(self) -> Dict[str, Any]:
         """
-        **[Get Dashboard Data] (lấy dữ liệu bảng điều khiển)**
+        **Get Dashboard Data** (lấy dữ liệu dashboard)
         
         Returns:
-            Dict: [Comprehensive dashboard data] (dữ liệu tổng hợp cho bảng điều khiển)
+            Dict: Comprehensive dashboard data
         """
         if not self.health_history:
             return {'status': 'no_data', 'message': 'No monitoring data available'}
@@ -425,10 +425,10 @@ class GPUResourceManagerMonitor:
     
     def get_health_summary(self) -> Dict[str, Any]:
         """
-        **[Get Health Summary] (lấy tóm tắt sức khỏe)**
+        **Get Health Summary** (lấy tóm tắt sức khỏe)
         
         Returns:
-            Dict: [Health summary] (tóm tắt sức khỏe) với [status codes] (mã trạng thái)
+            Dict: Health summary với status codes
         """
         if not self.health_history:
             return {
@@ -477,10 +477,10 @@ class GPUResourceManagerMonitor:
     
     def register_cloaked_process(self, pid: int, process_info: Dict[str, Any]) -> None:
         """
-        **[Register Cloaked Process] (đăng ký tiến trình đã che giấu)**
+        **Register Cloaked Process** (đăng ký tiến trình đã che giấu)
         
         Args:
-            pid: [Process ID] (mã định danh tiến trình)
+            pid: Process ID
             process_info: Thông tin tiến trình
         """
         self.cloaked_processes[pid] = {
@@ -488,25 +488,25 @@ class GPUResourceManagerMonitor:
             'process_info': process_info,
             'cloaking_strategies': process_info.get('strategies', [])
         }
-        self.logger.info(f"✅ [GPU MONITOR] Đã đăng ký [cloaked process] (tiến trình đã che giấu) PID={pid}")
+        self.logger.info(f"✅ [GPU MONITOR] Registered cloaked process PID={pid}")
     
     def unregister_cloaked_process(self, pid: int) -> None:
         """
-        **[Unregister Cloaked Process] (hủy đăng ký tiến trình đã che giấu)**
+        **Unregister Cloaked Process** (hủy đăng ký tiến trình đã che giấu)
         
         Args:
-            pid: [Process ID] (mã định danh tiến trình)
+            pid: Process ID
         """
         if pid in self.cloaked_processes:
             del self.cloaked_processes[pid]
-            self.logger.info(f"🗑️ [GPU MONITOR] Đã hủy đăng ký [cloaked process] (tiến trình đã che giấu) PID={pid}")
+            self.logger.info(f"🗑️ [GPU MONITOR] Unregistered cloaked process PID={pid}")
     
     def export_monitoring_data(self, filepath: str = None) -> str:
         """
-        **[Export Monitoring Data] (xuất dữ liệu giám sát)**
+        **Export Monitoring Data** (xuất dữ liệu giám sát)
         
         Args:
-            filepath: Đường dẫn file xuất (tùy chọn)
+            filepath: Đường dẫn file xuất (optional)
             
         Returns:
             str: Đường dẫn file đã xuất
@@ -527,10 +527,10 @@ class GPUResourceManagerMonitor:
             with open(filepath, 'w') as f:
                 json.dump(export_data, f, indent=2, default=str)
             
-            self.logger.info(f"📁 [GPU MONITOR] Đã xuất [monitoring data] (dữ liệu giám sát) đến: {filepath}")
+            self.logger.info(f"📁 [GPU MONITOR] Monitoring data exported to: {filepath}")
             return filepath
         except Exception as e:
-            self.logger.error(f"❌ [GPU MONITOR] Xuất dữ liệu thất bại: {e}")
+            self.logger.error(f"❌ [GPU MONITOR] Failed to export data: {e}")
             raise
 
 
@@ -539,10 +539,10 @@ _gpu_monitor_instance: Optional[GPUResourceManagerMonitor] = None
 
 def get_gpu_monitor() -> GPUResourceManagerMonitor:
     """
-    **[Get Global GPU Monitor Instance] (lấy instance giám sát GPU toàn cục)**
+    **Get Global GPU Monitor Instance** (lấy instance giám sát GPU toàn cục)
     
     Returns:
-        GPUResourceManagerMonitor: [Global monitor instance] (instance giám sát toàn cục)
+        GPUResourceManagerMonitor: Global monitor instance
     """
     global _gpu_monitor_instance
     if _gpu_monitor_instance is None:
@@ -551,14 +551,14 @@ def get_gpu_monitor() -> GPUResourceManagerMonitor:
 
 def initialize_gpu_monitoring(gpu_manager, config: Dict[str, Any] = None) -> GPUResourceManagerMonitor:
     """
-    **[Initialize GPU Monitoring System] (khởi tạo hệ thống giám sát GPU)**
+    **Initialize GPU Monitoring System** (khởi tạo hệ thống giám sát GPU)
     
     Args:
-        gpu_manager: [GPUResourceManager] (trình quản lý GPU) instance
-        config: [Configuration] (cấu hình) cho [monitoring] (giám sát)
+        gpu_manager: GPUResourceManager instance
+        config: Configuration cho monitoring
         
     Returns:
-        GPUResourceManagerMonitor: [Configured monitor instance] (instance giám sát đã cấu hình)
+        GPUResourceManagerMonitor: Configured monitor instance
     """
     monitor = get_gpu_monitor()
     monitor.set_gpu_manager(gpu_manager)

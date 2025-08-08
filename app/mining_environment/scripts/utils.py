@@ -10,25 +10,25 @@ import threading
 from typing import Any, Dict, Optional
 
 # ---------------------------------------------------------------------------
-# Helper ghi log JSON cho tính năng GPU
+# **Helper ghi log JSON** (trợ giúp ghi nhật ký JSON – hàm hỗ trợ ghi log định dạng JSON) cho **GPU features** (tính năng GPU – chức năng card đồ họa)
 # ---------------------------------------------------------------------------
-# Telemetry functionality has been removed
+# **Telemetry functionality has been removed** (chức năng telemetry đã bị xóa – tính năng đo lường từ xa đã loại bỏ)
 def log_gpu_feature(*_args, **_kwargs):  # type: ignore
-    """Telemetry logging functionality has been removed"""
+    """**Telemetry logging functionality has been removed** (chức năng ghi nhật ký telemetry đã bị xóa – tính năng ghi log đo lường từ xa đã loại bỏ)"""
     pass
 
 ###############################################################################
-#                           DECORATOR retry (đồng bộ)                          #
+#                           **DECORATOR retry** (đồng bộ – bộ trang trí thử lại)                          #
 ###############################################################################
 def retry(exception_to_check: Any, tries: int = 4, delay: float = 3.0, backoff: float = 2.0):
     """
-    Decorator đồng bộ để retry một hàm nếu gặp exception cụ thể.
+    **Decorator đồng bộ** (bộ trang trí đồng bộ – decorator không bất đồng bộ) để **retry** (thử lại – thực hiện lại) một hàm nếu gặp **exception** (ngoại lệ – lỗi) cụ thể.
 
-    :param exception_to_check: Exception hoặc tuple exceptions cần bắt để retry.
-    :param tries: Số lần thử (int).
-    :param delay: Thời gian chờ ban đầu giữa các lần thử (float, tính bằng giây).
-    :param backoff: Hệ số nhân thời gian chờ (float).
-    :return: Giá trị hàm nếu thành công, hoặc raise exception nếu hết tries.
+    :param exception_to_check: **Exception** (ngoại lệ) hoặc **tuple exceptions** (bộ ngoại lệ – danh sách lỗi) cần bắt để **retry** (thử lại).
+    :param tries: **Số lần thử** (number of attempts – số lượt thực hiện) (int).
+    :param delay: **Thời gian chờ ban đầu** (initial delay – độ trễ khởi điểm) giữa các lần thử (float, tính bằng giây).
+    :param backoff: **Hệ số nhân thời gian chờ** (backoff multiplier – hệ số tăng độ trễ) (float).
+    :return: Giá trị hàm nếu thành công, hoặc **raise exception** (ném ngoại lệ – báo lỗi) nếu hết **tries** (lần thử).
     """
     def decorator_retry(func):
         @functools.wraps(func)
@@ -39,8 +39,8 @@ def retry(exception_to_check: Any, tries: int = 4, delay: float = 3.0, backoff: 
                     return func(*args, **kwargs)
                 except exception_to_check as e:
                     logging.getLogger(__name__).warning(
-                        f"Lỗi '{e}' xảy ra trong '{func.__name__}'. "
-                        f"Thử lại sau {mdelay} giây..."
+                        f"**Lỗi** (error – ngoại lệ) '{e}' xảy ra trong '{func.__name__}'. "
+                        f"**Thử lại sau** (retrying after – thực hiện lại sau) {mdelay} giây..."
                     )
                     time.sleep(mdelay)
                     mtries -= 1
@@ -50,17 +50,17 @@ def retry(exception_to_check: Any, tries: int = 4, delay: float = 3.0, backoff: 
     return decorator_retry
 
 ###############################################################################
-#                           LỚP GPUManager (Singleton)                         #
+#                           **LỚP GPUManager** (Singleton – mẫu thiết kế đơn thể)                         #
 ###############################################################################
 class GPUManager:
     """
-    Lớp Singleton quản lý GPU bằng NVML, cung cấp các phương thức lấy và điều chỉnh
-    thông số GPU như power limit, xung nhịp, mức sử dụng GPU, v.v.
+    **Lớp Singleton** (singleton class – lớp đơn thể) quản lý **GPU** (card đồ họa) bằng **NVML** (NVIDIA Management Library – thư viện quản lý NVIDIA), cung cấp các **phương thức** (methods – hàm) lấy và điều chỉnh
+    **thông số GPU** (GPU parameters – tham số card đồ họa) như **power limit** (giới hạn công suất), **xung nhịp** (clock speed – tốc độ xung), **mức sử dụng GPU** (GPU utilization – tỷ lệ sử dụng card đồ họa), v.v.
 
     Attributes:
-        gpu_initialized (bool): Đánh dấu NVML đã được khởi tạo hay chưa.
-        gpu_count (int): Số lượng GPU có trong hệ thống (nếu NVML init thành công).
-        logger (logging.Logger): Đối tượng logger.
+        gpu_initialized (bool): Đánh dấu **NVML** đã được **khởi tạo** (initialized – thiết lập) hay chưa.
+        gpu_count (int): **Số lượng GPU** (GPU count – số card đồ họa) có trong hệ thống (nếu **NVML init** thành công).
+        logger (logging.Logger): **Đối tượng logger** (logger object – thực thể ghi nhật ký).
     """
 
     _instance = None
@@ -68,7 +68,7 @@ class GPUManager:
 
     def __new__(cls):
         """
-        Tạo (hoặc trả về) instance singleton của GPUManager.
+        Tạo (hoặc trả về) **instance singleton** (thực thể đơn thể – đối tượng duy nhất) của **GPUManager** (trình quản lý GPU).
         """
         if cls._instance is None:
             with cls._lock:
@@ -78,7 +78,7 @@ class GPUManager:
 
     def __init__(self):
         """
-        Khởi tạo GPUManager, đảm bảo chỉ chạy 1 lần cho singleton.
+        **Khởi tạo GPUManager** (initialize GPUManager – thiết lập trình quản lý GPU), đảm bảo chỉ chạy 1 lần cho **singleton** (đơn thể – mẫu thiết kế duy nhất).
         """
         if getattr(self, '_initialized', False):
             return
@@ -90,42 +90,42 @@ class GPUManager:
 
     def initialize(self) -> bool:
         """
-        Khởi tạo NVML đồng bộ. Nếu thành công, đánh dấu gpu_initialized = True.
+        **Khởi tạo NVML đồng bộ** (synchronous NVML initialization – thiết lập NVML theo cách đồng bộ). Nếu thành công, đánh dấu **gpu_initialized = True** (GPU đã khởi tạo = Đúng).
 
-        :return: True nếu NVML init thành công, ngược lại False.
+        :return: **True** nếu **NVML init** (khởi tạo NVML) thành công, ngược lại **False**.
         """
         try:
             pynvml.nvmlInit()
             self.gpu_count = pynvml.nvmlDeviceGetCount()
             self.gpu_initialized = True
-            self.logger.info(f"NVML khởi tạo thành công. Phát hiện {self.gpu_count} GPU.")
+            self.logger.info(f"**NVML khởi tạo thành công** (NVML initialized successfully – NVML đã thiết lập xong). **Phát hiện** (detected – tìm thấy) {self.gpu_count} **GPU** (card đồ họa).")
             return True
         except pynvml.NVMLError as e:
             self.gpu_initialized = False
-            self.logger.warning(f"Không thể khởi tạo NVML: {e}. GPUManager sẽ vô hiệu.")
+            self.logger.warning(f"**Không thể khởi tạo NVML** (Cannot initialize NVML – không thiết lập được NVML): {e}. **GPUManager sẽ vô hiệu** (GPUManager will be disabled – trình quản lý GPU sẽ bị tắt).")
             return False
         except Exception as e:
             self.gpu_initialized = False
-            self.logger.error(f"Lỗi không xác định khi khởi tạo GPUManager: {e}")
+            self.logger.error(f"**Lỗi không xác định** (Unexpected error – lỗi bất ngờ) khi **khởi tạo GPUManager** (initializing GPUManager – thiết lập trình quản lý GPU): {e}")
             return False
 
     def shutdown_nvml(self) -> None:
         """
-        Giải phóng NVML nếu đã khởi tạo. Đồng bộ.
+        **Giải phóng NVML** (shutdown NVML – đóng thư viện quản lý NVIDIA) nếu đã khởi tạo. **Đồng bộ** (synchronous – thực hiện tuần tự).
         """
         if self.gpu_initialized:
             try:
                 pynvml.nvmlShutdown()
-                self.logger.info("NVML đã được đóng thành công.")
+                self.logger.info("**NVML đã được đóng thành công** (NVML shutdown successfully – NVML đã tắt xong).")
                 self.gpu_initialized = False
             except pynvml.NVMLError as e:
-                self.logger.error(f"Lỗi khi đóng NVML: {e}")
+                self.logger.error(f"**Lỗi khi đóng NVML** (Error shutting down NVML – lỗi tắt NVML): {e}")
 
     def get_total_gpu_memory(self) -> float:
         """
-        Lấy tổng dung lượng bộ nhớ của tất cả GPU (MB).
+        **Lấy tổng dung lượng bộ nhớ** (get total memory capacity – lấy tổng sức chứa bộ nhớ) của tất cả **GPU** (card đồ họa) (MB).
 
-        :return: Dung lượng (MB). Trả về 0.0 nếu lỗi hoặc chưa init.
+        :return: **Dung lượng** (capacity – sức chứa) (MB). Trả về 0.0 nếu lỗi hoặc chưa **init** (khởi tạo).
         """
         if not self.gpu_initialized:
             return 0.0
@@ -137,14 +137,14 @@ class GPUManager:
                 total_memory += mem_info.total / (1024**2)
             return total_memory
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi lấy tổng bộ nhớ GPU: {e}")
+            self.logger.error(f"**Lỗi khi lấy tổng bộ nhớ GPU** (Error getting total GPU memory – lỗi lấy tổng bộ nhớ card đồ họa): {e}")
             return 0.0
 
     def get_used_gpu_memory(self) -> float:
         """
-        Lấy tổng bộ nhớ GPU đang sử dụng (MB).
+        **Lấy tổng bộ nhớ GPU đang sử dụng** (get used GPU memory – lấy bộ nhớ card đồ họa đã dùng) (MB).
 
-        :return: Dung lượng đang sử dụng (MB). Trả về 0.0 nếu lỗi hoặc chưa init.
+        :return: **Dung lượng đang sử dụng** (used capacity – sức chứa đã dùng) (MB). Trả về 0.0 nếu lỗi hoặc chưa **init** (khởi tạo).
         """
         if not self.gpu_initialized:
             return 0.0
@@ -156,23 +156,23 @@ class GPUManager:
                 used_memory += mem_info.used / (1024**2)
             return used_memory
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi lấy bộ nhớ GPU đã sử dụng: {e}")
+            self.logger.error(f"**Lỗi khi lấy bộ nhớ GPU đã sử dụng** (Error getting used GPU memory – lỗi lấy bộ nhớ card đồ họa đã dùng): {e}")
             return 0.0
 
     @retry(pynvml.NVMLError, tries=3, delay=2, backoff=2)
     def set_gpu_power_limit(self, gpu_index: int, power_limit_w: int) -> bool:
         """
-        Đặt power limit cho GPU, có cơ chế retry nếu gặp NVML error.
+        **Đặt power limit cho GPU** (set GPU power limit – thiết lập giới hạn công suất card đồ họa), có **cơ chế retry** (retry mechanism – cơ chế thử lại) nếu gặp **NVML error** (lỗi NVML).
 
-        :param gpu_index: Chỉ số GPU.
-        :param power_limit_w: Power limit (W).
-        :return: True nếu set thành công, ngược lại raise exception.
+        :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
+        :param power_limit_w: **Power limit** (giới hạn công suất) (W - watt).
+        :return: **True** nếu **set** (thiết lập) thành công, ngược lại **raise exception** (ném ngoại lệ – báo lỗi).
         """
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             power_limit_mw = power_limit_w * 1000
             pynvml.nvmlDeviceSetPowerManagementLimit(handle, power_limit_mw)
-            self.logger.info(f"Đặt power limit GPU {gpu_index} = {power_limit_w}W.")
+            self.logger.info(f"**Đặt power limit GPU** (Set GPU power limit – thiết lập giới hạn công suất card đồ họa) {gpu_index} = {power_limit_w}W.")
             # ----- JSON log -----
             log_gpu_feature(
                 feature="gpu_optimization",
@@ -182,7 +182,7 @@ class GPUManager:
             )
             return True
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi đặt power limit GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi khi đặt power limit GPU** (Error setting GPU power limit – lỗi thiết lập giới hạn công suất card đồ họa) {gpu_index}: {e}")
             log_gpu_feature(
                 feature="gpu_optimization",
                 state="error",
@@ -192,7 +192,7 @@ class GPUManager:
             )
             raise
         except Exception as e:
-            self.logger.error(f"Lỗi bất ngờ set power limit GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi bất ngờ set power limit GPU** (Unexpected error setting GPU power limit – lỗi không mong đợi khi thiết lập giới hạn công suất card đồ họa) {gpu_index}: {e}")
             log_gpu_feature(
                 feature="gpu_optimization",
                 state="error",
@@ -204,39 +204,39 @@ class GPUManager:
 
     def get_gpu_power_limit(self, gpu_index: int) -> Optional[float]:
         """
-        Lấy power limit hiện tại của GPU (W).
+        **Lấy power limit hiện tại của GPU** (get current GPU power limit – lấy giới hạn công suất hiện tại của card đồ họa) (W).
 
-        :param gpu_index: Chỉ số GPU.
-        :return: Power limit (float) hoặc None nếu lỗi.
+        :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
+        :return: **Power limit** (giới hạn công suất) (float) hoặc **None** nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("GPU chưa init. Không thể lấy power limit.")
+            self.logger.error("**GPU chưa init** (GPU not initialized – GPU chưa khởi tạo). **Không thể lấy power limit** (Cannot get power limit – không lấy được giới hạn công suất).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
-            self.logger.error(f"GPU index {gpu_index} không hợp lệ, chỉ có {self.gpu_count} GPU.")
+            self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng), chỉ có {self.gpu_count} **GPU** (card đồ họa).")
             return None
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             power_limit_mw = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
             power_limit_w = power_limit_mw / 1000
-            self.logger.debug(f"GPU {gpu_index} power limit = {power_limit_w}W.")
+            self.logger.debug(f"**GPU** (card đồ họa) {gpu_index} **power limit** (giới hạn công suất) = {power_limit_w}W.")
             return power_limit_w
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi NVML get power limit GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi NVML get power limit GPU** (NVML error getting GPU power limit – lỗi NVML khi lấy giới hạn công suất card đồ họa) {gpu_index}: {e}")
             return None
         except Exception as e:
-            self.logger.error(f"Lỗi get power limit GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi get power limit GPU** (Error getting GPU power limit – lỗi lấy giới hạn công suất card đồ họa) {gpu_index}: {e}")
             return None
 
     def get_gpu_temperature(self, gpu_index: int) -> Optional[float]:
         """
-        Lấy nhiệt độ GPU (°C).
+        **Lấy nhiệt độ GPU** (get GPU temperature – lấy nhiệt độ card đồ họa) (°C).
 
-        :param gpu_index: Chỉ số GPU.
-        :return: Nhiệt độ (°C), hoặc None nếu lỗi.
+        :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
+        :return: **Nhiệt độ** (temperature) (°C), hoặc **None** nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("Chưa init NVML. Không thể lấy nhiệt độ.")
+            self.logger.error("**Chưa init NVML** (NVML not initialized – NVML chưa khởi tạo). **Không thể lấy nhiệt độ** (Cannot get temperature – không lấy được nhiệt độ).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
             self.logger.error(f"GPU index {gpu_index} không hợp lệ.")
@@ -244,27 +244,27 @@ class GPUManager:
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-            self.logger.debug(f"Nhiệt độ GPU {gpu_index} = {temperature}°C.")
+            self.logger.debug(f"**Nhiệt độ GPU** (GPU temperature – nhiệt độ card đồ họa) {gpu_index} = {temperature}°C.")
             return float(temperature)
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi NVML khi lấy nhiệt độ GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi NVML khi lấy nhiệt độ GPU** (NVML error getting GPU temperature – lỗi NVML khi lấy nhiệt độ card đồ họa) {gpu_index}: {e}")
             return None
         except Exception as e:
-            self.logger.error(f"Lỗi khi lấy nhiệt độ GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi khi lấy nhiệt độ GPU** (Error getting GPU temperature – lỗi lấy nhiệt độ card đồ họa) {gpu_index}: {e}")
             return None
 
     def get_gpu_utilization(self, gpu_index: int) -> Optional[Dict[str, float]]:
         """
-        Lấy GPU utilization (phần trăm GPU, phần trăm memory).
+        **Lấy GPU utilization** (get GPU utilization – lấy mức sử dụng GPU) (phần trăm GPU, phần trăm memory).
 
-        :param gpu_index: Chỉ số GPU.
-        :return: Dict {'gpu_util_percent', 'memory_util_percent'} hoặc None nếu lỗi.
+        :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
+        :return: **Dict** (từ điển) {'gpu_util_percent', 'memory_util_percent'} hoặc **None** nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("Chưa init GPU. Không thể lấy utilization.")
+            self.logger.error("**Chưa init GPU** (GPU not initialized – GPU chưa khởi tạo). **Không thể lấy utilization** (Cannot get utilization – không lấy được mức sử dụng).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
-            self.logger.error(f"GPU index {gpu_index} không hợp lệ.")
+            self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng).")
             return None
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
@@ -274,26 +274,26 @@ class GPUManager:
                 'memory_util_percent': float(utilization.memory)
             }
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi NVML get utilization GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi NVML get utilization GPU** (NVML error getting GPU utilization – lỗi NVML khi lấy mức sử dụng GPU) {gpu_index}: {e}")
             return None
         except Exception as e:
-            self.logger.error(f"Lỗi khi get utilization GPU {gpu_index}: {e}")
+            self.logger.error(f"**Lỗi khi get utilization GPU** (Error getting GPU utilization – lỗi lấy mức sử dụng GPU) {gpu_index}: {e}")
             return None
 
     def set_gpu_clocks(self, gpu_index: int, sm_clock: int, mem_clock: int) -> bool:
         """
-        Khóa xung nhịp SM và Memory cho GPU bằng lệnh nvidia-smi.
+        **Khóa xung nhịp SM và Memory** (lock SM and Memory clocks – khóa tốc độ xung SM và bộ nhớ) cho **GPU** bằng lệnh **nvidia-smi** (công cụ quản lý NVIDIA).
 
-        :param gpu_index: Chỉ số GPU.
-        :param sm_clock: Mức SM clock (MHz).
-        :param mem_clock: Mức Memory clock (MHz).
-        :return: True nếu đặt thành công, False nếu lỗi.
+        :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
+        :param sm_clock: **Mức SM clock** (SM clock level – mức xung nhịp SM) (MHz).
+        :param mem_clock: **Mức Memory clock** (Memory clock level – mức xung nhịp bộ nhớ) (MHz).
+        :return: **True** nếu đặt thành công, **False** nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("Chưa init GPU. Không thể set xung nhịp.")
+            self.logger.error("**Chưa init GPU** (GPU not initialized – GPU chưa khởi tạo). **Không thể set xung nhịp** (Cannot set clocks – không đặt được xung nhịp).")
             return False
         if gpu_index < 0 or gpu_index >= self.gpu_count:
-            self.logger.error(f"GPU index {gpu_index} không hợp lệ.")
+            self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng).")
             return False
         try:
             cmd_sm = ['nvidia-smi', '-i', str(gpu_index), f'--lock-gpu-clocks={sm_clock}']

