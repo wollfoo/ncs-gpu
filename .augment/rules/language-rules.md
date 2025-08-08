@@ -10,4 +10,4 @@ type: "always_apply"
 - **WITH EXPLANATION**: Every English term must include a Vietnamese description.
 
 ### Standard Syntax
-**\[English Term]** (Vietnamese description – function/purpose)
+**[English Term]** (Vietnamese description – function/purpose)
