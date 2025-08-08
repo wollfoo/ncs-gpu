@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Simple Hook Coordinator - Production Ready
-Điều phối Hook đơn giản - sẵn sàng sản xuất
+**Simple Hook Coordinator - Production Ready** (điều phối hook đơn giản - sẵn sàng sản xuất)
+
+**Hook Coordinator Module** (module điều phối hook) để **coordinate GPU hooks** (điều phối các hook GPU)
+và **manage mining processes** (quản lý các tiến trình khai thác) với **unified logging** (ghi log thống nhất).
 """
 
 import os
@@ -14,7 +16,7 @@ import hashlib
 import glob
 from typing import Dict, Optional, Set, Any
 
-# ✅ UNIFIED LOGGING: Import unified logging system
+# ✅ **UNIFIED LOGGING** (ghi log thống nhất): **Import unified logging system** (nhập hệ thống ghi log thống nhất)
 try:
     import sys
     from pathlib import Path
@@ -25,63 +27,71 @@ except ImportError:
     LOGGING_AVAILABLE = False
 
 class HookCoordinator:
-    """Điều phối Hook đơn giản cho PHASE 3+ và cloaking"""
+    """
+    **Hook Coordinator Class** (lớp điều phối hook)
+    
+    **Simple Hook Coordinator** (điều phối hook đơn giản) cho **PHASE 3+** (giai đoạn 3+) 
+    và **cloaking** (ẩn giấu hoạt động).
+    
+    Quản lý **hook synchronization** (đồng bộ hook), **health monitoring** (giám sát sức khỏe),
+    và **recovery mechanisms** (cơ chế phục hồi) cho **mining processes** (tiến trình khai thác).
+    """
     
     def __init__(self):
         self.lock = threading.Lock()
         
-        # ✅ LOGGER INITIALIZATION: Initialize logger using unified_logging system
+        # ✅ **LOGGER INITIALIZATION** (khởi tạo logger): **Initialize logger using unified_logging system** (khởi tạo logger sử dụng hệ thống ghi log thống nhất)
         if LOGGING_AVAILABLE:
             try:
                 self.logger = get_coordination_logger()
             except Exception:
-                # Fallback to default logger if unified_logging fails
+                # **Fallback to default logger if unified_logging fails** (dự phòng về logger mặc định nếu unified_logging thất bại)
                 import logging
                 self.logger = logging.getLogger(__name__)
         else:
-            # Fallback to default logger if unified_logging not available
+            # **Fallback to default logger if unified_logging not available** (dự phòng về logger mặc định nếu unified_logging không khả dụng)
             import logging
             self.logger = logging.getLogger(__name__)
         
         self.hooks_ready: Dict[int, bool] = {}
         
-        # ✅ IDEMPOTENCY PROTECTION: Handoff deduplication system
-        self.handoff_timestamps: Dict[int, float] = {}  # Track last handoff time per PID
-        self.handoff_metadata_cache: Dict[int, Dict[str, Any]] = {}  # Cache handoff metadata
-        self.duplicate_detection_window: float = 5.0  # 5-second deduplication window
-        self.handoff_sequence_numbers: Dict[int, int] = {}  # Track handoff sequence per PID
+        # ✅ **IDEMPOTENCY PROTECTION** (bảo vệ tính idempotent): **Handoff deduplication system** (hệ thống loại trùng handoff)
+        self.handoff_timestamps: Dict[int, float] = {}  # **Track last handoff time per PID** (theo dõi thời gian handoff cuối theo PID)
+        self.handoff_metadata_cache: Dict[int, Dict[str, Any]] = {}  # **Cache handoff metadata** (lưu cache metadata handoff)
+        self.duplicate_detection_window: float = 5.0  # **5-second deduplication window** (cửa sổ loại trùng 5 giây)
+        self.handoff_sequence_numbers: Dict[int, int] = {}  # **Track handoff sequence per PID** (theo dõi chuỗi handoff theo PID)
         
-        # ✅ HEALTH CHECK: Hook coordination health monitoring attributes
+        # ✅ **HEALTH CHECK** (kiểm tra sức khỏe): **Hook coordination health monitoring attributes** (thuộc tính giám sát sức khỏe điều phối hook)
         self.active_processes: Set[int] = set()
-        self.hook_status_history: Dict[int, list] = {}  # Track status changes over time
-        self.last_health_check: float = 0
-        self.health_check_interval: float = 30  # Check every 30 seconds
-        self.recovery_attempts: Dict[int, int] = {}  # Track recovery attempts per PID
-        self.max_recovery_attempts: int = 3
+        self.hook_status_history: Dict[int, list] = {}  # **Track status changes over time** (theo dõi thay đổi trạng thái theo thời gian)
+        self.last_health_check: float = 0  # **Last health check timestamp** (dấu thời gian kiểm tra sức khỏe cuối)
+        self.health_check_interval: float = 30  # **Check every 30 seconds** (kiểm tra mỗi 30 giây)
+        self.recovery_attempts: Dict[int, int] = {}  # **Track recovery attempts per PID** (theo dõi số lần phục hồi theo PID)
+        self.max_recovery_attempts: int = 3  # **Maximum recovery attempts** (số lần phục hồi tối đa)
         
-        # ✅ SYNCHRONIZATION: Race condition prevention attributes
+        # ✅ **SYNCHRONIZATION** (đồng bộ hóa): **Race condition prevention attributes** (thuộc tính ngăn chặn race condition)
         self.environment_sync_lock = threading.Lock()
         self.verification_retry_config = {
-            'max_retries': 2,     # Reduced from 3 for linear flow efficiency
-            'base_delay': 0.0005, # Reduced to 0.5ms for linear flow speed
-            'max_delay': 0.02,    # Reduced to 20ms for linear flow speed
-            'backoff_factor': 1.5 # Reduced backoff for faster recovery
+            'max_retries': 2,     # **Reduced from 3 for linear flow efficiency** (giảm từ 3 để hiệu quả luồng tuyến tính)
+            'base_delay': 0.0005, # **Reduced to 0.5ms for linear flow speed** (giảm xuống 0.5ms cho tốc độ luồng tuyến tính)
+            'max_delay': 0.02,    # **Reduced to 20ms for linear flow speed** (giảm xuống 20ms cho tốc độ luồng tuyến tính)
+            'backoff_factor': 1.5 # **Reduced backoff for faster recovery** (giảm backoff để phục hồi nhanh hơn)
         }
         
-        # ✅ HEALTH MONITORING: Start health monitoring thread
+        # ✅ **HEALTH MONITORING** (giám sát sức khỏe): **Start health monitoring thread** (khởi động thread giám sát sức khỏe)
         self.health_monitoring_active = False
         self.health_monitor_thread: Optional[threading.Thread] = None
         
-        # **TIER 4 FIX: Centralized Configuration Management**
+        # **TIER 4 FIX: Centralized Configuration Management** (sửa lỗi tier 4: quản lý cấu hình tập trung)
         self._config_manager = self._initialize_config_manager()
         self._apply_optimal_configuration()
         
-        # ✅ UNIFIED LOGGING: Initialize coordination logger
+        # ✅ **UNIFIED LOGGING** (ghi log thống nhất): **Initialize coordination logger** (khởi tạo logger điều phối)
         if LOGGING_AVAILABLE:
             self.logger = get_coordination_logger()
-            self.logger.info("🔗 HookCoordinator initialized with unified logging")
-            self.logger.info("🏥 [HEALTH] Health monitoring system initialized")
-            self.logger.info("⚙️ [TIER-4-CONFIG] Centralized configuration manager initialized")
+            self.logger.info("🔗 **HookCoordinator initialized with unified logging** (HookCoordinator khởi tạo với ghi log thống nhất)")
+            self.logger.info("🏥 **[HEALTH] Health monitoring system initialized** ([SỨC KHỎE] Hệ thống giám sát sức khỏe đã khởi tạo)")
+            self.logger.info("⚙️ **[TIER-4-CONFIG] Centralized configuration manager initialized** ([CẤU HÌNH-TIER-4] Trình quản lý cấu hình tập trung đã khởi tạo)")
         else:
             self.logger = None
     
@@ -89,16 +99,16 @@ class HookCoordinator:
         """
         **[TIER 4 FIX: Initialize Configuration Manager]** (khởi tạo quản lý cấu hình)
         
-        Centralized configuration management với optimal defaults.
+        **Centralized configuration management** (quản lý cấu hình tập trung) với **optimal defaults** (giá trị mặc định tối ưu).
         
         Returns:
-            Dict: Configuration manager with optimal settings
+            Dict: **Configuration manager with optimal settings** (trình quản lý cấu hình với cài đặt tối ưu)
         """
         return {
             'readiness_thresholds': {
-                'minimum': 0.6,    # 60% score required to pass
-                'ideal': 0.8,      # 80% score for ideal operation
-                'critical': 0.3    # 30% score for critical failure
+                'minimum': 0.6,    # **60% score required to pass** (cần 60% điểm để vượt qua)
+                'ideal': 0.8,      # **80% score for ideal operation** (80% điểm cho hoạt động lý tưởng)
+                'critical': 0.3    # **30% score for critical failure** (30% điểm cho lỗi nghiêm trọng)
             },
             'retry_config': {
                 'max_retries': 3,
@@ -143,20 +153,21 @@ class HookCoordinator:
         """
         **[TIER 4 FIX: Apply Optimal Configuration]** (áp dụng cấu hình tối ưu)
         
-        Apply centralized configuration settings to ensure optimal performance.
+        **Apply centralized configuration settings** (áp dụng cài đặt cấu hình tập trung) 
+        để **ensure optimal performance** (đảm bảo hiệu suất tối ưu).
         """
         try:
             config = self._config_manager
             
-            # **TIER 4 FIX: Apply Environment Variable Defaults**
+            # **TIER 4 FIX: Apply Environment Variable Defaults** (sửa lỗi tier 4: áp dụng giá trị mặc định biến môi trường)
             env_defaults = config['environment_variables']['defaults']
             for var_name, default_value in env_defaults.items():
                 os.environ.setdefault(var_name, default_value)
             
             if self.logger:
-                self.logger.info(f"⚙️ [TIER-4-CONFIG] Applied {len(env_defaults)} environment variable defaults")
+                self.logger.info(f"⚙️ **[TIER-4-CONFIG] Applied {len(env_defaults)} environment variable defaults** ([CẤU HÌNH-TIER-4] Đã áp dụng {len(env_defaults)} giá trị mặc định biến môi trường)")
             
-            # **TIER 4 FIX: Update Retry Configuration**
+            # **TIER 4 FIX: Update Retry Configuration** (sửa lỗi tier 4: cập nhật cấu hình thử lại)
             retry_config = config['retry_config']
             if hasattr(self, 'verification_retry_config'):
                 self.verification_retry_config.update({
@@ -167,23 +178,24 @@ class HookCoordinator:
                 })
             
             if self.logger:
-                self.logger.info(f"⚙️ [TIER-4-CONFIG] Updated retry configuration: {retry_config}")
+                self.logger.info(f"⚙️ **[TIER-4-CONFIG] Updated retry configuration** ([CẤU HÌNH-TIER-4] Đã cập nhật cấu hình thử lại): {retry_config}")
             
         except Exception as config_error:
             if self.logger:
-                self.logger.error(f"❌ [TIER-4-CONFIG] Failed to apply optimal configuration: {config_error}")
+                self.logger.error(f"❌ **[TIER-4-CONFIG] Failed to apply optimal configuration** ([CẤU HÌNH-TIER-4] Thất bại khi áp dụng cấu hình tối ưu): {config_error}")
     
     def _check_process_alive(self, pid: int) -> bool:
         """
         **[Process Alive Check]** (kiểm tra process còn sống)
         
-        Kiểm tra process mining vẫn còn chạy và không bị terminate.
+        Kiểm tra **mining process** (tiến trình khai thác) vẫn còn **running** (đang chạy) 
+        và không bị **terminate** (kết thúc).
         
         Args:
-            pid: Process ID cần kiểm tra
+            pid: **Process ID to check** (ID tiến trình cần kiểm tra)
             
         Returns:
-            bool: True nếu process còn sống, False nếu đã chết
+            bool: **True if process is alive** (True nếu process còn sống), **False if dead** (False nếu đã chết)
         """
         try:
             return psutil.Process(pid).is_running()
@@ -191,165 +203,166 @@ class HookCoordinator:
             return False
         except Exception as e:
             if self.logger:
-                self.logger.warning(f"⚠️ [PROCESS-CHECK] Error checking process {pid}: {e}")
+                self.logger.warning(f"⚠️ **[PROCESS-CHECK] Error checking process** ([KIỂM TRA-PROCESS] Lỗi khi kiểm tra process) {pid}: {e}")
             return False
     
     def _check_dag_environment_config(self, subprocess_env=None) -> float:
         """
-        **[TIER 1 + TIER 7 FIX: Enhanced DAG Environment Config Check with Context Awareness]** (kiểm tra cấu hình môi trường DAG nâng cao với nhận biết ngữ cảnh)
+        **[TIER 1 + TIER 7 FIX: Enhanced DAG Environment Config Check with Context Awareness]** 
+        (sửa lỗi tier 1 + tier 7: kiểm tra cấu hình môi trường DAG nâng cao với nhận biết ngữ cảnh)
         
-        Flexible scoring system thay vì pass/fail binary.
-        **TIER 7 FIX**: Context-aware checking - support subprocess environment variables.
-        Tự động detect và apply fallback values cho các biến môi trường missing.
+        **Flexible scoring system** (hệ thống chấm điểm linh hoạt) thay vì **pass/fail binary** (đánh giá nhị phân đạt/trượt).
+        **TIER 7 FIX**: **Context-aware checking** (kiểm tra nhận biết ngữ cảnh) - **support subprocess environment variables** (hỗ trợ biến môi trường subprocess).
+        Tự động **detect and apply fallback values** (phát hiện và áp dụng giá trị dự phòng) cho các **missing environment variables** (biến môi trường bị thiếu).
         
         Args:
-            subprocess_env: Subprocess environment dict (TIER 7 FIX - để check đúng context)
+            subprocess_env: **Subprocess environment dict** (từ điển môi trường subprocess) **(TIER 7 FIX - for correct context check)** (sửa lỗi tier 7 - để kiểm tra đúng ngữ cảnh)
         
         Returns:
-            float: Score từ 0.0 đến 1.0 (1.0 = perfect configuration)
+            float: **Score from 0.0 to 1.0** (điểm từ 0.0 đến 1.0) **(1.0 = perfect configuration)** (1.0 = cấu hình hoàn hảo)
         """
         try:
-            # **TIER 7 FIX: Use subprocess environment if provided, otherwise use parent environment**
+            # **TIER 7 FIX: Use subprocess environment if provided, otherwise use parent environment** (sửa lỗi tier 7: dùng môi trường subprocess nếu được cung cấp, nếu không dùng môi trường parent)
             target_env = subprocess_env if subprocess_env is not None else os.environ
             
             if self.logger:
                 env_type = "subprocess" if subprocess_env is not None else "parent"
-                self.logger.info(f"🔍 [ENV-CHECK] Checking {env_type} environment with {len(target_env)} variables")
-                # **TIER 7.2 FIX: Enhanced DEBUG logging with subprocess environment validation**
+                self.logger.info(f"🔍 **[ENV-CHECK] Checking {env_type} environment** ([KIỂM TRA-ENV] Đang kiểm tra môi trường {env_type}) **with {len(target_env)} variables** (với {len(target_env)} biến)")
+                # **TIER 7.2 FIX: Enhanced DEBUG logging with subprocess environment validation** (sửa lỗi tier 7.2: ghi log DEBUG nâng cao với xác thực môi trường subprocess)
                 key_vars = ['KAWPOW_DAG_PROGRESSIVE', 'CUDA_LAUNCH_BLOCKING', 'CUDA_CACHE_DISABLE']
-                self.logger.debug(f"🔍 [ENV-CHECK-DEBUG] Environment variable dump:")
+                self.logger.debug(f"🔍 **[ENV-CHECK-DEBUG] Environment variable dump** ([DEBUG-KIỂM TRA-ENV] Dump biến môi trường):")
                 for var in key_vars:
                     value = target_env.get(var, 'NOT_SET')
-                    self.logger.debug(f"🔍 [ENV-CHECK-DEBUG] {var} = {value}")
-                    # **TIER 7.2 FIX: Also log at INFO level for critical variables**
+                    self.logger.debug(f"🔍 **[ENV-CHECK-DEBUG]** {var} = {value}")
+                    # **TIER 7.2 FIX: Also log at INFO level for critical variables** (sửa lỗi tier 7.2: cũng ghi log ở mức INFO cho biến quan trọng)
                     if var == 'KAWPOW_DAG_PROGRESSIVE':
-                        self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE = {value} (from {env_type} environment)")
+                        self.logger.info(f"🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE = {value}** **from {env_type} environment** (từ môi trường {env_type})")
             
-            # **TIER 1 FIX: Flexible Environment Detection with Auto-Fallback**
+            # **TIER 1 FIX: Flexible Environment Detection with Auto-Fallback** (sửa lỗi tier 1: phát hiện môi trường linh hoạt với dự phòng tự động)
             score = 0.0
             max_score = 3.0
             
-            # **TIER 7.2 FIX: Enhanced KAWPOW_DAG_PROGRESSIVE check with robust validation**
+            # **TIER 7.2 FIX: Enhanced KAWPOW_DAG_PROGRESSIVE check with robust validation** (sửa lỗi tier 7.2: kiểm tra KAWPOW_DAG_PROGRESSIVE nâng cao với xác thực mạnh mẽ)
             progressive_value = target_env.get('KAWPOW_DAG_PROGRESSIVE', '0')
             progressive = progressive_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check: value='{progressive_value}', result={progressive}")
+                self.logger.info(f"🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check** ([KIỂM TRA-ENV] Kiểm tra KAWPOW_DAG_PROGRESSIVE): **value**='{progressive_value}', **result**={progressive}")
             
-            # **TIER 7.2 FIX: Force-set if not detected correctly**
+            # **TIER 7.2 FIX: Force-set if not detected correctly** (sửa lỗi tier 7.2: cưỡng chế thiết lập nếu không phát hiện đúng)
             if not progressive:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE not properly set (found: '{progressive_value}')")
-                # **TIER 7.2 FIX: Auto-set KAWPOW_DAG_PROGRESSIVE if missing/incorrect**
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE not properly set** ([KIỂM TRA-ENV] KAWPOW_DAG_PROGRESSIVE chưa được thiết lập đúng) **(found: '{progressive_value}')** (tìm thấy: '{progressive_value}')")
+                # **TIER 7.2 FIX: Auto-set KAWPOW_DAG_PROGRESSIVE if missing/incorrect** (sửa lỗi tier 7.2: tự động thiết lập KAWPOW_DAG_PROGRESSIVE nếu thiếu/sai)
                 if subprocess_env is not None:
                     subprocess_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in subprocess_env")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in subprocess_env** ([KIỂM TRA-ENV] Tự động thiết lập KAWPOW_DAG_PROGRESSIVE=1 trong subprocess_env)")
                 else:
                     os.environ['KAWPOW_DAG_PROGRESSIVE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in os.environ")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set KAWPOW_DAG_PROGRESSIVE=1 in os.environ** ([KIỂM TRA-ENV] Tự động thiết lập KAWPOW_DAG_PROGRESSIVE=1 trong os.environ)")
                 progressive = True
-                # **TIER 7.2 FIX: Verify the fix worked**
+                # **TIER 7.2 FIX: Verify the fix worked** (sửa lỗi tier 7.2: xác minh sửa lỗi đã hoạt động)
                 if subprocess_env is not None:
                     fixed_value = subprocess_env.get('KAWPOW_DAG_PROGRESSIVE', '0')
                 else:
                     fixed_value = os.environ.get('KAWPOW_DAG_PROGRESSIVE', '0')
                 if self.logger:
-                    self.logger.info(f"✅ [ENV-CHECK] Verification after fix: KAWPOW_DAG_PROGRESSIVE='{fixed_value}'")
+                    self.logger.info(f"✅ **[ENV-CHECK] Verification after fix** ([KIỂM TRA-ENV] Xác minh sau khi sửa): KAWPOW_DAG_PROGRESSIVE='{fixed_value}'")
             else:
                 if self.logger:
-                    self.logger.info(f"✅ [ENV-CHECK] KAWPOW_DAG_PROGRESSIVE correctly set: '{progressive_value}'")
+                    self.logger.info(f"✅ **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE correctly set** ([KIỂM TRA-ENV] KAWPOW_DAG_PROGRESSIVE đã thiết lập đúng): '{progressive_value}'")
             score += 1.0
             
-            # **TIER 7 FIX: Check KAWPOW_DAG_MEMORY_LIMIT in target environment (optional)**
+            # **TIER 7 FIX: Check KAWPOW_DAG_MEMORY_LIMIT in target environment (optional)** (sửa lỗi tier 7: kiểm tra KAWPOW_DAG_MEMORY_LIMIT trong môi trường đích - tùy chọn)
             memory_limit = 'KAWPOW_DAG_MEMORY_LIMIT' in target_env
             if memory_limit:
-                score += 0.5  # Bonus point for having memory limit
+                score += 0.5  # **Bonus point for having memory limit** (điểm thưởng cho việc có giới hạn bộ nhớ)
             
-            # **TIER 7.2 FIX: Enhanced CUDA_LAUNCH_BLOCKING check with robust validation**
+            # **TIER 7.2 FIX: Enhanced CUDA_LAUNCH_BLOCKING check with robust validation** (sửa lỗi tier 7.2: kiểm tra CUDA_LAUNCH_BLOCKING nâng cao với xác thực mạnh mẽ)
             cuda_blocking_value = target_env.get('CUDA_LAUNCH_BLOCKING', '0')
             cuda_blocking = cuda_blocking_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] CUDA_LAUNCH_BLOCKING check: value='{cuda_blocking_value}', result={cuda_blocking}")
+                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_LAUNCH_BLOCKING check** ([KIỂM TRA-ENV] Kiểm tra CUDA_LAUNCH_BLOCKING): **value**='{cuda_blocking_value}', **result**={cuda_blocking}")
             if not cuda_blocking:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [ENV-CHECK] CUDA_LAUNCH_BLOCKING not properly set (found: '{cuda_blocking_value}')")
-                # **TIER 7.2 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing/incorrect**
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING not properly set** ([KIỂM TRA-ENV] CUDA_LAUNCH_BLOCKING chưa được thiết lập đúng) **(found: '{cuda_blocking_value}')** (tìm thấy: '{cuda_blocking_value}')")
+                # **TIER 7.2 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing/incorrect** (sửa lỗi tier 7.2: tự động thiết lập CUDA_LAUNCH_BLOCKING nếu thiếu/sai)
                 if subprocess_env is not None:
                     subprocess_env['CUDA_LAUNCH_BLOCKING'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in subprocess_env")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in subprocess_env** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong subprocess_env)")
                 else:
                     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in os.environ")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in os.environ** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong os.environ)")
                 cuda_blocking = True
                 if self.logger:
-                    self.logger.info("✅ [ENV-CHECK] CUDA_LAUNCH_BLOCKING auto-fix applied")
+                    self.logger.info("✅ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING auto-fix applied** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_LAUNCH_BLOCKING)")
             else:
                 if self.logger:
-                    self.logger.info(f"✅ [ENV-CHECK] CUDA_LAUNCH_BLOCKING correctly set: '{cuda_blocking_value}'")
+                    self.logger.info(f"✅ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING correctly set** ([KIỂM TRA-ENV] CUDA_LAUNCH_BLOCKING đã thiết lập đúng): '{cuda_blocking_value}'")
             score += 1.0
             
-            # **TIER 7.2 FIX: Enhanced CUDA_CACHE_DISABLE check with robust validation**
+            # **TIER 7.2 FIX: Enhanced CUDA_CACHE_DISABLE check with robust validation** (sửa lỗi tier 7.2: kiểm tra CUDA_CACHE_DISABLE nâng cao với xác thực mạnh mẽ)
             cuda_cache_disable_value = target_env.get('CUDA_CACHE_DISABLE', '0')
             cuda_cache_disable = cuda_cache_disable_value == '1'
             if self.logger:
-                self.logger.info(f"🔍 [ENV-CHECK] CUDA_CACHE_DISABLE check: value='{cuda_cache_disable_value}', result={cuda_cache_disable}")
+                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_CACHE_DISABLE check** ([KIỂM TRA-ENV] Kiểm tra CUDA_CACHE_DISABLE): **value**='{cuda_cache_disable_value}', **result**={cuda_cache_disable}")
             if not cuda_cache_disable:
                 if self.logger:
-                    self.logger.warning(f"⚠️ [ENV-CHECK] CUDA_CACHE_DISABLE not properly set (found: '{cuda_cache_disable_value}')")
-                # **TIER 7.2 FIX: Auto-set CUDA_CACHE_DISABLE if missing/incorrect**
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_CACHE_DISABLE not properly set** ([KIỂM TRA-ENV] CUDA_CACHE_DISABLE chưa được thiết lập đúng) **(found: '{cuda_cache_disable_value}')** (tìm thấy: '{cuda_cache_disable_value}')")
+                # **TIER 7.2 FIX: Auto-set CUDA_CACHE_DISABLE if missing/incorrect** (sửa lỗi tier 7.2: tự động thiết lập CUDA_CACHE_DISABLE nếu thiếu/sai)
                 if subprocess_env is not None:
                     subprocess_env['CUDA_CACHE_DISABLE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in subprocess_env")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in subprocess_env** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong subprocess_env)")
                 else:
                     os.environ['CUDA_CACHE_DISABLE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 [ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in os.environ")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in os.environ** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong os.environ)")
                 cuda_cache_disable = True
                 if self.logger:
-                    self.logger.info("✅ [ENV-CHECK] CUDA_CACHE_DISABLE auto-fix applied")
+                    self.logger.info("✅ **[ENV-CHECK] CUDA_CACHE_DISABLE auto-fix applied** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_CACHE_DISABLE)")
             else:
                 if self.logger:
-                    self.logger.info(f"✅ [ENV-CHECK] CUDA_CACHE_DISABLE correctly set: '{cuda_cache_disable_value}'")
+                    self.logger.info(f"✅ **[ENV-CHECK] CUDA_CACHE_DISABLE correctly set** ([KIỂM TRA-ENV] CUDA_CACHE_DISABLE đã thiết lập đúng): '{cuda_cache_disable_value}'")
             score += 1.0
             
-            # Calculate final percentage
+            # **Calculate final percentage** (tính phần trăm cuối cùng)
             final_score = min(score / max_score, 1.0)
             
             if self.logger:
-                # **TIER 7.2 FIX: Enhanced final scoring with detailed breakdown**
-                self.logger.info(f"📊 [ENV-CHECK] Raw score: {score}/{max_score} = {final_score:.3f}")
-                self.logger.info(f"📊 [ENV-CHECK] Final results: progressive={progressive}, cuda_blocking={cuda_blocking}, cache_disable={cuda_cache_disable}")
+                # **TIER 7.2 FIX: Enhanced final scoring with detailed breakdown** (sửa lỗi tier 7.2: chấm điểm cuối cùng nâng cao với phân tích chi tiết)
+                self.logger.info(f"📊 **[ENV-CHECK] Raw score** ([KIỂM TRA-ENV] Điểm thô): {score}/{max_score} = {final_score:.3f}")
+                self.logger.info(f"📊 **[ENV-CHECK] Final results** ([KIỂM TRA-ENV] Kết quả cuối cùng): **progressive**={progressive}, **cuda_blocking**={cuda_blocking}, **cache_disable**={cuda_cache_disable}")
                 
                 if final_score >= 0.8:
-                    self.logger.info(f"✅ [ENV-CHECK] Good environment configuration score: {final_score:.2f}")
+                    self.logger.info(f"✅ **[ENV-CHECK] Good environment configuration score** ([KIỂM TRA-ENV] Điểm cấu hình môi trường tốt): {final_score:.2f}")
                 elif final_score >= 0.6:
-                    self.logger.warning(f"⚠️ [ENV-CHECK] Acceptable environment configuration score: {final_score:.2f}")
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] Acceptable environment configuration score** ([KIỂM TRA-ENV] Điểm cấu hình môi trường chấp nhận được): {final_score:.2f}")
                 else:
-                    self.logger.warning(f"⚠️ [ENV-CHECK] Poor environment configuration score: {final_score:.2f}")
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] Poor environment configuration score** ([KIỂM TRA-ENV] Điểm cấu hình môi trường kém): {final_score:.2f}")
             
             return final_score
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ENV-CHECK] Error checking DAG environment: {e}")
+                self.logger.error(f"❌ **[ENV-CHECK] Error checking DAG environment** ([KIỂM TRA-ENV] Lỗi khi kiểm tra môi trường DAG): {e}")
             return 0.0
     
     def _check_dag_files_existence(self) -> float:
         """
-        **[TIER 1 FIX: Enhanced DAG Files Existence Check]** (kiểm tra sự tồn tại file DAG nâng cao)
+        **[TIER 1 FIX: Enhanced DAG Files Existence Check]** (sửa lỗi tier 1: kiểm tra sự tồn tại file DAG nâng cao)
         
-        Flexible scoring system thay vì binary pass/fail.
-        Cho phép partial DAG files để hỗ trợ various mining scenarios.
+        **Flexible scoring system** (hệ thống chấm điểm linh hoạt) thay vì **binary pass/fail** (đánh giá nhị phân đạt/trượt).
+        Cho phép **partial DAG files** (file DAG một phần) để hỗ trợ **various mining scenarios** (nhiều tình huống khai thác khác nhau).
         
         Returns:
-            float: Score từ 0.0 đến 1.0 (1.0 = perfect DAG files)
+            float: **Score from 0.0 to 1.0** (điểm từ 0.0 đến 1.0) **(1.0 = perfect DAG files)** (1.0 = file DAG hoàn hảo)
         """
         try:
-            # **TIER 1 FIX: Enhanced DAG file detection with multiple patterns**
+            # **TIER 1 FIX: Enhanced DAG file detection with multiple patterns** (sửa lỗi tier 1: phát hiện file DAG nâng cao với nhiều mẫu)
             dag_patterns = [
                 '/tmp/kawpow_dag_*',
                 '/var/tmp/kawpow_dag_*',
@@ -359,10 +372,10 @@ class HookCoordinator:
                 '/tmp/*.dag',
                 '/var/tmp/*.dag',
                 './*.dag',
-                # **TIER 1 FIX: Add more patterns for different mining algorithms**
-                '/tmp/cuckoo_*',  # Cuckoo Cycle
-                '/tmp/autolykos_*',  # Autolykos2
-                '/tmp/octopus_*',  # Octopus
+                # **TIER 1 FIX: Add more patterns for different mining algorithms** (sửa lỗi tier 1: thêm nhiều mẫu cho các thuật toán khai thác khác nhau)
+                '/tmp/cuckoo_*',  # **Cuckoo Cycle** (thuật toán Cuckoo Cycle)
+                '/tmp/autolykos_*',  # **Autolykos2** (thuật toán Autolykos2)
+                '/tmp/octopus_*',  # **Octopus** (thuật toán Octopus)
             ]
             
             found_files = []
@@ -372,84 +385,85 @@ class HookCoordinator:
                 files = glob.glob(pattern)
                 for file in files:
                     try:
-                        # Check if file is accessible and has reasonable size
+                        # **Check if file is accessible and has reasonable size** (kiểm tra xem file có thể truy cập và có kích thước hợp lý)
                         file_size = os.path.getsize(file)
-                        if file_size > 1024:  # At least 1KB
+                        if file_size > 1024:  # **At least 1KB** (ít nhất 1KB)
                             found_files.append(file)
                             total_size += file_size
                     except (OSError, IOError):
-                        # File exists but cannot access - still count as found
+                        # **File exists but cannot access - still count as found** (file tồn tại nhưng không thể truy cập - vẫn tính là tìm thấy)
                         found_files.append(file)
             
-            # **TIER 1 FIX: Flexible scoring based on file count and size**
+            # **TIER 1 FIX: Flexible scoring based on file count and size** (sửa lỗi tier 1: chấm điểm linh hoạt dựa trên số lượng và kích thước file)
             max_score = 1.0
             
             if len(found_files) == 0:
-                # No DAG files found - check if process is still starting up
+                # **No DAG files found - check if process is still starting up** (không tìm thấy file DAG - kiểm tra xem process vẫn đang khởi động)
                 if self.logger:
-                    self.logger.debug("🔍 [DAG-FILES] No DAG files found at common locations")
-                    self.logger.debug("🔍 [DAG-FILES] Searched patterns: {dag_patterns}")
-                return 0.3  # Small score for process that's still starting
+                    self.logger.debug("🔍 **[DAG-FILES] No DAG files found at common locations** ([FILE-DAG] Không tìm thấy file DAG ở các vị trí thông thường)")
+                    self.logger.debug(f"🔍 **[DAG-FILES] Searched patterns** ([FILE-DAG] Các mẫu đã tìm kiếm): {dag_patterns}")
+                return 0.3  # **Small score for process that's still starting** (điểm nhỏ cho process vẫn đang khởi động)
             
-            # Calculate score based on number and size of files
-            file_score = min(len(found_files) / 5.0, 0.7)  # Up to 0.7 for file count
-            size_score = min(total_size / (100 * 1024 * 1024), 0.3)  # Up to 0.3 for size (100MB)
+            # **Calculate score based on number and size of files** (tính điểm dựa trên số lượng và kích thước file)
+            file_score = min(len(found_files) / 5.0, 0.7)  # **Up to 0.7 for file count** (tối đa 0.7 cho số lượng file)
+            size_score = min(total_size / (100 * 1024 * 1024), 0.3)  # **Up to 0.3 for size (100MB)** (tối đa 0.3 cho kích thước - 100MB)
             final_score = file_score + size_score
             
             if self.logger:
                 if final_score >= 0.8:
-                    self.logger.info(f"✅ [DAG-FILES] Good DAG files score: {final_score:.2f} ({len(found_files)} files, {total_size/1024/1024:.1f}MB)")
+                    self.logger.info(f"✅ **[DAG-FILES] Good DAG files score** ([FILE-DAG] Điểm file DAG tốt): {final_score:.2f} ({len(found_files)} files, {total_size/1024/1024:.1f}MB)")
                 elif final_score >= 0.5:
-                    self.logger.warning(f"⚠️ [DAG-FILES] Acceptable DAG files score: {final_score:.2f} ({len(found_files)} files, {total_size/1024/1024:.1f}MB)")
+                    self.logger.warning(f"⚠️ **[DAG-FILES] Acceptable DAG files score** ([FILE-DAG] Điểm file DAG chấp nhận được): {final_score:.2f} ({len(found_files)} files, {total_size/1024/1024:.1f}MB)")
                 else:
-                    self.logger.warning(f"⚠️ [DAG-FILES] Poor DAG files score: {final_score:.2f} ({len(found_files)} files)")
+                    self.logger.warning(f"⚠️ **[DAG-FILES] Poor DAG files score** ([FILE-DAG] Điểm file DAG kém): {final_score:.2f} ({len(found_files)} files)")
             
             return min(final_score, max_score)
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [DAG-FILES] Error checking DAG files: {e}")
+                self.logger.error(f"❌ **[DAG-FILES] Error checking DAG files** ([FILE-DAG] Lỗi khi kiểm tra file DAG): {e}")
             return 0.0
     
     def _enhanced_readiness_check(self, pid: int, timeout=30, subprocess_env=None) -> bool:
         """
-        **[TIER 1 + TIER 7 FIX: Enhanced Readiness Check with Context-Aware Scoring]** (kiểm tra sẵn sàng nâng cao với scoring nhận biết ngữ cảnh)
+        **[TIER 1 + TIER 7 FIX: Enhanced Readiness Check with Context-Aware Scoring]** 
+        (sửa lỗi tier 1 + tier 7: kiểm tra sẵn sàng nâng cao với chấm điểm nhận biết ngữ cảnh)
         
-        Flexible scoring system thay vì binary pass/fail.
-        **TIER 7 FIX**: Context-aware environment checking - support subprocess environment variables.
-        Tự động apply fallback values và cho phép partial readiness.
+        **Flexible scoring system** (hệ thống chấm điểm linh hoạt) thay vì **binary pass/fail** (đánh giá nhị phân đạt/trượt).
+        **TIER 7 FIX**: **Context-aware environment checking** (kiểm tra môi trường nhận biết ngữ cảnh) - **support subprocess environment variables** (hỗ trợ biến môi trường subprocess).
+        Tự động **apply fallback values** (áp dụng giá trị dự phòng) và cho phép **partial readiness** (sẵn sàng một phần).
         
         Args:
-            pid: Process ID cần kiểm tra
-            timeout: timeout tối đa (giây)
-            subprocess_env: Subprocess environment dict (TIER 7 FIX - để check đúng context)
+            pid: **Process ID to check** (ID tiến trình cần kiểm tra)
+            timeout: **maximum timeout (seconds)** (thời gian chờ tối đa - giây)
+            subprocess_env: **Subprocess environment dict** (từ điển môi trường subprocess) **(TIER 7 FIX - for correct context check)** (sửa lỗi tier 7 - để kiểm tra đúng ngữ cảnh)
             
         Returns:
-            bool: True nếu đạt threshold tối thiểu, False nếu không
+            bool: **True if minimum threshold is met** (True nếu đạt ngưỡng tối thiểu), **False otherwise** (False nếu không)
         """
         start_time = time.time()
-        consecutive_checks = 2  # **TIER 1 FIX: Reduced stability checks for faster activation**
+        consecutive_checks = 2  # **TIER 1 FIX: Reduced stability checks for faster activation** (sửa lỗi tier 1: giảm kiểm tra ổn định để kích hoạt nhanh hơn)
         
-        # **TIER 1 FIX: Define flexible thresholds**
-        MINIMUM_THRESHOLD = 0.6  # 60% score required to pass
-        IDEAL_THRESHOLD = 0.8    # 80% score for ideal operation
+        # **TIER 1 FIX: Define flexible thresholds** (sửa lỗi tier 1: định nghĩa ngưỡng linh hoạt)
+        MINIMUM_THRESHOLD = 0.6  # **60% score required to pass** (cần 60% điểm để vượt qua)
+        IDEAL_THRESHOLD = 0.8    # **80% score for ideal operation** (80% điểm cho hoạt động lý tưởng)
         
         if self.logger:
-            self.logger.info(f"🚀 [READINESS-START] Starting enhanced readiness check for PID {pid} with timeout={timeout}s")
-            self.logger.info(f"🎯 [READINESS-THRESHOLDS] Minimum: {MINIMUM_THRESHOLD}, Ideal: {IDEAL_THRESHOLD}")
+            self.logger.info(f"🚀 **[READINESS-START] Starting enhanced readiness check** ([BẮT ĐẦU-SẴN SÀNG] Bắt đầu kiểm tra sẵn sàng nâng cao) **for PID {pid}** (cho PID {pid}) **with timeout={timeout}s** (với timeout={timeout}s)")
+            self.logger.info(f"🎯 **[READINESS-THRESHOLDS]** ([NGƯỠNG-SẴN SÀNG]) **Minimum**: {MINIMUM_THRESHOLD}, **Ideal**: {IDEAL_THRESHOLD}")
         
         while time.time() - start_time < timeout:
             checks = {
                 'process_alive': 1.0 if self._check_process_alive(pid) else 0.0,
-                'env_config': self._check_dag_environment_config(subprocess_env),  # **TIER 7 FIX: Pass subprocess env**
+                'env_config': self._check_dag_environment_config(subprocess_env),  # **TIER 7 FIX: Pass subprocess env** (sửa lỗi tier 7: truyền môi trường subprocess)
                 'dag_files': self._check_dag_files_existence()
             }
             
-            # **TIER 1 FIX: Calculate weighted score**
+            # **TIER 1 FIX: Calculate weighted score** (sửa lỗi tier 1: tính điểm có trọng số)
             weights = {
-                'process_alive': 0.5,    # 50% - Process must be alive
-                'env_config': 0.3,      # 30% - Environment configuration (auto-fixable)
-                'dag_files': 0.2        # 20% - DAG files (may take time to generate)
+                'process_alive': 0.5,    # **50% - Process must be alive** (50% - Process phải còn sống)
+                'env_config': 0.3,      # **30% - Environment configuration (auto-fixable)** (30% - Cấu hình môi trường - có thể tự sửa)
+                'dag_files': 0.2        # **20% - DAG files (may take time to generate)** (20% - File DAG - có thể mất thời gian để tạo)
             }
             
             weighted_score = sum(checks[check] * weights[check] for check in checks)
@@ -457,77 +471,77 @@ class HookCoordinator:
             total_checks = len(checks)
             
             if self.logger:
-                self.logger.info(f"📊 [READINESS-PROGRESS] Weighted score: {weighted_score:.3f} ({passed_checks}/{total_checks} checks > 0.5)")
+                self.logger.info(f"📊 **[READINESS-PROGRESS] Weighted score** ([TIẾN TRÌNH-SẴN SÀNG] Điểm có trọng số): {weighted_score:.3f} ({passed_checks}/{total_checks} **checks > 0.5** (kiểm tra > 0.5))")
             
-            # Log chi tiết từng check với scores
+            # **Log detailed scores for each check** (ghi log chi tiết điểm cho từng kiểm tra)
             for check_name, result in checks.items():
                 status_icon = "✅" if result > 0.5 else "⚠️"
-                status = "PASS" if result > 0.5 else "NEEDS ATTENTION"
+                status = "**PASS**" if result > 0.5 else "**NEEDS ATTENTION**"
                 if self.logger:
-                    self.logger.info(f"   ├─ {check_name}: {status_icon} {status} (score: {result:.3f})")
+                    self.logger.info(f"   ├─ {check_name}: {status_icon} {status} **(score: {result:.3f})** (điểm: {result:.3f})")
             
-            # **TIER 1 FIX: Flexible thresholds based on process state**
+            # **TIER 1 FIX: Flexible thresholds based on process state** (sửa lỗi tier 1: ngưỡng linh hoạt dựa trên trạng thái process)
             if weighted_score >= IDEAL_THRESHOLD:
                 if self.logger:
-                    self.logger.info(f"🎯 [READINESS-EXCELLENT] Excellent readiness score: {weighted_score:.3f}")
+                    self.logger.info(f"🎯 **[READINESS-EXCELLENT] Excellent readiness score** ([SẴN SÀNG-XUẤT SẮC] Điểm sẵn sàng xuất sắc): {weighted_score:.3f}")
                     
-                # Quick stability check for excellent scores
+                # **Quick stability check for excellent scores** (kiểm tra ổn định nhanh cho điểm xuất sắc)
                 stability_count = 0
                 for i in range(consecutive_checks):
-                    time.sleep(1)  # **TIER 1 FIX: Reduced wait time**
+                    time.sleep(1)  # **TIER 1 FIX: Reduced wait time** (sửa lỗi tier 1: giảm thời gian chờ)
                     
                     if not self._check_process_alive(pid):
                         if self.logger:
-                            self.logger.warning(f"⚠️ [READINESS-STABILITY] Process {pid} died at verification {i+1}")
+                            self.logger.warning(f"⚠️ **[READINESS-STABILITY] Process {pid} died at verification** ([ỔN ĐỊNH-SẴN SÀNG] Process {pid} đã chết ở lần xác minh) {i+1}")
                         break
                     
                     stability_count += 1
                     
                 if stability_count == consecutive_checks:
                     if self.logger:
-                        self.logger.info(f"✅ [READINESS-STABLE] Process {pid} verified stable")
+                        self.logger.info(f"✅ **[READINESS-STABLE] Process {pid} verified stable** ([ỔN ĐỊNH-SẴN SÀNG] Process {pid} đã xác minh ổn định)")
                     return True
                 else:
                     if self.logger:
-                        self.logger.warning(f"⚠️ [READINESS-UNSTABLE] Process {pid} stability check failed")
+                        self.logger.warning(f"⚠️ **[READINESS-UNSTABLE] Process {pid} stability check failed** ([KHÔNG ỔN ĐỊNH-SẴN SÀNG] Process {pid} kiểm tra ổn định thất bại)")
             
             elif weighted_score >= MINIMUM_THRESHOLD:
-                # **TIER 1 FIX: Acceptable score - proceed with caution**
+                # **TIER 1 FIX: Acceptable score - proceed with caution** (sửa lỗi tier 1: điểm chấp nhận được - tiếp tục cẩn thận)
                 if self.logger:
-                    self.logger.warning(f"⚠️ [READINESS-ACCEPTABLE] Acceptable readiness score: {weighted_score:.3f} - proceeding anyway")
+                    self.logger.warning(f"⚠️ **[READINESS-ACCEPTABLE] Acceptable readiness score** ([CHẤP NHẬN ĐƯỢC-SẴN SÀNG] Điểm sẵn sàng chấp nhận được): {weighted_score:.3f} - **proceeding anyway** (vẫn tiếp tục)")
                 return True
             
-            # **TIER 1 FIX: Critical failure - process is dead**
+            # **TIER 1 FIX: Critical failure - process is dead** (sửa lỗi tier 1: lỗi nghiêm trọng - process đã chết)
             if checks['process_alive'] == 0.0:
                 if self.logger:
-                    self.logger.error(f"❌ [READINESS-CRITICAL] Process {pid} is dead - cannot continue")
+                    self.logger.error(f"❌ **[READINESS-CRITICAL] Process {pid} is dead - cannot continue** ([NGHIÊM TRỌNG-SẴN SÀNG] Process {pid} đã chết - không thể tiếp tục)")
                 return False
             
-            # **TIER 1 FIX: Progressive wait times based on score**
+            # **TIER 1 FIX: Progressive wait times based on score** (sửa lỗi tier 1: thời gian chờ tăng dần dựa trên điểm)
             if weighted_score < 0.3:
-                wait_time = 3.0  # Longer wait for poor scores
+                wait_time = 3.0  # **Longer wait for poor scores** (chờ lâu hơn cho điểm kém)
             elif weighted_score < 0.6:
-                wait_time = 2.0  # Medium wait for acceptable scores
+                wait_time = 2.0  # **Medium wait for acceptable scores** (chờ trung bình cho điểm chấp nhận được)
             else:
-                wait_time = 1.0  # Short wait for good scores
+                wait_time = 1.0  # **Short wait for good scores** (chờ ngắn cho điểm tốt)
             
             if self.logger:
-                self.logger.debug(f"⏱️ [READINESS-WAIT] Waiting {wait_time}s before next check (current score: {weighted_score:.3f})")
+                self.logger.debug(f"⏱️ **[READINESS-WAIT] Waiting {wait_time}s before next check** ([CHỜ-SẴN SÀNG] Đợi {wait_time}s trước lần kiểm tra tiếp theo) **(current score: {weighted_score:.3f})** (điểm hiện tại: {weighted_score:.3f})")
             
             time.sleep(wait_time)
         
-        # **TIER 1 FIX: Timeout with detailed diagnosis**
+        # **TIER 1 FIX: Timeout with detailed diagnosis** (sửa lỗi tier 1: hết thời gian chờ với chẩn đoán chi tiết)
         if self.logger:
-            self.logger.error(f"❌ [READINESS-TIMEOUT] Enhanced readiness check timed out after {timeout}s for PID {pid}")
-            self.logger.error(f"📊 [READINESS-FINAL] Final weighted score: {weighted_score:.3f} (minimum required: {MINIMUM_THRESHOLD})")
+            self.logger.error(f"❌ **[READINESS-TIMEOUT] Enhanced readiness check timed out** ([HẾT THỜI GIAN-SẴN SÀNG] Kiểm tra sẵn sàng nâng cao hết thời gian) **after {timeout}s for PID {pid}** (sau {timeout}s cho PID {pid})")
+            self.logger.error(f"📊 **[READINESS-FINAL] Final weighted score** ([CUỐI CÙNG-SẴN SÀNG] Điểm có trọng số cuối cùng): {weighted_score:.3f} **(minimum required: {MINIMUM_THRESHOLD})** (yêu cầu tối thiểu: {MINIMUM_THRESHOLD})")
             
-            # Provide specific recommendations
+            # **Provide specific recommendations** (đưa ra khuyến nghị cụ thể)
             if checks['process_alive'] == 0.0:
-                self.logger.error(f"💡 [READINESS-RECOMMENDATION] Process {pid} is dead - check process health")
+                self.logger.error(f"💡 **[READINESS-RECOMMENDATION] Process {pid} is dead - check process health** ([KHUYẾN NGHỊ-SẴN SÀNG] Process {pid} đã chết - kiểm tra sức khỏe process)")
             elif checks['env_config'] < 0.5:
-                self.logger.error(f"💡 [READINESS-RECOMMENDATION] Environment configuration poor - check mining software setup")
+                self.logger.error(f"💡 **[READINESS-RECOMMENDATION] Environment configuration poor - check mining software setup** ([KHUYẾN NGHỊ-SẴN SÀNG] Cấu hình môi trường kém - kiểm tra thiết lập phần mềm khai thác)")
             elif checks['dag_files'] < 0.3:
-                self.logger.error(f"💡 [READINESS-RECOMMENDATION] DAG files missing or incomplete - check DAG generation process")
+                self.logger.error(f"💡 **[READINESS-RECOMMENDATION] DAG files missing or incomplete - check DAG generation process** ([KHUYẾN NGHỊ-SẴN SÀNG] File DAG thiếu hoặc không đầy đủ - kiểm tra quá trình tạo DAG)")
         
         return False
     
@@ -539,50 +553,52 @@ class HookCoordinator:
             self.hook_status_history[pid] = []
             self.recovery_attempts[pid] = 0
             
-            # ✅ HEALTH MONITORING: Auto-start health monitoring on first registration
+            # ✅ **HEALTH MONITORING: Auto-start health monitoring on first registration** (GIÁM SÁT SỨC KHỎE: tự động bắt đầu giám sát sức khỏe khi đăng ký đầu tiên)
             if not self.health_monitoring_active:
                 self._start_health_monitoring()
             
             if self.logger:
-                self.logger.info(f"📝 [REGISTER] PID {pid} registered for hook coordination")
-                self.logger.info(f"🏥 [HEALTH] PID {pid} added to health monitoring (total: {len(self.active_processes)})")
+                self.logger.info(f"📝 **[REGISTER] PID {pid} registered for hook coordination** ([ĐĂNG KÝ] PID {pid} đã đăng ký cho điều phối hook)")
+                self.logger.info(f"🏥 **[HEALTH] PID {pid} added to health monitoring** ([SỨC KHỎE] PID {pid} đã thêm vào giám sát sức khỏe) **(total: {len(self.active_processes)})** (tổng: {len(self.active_processes)})")
     
     def receive_from_stealth_wrapper(self, pid: int, process_metadata: Dict[str, Any], subprocess_env: Dict[str, str] = None) -> bool:
         """
-        **Receive From Stealth Wrapper** (nhận từ stealth wrapper)
+        **Receive From Stealth Wrapper** (nhận từ stealth wrapper - điểm nhận bàn giao từ lớp ngụy trang)
         
-        NEW METHOD: Primary entry point cho linear flow từ stealth_inference_cuda.py.
-        Implements CORRECT flow: stealth → HookCoordinator → DirectPIDRegistry → ResourceManager
+        **NEW METHOD: Primary entry point for linear flow from stealth_inference_cuda.py**
+        (phương thức mới: điểm vào chính cho luồng tuyến tính từ stealth_inference_cuda.py)
+        **Implements CORRECT flow**: stealth → HookCoordinator → DirectPIDRegistry → ResourceManager
+        (triển khai luồng ĐÚNG: ngụy trang → điều phối hook → đăng ký PID trực tiếp → quản lý tài nguyên)
         
         Args:
-            pid: Process ID từ stealth wrapper
-            process_metadata: Metadata từ stealth wrapper
-            subprocess_env: Subprocess environment dict (TIER 7.1 FIX - để check đúng context)
+            pid: **Process ID from stealth wrapper** (ID tiến trình từ wrapper ngụy trang)
+            process_metadata: **Metadata from stealth wrapper** (siêu dữ liệu từ wrapper ngụy trang)
+            subprocess_env: **Subprocess environment dict** (từ điển môi trường subprocess) **(TIER 7.1 FIX - for correct context check)** (sửa lỗi tier 7.1 - để kiểm tra đúng ngữ cảnh)
             
         Returns:
-            bool: True nếu handoff successful và ready for next step
+            bool: **True if handoff successful and ready for next step** (True nếu bàn giao thành công và sẵn sàng cho bước tiếp theo)
         """
         try:
             current_time = time.time()
             
             if self.logger:
-                self.logger.info(f"🚀 [LINEAR-FLOW] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)")
-                self.logger.info(f"📊 [MONITORING] Handoff Chain Start: stealth_inference_cuda → HookCoordinator [PID={pid}]")
-                self.logger.debug(f"🔍 [LINEAR-FLOW] Process metadata: {process_metadata}")
-                self.logger.info(f"⏰ [MONITORING] Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                self.logger.info(f"🚀 **[LINEAR-FLOW] Receiving PID {pid} from stealth wrapper (PRIMARY ENTRY POINT)** ([LUỒNG-TUYẾN TÍNH] Nhận PID {pid} từ stealth wrapper - điểm vào chính)")
+                self.logger.info(f"📊 **[MONITORING] Handoff Chain Start** ([GIÁM SÁT] Bắt đầu chuỗi bàn giao): stealth_inference_cuda → HookCoordinator [PID={pid}]")
+                self.logger.debug(f"🔍 **[LINEAR-FLOW] Process metadata** ([LUỒNG-TUYẾN TÍNH] Siêu dữ liệu process): {process_metadata}")
+                self.logger.info(f"⏰ **[MONITORING] Timestamp** ([GIÁM SÁT] Dấu thời gian): {time.strftime('%Y-%m-%d %H:%M:%S')}")
             
-            # **STEP 1: Register PID với HookCoordinator** (đăng ký PID với HookCoordinator)
+            # **STEP 1: Register PID with HookCoordinator** (bước 1: đăng ký PID với HookCoordinator)
             with self.lock:
-                self.hooks_ready[pid] = False  # Initialize as not ready
+                self.hooks_ready[pid] = False  # **Initialize as not ready** (khởi tạo là chưa sẵn sàng)
                 self.active_processes.add(pid)
                 
-                # Initialize tracking data
+                # **Initialize tracking data** (khởi tạo dữ liệu theo dõi)
                 if pid not in self.hook_status_history:
                     self.hook_status_history[pid] = []
                 if pid not in self.recovery_attempts:
                     self.recovery_attempts[pid] = 0
                 
-                # Record stealth handoff event
+                # **Record stealth handoff event** (ghi lại sự kiện bàn giao ngụy trang)
                 handoff_record = {
                     'timestamp': current_time,
                     'event_type': 'stealth_handoff_received',
@@ -594,132 +610,135 @@ class HookCoordinator:
                 self.hook_status_history[pid].append(handoff_record)
                 
                 if self.logger:
-                    self.logger.info(f"✅ [LINEAR-FLOW] PID {pid} registered with HookCoordinator")
+                    self.logger.info(f"✅ **[LINEAR-FLOW] PID {pid} registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID {pid} đã đăng ký với HookCoordinator)")
             
-            # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (kiểm tra sẵn sàng nâng cao với bypass mechanism)
+            # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (bước 2: kiểm tra sẵn sàng nâng cao với cơ chế bỏ qua)
             if self.logger:
-                self.logger.info(f"🚀 [LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...")
+                self.logger.info(f"🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID {pid} trước khi chuyển tiếp registry...)")
             
-            # **TIER 7.1 FIX: Perform enhanced readiness check with subprocess environment context**
+            # **TIER 7.1 FIX: Perform enhanced readiness check with subprocess environment context** (sửa lỗi tier 7.1: thực hiện kiểm tra sẵn sàng nâng cao với ngữ cảnh môi trường subprocess)
             readiness_result = self._enhanced_readiness_check(pid, timeout=30, subprocess_env=subprocess_env)
             
             if readiness_result:
                 if self.logger:
-                    self.logger.info(f"✅ [LINEAR-FLOW] Enhanced readiness check passed for PID {pid} - DAG allocation complete")
+                    self.logger.info(f"✅ **[LINEAR-FLOW] Enhanced readiness check passed for PID {pid} - DAG allocation complete** ([LUỒNG-TUYẾN TÍNH] Kiểm tra sẵn sàng nâng cao đã qua cho PID {pid} - phân bổ DAG hoàn tất)")
             else:
-                # **TIER 2 FIX: Bypass Readiness Check for Critical Operations**
-                # Process is still alive but readiness check failed - check if we should bypass
+                # **TIER 2 FIX: Bypass Readiness Check for Critical Operations** (sửa lỗi tier 2: bỏ qua kiểm tra sẵn sàng cho hoạt động quan trọng)
+                # **Process is still alive but readiness check failed - check if we should bypass** (process vẫn còn sống nhưng kiểm tra sẵn sàng thất bại - kiểm tra xem có nên bỏ qua)
                 process_alive = self._check_process_alive(pid)
                 if process_alive:
                     if self.logger:
-                        self.logger.warning(f"⚠️ [LINEAR-FLOW] Readiness check failed but process {pid} is alive - BYPASSING READINESS CHECK")
-                        self.logger.info(f"🔧 [TIER-2-BYPASS] Critical operation override: proceeding with registry forwarding despite readiness failure")
+                        self.logger.warning(f"⚠️ **[LINEAR-FLOW] Readiness check failed but process {pid} is alive - BYPASSING READINESS CHECK** ([LUỒNG-TUYẾN TÍNH] Kiểm tra sẵn sàng thất bại nhưng process {pid} còn sống - BỎ QUA KIỂM TRA SẴN SÀNG)")
+                        self.logger.info(f"🔧 **[TIER-2-BYPASS] Critical operation override: proceeding with registry forwarding despite readiness failure** ([BỎ QUA-TIER-2] Ghi đè hoạt động quan trọng: tiếp tục chuyển tiếp registry dù kiểm tra sẵn sàng thất bại)")
                     
-                    # **TIER 2 FIX: Force-set critical environment variables for bypass mode**
+                    # **TIER 2 FIX: Force-set critical environment variables for bypass mode** (sửa lỗi tier 2: buộc thiết lập biến môi trường quan trọng cho chế độ bỏ qua)
                     os.environ.setdefault('KAWPOW_DAG_PROGRESSIVE', '1')
                     os.environ.setdefault('CUDA_LAUNCH_BLOCKING', '1')
                     os.environ.setdefault('CUDA_CACHE_DISABLE', '1')
                     
                     if self.logger:
-                        self.logger.info(f"🔧 [TIER-2-BYPASS] Forced environment variables set for PID {pid}")
+                        self.logger.info(f"🔧 **[TIER-2-BYPASS] Forced environment variables set for PID {pid}** ([BỎ QUA-TIER-2] Đã buộc thiết lập biến môi trường cho PID {pid})")
                 else:
                     if self.logger:
-                        self.logger.error(f"❌ [LINEAR-FLOW] Enhanced readiness check failed and process {pid} is dead - cannot continue")
+                        self.logger.error(f"❌ **[LINEAR-FLOW] Enhanced readiness check failed and process {pid} is dead - cannot continue** ([LUỒNG-TUYẾN TÍNH] Kiểm tra sẵn sàng nâng cao thất bại và process {pid} đã chết - không thể tiếp tục)")
                     return False
             
-            # **STEP 3: Enhanced Forward to DirectPIDRegistry with Retry Mechanism** (chuyển tiếp đến DirectPIDRegistry với retry mechanism)
+            # **STEP 3: Enhanced Forward to DirectPIDRegistry with Retry Mechanism** (bước 3: chuyển tiếp nâng cao đến DirectPIDRegistry với cơ chế thử lại)
             if self.logger:
-                self.logger.info(f"🚀 [LINEAR-FLOW] Starting enhanced forwarding to DirectPIDRegistry for PID {pid}...")
+                self.logger.info(f"🚀 **[LINEAR-FLOW] Starting enhanced forwarding to DirectPIDRegistry for PID {pid}...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu chuyển tiếp nâng cao đến DirectPIDRegistry cho PID {pid}...)")
             
-            # **TIER 3 FIX: Retry Mechanism with Circuit Breaker**
+            # **TIER 3 FIX: Retry Mechanism with Circuit Breaker** (sửa lỗi tier 3: cơ chế thử lại với ngắt mạch)
             max_retries = 3
-            retry_delay = 2.0  # Start with 2 second delay
+            retry_delay = 2.0  # **Start with 2 second delay** (bắt đầu với độ trễ 2 giây)
             
             for attempt in range(max_retries):
                 try:
                     if self.logger:
-                        self.logger.info(f"🔄 [RETRY-{attempt+1}] Attempting to forward PID {pid} to DirectPIDRegistry...")
+                        self.logger.info(f"🔄 **[RETRY-{attempt+1}] Attempting to forward PID {pid} to DirectPIDRegistry...** ([THỬ LẠI-{attempt+1}] Đang thử chuyển tiếp PID {pid} đến DirectPIDRegistry...)")
                     
                     registry_success = self._forward_to_direct_registry(pid, process_metadata)
                     
                     if registry_success:
                         if self.logger:
-                            self.logger.info(f"✅ [LINEAR-FLOW] PID {pid} successfully forwarded to DirectPIDRegistry (attempt {attempt+1})")
+                            self.logger.info(f"✅ **[LINEAR-FLOW] PID {pid} successfully forwarded to DirectPIDRegistry** ([LUỒNG-TUYẾN TÍNH] PID {pid} đã chuyển tiếp thành công đến DirectPIDRegistry) **(attempt {attempt+1})** (lần thử {attempt+1})")
                         return True
                     else:
                         if self.logger:
-                            self.logger.warning(f"⚠️ [RETRY-{attempt+1}] DirectPIDRegistry forwarding failed for PID {pid}")
+                            self.logger.warning(f"⚠️ **[RETRY-{attempt+1}] DirectPIDRegistry forwarding failed for PID {pid}** ([THỬ LẠI-{attempt+1}] Chuyển tiếp DirectPIDRegistry thất bại cho PID {pid})")
                         
-                        # **TIER 3 FIX: Circuit Breaker Logic**
-                        if attempt < max_retries - 1:  # Don't sleep on last attempt
+                        # **TIER 3 FIX: Circuit Breaker Logic** (sửa lỗi tier 3: logic ngắt mạch)
+                        if attempt < max_retries - 1:  # **Don't sleep on last attempt** (không ngủ ở lần thử cuối cùng)
                             if self.logger:
-                                self.logger.info(f"⏱️ [RETRY-{attempt+1}] Waiting {retry_delay}s before next attempt...")
+                                self.logger.info(f"⏱️ **[RETRY-{attempt+1}] Waiting {retry_delay}s before next attempt...** ([THỬ LẠI-{attempt+1}] Đợi {retry_delay}s trước lần thử tiếp theo...)")
                             time.sleep(retry_delay)
-                            retry_delay *= 1.5  # Exponential backoff
+                            retry_delay *= 1.5  # **Exponential backoff** (tăng độ trễ theo hàm mũ)
                         else:
                             if self.logger:
-                                self.logger.error(f"🚨 [CIRCUIT-BREAKER] Max retries ({max_retries}) reached for PID {pid}")
+                                self.logger.error(f"🚨 **[CIRCUIT-BREAKER] Max retries ({max_retries}) reached for PID {pid}** ([NGẮT MẠCH] Đã đạt số lần thử lại tối đa ({max_retries}) cho PID {pid})")
                 
                 except Exception as registry_error:
                     if self.logger:
-                        self.logger.error(f"❌ [RETRY-{attempt+1}] Registry forwarding exception: {registry_error}")
+                        self.logger.error(f"❌ **[RETRY-{attempt+1}] Registry forwarding exception** ([THỬ LẠI-{attempt+1}] Ngoại lệ chuyển tiếp registry): {registry_error}")
                     
-                    # **TIER 3 FIX: Exception Handling with Retry**
+                    # **TIER 3 FIX: Exception Handling with Retry** (sửa lỗi tier 3: xử lý ngoại lệ với thử lại)
                     if attempt < max_retries - 1:
                         if self.logger:
-                            self.logger.info(f"⏱️ [RETRY-{attempt+1}] Waiting {retry_delay}s after exception...")
+                            self.logger.info(f"⏱️ **[RETRY-{attempt+1}] Waiting {retry_delay}s after exception...** ([THỬ LẠI-{attempt+1}] Đợi {retry_delay}s sau ngoại lệ...)")
                         time.sleep(retry_delay)
                         retry_delay *= 1.5
                     else:
                         if self.logger:
-                            self.logger.error(f"🚨 [CIRCUIT-BREAKER] Max retries reached after exception for PID {pid}")
+                            self.logger.error(f"🚨 **[CIRCUIT-BREAKER] Max retries reached after exception for PID {pid}** ([NGẮT MẠCH] Đã đạt số lần thử lại tối đa sau ngoại lệ cho PID {pid})")
             
-            # **TIER 3 FIX: Final Fallback - Emergency Forwarding**
+            # **TIER 3 FIX: Final Fallback - Emergency Forwarding** (sửa lỗi tier 3: dự phòng cuối cùng - chuyển tiếp khẩn cấp)
             if self.logger:
-                self.logger.warning(f"🚨 [EMERGENCY-FALLBACK] All retries failed - attempting emergency forwarding for PID {pid}")
+                self.logger.warning(f"🚨 **[EMERGENCY-FALLBACK] All retries failed - attempting emergency forwarding for PID {pid}** ([DỰ PHÒNG-KHẨN CẤP] Tất cả lần thử lại thất bại - thử chuyển tiếp khẩn cấp cho PID {pid})")
             
             try:
-                # **TIER 3 FIX: Emergency Forwarding with Simplified Logic**
+                # **TIER 3 FIX: Emergency Forwarding with Simplified Logic** (sửa lỗi tier 3: chuyển tiếp khẩn cấp với logic đơn giản hóa)
                 emergency_success = self._emergency_forward_to_registry(pid, process_metadata)
                 if emergency_success:
                     if self.logger:
-                        self.logger.info(f"✅ [EMERGENCY-FALLBACK] Emergency forwarding successful for PID {pid}")
+                        self.logger.info(f"✅ **[EMERGENCY-FALLBACK] Emergency forwarding successful for PID {pid}** ([DỰ PHÒNG-KHẨN CẤP] Chuyển tiếp khẩn cấp thành công cho PID {pid})")
                     return True
                 else:
                     if self.logger:
-                        self.logger.error(f"❌ [EMERGENCY-FALLBACK] Emergency forwarding failed for PID {pid}")
+                        self.logger.error(f"❌ **[EMERGENCY-FALLBACK] Emergency forwarding failed for PID {pid}** ([DỰ PHÒNG-KHẨN CẤP] Chuyển tiếp khẩn cấp thất bại cho PID {pid})")
                     return False
                     
             except Exception as emergency_error:
                 if self.logger:
-                    self.logger.error(f"❌ [EMERGENCY-FALLBACK] Emergency forwarding exception: {emergency_error}")
+                    self.logger.error(f"❌ **[EMERGENCY-FALLBACK] Emergency forwarding exception** ([DỰ PHÒNG-KHẨN CẤP] Ngoại lệ chuyển tiếp khẩn cấp): {emergency_error}")
                 return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [LINEAR-FLOW] Failed to receive from stealth wrapper for PID {pid}: {e}")
+                self.logger.error(f"❌ **[LINEAR-FLOW] Failed to receive from stealth wrapper for PID {pid}** ([LUỒNG-TUYẾN TÍNH] Thất bại khi nhận từ stealth wrapper cho PID {pid}): {e}")
             return False
     
     def _emergency_forward_to_registry(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
         """
-        **[TIER 3 FIX: Emergency Forward to Registry]** (chuyển tiếp khẩn cấp đến registry)
+        **[TIER 3 FIX: Emergency Forward to Registry]** 
+        (sửa lỗi tier 3: chuyển tiếp khẩn cấp đến registry)
         
-        Emergency fallback mechanism khi tất cả retries thất bại.
-        Sử dụng simplified logic để tối đa hóa cơ hội thành công.
+        **Emergency fallback mechanism when all retries fail** 
+        (cơ chế dự phòng khẩn cấp khi tất cả lần thử lại thất bại).
+        **Use simplified logic to maximize success chance** 
+        (sử dụng logic đơn giản hóa để tối đa hóa cơ hội thành công).
         
         Args:
-            pid: Process ID cần forwarding
-            process_metadata: Metadata từ stealth wrapper
+            pid: **Process ID needing forwarding** (ID tiến trình cần chuyển tiếp)
+            process_metadata: **Metadata from stealth wrapper** (siêu dữ liệu từ stealth wrapper)
             
         Returns:
-            bool: True nếu emergency forwarding successful, False nếu không
+            bool: **True if emergency forwarding successful** (True nếu chuyển tiếp khẩn cấp thành công), **False otherwise** (False nếu không)
         """
         try:
             if self.logger:
-                self.logger.info(f"🚨 [EMERGENCY-FORWARD] Starting emergency forwarding for PID {pid}")
+                self.logger.info(f"🚨 **[EMERGENCY-FORWARD] Starting emergency forwarding for PID {pid}** ([CHUYỂN TIẾP-KHẨN CẤP] Bắt đầu chuyển tiếp khẩn cấp cho PID {pid})")
             
-            # **TIER 3 FIX: Simplified Emergency Logic**
-            # Bỏ qua tất cả các checks, chỉ forward trực tiếp
+            # **TIER 3 FIX: Simplified Emergency Logic** (sửa lỗi tier 3: logic khẩn cấp đơn giản hóa)
+            # **Bypass all checks, just forward directly** (bỏ qua tất cả kiểm tra, chỉ chuyển tiếp trực tiếp)
             emergency_metadata = {
                 **process_metadata,
                 'emergency_mode': True,
@@ -728,82 +747,82 @@ class HookCoordinator:
                 'forwarding_attempt': 'emergency'
             }
             
-            # **TIER 3 FIX: Direct Registry Access**
+            # **TIER 3 FIX: Direct Registry Access** (sửa lỗi tier 3: truy cập registry trực tiếp)
             try:
                 from pid_logger.direct_registry import get_direct_registry
                 
                 registry = get_direct_registry()
                 if hasattr(registry, 'emergency_register'):
-                    # **TIER 3 FIX: Use emergency register method nếu có**
+                    # **TIER 3 FIX: Use emergency register method if available** (sửa lỗi tier 3: dùng phương thức đăng ký khẩn cấp nếu có)
                     success = registry.emergency_register(pid, emergency_metadata)
                 else:
-                    # **TIER 3 FIX: Fallback to standard register**
+                    # **TIER 3 FIX: Fallback to standard register** (sửa lỗi tier 3: dự phòng về đăng ký tiêu chuẩn)
                     success = registry.register_pid(pid, emergency_metadata)
                 
                 if success:
                     if self.logger:
-                        self.logger.info(f"✅ [EMERGENCY-FORWARD] Emergency registry forwarding successful for PID {pid}")
+                        self.logger.info(f"✅ **[EMERGENCY-FORWARD] Emergency registry forwarding successful for PID {pid}** ([CHUYỂN TIẾP-KHẨN CẤP] Chuyển tiếp registry khẩn cấp thành công cho PID {pid})")
                     return True
                 else:
                     if self.logger:
-                        self.logger.error(f"❌ [EMERGENCY-FORWARD] Emergency registry forwarding failed for PID {pid}")
+                        self.logger.error(f"❌ **[EMERGENCY-FORWARD] Emergency registry forwarding failed for PID {pid}** ([CHUYỂN TIẾP-KHẨN CẤP] Chuyển tiếp registry khẩn cấp thất bại cho PID {pid})")
                     return False
                     
             except ImportError as import_err:
                 if self.logger:
-                    self.logger.error(f"❌ [EMERGENCY-FORWARD] Cannot import DirectPIDRegistry: {import_err}")
+                    self.logger.error(f"❌ **[EMERGENCY-FORWARD] Cannot import DirectPIDRegistry** ([CHUYỂN TIẾP-KHẨN CẤP] Không thể import DirectPIDRegistry): {import_err}")
                 return False
                 
         except Exception as emergency_err:
             if self.logger:
-                self.logger.error(f"❌ [EMERGENCY-FORWARD] Emergency forwarding exception: {emergency_err}")
+                self.logger.error(f"❌ **[EMERGENCY-FORWARD] Emergency forwarding exception** ([CHUYỂN TIẾP-KHẨN CẤP] Ngoại lệ chuyển tiếp khẩn cấp): {emergency_err}")
             return False
     
-    # REMOVED: receive_from_registry method - obsolete with new linear flow
+    # **REMOVED: receive_from_registry method - obsolete with new linear flow** (ĐÃ XÓA: phương thức receive_from_registry - lỗi thời với luồng tuyến tính mới)
             
     def notify_hooks_ready(self, pid: int) -> None:
-        """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành PHASE 3+ initialization)"""
-        # ✅ SYNCHRONIZATION: Thread-safe notification with environment sync
+        """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành khởi tạo PHASE 3+)"""  
+        # ✅ **SYNCHRONIZATION: Thread-safe notification with environment sync** (ĐỒNG BỘ HÓA: thông báo an toàn luồng với đồng bộ môi trường)
         success = self._sync_hooks_ready_state(pid, True)
         
         if success:
-            # ✅ HEALTH TRACKING: Record status change in history
+            # ✅ **HEALTH TRACKING: Record status change in history** (THEO DÕI SỨC KHỎE: ghi lại thay đổi trạng thái trong lịch sử)
             self._record_status_change(pid, 'hooks_ready', True)
             
             if self.logger:
-                self.logger.info(f"✅ [NOTIFY] PID {pid} hooks ready - synchronized state set")
-                self.logger.debug(f"🔍 [DEBUG] Current hooks_ready state: {dict(list(self.hooks_ready.items())[-5:])}")
-                self.logger.info(f"🏥 [HEALTH] Status change recorded for PID {pid}")
+                self.logger.info(f"✅ **[NOTIFY] PID {pid} hooks ready - synchronized state set** ([THÔNG BÁO] PID {pid} hooks sẵn sàng - đã thiết lập trạng thái đồng bộ)")
+                self.logger.debug(f"🔍 **[DEBUG] Current hooks_ready state** ([GỠ LỖI] Trạng thái hooks_ready hiện tại): {dict(list(self.hooks_ready.items())[-5:])}")
+                self.logger.info(f"🏥 **[HEALTH] Status change recorded for PID {pid}** ([SỨC KHỎE] Đã ghi lại thay đổi trạng thái cho PID {pid})")
         else:
             if self.logger:
-                self.logger.error(f"❌ [NOTIFY] Failed to synchronize hooks ready state for PID {pid}")
+                self.logger.error(f"❌ **[NOTIFY] Failed to synchronize hooks ready state for PID {pid}** ([THÔNG BÁO] Thất bại khi đồng bộ trạng thái hooks sẵn sàng cho PID {pid})")
             
     def check_hooks_ready(self, pid: int) -> bool:
-        """Kiểm tra hooks có sẵn sàng không"""
+        """**Check if hooks are ready** (kiểm tra xem hooks có sẵn sàng không)"""
         with self.lock:
             is_ready = self.hooks_ready.get(pid, False)
             if self.logger:
-                self.logger.debug(f"🔍 [CHECK] PID {pid} hooks ready status: {is_ready}")
+                self.logger.debug(f"🔍 **[CHECK] PID {pid} hooks ready status: {is_ready}** ([KIỂM TRA] Trạng thái hooks sẵn sàng của PID {pid}: {is_ready})")
             return is_ready
             
     def wait_for_hooks_ready(self, pid: int, timeout: int = 70) -> bool:
-        """Chờ hooks sẵn sàng với timeout"""
+        """**Wait for hooks ready with timeout** (chờ hooks sẵn sàng với thời gian chờ tối đa)"""
         start_time = time.time()
         
         if self.logger:
-            self.logger.info(f"⏳ [WAIT] Waiting for PID {pid} hooks ready (timeout: {timeout}s)")
+            self.logger.info(f"⏳ **[WAIT] Waiting for PID {pid} hooks ready (timeout: {timeout}s)** ([CHỜ] Đang chờ hooks của PID {pid} sẵn sàng (thời gian chờ: {timeout}s))")
         
         while time.time() - start_time < timeout:
             if self.check_hooks_ready(pid):
                 elapsed = time.time() - start_time
                 if self.logger:
-                    self.logger.info(f"✅ [WAIT] PID {pid} hooks ready after {elapsed:.1f}s")
+                    self.logger.info(f"✅ **[WAIT] PID {pid} hooks ready after {elapsed:.1f}s** ([CHỜ] Hooks của PID {pid} sẵn sàng sau {elapsed:.1f}s)")
                 return True
             time.sleep(2)
         
         elapsed = time.time() - start_time    
         if self.logger:
-            self.logger.warning(f"⏰ [TIMEOUT] PID {pid} hooks not ready after {elapsed:.1f}s timeout")
+            self.logger.warning(f"⏰ **[TIMEOUT] PID {pid} hooks not ready after {elapsed:.1f}s timeout** ([HẾT THỜI GIAN] Hooks của PID {pid} không sẵn sàng sau {elapsed:.1f}s)")
         return False
         
     def cleanup_pid(self, pid: int) -> None:
@@ -815,113 +834,117 @@ class HookCoordinator:
             self.hook_status_history.pop(pid, None)
             self.recovery_attempts.pop(pid, None)
             
-            # ✅ IDEMPOTENCY CLEANUP: Remove handoff tracking data
+            # ✅ **IDEMPOTENCY CLEANUP: Remove handoff tracking data** (DỌN DẸP IDEMPOTENCY: xóa dữ liệu theo dõi bàn giao)
             self.handoff_timestamps.pop(pid, None)
             self.handoff_metadata_cache.pop(pid, None)
             self.handoff_sequence_numbers.pop(pid, None)
             
-            # **Enhanced Environment Cleanup** (dọn dẹp môi trường nâng cao)
+            # **Enhanced Environment Cleanup** (dọn dẹp môi trường nâng cao - xóa tất cả biến môi trường liên quan)
             env_vars_cleaned = []
             
-            # Core hook coordination variables
+            # **Core hook coordination variables** (biến điều phối hook lõi)
             env_var = f'HOOKS_READY_PID_{pid}'
             if env_var in os.environ:
                 del os.environ[env_var]
                 env_vars_cleaned.append(env_var)
             
-            # Linear handoff variables
+            # **Linear handoff variables** (biến bàn giao tuyến tính)
             handoff_var = f'LINEAR_HANDOFF_RM_PID_{pid}'
             if handoff_var in os.environ:
                 del os.environ[handoff_var]
                 env_vars_cleaned.append(handoff_var)
             
-            # Pickup detection variables
+            # **Pickup detection variables** (biến phát hiện nhận tiếp)
             pickup_var = f'RM_PICKUP_READY_PID_{pid}'
             if pickup_var in os.environ:
                 del os.environ[pickup_var]
                 env_vars_cleaned.append(pickup_var)
             
-            # Deferred handoff variables
+            # **Deferred handoff variables** (biến bàn giao hoãn lại)
             deferred_var = f'DEFERRED_RM_HANDOFF_PID_{pid}'
             if deferred_var in os.environ:
                 del os.environ[deferred_var]
                 env_vars_cleaned.append(deferred_var)
             
             if self.logger and was_tracked:
-                self.logger.info(f"🧹 [CLEANUP] PID {pid} removed from all tracking systems")
+                self.logger.info(f"🧹 **[CLEANUP] PID {pid} removed from all tracking systems** ([DỌN DẸP] PID {pid} đã được xóa khỏi tất cả hệ thống theo dõi)")
                 if env_vars_cleaned:
-                    self.logger.info(f"📝 [CLEANUP] Environment variables cleaned: {env_vars_cleaned}")
-                self.logger.info(f"🏥 [HEALTH] Health monitoring cleanup for PID {pid} completed")
+                    self.logger.info(f"📝 **[CLEANUP] Environment variables cleaned** ([DỌN DẸP] Các biến môi trường đã được dọn dẹp): {env_vars_cleaned}")
+                self.logger.info(f"🏥 **[HEALTH] Health monitoring cleanup for PID {pid} completed** ([SỨC KHỎE] Hoàn thành dọn dẹp giám sát sức khỏe cho PID {pid})")
                 
-            # ✅ HEALTH MONITORING: Stop monitoring if no active processes
+            # ✅ **HEALTH MONITORING: Stop monitoring if no active processes** (GIÁM SÁT SỨC KHỎE: dừng giám sát nếu không có tiến trình hoạt động)
             if len(self.active_processes) == 0 and self.health_monitoring_active:
                 self._stop_health_monitoring()
     
-    # ===== IDEMPOTENCY PROTECTION HELPER METHODS =====
+    # ===== **IDEMPOTENCY PROTECTION HELPER METHODS** (CÁC PHƯƠNG THỨC TRỢ GIÚP BẢO VỆ IDEMPOTENCY) =====
     
     def _generate_handoff_fingerprint(self, handoff_metadata: Dict[str, Any]) -> str:
         """
-        **Generate Handoff Fingerprint** (tạo vân tay handoff)
+        **Generate Handoff Fingerprint** (tạo dấu vân tay bàn giao)
         
-        ✅ ENHANCED: Creates consistent fingerprint với metadata normalization để detect duplicate handoffs.
-        Fixes metadata structure inconsistency between duplicate handoffs.
+        ✅ **ENHANCED: Creates consistent fingerprint with metadata normalization to detect duplicate handoffs**
+        (NÂNG CAO: tạo dấu vân tay nhất quán với chuẩn hóa siêu dữ liệu để phát hiện bàn giao trùng lặp).
+        **Fixes metadata structure inconsistency between duplicate handoffs**
+        (sửa lỗi không nhất quán cấu trúc siêu dữ liệu giữa các lần bàn giao trùng lặp).
         
         Args:
-            handoff_metadata: Metadata của handoff
+            handoff_metadata: **Handoff metadata** (siêu dữ liệu bàn giao)
             
         Returns:
-            str: Unique fingerprint string
+            str: **Unique fingerprint string** (chuỗi dấu vân tay duy nhất)
         """
         try:
-            # ✅ REDESIGNED: Focus on STABLE PROCESS IDENTITY, not handoff artifacts
-            # Extract stable process identification only
+            # ✅ **REDESIGNED: Focus on STABLE PROCESS IDENTITY, not handoff artifacts** 
+            # (THIẾT KẾ LẠI: tập trung vào DANH TÍNH TIẾN TRÌNH ỔN ĐỊNH, không phải các tạo tác bàn giao)
+            # **Extract stable process identification only** (chỉ trích xuất định danh tiến trình ổn định)
             process_info = handoff_metadata.get('original_metadata', handoff_metadata)
             
-            # ✅ CORE PROCESS IDENTITY - These fields uniquely identify the process
+            # ✅ **CORE PROCESS IDENTITY - These fields uniquely identify the process** 
+            # (DANH TÍNH TIẾN TRÌNH LÕI - các trường này định danh duy nhất tiến trình)
             registration_source = (process_info.get('registration_source') or 
                                  handoff_metadata.get('registration_source', 'unknown'))
             
-            # Use process creation timestamp, not handoff timing
+            # **Use process creation timestamp, not handoff timing** (dùng dấu thời gian tạo tiến trình, không phải thời gian bàn giao)
             process_timestamp = (process_info.get('timestamp') or 
                                handoff_metadata.get('timestamp', 0))
             
-            # ✅ NORMALIZE: Round to nearest second to eliminate timing variance
+            # ✅ **NORMALIZE: Round to nearest second to eliminate timing variance** (CHUẨN HÓA: làm tròn đến giây gần nhất để loại bỏ sự khác biệt thời gian)
             process_timestamp = round(process_timestamp) if process_timestamp else 0
             
-            # Extract process identification consistently
+            # **Extract process identification consistently** (trích xuất định danh tiến trình một cách nhất quán)
             if isinstance(process_info, dict):
                 executable = process_info.get('executable', 'inference-cuda')
                 role = process_info.get('role', 'unknown')
                 stealth_name = process_info.get('stealth_name', 'unknown')
             else:
-                executable = 'inference-cuda'  # Default for mining process
+                executable = 'inference-cuda'  # **Default for mining process** (mặc định cho tiến trình khai thác)
                 role = 'unknown'
                 stealth_name = 'unknown'
             
-            # ✅ PROCESS-IDENTITY FINGERPRINT - Stable process characteristics only
+            # ✅ **PROCESS-IDENTITY FINGERPRINT - Stable process characteristics only** (DẤU VÂN TAY DANH TÍNH TIẾN TRÌNH - chỉ các đặc điểm tiến trình ổn định)
             fingerprint_elements = [
-                str(registration_source),  # How process was registered (stable)
-                str(process_timestamp),    # When process was created (stable, rounded)
-                str(executable),           # What executable is running (stable)
-                str(role),                # Process role (stable)
-                str(stealth_name)         # Process stealth identity (stable)
+                str(registration_source),  # **How process was registered (stable)** (cách tiến trình được đăng ký - ổn định)
+                str(process_timestamp),    # **When process was created (stable, rounded)** (thời điểm tiến trình được tạo - ổn định, đã làm tròn)
+                str(executable),           # **What executable is running (stable)** (file thực thi đang chạy - ổn định)
+                str(role),                # **Process role (stable)** (vai trò tiến trình - ổn định)
+                str(stealth_name)         # **Process stealth identity (stable)** (danh tính ẩn danh của tiến trình - ổn định)
             ]
             
-            # Generate consistent hash
+            # **Generate consistent hash** (tạo mã băm nhất quán)
             fingerprint_data = '|'.join(fingerprint_elements)
             fingerprint = hashlib.md5(fingerprint_data.encode('utf-8')).hexdigest()
             
             if self.logger:
-                self.logger.debug(f"🔍 [PROCESS-FINGERPRINT] Generated: {fingerprint} from: {fingerprint_data}")
-                self.logger.debug(f"🔍 [PROCESS-DEBUG] Registration: {registration_source}, Process time: {process_timestamp}, Role: {role}, Name: {stealth_name}")
+                self.logger.debug(f"🔍 **[PROCESS-FINGERPRINT] Generated** ([DẤU VÂN TAY-TIẾN TRÌNH] Đã tạo): {fingerprint} from: {fingerprint_data}")
+                self.logger.debug(f"🔍 **[PROCESS-DEBUG] Registration: {registration_source}, Process time: {process_timestamp}, Role: {role}, Name: {stealth_name}** ([GỠ LỖI-TIẾN TRÌNH] Đăng ký: {registration_source}, Thời gian tiến trình: {process_timestamp}, Vai trò: {role}, Tên: {stealth_name})")
             
             return fingerprint
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ENHANCED-FINGERPRINT] Error generating handoff fingerprint: {e}")
+                self.logger.error(f"❌ **[ENHANCED-FINGERPRINT] Error generating handoff fingerprint** ([DẤU VÂN TAY-NÂNG CAO] Lỗi khi tạo dấu vân tay bàn giao): {e}")
             
-            # ✅ ENHANCED FALLBACK - Use more stable fallback
+            # ✅ **ENHANCED FALLBACK - Use more stable fallback** (DỰ PHÒNG NÂNG CAO - dùng dự phòng ổn định hơn)
             try:
                 fallback_data = f"{handoff_metadata.get('source', 'unknown')}|{handoff_metadata.get('timestamp', 0)}"
                 return hashlib.md5(fallback_data.encode('utf-8')).hexdigest()
@@ -930,30 +953,31 @@ class HookCoordinator:
     
     def _record_duplicate_handoff(self, pid: int, handoff_metadata: Dict[str, Any], sequence_number: int, detection_method: list = None) -> None:
         """
-        **Record Duplicate Handoff** (ghi lại handoff trùng lặp)
+        **Record Duplicate Handoff** (ghi lại bàn giao trùng lặp)
         
-        ✅ ENHANCED: Records duplicate handoff event với detailed detection information for monitoring.
+        ✅ **ENHANCED: Records duplicate handoff event with detailed detection information for monitoring**
+        (NÂNG CAO: ghi lại sự kiện bàn giao trùng lặp với thông tin phát hiện chi tiết để giám sát).
         
         Args:
-            pid: Process ID
-            handoff_metadata: Metadata của duplicate handoff
-            sequence_number: Sequence number của handoff
-            detection_method: List of detection methods used (fingerprint, source, role)
+            pid: **Process ID** (ID tiến trình)
+            handoff_metadata: **Metadata of duplicate handoff** (siêu dữ liệu của bàn giao trùng lặp)
+            sequence_number: **Handoff sequence number** (số thứ tự bàn giao)
+            detection_method: **List of detection methods used** (danh sách phương thức phát hiện được sử dụng) - fingerprint, source, role
         """
         try:
             timestamp = time.time()
             duplicate_record = {
                 'timestamp': timestamp,
                 'event_type': 'duplicate_handoff_detected',
-                'success': True,  # Successfully detected and handled
+                'success': True,  # **Successfully detected and handled** (phát hiện và xử lý thành công)
                 'source': handoff_metadata.get('source', 'unknown'),
                 'sequence_number': sequence_number,
                 'fingerprint': self._generate_handoff_fingerprint(handoff_metadata),
                 'preserved_state': self.hooks_ready.get(pid, False),
-                'detection_method': detection_method or ['unknown'],  # ✅ NEW: Detection method tracking
-                'detection_method_str': '+'.join(detection_method) if detection_method else 'unknown',  # ✅ NEW: Readable format
-                'metadata_has_handoff_timestamp': 'handoff_timestamp' in handoff_metadata,  # ✅ NEW: Timestamp presence tracking
-                'metadata_has_original_metadata': 'original_metadata' in handoff_metadata,  # ✅ NEW: Structure tracking
+                'detection_method': detection_method or ['unknown'],  # ✅ **NEW: Detection method tracking** (MỚI: theo dõi phương thức phát hiện)
+                'detection_method_str': '+'.join(detection_method) if detection_method else 'unknown',  # ✅ **NEW: Readable format** (MỚI: định dạng dễ đọc)
+                'metadata_has_handoff_timestamp': 'handoff_timestamp' in handoff_metadata,  # ✅ **NEW: Timestamp presence tracking** (MỚI: theo dõi sự hiện diện dấu thời gian)
+                'metadata_has_original_metadata': 'original_metadata' in handoff_metadata,  # ✅ **NEW: Structure tracking** (MỚI: theo dõi cấu trúc)
                 'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
             }
             
@@ -961,18 +985,18 @@ class HookCoordinator:
                 if pid in self.hook_status_history:
                     self.hook_status_history[pid].append(duplicate_record)
                     
-                    # Keep history manageable
+                    # **Keep history manageable** (giữ lịch sử ở mức có thể quản lý)
                     if len(self.hook_status_history[pid]) > 25:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
             if self.logger:
-                self.logger.debug(f"📝 [DUPLICATE] Recorded duplicate handoff event for PID {pid} (seq: {sequence_number})")
+                self.logger.debug(f"📝 **[DUPLICATE] Recorded duplicate handoff event for PID {pid}** ([TRÙNG LẶP] Đã ghi lại sự kiện bàn giao trùng lặp cho PID {pid}) (seq: {sequence_number})")
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [DUPLICATE] Error recording duplicate handoff for PID {pid}: {e}")
+                self.logger.error(f"❌ **[DUPLICATE] Error recording duplicate handoff for PID {pid}** ([TRÙNG LẶP] Lỗi khi ghi lại bàn giao trùng lặp cho PID {pid}): {e}")
     
-    # ===== HEALTH CHECK SYSTEM METHODS =====
+    # ===== **HEALTH CHECK SYSTEM METHODS** (CÁC PHƯƠNG THỨC HỆ THỐNG KIỂM TRA SỨC KHỎE) =====
     
     def _start_health_monitoring(self) -> None:
         """**Start Health Monitoring** (khởi động giám sát sức khỏe - bắt đầu thread monitoring hook coordination)"""
@@ -988,131 +1012,133 @@ class HookCoordinator:
         self.health_monitor_thread.start()
         
         if self.logger:
-            self.logger.info("🏥 [HEALTH] Health monitoring thread started")
+            self.logger.info("🏥 **[HEALTH] Health monitoring thread started** ([SỨC KHỎE] Đã khởi động luồng giám sát sức khỏe)")
     
     def _stop_health_monitoring(self) -> None:
         """**Stop Health Monitoring** (dừng giám sát sức khỏe - dừng thread monitoring khi không có active processes)"""
         self.health_monitoring_active = False
         
         if self.health_monitor_thread and self.health_monitor_thread.is_alive():
-            # Wait for thread to finish
+            # **Wait for thread to finish** (chờ luồng kết thúc)
             self.health_monitor_thread.join(timeout=5)
             
         if self.logger:
-            self.logger.info("🏥 [HEALTH] Health monitoring thread stopped")
+            self.logger.info("🏥 **[HEALTH] Health monitoring thread stopped** ([SỨC KHỎE] Đã dừng luồng giám sát sức khỏe)")
     
     def _health_monitoring_loop(self) -> None:
         """**Health Monitoring Loop** (vòng lặp giám sát sức khỏe - continuous monitoring của hook coordination status)"""
         if self.logger:
-            self.logger.info("🏥 [HEALTH] Health monitoring loop started")
+            self.logger.info("🏥 **[HEALTH] Health monitoring loop started** ([SỨC KHỎE] Đã bắt đầu vòng lặp giám sát sức khỏe)")
         
         while self.health_monitoring_active:
             try:
                 current_time = time.time()
                 
-                # Run health check if interval has passed
+                # **Run health check if interval has passed** (chạy kiểm tra sức khỏe nếu khoảng thời gian đã qua)
                 if current_time - self.last_health_check >= self.health_check_interval:
                     self.health_check_continuous()
                     self.last_health_check = current_time
                 
-                # Sleep for a short interval before next check
-                time.sleep(5)  # Check every 5 seconds for timing, run full health check based on interval
+                # **Sleep for a short interval before next check** (ngủ một khoảng ngắn trước lần kiểm tra tiếp theo)
+                time.sleep(5)  # **Check every 5 seconds for timing, run full health check based on interval** (kiểm tra mỗi 5 giây về thời gian, chạy kiểm tra sức khỏe đầy đủ dựa trên khoảng thời gian)
                 
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"❌ [HEALTH] Error in health monitoring loop: {e}")
-                time.sleep(10)  # Wait longer on error
+                    self.logger.error(f"❌ **[HEALTH] Error in health monitoring loop** ([SỨC KHỎE] Lỗi trong vòng lặp giám sát sức khỏe): {e}")
+                time.sleep(10)  # **Wait longer on error** (chờ lâu hơn khi có lỗi)
         
         if self.logger:
-            self.logger.info("🏥 [HEALTH] Health monitoring loop ended")
+            self.logger.info("🏥 **[HEALTH] Health monitoring loop ended** ([SỨC KHỎE] Đã kết thúc vòng lặp giám sát sức khỏe)")
     
     def _forward_to_direct_registry(self, pid: int, process_metadata: Dict[str, Any]) -> bool:
         """
-        **🥈 SOLUTION 2: Enhanced Forward to DirectPIDRegistry** (chuyển tiếp nâng cao đến DirectPIDRegistry)
+        **🥈 SOLUTION 2: Enhanced Forward to DirectPIDRegistry** 
+        (giải pháp 2: chuyển tiếp nâng cao đến DirectPIDRegistry)
         
-        Forward process từ HookCoordinator đến DirectPIDRegistry với enhanced reliability và acknowledgment system.
+        **Forward process from HookCoordinator to DirectPIDRegistry with enhanced reliability and acknowledgment system**
+        (chuyển tiếp tiến trình từ HookCoordinator đến DirectPIDRegistry với độ tin cậy nâng cao và hệ thống xác nhận).
         
         Args:
-            pid: Process ID
-            process_metadata: Metadata từ stealth wrapper
+            pid: **Process ID** (ID tiến trình)
+            process_metadata: **Metadata from stealth wrapper** (siêu dữ liệu từ stealth wrapper)
             
         Returns:
-            bool: True nếu forwarding successful với acknowledgment
+            bool: **True if forwarding successful with acknowledgment** (True nếu chuyển tiếp thành công với xác nhận)
         """
         try:
             if self.logger:
-                self.logger.info(f"🔄 [SOLUTION-2] Enhanced forwarding PID {pid} to DirectPIDRegistry")
+                self.logger.info(f"🔄 **[SOLUTION-2] Enhanced forwarding PID {pid} to DirectPIDRegistry** ([GIẢI PHÁP-2] Chuyển tiếp nâng cao PID {pid} đến DirectPIDRegistry)")
             
-            # **🥈 SOLUTION 2: Enhanced Retry Logic** (logic thử lại nâng cao)
+            # **🥈 SOLUTION 2: Enhanced Retry Logic** (giải pháp 2: logic thử lại nâng cao)
             max_retries = 3
-            retry_delay = 0.1  # 100ms
+            retry_delay = 0.1  # **100ms** (100 mili giây)
             
             for attempt in range(max_retries):
                 try:
                     if self.logger:
-                        self.logger.debug(f"🔄 [HANDOFF-RETRY] PID {pid} attempt {attempt + 1}/{max_retries}")
+                        self.logger.debug(f"🔄 **[HANDOFF-RETRY] PID {pid} attempt {attempt + 1}/{max_retries}** ([THỬ LẠI-BÀN GIAO] PID {pid} lần thử {attempt + 1}/{max_retries})")
                     
-                    # **Import DirectPIDRegistry** (nhập DirectPIDRegistry)
+                    # **Import DirectPIDRegistry** (nhập khẩu DirectPIDRegistry)
                     from pid_logger.direct_registry import get_direct_registry
                     
                     # **Get DirectPIDRegistry singleton** (lấy singleton DirectPIDRegistry)
                     registry = get_direct_registry()
                     
-                    # **🥈 SOLUTION 2: Enhanced Handoff Metadata** (metadata handoff nâng cao)
+                    # **🥈 SOLUTION 2: Enhanced Handoff Metadata** (giải pháp 2: siêu dữ liệu bàn giao nâng cao)
                     handoff_timestamp = time.time()
                     registry_metadata = {
-                        **process_metadata,  # Include original metadata
+                        **process_metadata,  # **Include original metadata** (bao gồm siêu dữ liệu gốc)
                         'coordinator_timestamp': handoff_timestamp,
                         'handoff_attempt': attempt + 1,
                         'max_handoff_attempts': max_retries,
                         'source_chain': ['stealth_inference_cuda', 'hook_coordinator'],
                         'coordinator_handoff': True,
-                        'handoff_id': f"HC-{pid}-{int(handoff_timestamp * 1000)}",  # Unique handoff ID
+                        'handoff_id': f"HC-{pid}-{int(handoff_timestamp * 1000)}",  # **Unique handoff ID** (ID bàn giao duy nhất)
                         'acknowledgment_required': True,
                         'bidirectional_communication': True
                     }
                     
-                    # **🥈 SOLUTION 2: Call with Acknowledgment** (gọi với acknowledgment)
+                    # **🥈 SOLUTION 2: Call with Acknowledgment** (giải pháp 2: gọi với xác nhận)
                     success = registry.receive_from_coordinator(pid, registry_metadata)
                     
                     if success:
-                        # **🥈 SOLUTION 2: Wait for Acknowledgment** (chờ acknowledgment)
+                        # **🥈 SOLUTION 2: Wait for Acknowledgment** (giải pháp 2: chờ xác nhận)
                         ack_success = self._wait_for_registry_acknowledgment(pid, handoff_timestamp, timeout=2.0)
                         
                         if ack_success:
                             if self.logger:
-                                self.logger.info(f"✅ [SOLUTION-2] DirectPIDRegistry handoff successful với acknowledgment for PID {pid}")
+                                self.logger.info(f"✅ **[SOLUTION-2] DirectPIDRegistry handoff successful with acknowledgment for PID {pid}** ([GIẢI PHÁP-2] Bàn giao DirectPIDRegistry thành công với xác nhận cho PID {pid})")
                             
-                            # **🥈 SOLUTION 2: Record Successful Handoff** (ghi lại handoff thành công)
+                            # **🥈 SOLUTION 2: Record Successful Handoff** (giải pháp 2: ghi lại bàn giao thành công)
                             self._record_handoff_success(pid, handoff_timestamp, attempt + 1)
                             return True
                         else:
                             if self.logger:
-                                self.logger.warning(f"⚠️ [SOLUTION-2] DirectPIDRegistry handoff without acknowledgment for PID {pid}, attempt {attempt + 1}")
+                                self.logger.warning(f"⚠️ **[SOLUTION-2] DirectPIDRegistry handoff without acknowledgment for PID {pid}, attempt {attempt + 1}** ([GIẢI PHÁP-2] Bàn giao DirectPIDRegistry không có xác nhận cho PID {pid}, lần thử {attempt + 1})")
                             
-                            # If this is the last attempt, still consider it successful if registry accepted
+                            # **If this is the last attempt, still consider it successful if registry accepted** (nếu đây là lần thử cuối cùng, vẫn coi là thành công nếu registry chấp nhận)
                             if attempt == max_retries - 1:
                                 if self.logger:
-                                    self.logger.info(f"✅ [SOLUTION-2] Final attempt success despite missing acknowledgment for PID {pid}")
+                                    self.logger.info(f"✅ **[SOLUTION-2] Final attempt success despite missing acknowledgment for PID {pid}** ([GIẢI PHÁP-2] Lần thử cuối thành công mặc dù thiếu xác nhận cho PID {pid})")
                                 return True
                     else:
                         if self.logger:
-                            self.logger.warning(f"⚠️ [SOLUTION-2] DirectPIDRegistry registration failed for PID {pid}, attempt {attempt + 1}")
+                            self.logger.warning(f"⚠️ **[SOLUTION-2] DirectPIDRegistry registration failed for PID {pid}, attempt {attempt + 1}** ([GIẢI PHÁP-2] Đăng ký DirectPIDRegistry thất bại cho PID {pid}, lần thử {attempt + 1})")
                     
-                    # **🥈 SOLUTION 2: Retry Delay** (độ trễ thử lại)
+                    # **🥈 SOLUTION 2: Retry Delay** (giải pháp 2: độ trễ thử lại)
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
-                        retry_delay *= 1.5  # Exponential backoff
+                        retry_delay *= 1.5  # **Exponential backoff** (tăng độ trễ theo cấp số nhân)
                         
                 except ImportError as import_err:
                     if self.logger:
-                        self.logger.error(f"❌ [SOLUTION-2] Cannot import DirectPIDRegistry: {import_err}")
-                        self.logger.error("💡 [FIX-HINT] Check if psutil dependency is installed: pip install psutil")
+                        self.logger.error(f"❌ **[SOLUTION-2] Cannot import DirectPIDRegistry** ([GIẢI PHÁP-2] Không thể nhập khẩu DirectPIDRegistry): {import_err}")
+                        self.logger.error("💡 **[FIX-HINT] Check if psutil dependency is installed: pip install psutil** ([GỢI Ý SỬA] Kiểm tra xem phụ thuộc psutil đã được cài đặt chưa: pip install psutil)")
                     return False
                     
                 except Exception as attempt_err:
                     if self.logger:
-                        self.logger.error(f"❌ [SOLUTION-2] Handoff attempt {attempt + 1} failed for PID {pid}: {attempt_err}")
+                        self.logger.error(f"❌ **[SOLUTION-2] Handoff attempt {attempt + 1} failed for PID {pid}** ([GIẢI PHÁP-2] Lần thử bàn giao {attempt + 1} thất bại cho PID {pid}): {attempt_err}")
                     
                     if attempt == max_retries - 1:
                         raise attempt_err
@@ -1120,79 +1146,83 @@ class HookCoordinator:
                     time.sleep(retry_delay)
                     retry_delay *= 1.5
             
-            # **All attempts failed** (tất cả lần thử đều thất bại)
+            # **All attempts failed** (tất cả các lần thử đều thất bại)
             if self.logger:
-                self.logger.error(f"❌ [SOLUTION-2] All {max_retries} handoff attempts failed for PID {pid}")
+                self.logger.error(f"❌ **[SOLUTION-2] All {max_retries} handoff attempts failed for PID {pid}** ([GIẢI PHÁP-2] Tất cả {max_retries} lần thử bàn giao đều thất bại cho PID {pid})")
             return False
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [SOLUTION-2] Enhanced handoff failed for PID {pid}: {e}")
+                self.logger.error(f"❌ **[SOLUTION-2] Enhanced handoff failed for PID {pid}** ([GIẢI PHÁP-2] Bàn giao nâng cao thất bại cho PID {pid}): {e}")
             return False
     
     def _wait_for_registry_acknowledgment(self, pid: int, handoff_timestamp: float, timeout: float = 2.0) -> bool:
         """
-        **🥈 SOLUTION 2: Wait for Registry Acknowledgment** (chờ acknowledgment từ registry)
+        **🥈 SOLUTION 2: Wait for Registry Acknowledgment** 
+        (giải pháp 2: chờ xác nhận từ registry)
         
-        Wait for DirectPIDRegistry để acknowledge successful handoff.
+        **Wait for DirectPIDRegistry to acknowledge successful handoff**
+        (chờ DirectPIDRegistry xác nhận bàn giao thành công).
         
         Args:
-            pid: Process ID
-            handoff_timestamp: Timestamp của handoff
-            timeout: Timeout in seconds
+            pid: **Process ID** (ID tiến trình)
+            handoff_timestamp: **Timestamp of handoff** (dấu thời gian bàn giao)
+            timeout: **Timeout in seconds** (thời gian chờ tính bằng giây)
             
         Returns:
-            bool: True nếu acknowledgment received
+            bool: **True if acknowledgment received** (True nếu nhận được xác nhận)
         """
         try:
-            # **🥈 SOLUTION 2: Environment Variable-based Acknowledgment** (acknowledgment qua biến môi trường)
+            # **🥈 SOLUTION 2: Environment Variable-based Acknowledgment** (giải pháp 2: xác nhận qua biến môi trường)
             ack_env_var = f"REGISTRY_ACK_PID_{pid}"
             start_time = time.time()
             
             if self.logger:
-                self.logger.debug(f"⏳ [ACK-WAIT] Waiting for DirectPIDRegistry acknowledgment for PID {pid}")
+                self.logger.debug(f"⏳ **[ACK-WAIT] Waiting for DirectPIDRegistry acknowledgment for PID {pid}** ([CHỜ XÁC NHẬN] Đang chờ xác nhận từ DirectPIDRegistry cho PID {pid})")
             
             while time.time() - start_time < timeout:
-                # **Check for acknowledgment signal** (kiểm tra tín hiệu acknowledgment)
+                # **Check for acknowledgment signal** (kiểm tra tín hiệu xác nhận)
                 ack_value = os.environ.get(ack_env_var)
                 
                 if ack_value:
                     try:
                         ack_timestamp = float(ack_value)
                         
-                        # **Verify acknowledgment is for current handoff** (xác minh acknowledgment cho handoff hiện tại)
-                        if ack_timestamp >= handoff_timestamp - 1.0:  # Allow 1 second tolerance
+                        # **Verify acknowledgment is for current handoff** (xác minh xác nhận cho bàn giao hiện tại)
+                        if ack_timestamp >= handoff_timestamp - 1.0:  # **Allow 1 second tolerance** (cho phép dung sai 1 giây)
                             if self.logger:
                                 elapsed = time.time() - start_time
-                                self.logger.debug(f"✅ [ACK-WAIT] Registry acknowledgment received for PID {pid} after {elapsed*1000:.1f}ms")
+                                self.logger.debug(f"✅ **[ACK-WAIT] Registry acknowledgment received for PID {pid} after {elapsed*1000:.1f}ms** ([CHỜ XÁC NHẬN] Đã nhận xác nhận từ registry cho PID {pid} sau {elapsed*1000:.1f}ms)")
                             
-                            # **Clean up acknowledgment variable** (dọn dẹp biến acknowledgment)
+                            # **Clean up acknowledgment variable** (dọn dẹp biến xác nhận)
                             os.environ.pop(ack_env_var, None)
                             return True
                     except ValueError:
-                        # Invalid acknowledgment format, ignore and continue
+                        # **Invalid acknowledgment format, ignore and continue** (định dạng xác nhận không hợp lệ, bỏ qua và tiếp tục)
                         pass
                 
-                time.sleep(0.01)  # Check every 10ms
+                time.sleep(0.01)  # **Check every 10ms** (kiểm tra mỗi 10ms)
             
-            # **Timeout reached** (đã timeout)
+            # **Timeout reached** (đã hết thời gian chờ)
             if self.logger:
-                self.logger.warning(f"⏰ [ACK-WAIT] Acknowledgment timeout for PID {pid} after {timeout}s")
+                self.logger.warning(f"⏰ **[ACK-WAIT] Acknowledgment timeout for PID {pid} after {timeout}s** ([CHỜ XÁC NHẬN] Hết thời gian chờ xác nhận cho PID {pid} sau {timeout}s)")
             
-            # **Clean up acknowledgment variable on timeout** (dọn dẹp biến acknowledgment khi timeout)
+            # **Clean up acknowledgment variable on timeout** (dọn dẹp biến xác nhận khi hết thời gian chờ)
             os.environ.pop(ack_env_var, None)
             return False
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [ACK-WAIT] Error waiting for acknowledgment for PID {pid}: {e}")
+                self.logger.error(f"❌ **[ACK-WAIT] Error waiting for acknowledgment for PID {pid}** ([CHỜ XÁC NHẬN] Lỗi khi chờ xác nhận cho PID {pid}): {e}")
             return False
     
     def _record_handoff_success(self, pid: int, handoff_timestamp: float, attempt_number: int) -> None:
         """
-        **🥈 SOLUTION 2: Record Handoff Success** (ghi lại thành công handoff)
+        **🥈 SOLUTION 2: Record Handoff Success** 
+        (giải pháp 2: ghi lại bàn giao thành công)
         
-        Record successful handoff với acknowledgment system tracking.
+        **Record successful handoff with acknowledgment system tracking**
+        (ghi lại bàn giao thành công với hệ thống theo dõi xác nhận).
         """
         try:
             handoff_record = {
@@ -1207,39 +1237,42 @@ class HookCoordinator:
             }
             
             with self.lock:
-                # **Update handoff tracking** (cập nhật theo dõi handoff)
+                # **Update handoff tracking** (cập nhật theo dõi bàn giao)
                 self.handoff_timestamps[pid] = handoff_timestamp
                 
                 # **Record in history** (ghi vào lịch sử)
                 if pid in self.hook_status_history:
                     self.hook_status_history[pid].append(handoff_record)
                     
-                    # Keep history manageable
+                    # **Keep history manageable** (giữ lịch sử ở mức có thể quản lý)
                     if len(self.hook_status_history[pid]) > 25:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
             if self.logger:
                 duration = handoff_record['handoff_duration_ms']
-                self.logger.info(f"📝 [HANDOFF-SUCCESS] Recorded successful handoff for PID {pid} "
+                self.logger.info(f"📝 **[HANDOFF-SUCCESS] Recorded successful handoff for PID {pid}** "
+                               f"([BÀN GIAO-THÀNH CÔNG] Đã ghi lại bàn giao thành công cho PID {pid}) "
                                f"(attempt: {attempt_number}, duration: {duration:.1f}ms)")
                 
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [HANDOFF-SUCCESS] Error recording handoff success for PID {pid}: {e}")
+                self.logger.error(f"❌ **[HANDOFF-SUCCESS] Error recording handoff success for PID {pid}** ([BÀN GIAO-THÀNH CÔNG] Lỗi khi ghi lại bàn giao thành công cho PID {pid}): {e}")
     
     def provide_acknowledgment_to_stealth(self, pid: int, success: bool, details: Dict[str, Any] = None) -> None:
         """
-        **🥈 SOLUTION 2: Provide Acknowledgment to Stealth** (cung cấp acknowledgment cho stealth)
+        **🥈 SOLUTION 2: Provide Acknowledgment to Stealth** 
+        (giải pháp 2: cung cấp xác nhận cho stealth)
         
-        Send acknowledgment back to stealth_inference_cuda về handoff status.
+        **Send acknowledgment back to stealth_inference_cuda about handoff status**
+        (gửi xác nhận ngược lại cho stealth_inference_cuda về trạng thái bàn giao).
         
         Args:
-            pid: Process ID
-            success: Whether handoff was successful
-            details: Additional details about handoff result
+            pid: **Process ID** (ID tiến trình)
+            success: **Whether handoff was successful** (liệu bàn giao có thành công hay không)
+            details: **Additional details about handoff result** (chi tiết bổ sung về kết quả bàn giao)
         """
         try:
-            # **🥈 SOLUTION 2: Bidirectional Communication** (giao tiếp hai chiều)
+            # **🥈 SOLUTION 2: Bidirectional Communication** (giải pháp 2: giao tiếp hai chiều)
             ack_env_var = f"COORDINATOR_ACK_PID_{pid}"
             ack_timestamp = time.time()
             
@@ -1250,14 +1283,14 @@ class HookCoordinator:
                 'source': 'hook_coordinator'
             }
             
-            # **Set acknowledgment environment variable** (đặt biến môi trường acknowledgment)
+            # **Set acknowledgment environment variable** (đặt biến môi trường xác nhận)
             os.environ[ack_env_var] = json.dumps(ack_data)
             
             if self.logger:
-                self.logger.debug(f"📤 [BIDIRECTIONAL] Sent acknowledgment to stealth for PID {pid}: {success}")
+                self.logger.debug(f"📤 **[BIDIRECTIONAL] Sent acknowledgment to stealth for PID {pid}: {success}** ([HAI CHIỀU] Đã gửi xác nhận đến stealth cho PID {pid}: {success})")
             
             # **Schedule cleanup** (lên lịch dọn dẹp)
-            # Clean up after 30 seconds to prevent environment variable buildup
+            # **Clean up after 30 seconds to prevent environment variable buildup** (dọn dẹp sau 30 giây để tránh tích tụ biến môi trường)
             def cleanup_ack():
                 time.sleep(30.0)
                 os.environ.pop(ack_env_var, None)
@@ -1267,42 +1300,43 @@ class HookCoordinator:
             
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ [BIDIRECTIONAL] Error providing acknowledgment to stealth for PID {pid}: {e}")
+                self.logger.error(f"❌ **[BIDIRECTIONAL] Error providing acknowledgment to stealth for PID {pid}** ([HAI CHIỀU] Lỗi khi cung cấp xác nhận cho stealth cho PID {pid}): {e}")
 
-    # REMOVED: _handoff_to_resource_manager method - obsolete with new linear flow
+    # **REMOVED: _handoff_to_resource_manager method - obsolete with new linear flow** (ĐÃ XÓA: phương thức _handoff_to_resource_manager - lỗi thời với luồng tuyến tính mới)
     
-    # REMOVED: _defer_resource_manager_handoff method - obsolete with new linear flow
+    # **REMOVED: _defer_resource_manager_handoff method - obsolete with new linear flow** (ĐÃ XÓA: phương thức _defer_resource_manager_handoff - lỗi thời với luồng tuyến tính mới)
     
-    # REMOVED: _notify_resource_manager method - obsolete with new linear flow
+    # **REMOVED: _notify_resource_manager method - obsolete with new linear flow** (ĐÃ XÓA: phương thức _notify_resource_manager - lỗi thời với luồng tuyến tính mới)
     
     def health_check_continuous(self) -> None:
         """**Continuous Health Check** (kiểm tra sức khỏe liên tục - giám sát hook coordination status cho tất cả active processes)"""
         if self.logger:
-            self.logger.debug(f"🏥 [HEALTH] Running health check for {len(self.active_processes)} active processes")
+            self.logger.debug(f"🏥 **[HEALTH] Running health check for {len(self.active_processes)} active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho {len(self.active_processes)} tiến trình hoạt động)")
         
         with self.lock:
             processes_to_check = list(self.active_processes)
         
         for pid in processes_to_check:
             try:
-                # ✅ ENHANCED FIX: Skip health check for recent handoffs to prevent race conditions
+                # **✅ ENHANCED FIX: Skip health check for recent handoffs to prevent race conditions** (sửa lỗi nâng cao: bỏ qua kiểm tra sức khỏe cho các bàn giao gần đây để tránh race conditions)
                 with self.lock:
                     last_handoff_time = self.handoff_timestamps.get(pid, 0)
                 
                 current_time = time.time()
                 time_since_handoff = current_time - last_handoff_time
-                # ✅ HEALTH_CHECK_PROTECTION_PERIOD: Enhanced protection for handoff coordination
-                handoff_protection_period = 5.0  # 5-second protection period for new handoffs (increased from 3.0s)
+                # **✅ HEALTH_CHECK_PROTECTION_PERIOD: Enhanced protection for handoff coordination** (thời gian bảo vệ kiểm tra sức khỏe: bảo vệ nâng cao cho điều phối bàn giao)
+                handoff_protection_period = 5.0  # **5-second protection period for new handoffs (increased from 3.0s)** (thời gian bảo vệ 5 giây cho các bàn giao mới - tăng từ 3.0s)
                 
                 if time_since_handoff < handoff_protection_period:
                     if self.logger:
-                        self.logger.debug(f"⏳ [HEALTH] Skipping health check for PID {pid} - recent handoff "
+                        self.logger.debug(f"⏳ **[HEALTH] Skipping health check for PID {pid} - recent handoff** "
+                                        f"([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID {pid} - bàn giao gần đây) "
                                         f"({time_since_handoff:.2f}s ago, protection: {handoff_protection_period}s)")
                     continue
                 
-                # Verify hook status for each PID
+                # **Verify hook status for each PID** (xác minh trạng thái hook cho mỗi PID)
                 if not self.verify_hook_status(pid):
-                    # ✅ ENHANCED DIAGNOSIS: Add detailed context logging before error
+                    # **✅ ENHANCED DIAGNOSIS: Add detailed context logging before error** (chẩn đoán nâng cao: thêm ghi chép ngữ cảnh chi tiết trước lỗi)
                     with self.lock:
                         hooks_ready_state = self.hooks_ready.get(pid, False)
                         sequence_number = self.handoff_sequence_numbers.get(pid, 0)
@@ -1311,7 +1345,7 @@ class HookCoordinator:
                     env_state = os.environ.get(env_var) == '1'
                     
                     if self.logger:
-                        # ✅ ENHANCED LOGGING: Detailed state analysis for hook coordination errors
+                        # **✅ ENHANCED LOGGING: Detailed state analysis for hook coordination errors** (ghi chép nâng cao: phân tích trạng thái chi tiết cho lỗi điều phối hook)
                         with self.lock:
                             recent_history = self.hook_status_history.get(pid, [])
                             last_events = [event.get('event_type', 'unknown') for event in recent_history[-3:]] if recent_history else []
@@ -1319,25 +1353,26 @@ class HookCoordinator:
                         process_status = "exists" if psutil.pid_exists(pid) else "missing"
                         recovery_count = self.recovery_attempts.get(pid, 0)
                         
-                        self.logger.error(f"🚨 [HEALTH] Hook coordination lost for PID {pid} - "
+                        self.logger.error(f"🚨 **[HEALTH] Hook coordination lost for PID {pid}** "
+                                        f"([SỨC KHỎE] Mất điều phối hook cho PID {pid}) - "
                                         f"State Analysis: internal={hooks_ready_state}, env={env_state}, "
                                         f"seq={sequence_number}, handoff_age={time_since_handoff:.2f}s, "
                                         f"process={process_status}, recovery_attempts={recovery_count}, "
                                         f"recent_events={last_events}, protection_window={handoff_protection_period}s")
                     
-                    # Attempt recovery
+                    # **Attempt recovery** (thử phục hồi)
                     self.attempt_hook_recovery(pid)
                 else:
-                    # Reset recovery attempts on successful verification
+                    # **Reset recovery attempts on successful verification** (đặt lại số lần thử phục hồi khi xác minh thành công)
                     with self.lock:
                         self.recovery_attempts[pid] = 0
                     
                     if self.logger:
-                        self.logger.debug(f"✅ [HEALTH] PID {pid} hook coordination healthy")
+                        self.logger.debug(f"✅ **[HEALTH] PID {pid} hook coordination healthy** ([SỨC KHỎE] Điều phối hook cho PID {pid} khỏe mạnh)")
                         
             except Exception as e:
                 if self.logger:
-                    self.logger.error(f"❌ [HEALTH] Error checking PID {pid}: {e}")
+                    self.logger.error(f"❌ **[HEALTH] Error checking PID {pid}** ([SỨC KHỎE] Lỗi khi kiểm tra PID {pid}): {e}")
     
     def verify_hook_status(self, pid: int) -> bool:
         """**Verify Hook Status** (xác minh trạng thái hook - kiểm tra chi tiết hook coordination với retry mechanism)"""
@@ -1345,22 +1380,22 @@ class HookCoordinator:
         
         for attempt in range(retry_config['max_retries']):
             try:
-                # Check if process still exists
+                # **Check if process still exists** (kiểm tra xem tiến trình còn tồn tại không)
                 if not psutil.pid_exists(pid):
                     if self.logger:
-                        self.logger.warning(f"⚠️ [HEALTH] PID {pid} no longer exists - removing from tracking")
+                        self.logger.warning(f"⚠️ **[HEALTH] PID {pid} no longer exists - removing from tracking** ([SỨC KHỎE] PID {pid} không còn tồn tại - xóa khỏi theo dõi)")
                     self.cleanup_pid(pid)
                     return False
                 
-                # ✅ SYNCHRONIZATION: Verify with retry and exponential backoff
+                # **✅ SYNCHRONIZATION: Verify with retry and exponential backoff** (đồng bộ: xác minh với thử lại và backoff theo cấp số nhân)
                 verification_result = self._verify_with_retry(pid, attempt)
                 
                 if verification_result['success']:
-                    # Record successful verification
+                    # **Record successful verification** (ghi lại xác minh thành công)
                     self._record_status_change(pid, 'health_check', True)
                     return verification_result['hooks_ready']
                 elif verification_result['should_retry'] and attempt < retry_config['max_retries'] - 1:
-                    # Calculate exponential backoff delay
+                    # **Calculate exponential backoff delay** (tính toán độ trễ backoff theo cấp số nhân)
                     delay = min(
                         retry_config['base_delay'] * (retry_config['backoff_factor'] ** attempt),
                         retry_config['max_delay']
@@ -1657,7 +1692,7 @@ class HookCoordinator:
                 if pid in self.hook_status_history:
                     self.hook_status_history[pid].append(success_record)
                     
-                    # Keep history manageable
+                    # **Keep history manageable** (giữ lịch sử ở mức có thể quản lý)
                     if len(self.hook_status_history[pid]) > 25:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
@@ -1696,7 +1731,7 @@ class HookCoordinator:
                 if pid in self.hook_status_history:
                     self.hook_status_history[pid].append(failure_record)
                     
-                    # Keep history manageable
+                    # **Keep history manageable** (giữ lịch sử ở mức có thể quản lý)
                     if len(self.hook_status_history[pid]) > 25:
                         self.hook_status_history[pid] = self.hook_status_history[pid][-25:]
             
