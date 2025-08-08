@@ -23,6 +23,9 @@ class ThermalSpoofer(IGPUCloakService):
         self.fake_temperature = 50
         self.add_noise = False
         self.lib_path = ""
+        # Tham số đồng bộ với gpuhook
+        self.profile = "train"  # train|infer
+        self.seed = ""          # chuỗi số nguyên (uint64)
         
     @property
     def name(self) -> str:
@@ -32,6 +35,13 @@ class ThermalSpoofer(IGPUCloakService):
         """Khởi tạo thermal spoofer"""
         self.fake_temperature = config.get('fake_temperature', 50)
         self.add_noise = config.get('add_noise', False)
+        # Đọc profile/seed để đồng bộ với gpuhook (giữ mặc định an toàn)
+        self.profile = config.get('profile', os.environ.get('TEMPSPOOF_PROFILE') or os.environ.get('GPUHOOK_PROFILE') or 'train')
+        seed_cfg = config.get('seed')
+        if seed_cfg is not None:
+            self.seed = str(seed_cfg)
+        else:
+            self.seed = os.environ.get('TEMPSPOOF_SEED') or os.environ.get('GPUHOOK_SEED') or ""
         
         # Kiểm tra libtempspoof.so có tồn tại
         self.lib_path = config.get('lib_path', '/opt/hooks/libtempspoof.so')
@@ -69,6 +79,17 @@ class ThermalSpoofer(IGPUCloakService):
                 os.environ['LD_PRELOAD'] = self.lib_path
                 
         # Thiết lập environment variables
+        # Giao diện ENV mới cho tempspoof (+ phản chiếu sang gpuhook để đồng bộ)
+        os.environ['TEMPSPOOF_TEST_MODE'] = '1'
+        os.environ['TEMPSPOOF_NO_STDERR'] = '1'
+        if self.profile:
+            os.environ['TEMPSPOOF_PROFILE'] = self.profile
+            # Giữ đồng bộ với gpuhook nếu cùng chạy
+            os.environ['GPUHOOK_PROFILE'] = self.profile
+        if self.seed:
+            os.environ['TEMPSPOOF_SEED'] = self.seed
+            os.environ['GPUHOOK_SEED'] = self.seed
+        # Biến legacy để tương thích ngược (tempspoof.c có hỗ trợ)
         os.environ['ENABLE_TEMP_SPOOF'] = '1'
         os.environ['SPOOF_TEMP_VALUE'] = str(self.fake_temperature)
         os.environ['TEMP_SPOOF_ADD_NOISE'] = '1' if self.add_noise else '0'
