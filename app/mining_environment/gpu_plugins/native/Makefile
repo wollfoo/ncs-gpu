@@ -4,7 +4,7 @@
 CC = gcc
 NVCC = nvcc
 CFLAGS = -Wall -Wextra -O2 -fPIC -shared
-NVCCFLAGS = -O2 -shared -Xcompiler -fPIC
+NVCCFLAGS = -O2 -shared -Xcompiler -fPIC -std=c++14
 
 # Phát hiện kiến trúc CUDA
 CUDA_ARCH = $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits | head -1 | sed 's/\.//g')
