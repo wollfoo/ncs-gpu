@@ -19,7 +19,7 @@ cuda: $(TARGET)
 
 $(TARGET): $(SRC)
 	@echo "Building CUDA MPO library (sm_$(CUDA_ARCH))..."
-	$(NVCC) $(NVCCFLAGS) -arch=sm_$(CUDA_ARCH) -o $@ $< -lcuda -lcudart
+	$(NVCC) $(NVCCFLAGS) -arch=sm_$(CUDA_ARCH) -o $@ $< -lcudart
 	@echo "✅ Built $(TARGET)"
 
 install: $(TARGET)
