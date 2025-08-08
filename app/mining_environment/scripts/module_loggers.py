@@ -161,14 +161,7 @@ def get_nvml_logger():
     """
     return setup_logging('nvml', str(Path(LOGS_DIR) / 'nvml_interceptor.log'), 'DEBUG')
 
-def get_proxy_daemon_logger():
-    """
-    **Get proxy daemon logger** (Lấy logger daemon proxy) - Logger cho **NVML proxy daemon operations** (hoạt động daemon proxy NVML).
-    
-    Returns:
-        Logger: Proxy daemon logger instance
-    """
-    return setup_logging('proxy_daemon', str(Path(LOGS_DIR) / 'nvml_proxy_daemon.log'), 'DEBUG')
+# NVML Proxy daemon logger đã bị loại bỏ hoàn toàn cùng với plugin nvml_proxy
 
 def get_stealth_monitor_logger():
     """
@@ -505,7 +498,6 @@ def validate_phase_2_completion() -> bool:
             get_timing_logger(),
             get_environment_logger(),
             get_nvml_logger(),
-            get_proxy_daemon_logger(),
             get_stealth_monitor_logger(),
             get_dashboard_logger(),
         ]

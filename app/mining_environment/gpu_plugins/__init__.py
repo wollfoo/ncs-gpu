@@ -54,16 +54,7 @@ def _auto_register_plugins():
             logger.warning(f"⚠️ Could not import time_based_manager: {e}")
         except Exception as e:
             logger.error(f"❌ Failed to register time_based_manager: {e}")
-        
-        # Import và đăng ký nvml_proxy
-        try:
-            from .ipc.nvml_proxy.nvml_proxy_plugin import NVMLProxyPlugin
-            gpu_plugin_registry.register('nvml_proxy', NVMLProxyPlugin)
-            logger.info("✅ Auto-registered: nvml_proxy")
-        except ImportError as e:
-            logger.warning(f"⚠️ Could not import nvml_proxy: {e}")
-        except Exception as e:
-            logger.error(f"❌ Failed to register nvml_proxy: {e}")
+        # nvml_proxy plugin đã bị loại bỏ hoàn toàn (decommissioned)
         
         # Báo cáo kết quả đăng ký
         registered_plugins = gpu_plugin_registry.list_plugins()
@@ -161,8 +152,7 @@ def apply_gpu_strategies(pid, strategies=None):
         available_plugins = [
             'thermal_spoofer',
             'nvml_interceptor', 
-            'time_based_manager',
-            'nvml_proxy'  # ✅ Thêm plugin mới
+            'time_based_manager'
         ]
         
         logger.info(f"🔄 [Step 2/5] Loading {len(available_plugins)} GPU plugins...")
