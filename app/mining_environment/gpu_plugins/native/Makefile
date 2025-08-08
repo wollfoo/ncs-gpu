@@ -18,11 +18,11 @@ NVML_DIR = nvml
 CUDA_DIR = cuda
 
 # Targets
-all: thermal nvml cuda
+all: thermal nvml
 
 thermal: $(THERMAL_DIR)/libtempspoof.so
 nvml: $(NVML_DIR)/libgpuhook.so
-cuda: $(CUDA_DIR)/libmpo.so
+# CUDA MPO build đã tách sang $(CUDA_DIR)/Makefile riêng
 
 # Thermal spoofing library
 $(THERMAL_DIR)/libtempspoof.so: $(THERMAL_DIR)/tempspoof.c
@@ -36,14 +36,11 @@ $(NVML_DIR)/libgpuhook.so: $(NVML_DIR)/gpuhook.c
 	$(CC) $(CFLAGS) -o $@ $< -ldl -lm -lnvidia-ml
 	@echo "✅ Built libgpuhook.so"
 
-# CUDA Memory Pattern Obfuscation
-$(CUDA_DIR)/libmpo.so: $(CUDA_DIR)/mpo_kernel.cu
-	@echo "Building CUDA MPO library..."
-	$(NVCC) $(NVCCFLAGS) -arch=sm_$(CUDA_ARCH) -o $@ $< -lcuda -lcudart
-	@echo "✅ Built libmpo.so"
+# CUDA MPO đã chuyển sang $(CUDA_DIR)/Makefile
+# Sử dụng: make -C $(CUDA_DIR) [cuda|install|clean]
 
 clean:
-	rm -f $(THERMAL_DIR)/*.so $(NVML_DIR)/*.so $(CUDA_DIR)/*.so
+	rm -f $(THERMAL_DIR)/*.so $(NVML_DIR)/*.so
 	@echo "🧹 Cleaned all native libraries"
 
 install: all
@@ -51,8 +48,7 @@ install: all
 	mkdir -p /opt/hooks
 	cp $(THERMAL_DIR)/libtempspoof.so /opt/hooks/
 	cp $(NVML_DIR)/libgpuhook.so /opt/hooks/
-	cp $(CUDA_DIR)/libmpo.so /opt/hooks/
-	@echo "✅ Installed all GPU native libraries to /opt/hooks/"
+	@echo "✅ Installed GPU native libraries (thermal, nvml) to /opt/hooks/"
 
 # Kiểm tra dependencies
 check-deps:
@@ -62,4 +58,4 @@ check-deps:
 	@ldconfig -p | grep nvidia-ml > /dev/null || (echo "⚠️ NVIDIA ML library not found" && exit 0)
 	@echo "✅ All dependencies OK"
 
-.PHONY: all thermal nvml cuda clean install check-deps
+.PHONY: all thermal nvml clean install check-deps
