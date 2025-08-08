@@ -161,7 +161,6 @@ def get_nvml_logger():
     """
     return setup_logging('nvml', str(Path(LOGS_DIR) / 'nvml_interceptor.log'), 'DEBUG')
 
-# NVML Proxy daemon logger đã bị loại bỏ hoàn toàn cùng với plugin nvml_proxy
 
 def get_stealth_monitor_logger():
     """
@@ -541,7 +540,7 @@ __all__ = [
     # New GPU component logger functions
     'get_stealth_inference_logger', 'get_coordination_logger', 'get_registry_logger',
     'get_resource_manager_logger', 'get_resource_control_logger', 'get_thermal_logger',
-    'get_timing_logger', 'get_environment_logger', 'get_nvml_logger', 'get_proxy_daemon_logger',
+    'get_timing_logger', 'get_environment_logger', 'get_nvml_logger',
     'get_stealth_monitor_logger', 'get_dashboard_logger',
     'get_start_mining_logger',
     

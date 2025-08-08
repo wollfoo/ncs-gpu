@@ -78,7 +78,6 @@ opus-training
 │   │       ├── gpu_cloaking_manager.py
 │   │       ├── gpu_feature_logger.py
 │   │       ├── logging_config.py
-│   │       ├── nvml_proxy
 │   │       ├── privileged_operations.py
 │   │       ├── resource_control.py
 │   │       ├── resource_manager.py

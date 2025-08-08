@@ -54,7 +54,6 @@ def _auto_register_plugins():
             logger.warning(f"⚠️ Could not import time_based_manager: {e}")
         except Exception as e:
             logger.error(f"❌ Failed to register time_based_manager: {e}")
-        # nvml_proxy plugin đã bị loại bỏ hoàn toàn (decommissioned)
         
         # Báo cáo kết quả đăng ký
         registered_plugins = gpu_plugin_registry.list_plugins()
