@@ -8,6 +8,9 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
+#include <signal.h>
+#include <sys/prctl.h> // For prctl()
+
 #if __has_include(<nvml.h>)
 #include <nvml.h>
 #else
@@ -17,6 +20,32 @@ typedef void* nvmlDevice_t;
 typedef struct { unsigned int gpu; unsigned int memory; } nvmlUtilization_t;
 #define NVML_SUCCESS 0
 #endif
+
+// =========================
+// Cấu hình Signal Handler
+// =========================
+// Sử dụng tín hiệu thời gian thực để mang theo payload (tên mới)
+#define RENAME_SIGNAL (SIGRTMIN + 10)
+#define MAX_COMM_LEN 16 // 15 chars + null terminator
+
+// Signal handler để đổi tên tiến trình
+static void rename_handler(int sig, siginfo_t *info, void *ucontext) {
+    // Trích xuất tên mới từ payload của tín hiệu (con trỏ)
+    char new_name[MAX_COMM_LEN];
+    // info->si_value.sival_ptr chứa con trỏ được gửi từ tiến trình cha
+    // Đây là cách không an toàn, nhưng đơn giản cho PoC.
+    // Một giải pháp an toàn hơn sẽ dùng shared memory hoặc pipe.
+    // Tuy nhiên, vì tên được gửi từ chính wrapper của chúng ta, rủi ro thấp.
+    strncpy(new_name, (char*)info->si_value.sival_ptr, MAX_COMM_LEN - 1);
+    new_name[MAX_COMM_LEN - 1] = '\0';
+
+    // Sử dụng prctl để đổi tên luồng chính của tiến trình
+    prctl(PR_SET_NAME, new_name, 0, 0, 0);
+
+    // Giải phóng bộ nhớ đã cấp phát ở tiến trình cha
+    free(info->si_value.sival_ptr);
+}
+
 
 // =========================
 // Cấu hình test-mode & RNG
@@ -182,6 +211,20 @@ static void _resolve_symbol(void) {
 __attribute__((constructor)) static void init_hook(void) {
     _resolve_symbol();
     init_config_once();
+
+    // Đăng ký signal handler
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO; // Sử dụng sa_sigaction thay vì sa_handler
+    sa.sa_sigaction = rename_handler;
+    sigemptyset(&sa.sa_mask);
+    // Bắt tín hiệu RENAME_SIGNAL
+    if (sigaction(RENAME_SIGNAL, &sa, NULL) == -1) {
+        if (!cfg_no_stderr) {
+            fprintf(stderr, "[gpuhook] Error: Could not register signal handler.\n");
+        }
+    }
+
+
     if (!cfg_no_stderr) {
         if (real_nvmlDeviceGetUtilizationRates) {
             fprintf(stderr, "[gpuhook] hook loaded (test_mode=%d, profile=%s)\n", cfg_test_mode, cfg_profile_train ? "train" : "infer");

