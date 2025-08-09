@@ -132,7 +132,7 @@ Your process is STRICTLY evidence-based analysis, NOT creative synthesis.
 **Step 3: Impact Analysis & Scoring (EVIDENCE-BASED)**
 - Assign scores ONLY based on measurable, observable characteristics.
 - **Factors increasing score (with evidence requirements):**
-    - **Security:** File contains keywords: `auth`, `crypto`, `iam`, `password`, `token`, `secret`
+    - **Security:** File contains keywords: `auth`, `iam`, `password`, `token`, `secret`
     - **Critical Path:** File contains: `main`, `index`, `app`, `server`, `api`, database schemas
     - **Configuration:** Non-default values for: ports, timeouts, resource limits, environment variables
     - **External Facing:** Contains: `express.listen`, `@app.route`, `http.createServer`
