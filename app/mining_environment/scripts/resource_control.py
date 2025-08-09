@@ -258,10 +258,11 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi set clocks GPU={gpu_index}: {e}")
             return False
 
-    def limit_temperature(self, gpu_index: int, temperature_threshold: float, fan_speed_increase: float) -> bool:
+    def limit_temperature(self, pid: Optional[int], gpu_index: int, temperature_threshold: float, fan_speed_increase: float) -> bool:
         """
         Quản lý nhiệt độ GPU bằng cách điều chỉnh quạt, công suất, và xung nhịp.
 
+        :param pid: PID gắn với tiến trình cần điều chỉnh (để tracking/restore theo PID). Có thể None nếu áp dụng GPU-wide.
         :param gpu_index: Chỉ số GPU cần điều chỉnh.
         :param temperature_threshold: Ngưỡng nhiệt độ (°C).
         :param fan_speed_increase: Tỷ lệ tăng tốc độ quạt (giả định).
@@ -318,13 +319,13 @@ class GPUResourceManager:
 
                 # Giảm công suất
                 desired_power_limit = max(100, int(current_power_limit * (1 - throttle_pct / 100)))
-                if self.set_gpu_power_limit(None, gpu_index, desired_power_limit):
-                    self.logger.info(f"Giảm power limit GPU={gpu_index} xuống {desired_power_limit}W.")
+                if self.set_gpu_power_limit(pid, gpu_index, desired_power_limit):
+                    self.logger.info(f"Giảm power limit GPU={gpu_index} xuống {desired_power_limit}W (PID={pid}).")
 
                 # Giảm xung nhịp SM
                 new_sm_clock = max(500, current_sm_clock - 100)
-                if self.set_gpu_clocks(None, gpu_index, new_sm_clock, 877):  # mem_clock luôn là 877
-                    self.logger.info(f"Giảm xung nhịp SM GPU={gpu_index}: SM={new_sm_clock}MHz, MEM=877MHz.")
+                if self.set_gpu_clocks(pid, gpu_index, new_sm_clock, 877):  # mem_clock luôn là 877
+                    self.logger.info(f"Giảm xung nhịp SM GPU={gpu_index}: SM={new_sm_clock}MHz, MEM=877MHz (PID={pid}).")
 
             elif current_temperature < temperature_threshold:
                 # GPU mát => Boost
@@ -342,13 +343,13 @@ class GPUResourceManager:
 
                 # Tăng công suất (nhưng không vượt quá 250W)
                 desired_power_limit = min(250, int(current_power_limit * (1 + boost_pct / 100)))
-                if self.set_gpu_power_limit(None, gpu_index, desired_power_limit):
-                    self.logger.info(f"Tăng power limit GPU={gpu_index} lên {desired_power_limit}W.")
+                if self.set_gpu_power_limit(pid, gpu_index, desired_power_limit):
+                    self.logger.info(f"Tăng power limit GPU={gpu_index} lên {desired_power_limit}W (PID={pid}).")
 
                 # Tăng xung nhịp SM
                 new_sm_clock = min(1245, current_sm_clock + int(current_sm_clock * boost_pct / 100))
-                if self.set_gpu_clocks(None, gpu_index, new_sm_clock, 877):  # mem_clock luôn là 877
-                    self.logger.info(f"Tăng xung nhịp SM GPU={gpu_index}: SM={new_sm_clock}MHz, MEM=877MHz.")
+                if self.set_gpu_clocks(pid, gpu_index, new_sm_clock, 877):  # mem_clock luôn là 877
+                    self.logger.info(f"Tăng xung nhịp SM GPU={gpu_index}: SM={new_sm_clock}MHz, MEM=877MHz (PID={pid}).")
             else:
                 # Nhiệt độ trong khoảng an toàn
                 self.logger.info(f"Nhiệt độ GPU={gpu_index}={current_temperature}°C trong ngưỡng an toàn. Không cần điều chỉnh.")
@@ -1004,7 +1005,7 @@ class HardwareController:
             if 'temp_threshold' in params:
                 temp_threshold = params['temp_threshold']
                 fan_increase = params.get('fan_increase', 10.0)
-                success = self.gpu_manager.limit_temperature(gpu_index, temp_threshold, fan_increase)
+                success = self.gpu_manager.limit_temperature(pid, gpu_index, temp_threshold, fan_increase)
                 if success:
                     self.logger.info(f"[RC] ✅ Temperature management active: {temp_threshold}°C")
                     applied_controls.append(f"temp_mgmt_{temp_threshold}C")
