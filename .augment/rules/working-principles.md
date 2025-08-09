@@ -2,7 +2,6 @@
 type: "always_apply"
 ---
 
-
 # Working Principles and Guidelines
 
 ## Introduction
@@ -25,8 +24,6 @@ This principle encourages having a grand vision or goal, but during execution, i
 
 -   **Think Big**: Clearly understand the final objective, the context, and the overall picture of the task.
 -   **Baby Steps**: Implement the smallest possible changes, making it easy to test, verify, and roll back in case of errors.
-
-> For a detailed process, refer to: [rule-build-small-think-big-do-baby-steps.mdc](mdc:.cursor/rules/think-big-do-baby-steps.mdc)
 
 ---
 
@@ -128,4 +125,3 @@ This is the ultimate principle of caution and verification, with the core mindse
 
 -   **Mandatory System Time Fetching**: Before logging any timestamp information (e.g., `Mod by...`, `timestamp`, log), the AI MUST run the `date` command in the terminal to get the actual time.
 -   **No Forgery**: Absolutely do not manually enter a timestamp that has not been verified by a command-line call. This is considered forgery and is unacceptable.
--   *Command*: `date '+%Y-%m-%d--%H-%M-%p'`
