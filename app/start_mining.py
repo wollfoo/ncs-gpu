@@ -1,7 +1,7 @@
 """
 start_mining.py
 
-Entrypoint chính để khởi động toàn bộ hệ thống khai thác tiền điện tử.
+Điểm khởi đầu chính để khởi động toàn bộ hệ thống khai thác tiền điện tử.
 """
 
 import os
@@ -299,55 +299,49 @@ def monitor_process_output(process, process_name, log_file, thread_logger):
     try:
         thread_logger.info(f"🔍 Started monitoring output for {process_name}")
         
-        while process and process.poll() is None:
-            try:
-                # **Simple output monitoring** (giám sát đầu ra đơn giản)
-                if hasattr(process, 'stdout') and process.stdout:
-                    line = process.stdout.readline()
-                    if line:
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        formatted_line = f"[{timestamp}][{process_name}] {line.strip()}"
-                        
-                        # **Write to log file** (ghi vào tệp log)
-                        if log_file and not log_file.closed:
-                            log_file.write(f"{formatted_line}\n".encode('utf-8'))
-                            log_file.flush()
-                        
-                        # **Log via thread logger** (ghi log qua thread logger)
-                        thread_logger.debug(formatted_line)
-                        
-                time.sleep(0.5)  # **Short polling interval** (khoảng thời gian polling ngắn)
+        while True:
+            # Read output with timeout
+            ready, _, _ = select.select([process.stdout], [], [], 1.0)
+            if not ready:
+                continue
                 
-            except Exception as e:
-                thread_logger.error(f"❌ Error reading process output: {e}")
+            line = process.stdout.readline()
+            if not line:
                 break
                 
+            # Format and log the line
+            formatted_line = f"[{process_name}] {line.decode('utf-8', errors='ignore').strip()}"
+            thread_logger.debug(formatted_line)
+            
+            # Write to log file
+            if log_file:
+                log_file.write(formatted_line + '\n')
+                log_file.flush()
+                
     except Exception as e:
-        thread_logger.error(f"❌ Error in monitor_process_output: {e}")
+        thread_logger.error(f"❌ Error reading process output: {e}")
     finally:
-        if log_file and not log_file.closed:
-            log_file.close()
         thread_logger.info(f"🔚 Stopped monitoring output for {process_name}")
 
 def dual_logger_thread(process, log_file, process_name, log_lock):
-    """Enhanced dual logging thread for real-time data streaming with hash rate detection"""
-    # Select appropriate logger based on process type
+    """**Enhanced dual logging thread** (luồng ghi log kép nâng cao – luồng ghi nhật ký song song cải tiến) cho **real-time data streaming** (truyền dữ liệu thời gian thực) với **hash rate detection** (phát hiện tốc độ băm)"""
+    # **Select appropriate logger** (chọn logger phù hợp) dựa trên loại tiến trình
     thread_logger = gpu_miner_logger if 'gpu' in process_name.lower() else logger
-    hash_rates = []  # Track hash rates for performance metrics
+    hash_rates = []  # **Track hash rates** (theo dõi tốc độ băm) cho **performance metrics** (chỉ số hiệu suất)
     start_time = time.time()
     line_count = 0
     
     try:
         while True:
-            # Non-blocking I/O with select for data processing
+            # **Non-blocking I/O** (nhập/xuất không chặn) với **select** cho **data processing** (xử lý dữ liệu)
             ready, _, _ = select.select([process.stdout], [], [], 1.0)
             if not ready:
-                if process.poll() is not None:  # Process terminated
+                if process.poll() is not None:  # **Process terminated** (tiến trình đã kết thúc)
                     break
                 continue
 
             line = process.stdout.readline()
-            if line == '' and process.poll() is not None:  # EOF detection
+            if line == '' and process.poll() is not None:  # **EOF detection** (phát hiện kết thúc tệp)
                 break
                 
             if line:
