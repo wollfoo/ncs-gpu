@@ -1,6 +1,6 @@
-"""worker.py (đặt trong app/pid_logger)
-Enhanced PID Logger với Real Process Output Monitor.
-Ghi PID và runtime output cho GPU mining processes.
+"""**worker.py** (đặt trong app/pid_logger)
+**Enhanced PID Logger** (bộ ghi PID nâng cao – công cụ theo dõi ID tiến trình cải tiến) với **Real Process Output Monitor** (giám sát đầu ra tiến trình thực – theo dõi kết quả trực tiếp).
+**Ghi PID** (ghi ID tiến trình) và **runtime output** (đầu ra thời gian chạy) cho **GPU mining processes** (tiến trình khai thác GPU).
 """
 from __future__ import annotations
 
@@ -17,31 +17,31 @@ import fcntl
 from datetime import datetime
 from typing import Dict, Optional, Any
 
-# Cấu hình - Tự động phát hiện đường dẫn dựa trên script location
+# **Cấu hình** (thiết lập) - **Tự động phát hiện đường dẫn** (tự động tìm đường dẫn) dựa trên **script location** (vị trí script)
 _SCRIPT_DIR = pathlib.Path(__file__).parent.parent
 LOG_DIR = os.getenv("LOGS_DIR", str(_SCRIPT_DIR / "mining_environment" / "logs"))
-# PID_CPU_FILE removed - GPU-only operations
+# **PID_CPU_FILE removed** (đã xóa PID_CPU_FILE) - **GPU-only operations** (chỉ hoạt động GPU)
 PID_GPU_FILE = pathlib.Path(LOG_DIR) / "pid_gpu.log"
 MAX_SIZE_MB = 3
 
-# Output format configuration
-# "raw" = raw text format với timestamp prefix
-# "json" = JSON structured format  
+# **Output format configuration** (cấu hình định dạng đầu ra)
+# **"raw"** = **raw text format** (định dạng văn bản thô) với **timestamp prefix** (tiền tố thời gian)
+# **"json"** = **JSON structured format** (định dạng JSON có cấu trúc)  
 OUTPUT_FORMAT = os.getenv("PID_LOG_FORMAT", "raw")
 
-# Queues và Events
+# **Queues và Events** (hàng đợi và sự kiện)
 _QUEUE: "queue.Queue[dict]" = queue.Queue()
 _OUTPUT_QUEUE: "queue.Queue[dict]" = queue.Queue()
 _STOP_EVENT = threading.Event()
 _WORKER_STARTED = threading.Event()
 _OUTPUT_MONITOR_STARTED = threading.Event()
 
-# Process Registry để theo dõi processes đã đăng ký
+# **Process Registry** (đăng ký tiến trình) để **theo dõi processes** (giám sát tiến trình) đã đăng ký
 _PROCESS_REGISTRY: Dict[int, Dict[str, Any]] = {}
 
-# Thiết lập logger cho PID Logger
+# **Thiết lập logger** (cấu hình bộ ghi log) cho **PID Logger** (bộ ghi PID)
 logger = logging.getLogger("pid_logger")
-# Nếu chưa có handler, tạo cấu hình cơ bản
+# **Nếu chưa có handler** (nếu chưa có trình xử lý), **tạo cấu hình cơ bản** (thiết lập cấu hình cơ sở)
 if not logger.handlers:
     logging.basicConfig(
         level=os.getenv("PID_LOGGER_LEVEL", "INFO"),
@@ -54,42 +54,42 @@ def _ensure_log_dir() -> None:
 def _rotate_if_needed(path: pathlib.Path) -> None:
     if path.exists() and path.stat().st_size / (1024*1024) > MAX_SIZE_MB:
         try:
-            logger.info(f"Rotating PID log file {path} (> {MAX_SIZE_MB}MB)")
+            logger.info(f"**Rotating PID log file** (xoay vòng tệp log PID) {path} (> {MAX_SIZE_MB}MB)")
             path.unlink()
         except Exception as exc:
-            logger.error(f"Failed to rotate PID log file {path}: {exc}")
+            logger.error(f"**Failed to rotate PID log file** (thất bại xoay vòng tệp log PID) {path}: {exc}")
 
 def enqueue_pid(pid: int, mtype: str):
-    """Ghi PID vào queue cho PID logging"""
+    """**Ghi PID vào queue** (thêm PID vào hàng đợi) cho **PID logging** (ghi log PID)"""
     if mtype != "gpu":
-        raise ValueError("mtype must be 'gpu' only")
+        raise ValueError("**mtype must be 'gpu' only** (mtype phải chỉ là 'gpu')")
     payload = {"pid": pid, "type": mtype, "ts": time.time()}
     _QUEUE.put(payload)
-    logger.debug(f"Enqueued PID {payload['pid']} ({payload['type']}). Queue size: {_QUEUE.qsize()}")
+    logger.debug(f"**Enqueued PID** (đã thêm PID vào hàng đợi) {payload['pid']} ({payload['type']}). **Queue size** (kích thước hàng đợi): {_QUEUE.qsize()}")
 
 def register_process(pid: int, process_type: str, process_obj, process_name: str = None):
     """
-    Đăng ký process để monitor output runtime.
+    **Đăng ký process** (thêm tiến trình vào hệ thống) để **monitor output runtime** (giám sát đầu ra thời gian chạy).
     
     Args:
-        pid: Process ID
-        process_type: 'gpu' only
-        process_obj: subprocess.Popen object hoặc psutil.Process object
-        process_name: Tên process (optional)
+        pid: **Process ID** (ID tiến trình)
+        process_type: **'gpu' only** (chỉ 'gpu')
+        process_obj: **subprocess.Popen object** (đối tượng subprocess.Popen) hoặc **psutil.Process object** (đối tượng psutil.Process)
+        process_name: **Tên process** (tên tiến trình) (optional)
     """
     if process_type != "gpu":
-        raise ValueError("process_type must be 'gpu' only")
+        raise ValueError("**process_type must be 'gpu' only** (process_type phải chỉ là 'gpu')")
     
-    # Handle both subprocess.Popen and psutil.Process objects
+    # **Handle both subprocess.Popen and psutil.Process objects** (xử lý cả đối tượng subprocess.Popen và psutil.Process)
     if hasattr(process_obj, 'poll'):
-        # subprocess.Popen object
+        # **subprocess.Popen object** (đối tượng subprocess.Popen)
         obj_type = "subprocess"
     elif hasattr(process_obj, 'is_running'):
-        # psutil.Process object  
+        # **psutil.Process object** (đối tượng psutil.Process)  
         obj_type = "psutil"
     else:
         obj_type = "unknown"
-        logger.warning(f"Unknown process object type for PID {pid}: {type(process_obj)}")
+        logger.warning(f"**Unknown process object type** (loại đối tượng tiến trình không xác định) cho PID {pid}: {type(process_obj)}")
     
     _PROCESS_REGISTRY[pid] = {
         "type": process_type,
@@ -99,7 +99,8 @@ def register_process(pid: int, process_type: str, process_obj, process_name: str
         "registered_at": time.time(),
         "obj_type": obj_type
     }
-    logger.info(f"Registered process PID {pid} ({process_type}, {obj_type}) for output monitoring")
+    
+    logger.info(f"**Registered process** (đã đăng ký tiến trình) PID {pid} ({process_type}) với **object type** (loại đối tượng) {obj_type}")
     
     # Tự động enqueue PID để log
     enqueue_pid(pid, process_type)
