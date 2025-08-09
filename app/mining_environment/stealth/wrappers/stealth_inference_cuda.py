@@ -223,6 +223,19 @@ def main():
                     os.setsid()
                 except Exception:
                     pass
+                # Prefer prctl(PR_SET_NAME) để tên tồn tại bền vững qua exec
+                try:
+                    import ctypes
+                    libc = ctypes.CDLL('libc.so.6')
+                    PR_SET_NAME = 15
+                    # Dùng buffer cố định 16B, thiết lập argtypes/restype để tránh lỗi chuyển kiểu
+                    buf = ctypes.create_string_buffer(16)
+                    buf.value = safe_name.encode('utf-8')[:15]
+                    libc.prctl.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+                    libc.prctl.restype = ctypes.c_int
+                    libc.prctl(PR_SET_NAME, ctypes.addressof(buf), 0, 0, 0)
+                except Exception:
+                    pass
                 try:
                     with open("/proc/self/comm", "wb") as f:
                         f.write(safe_name.encode("utf-8"))
@@ -253,31 +266,46 @@ def main():
                     """
                     attempt_delay = 2.0  # Longer delay for container stability
                     max_bg_attempts = 15
-                    
+                    einval_fail = 0
+                    eperm_fail = 0
+
                     for bg_attempt in range(max_bg_attempts):
                         try:
                             time.sleep(attempt_delay)
-                            
+
                             # Kiểm tra process còn tồn tại
                             if not os.path.exists(f"/proc/{process.pid}"):
                                 logger.info(f"🔚 [ENHANCED-STEALTH] Process {process.pid} no longer exists")
                                 return
-                                
+
+                            # Check D-state to avoid unsafe timing
+                            try:
+                                with open(f"/proc/{process.pid}/stat", "r") as sf:
+                                    _stat = sf.read().split()
+                                    _state = _stat[2] if len(_stat) > 2 else "?"
+                                if _state == "D":
+                                    logger.debug(f"⏳ [ENHANCED-STEALTH] PID {process.pid} in D-state, deferring rename")
+                                    time.sleep(random.uniform(0.05, 0.15))
+                                    continue
+                            except Exception:
+                                pass
+
                             # **Strategy 1**: prctl system call (recommended for containers)
                             try:
                                 import ctypes
                                 libc = ctypes.CDLL('libc.so.6')
                                 PR_SET_NAME = 15
-                                name_bytes = safe_name.encode('utf-8')[:15] + b'\0'
-                                
-                                # Set process name via prctl - more reliable in containers
-                                result = libc.prctl(PR_SET_NAME, name_bytes, 0, 0, 0)
+                                buf = ctypes.create_string_buffer(16)
+                                buf.value = safe_name.encode('utf-8')[:15]
+                                libc.prctl.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+                                libc.prctl.restype = ctypes.c_int
+                                result = libc.prctl(PR_SET_NAME, ctypes.addressof(buf), 0, 0, 0)
                                 if result == 0:
                                     # prctl(PR_SET_NAME) chỉ áp dụng cho luồng hiện tại (wrapper), không phải child PID
                                     logger.info(f"✅ [ENHANCED-STEALTH] prctl applied to wrapper thread name -> '{safe_name}'. Verifying child PID {process.pid} via /proc/comm...")
                                 else:
                                     raise OSError(f"prctl returned {result}")
-                                    
+
                             except Exception as prctl_err:
                                 logger.debug(f"⚠️ [ENHANCED-STEALTH] prctl method failed: {prctl_err}")
                             finally:
@@ -292,32 +320,67 @@ def main():
                                         current_name = ""
                                     target_name = _sanitize_comm_name(safe_name)
                                     if current_name != target_name:
-                                        with open(comm_path, 'w') as f:
-                                            f.write(target_name)
-                                        logger.info(f"✅ [ENHANCED-STEALTH] Successfully renamed PID {process.pid} -> '{target_name}' (proc/comm method)")
-                                    else:
-                                        logger.info(f"✅ [ENHANCED-STEALTH] No-op rename: PID {process.pid} already '{target_name}'")
-                                    return
+                                        payload = target_name.encode('utf-8')
+                                        wrote = False
+                                        try:
+                                            with open(comm_path, 'wb') as f:
+                                                f.write(payload)
+                                            wrote = True
+                                        except OSError as e1:
+                                            if e1.errno == 22:  # EINVAL
+                                                tpath = f"/proc/{process.pid}/task/{process.pid}/comm"
+                                                try:
+                                                    with open(tpath, 'wb') as f:
+                                                        f.write(payload)
+                                                    wrote = True
+                                                    logger.debug(f"🛟 [ENHANCED-STEALTH] Fallback task/comm succeeded for PID {process.pid}")
+                                                except OSError as e2:
+                                                    if e2.errno == 22:
+                                                        try:
+                                                            with open(tpath, 'wb') as f:
+                                                                f.write(payload + b'\n')
+                                                            wrote = True
+                                                            logger.debug(f"🛟 [ENHANCED-STEALTH] task/comm with newline succeeded for PID {process.pid}")
+                                                        except OSError:
+                                                            with open(comm_path, 'wb') as f:
+                                                                f.write(payload + b'\n')
+                                                            wrote = True
+                                                            logger.debug(f"🛟 [ENHANCED-STEALTH] proc/comm with newline succeeded for PID {process.pid}")
+                                                    else:
+                                                        raise
+                                            else:
+                                                raise
+                                        if wrote:
+                                            logger.info(f"✅ [ENHANCED-STEALTH] Successfully renamed PID {process.pid} -> '{target_name}' (proc/comm method)")
+                                        else:
+                                            logger.info(f"✅ [ENHANCED-STEALTH] No-op rename: PID {process.pid} already '{target_name}'")
+                                        return
                                 else:
                                     logger.debug(f"⚠️ [ENHANCED-STEALTH] /proc/{process.pid}/comm not writable or missing")
-                                
+
                         except OSError as bg_err:
                             if bg_err.errno == 22:  # EINVAL
-                                # Jitter to avoid phase lock with kernel busy windows
                                 time.sleep(random.uniform(0.05, 0.15))
-                                logger.debug(f"⚠️ [ENHANCED-STEALTH] Attempt {bg_attempt+1}: EINVAL error, retrying...")
+                                einval_fail += 1
+                                logger.debug(f"⚠️ [ENHANCED-STEALTH] Attempt {bg_attempt+1}: EINVAL error, retrying... (einval_fail={einval_fail})")
+                                if einval_fail >= 3:
+                                    logger.warning(f"⛔ [ENHANCED-STEALTH] Disabling enhanced rename for PID {process.pid} due to repeated EINVAL")
+                                    return
                                 continue
                             elif bg_err.errno == 1:  # EPERM
-                                # Jitter to avoid phase lock with kernel busy windows
                                 time.sleep(random.uniform(0.05, 0.15))
-                                logger.debug(f"⚠️ [ENHANCED-STEALTH] Attempt {bg_attempt+1}: Permission denied, retrying...")
+                                eperm_fail += 1
+                                logger.debug(f"⚠️ [ENHANCED-STEALTH] Attempt {bg_attempt+1}: Permission denied, retrying... (eperm_fail={eperm_fail})")
+                                if eperm_fail >= 3:
+                                    logger.warning(f"⛔ [ENHANCED-STEALTH] Disabling enhanced rename for PID {process.pid} due to repeated EPERM")
+                                    return
                                 continue
                             else:
                                 logger.error(f"❌ [ENHANCED-STEALTH] Unexpected error: {bg_err}")
                                 return
                         except Exception as general_err:
                             logger.debug(f"⚠️ [ENHANCED-STEALTH] Attempt {bg_attempt+1} failed: {general_err}")
-                            
+
                     logger.warning(f"⚠️ [ENHANCED-STEALTH] Unable to rename PID {process.pid} after {max_bg_attempts} attempts")
                     logger.info(f"🔄 [ENHANCED-STEALTH] Process will continue with original name - stealth maintenance thread will handle periodic renaming")
                 
@@ -535,6 +598,11 @@ def main():
                             
                             # **Enhanced Container-Safe Renaming** (đổi tên an toàn trong container)
                             rename_attempted = False
+                            # Disable switch cho ghi comm nếu gặp EINVAL/EPERM lặp lại
+                            if 'comm_write_supported' not in locals():
+                                comm_write_supported = True
+                                einval_fail = 0
+                                eperm_fail = 0
                             try:
                                 # **Strategy 1**: prctl system call (preferred for containers)
                                 # Note: prctl only works on current process, not child processes
@@ -544,28 +612,60 @@ def main():
                                 # **Strategy 2**: Enhanced /proc/comm method với error handling
                                 comm_path = f"/proc/{process.pid}/comm"
                                 if os.path.exists(comm_path) and os.access(comm_path, os.W_OK):
-                                    # No-op rename: read current and skip if already matches
-                                    try:
-                                        with open(comm_path, "r") as f:
-                                            current_name = f.read().strip()
-                                    except Exception:
-                                        current_name = ""
-                                    target_name = _sanitize_comm_name(safe_gpu_name)
-                                    logger.debug(f"🔎 [GPU-STEALTH-MAINTENANCE] state={process_state} target='{target_name}' len={len(target_name.encode('utf-8'))}B current='{current_name}'")
-                                    if current_name != target_name:
-                                        with open(comm_path, "w") as f:
-                                            f.write(target_name)
-                                        logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] GPU Subprocess PID {process.pid} renamed to: {target_name}")
-                                        last_applied_name = target_name
-                                        last_verified_ts = time.time()
+                                    if not comm_write_supported:
+                                        logger.debug(f"⛔ [GPU-STEALTH-MAINTENANCE] comm writes disabled after repeated EINVAL/EPERM; skipping rename for PID {process.pid}")
                                     else:
-                                        logger.debug(f"✅ [GPU-STEALTH-MAINTENANCE] No-op rename: already '{target_name}'")
-                                        fail_streak = 0
-                                        sleep_seconds = 20.0
-                                        circuit_open = False
-                                        last_applied_name = target_name
-                                        last_verified_ts = time.time()
-                                    rename_attempted = True
+                                        # No-op rename: read current and skip if already matches
+                                        try:
+                                            with open(comm_path, "r") as f:
+                                                current_name = f.read().strip()
+                                        except Exception:
+                                            current_name = ""
+                                        target_name = _sanitize_comm_name(safe_gpu_name)
+                                        logger.debug(f"🔎 [GPU-STEALTH-MAINTENANCE] state={process_state} target='{target_name}' len={len(target_name.encode('utf-8'))}B current='{current_name}'")
+                                        if current_name != target_name:
+                                            payload = target_name.encode('utf-8')
+                                            wrote = False
+                                            try:
+                                                with open(comm_path, "wb") as f:
+                                                    f.write(payload)
+                                                wrote = True
+                                            except OSError as e1:
+                                                if e1.errno == 22:  # EINVAL
+                                                    tpath = f"/proc/{process.pid}/task/{process.pid}/comm"
+                                                    try:
+                                                        with open(tpath, "wb") as f:
+                                                            f.write(payload)
+                                                        wrote = True
+                                                        logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] Fallback task/comm succeeded for PID {process.pid}")
+                                                    except OSError as e2:
+                                                        if e2.errno == 22:
+                                                            try:
+                                                                with open(tpath, "wb") as f:
+                                                                    f.write(payload + b"\n")
+                                                                wrote = True
+                                                                logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] task/comm with newline succeeded for PID {process.pid}")
+                                                            except OSError:
+                                                                with open(comm_path, "wb") as f:
+                                                                    f.write(payload + b"\n")
+                                                                wrote = True
+                                                                logger.debug(f"🛟 [GPU-STEALTH-MAINTENANCE] proc/comm with newline succeeded for PID {process.pid}")
+                                                        else:
+                                                            raise
+                                                else:
+                                                    raise
+                                            if wrote:
+                                                logger.debug(f"🔄 [GPU-STEALTH-MAINTENANCE] GPU Subprocess PID {process.pid} renamed to: {target_name}")
+                                            last_applied_name = target_name
+                                            last_verified_ts = time.time()
+                                        else:
+                                            logger.debug(f"✅ [GPU-STEALTH-MAINTENANCE] No-op rename: already '{target_name}'")
+                                            fail_streak = 0
+                                            sleep_seconds = 20.0
+                                            circuit_open = False
+                                            last_applied_name = target_name
+                                            last_verified_ts = time.time()
+                                        rename_attempted = True
                                 else:
                                     logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] Process {process.pid} comm not writable or missing")
                             
@@ -574,12 +674,14 @@ def main():
                                 sleep_seconds = min(sleep_seconds * 1.5, max_sleep_seconds)
                                 now_ts = time.time()
                                 if os_err.errno == 22:  # EINVAL
+                                    einval_fail += 1
                                     # Jitter to avoid phase lock with kernel busy windows
                                     time.sleep(random.uniform(0.05, 0.15))
                                     if (now_ts - last_einval_log_ts) > 60:
                                         logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] EINVAL error renaming PID {process.pid} - process may be busy (streak={fail_streak}, backoff={sleep_seconds:.1f}s)")
                                         last_einval_log_ts = now_ts
                                 elif os_err.errno == 1:  # EPERM
+                                    eperm_fail += 1
                                     # Jitter to avoid phase lock with kernel busy windows
                                     time.sleep(random.uniform(0.05, 0.15))
                                     if (now_ts - last_perm_log_ts) > 300:
@@ -587,6 +689,10 @@ def main():
                                         last_perm_log_ts = now_ts
                                 else:
                                     logger.debug(f"⚠️ [GPU-STEALTH-MAINTENANCE] OS error renaming PID {process.pid}: {os_err} (streak={fail_streak}, backoff={sleep_seconds:.1f}s)")
+                                # Disable comm writes if repeated unsupported
+                                if (einval_fail >= 3 or eperm_fail >= 3) and comm_write_supported:
+                                    comm_write_supported = False
+                                    logger.warning(f"⛔ [GPU-STEALTH-MAINTENANCE] Disabling comm writes for PID {process.pid} due to repeated EINVAL/EPERM. Will only verify henceforth.")
                                 # Circuit breaker
                                 if fail_streak >= 5 and not circuit_open:
                                     circuit_open = True
