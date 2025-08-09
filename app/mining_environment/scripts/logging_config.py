@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-✅ **ENHANCED LOGGING CONFIG** (cấu hình ghi log nâng cao – hệ thống nhật ký cải tiến) - **Phase 1 Foundation** (giai đoạn 1 nền tảng – bước xây dựng cơ bản)
+✅ ENHANCED LOGGING CONFIG (cấu hình ghi log nâng cao – hệ thống nhật ký cải tiến) - Phase 1 Foundation (giai đoạn 1 nền tảng – bước xây dựng cơ bản)
 
-**Merged functionality** (chức năng tích hợp – gộp tính năng) từ 3 **logging modules** (module ghi log – thành phần nhật ký):
-- **logging_config.py** (API tương thích cốt lõi – giao diện lập trình cơ bản)
-- **unified_logging.py** (singleton pattern – mẫu thiết kế đơn lẻ + hierarchy – cấu trúc phân cấp)
-- **unified_log_aggregator.py** (event-driven aggregation – tổng hợp theo sự kiện)
+Merged functionality (chức năng tích hợp – gộp tính năng) từ 3 logging modules (module ghi log – thành phần nhật ký):
+- logging_config.py (API tương thích cốt lõi – giao diện lập trình cơ bản)
+- unified_logging.py (singleton pattern – mẫu thiết kế đơn lẻ + hierarchy – cấu trúc phân cấp)
+- unified_log_aggregator.py (event-driven aggregation – tổng hợp theo sự kiện)
 
-Cung cấp **unified logging system** (hệ thống ghi log thống nhất – hệ thống nhật ký tập trung) cho **GPU mining environment** (môi trường khai thác GPU – hệ thống đào coin card đồ họa) với:
-- **Backward compatible** (tương thích ngược – hoạt động với code cũ) **setup_logging() API** (giao diện thiết lập ghi log)
-- **Thread-safe singleton pattern** (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
-- **Real-time log aggregation** (tổng hợp log thời gian thực – gom nhật ký tức thì) (**event-driven** – điều khiển bởi sự kiện, not **polling** – không dò tìm)
-- **Correlation ID system** (hệ thống ID tương quan – mã định danh liên kết)
-- **Enhanced PID/TID tracking** (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng)
+Cung cấp unified logging system (hệ thống ghi log thống nhất – hệ thống nhật ký tập trung) cho GPU mining environment (môi trường khai thác GPU – hệ thống đào coin card đồ họa) với:
+- Backward compatible (tương thích ngược – hoạt động với code cũ) setup_logging() API (giao diện thiết lập ghi log)
+- Thread-safe singleton pattern (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
+- Real-time log aggregation (tổng hợp log thời gian thực – gom nhật ký tức thì) (event-driven – điều khiển bởi sự kiện, not polling – không dò tìm)
+- Correlation ID system (hệ thống ID tương quan – mã định danh liên kết)
+- Enhanced PID/TID tracking (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng)
 """
 
 import os
@@ -30,72 +30,72 @@ import re
 import queue
 import weakref
 
-# **Legacy cryptography imports** (import mã hóa cũ – nhập thư viện bảo mật cũ) (**preserved for compatibility** – giữ lại để tương thích)
+# Legacy cryptography imports (import mã hóa cũ – nhập thư viện bảo mật cũ) (preserved for compatibility – giữ lại để tương thích)
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet  # pragma: no cover
 else:
     try:
         from cryptography.fernet import Fernet  # type: ignore
-    except ImportError:  # **Library** (thư viện – module bên ngoài) có thể chưa cài khi **static check** (kiểm tra tĩnh – phân tích code không chạy)
+    except ImportError:  # Library (thư viện – module bên ngoài) có thể chưa cài khi static check (kiểm tra tĩnh – phân tích code không chạy)
         Fernet = Any  # type: ignore
 import random
 import string
 
 ###############################################################################
-#        **ENHANCED LOGGING SYSTEM** (hệ thống ghi log nâng cao) - PHASE 1  #
+#        ENHANCED LOGGING SYSTEM (hệ thống ghi log nâng cao) - PHASE 1  #
 ###############################################################################
 
-# ✅ **CORRELATION ID** (ID tương quan – mã định danh liên kết): **ContextVar system** (hệ thống biến ngữ cảnh – biến theo ngữ cảnh) (**preserved from original** – giữ nguyên từ bản gốc)
+# ✅ CORRELATION ID (ID tương quan – mã định danh liên kết): ContextVar system (hệ thống biến ngữ cảnh – biến theo ngữ cảnh) (preserved from original – giữ nguyên từ bản gốc)
 correlation_id: ContextVar[str] = ContextVar('correlation_id', default='unknown')
 
 
 ###############################################################################
-#     **CORRELATION ID FILTER** (bộ lọc ID tương quan) (PRESERVED – giữ nguyên) #
+#     CORRELATION ID FILTER (bộ lọc ID tương quan) (PRESERVED – giữ nguyên) #
 ###############################################################################
 class CorrelationIdFilter(logging.Filter):
     """
-    ✅ **PRESERVED** (giữ nguyên – bảo toàn): **Logging filter** (bộ lọc ghi log – công cụ lọc nhật ký) để thêm **Correlation ID** (ID tương quan – mã định danh liên kết) vào mỗi **log record** (bản ghi log – mục nhật ký).
-    **Maintained exact API compatibility** (duy trì tương thích API chính xác – giữ nguyên giao diện lập trình) từ **original logging_config.py** (file cấu hình gốc)
+    ✅ PRESERVED (giữ nguyên – bảo toàn): Logging filter (bộ lọc ghi log – công cụ lọc nhật ký) để thêm Correlation ID (ID tương quan – mã định danh liên kết) vào mỗi log record (bản ghi log – mục nhật ký).
+    Maintained exact API compatibility (duy trì tương thích API chính xác – giữ nguyên giao diện lập trình) từ original logging_config.py (file cấu hình gốc)
     """
     def filter(self, record: logging.LogRecord) -> bool:
         """
-        Thêm **Correlation ID** (ID tương quan – mã định danh liên kết) vào **log record** (bản ghi log – mục nhật ký).
+        Thêm Correlation ID (ID tương quan – mã định danh liên kết) vào log record (bản ghi log – mục nhật ký).
         
         Args:
-            record (logging.LogRecord): **Current log record** (bản ghi log hiện tại – mục nhật ký đang xử lý).
+            record (logging.LogRecord): Current log record (bản ghi log hiện tại – mục nhật ký đang xử lý).
         
         Returns:
-            bool: Luôn trả về **True** để cho phép **log record** (bản ghi log) được **processed** (xử lý – thực thi).
+            bool: Luôn trả về True để cho phép log record (bản ghi log) được processed (xử lý – thực thi).
         """
         record.correlation_id = correlation_id.get()
         return True
 
 
 ###############################################################################
-#     **ENHANCED LOG MANAGER CLASS** (lớp quản lý log nâng cao)             #
+#     ENHANCED LOG MANAGER CLASS (lớp quản lý log nâng cao)             #
 ###############################################################################
 class EnhancedLogManager:
     """
-    ✅ **UNIFIED LOGGING MANAGER** (trình quản lý log thống nhất – hệ thống điều khiển nhật ký tập trung) - **Phase 1 Foundation** (giai đoạn 1 nền tảng)
+    ✅ UNIFIED LOGGING MANAGER (trình quản lý log thống nhất – hệ thống điều khiển nhật ký tập trung) - Phase 1 Foundation (giai đoạn 1 nền tảng)
     
-    **Merges functionality** (tích hợp chức năng – gộp tính năng) từ 3 **modules** (mô-đun – thành phần):
-    1. **logging_config.py**: **setup_logging() API** (giao diện thiết lập log) + **CorrelationIdFilter** (bộ lọc ID tương quan)
-    2. **unified_logging.py**: **Singleton pattern** (mẫu đơn lẻ – thiết kế duy nhất) + **logger hierarchy** (phân cấp logger – cấu trúc cây nhật ký)
-    3. **unified_log_aggregator.py**: **Event-driven log aggregation** (tổng hợp log theo sự kiện – gom nhật ký kích hoạt)
+    Merges functionality (tích hợp chức năng – gộp tính năng) từ 3 modules (mô-đun – thành phần):
+    1. logging_config.py: setup_logging() API (giao diện thiết lập log) + CorrelationIdFilter (bộ lọc ID tương quan)
+    2. unified_logging.py: Singleton pattern (mẫu đơn lẻ – thiết kế duy nhất) + logger hierarchy (phân cấp logger – cấu trúc cây nhật ký)
+    3. unified_log_aggregator.py: Event-driven log aggregation (tổng hợp log theo sự kiện – gom nhật ký kích hoạt)
     
-    **Features** (tính năng – chức năng chính):
-    - **Thread-safe singleton pattern** (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
-    - **Backward compatible** (tương thích ngược) **setup_logging() API** (giao diện thiết lập log)
-    - **Enhanced PID/TID tracking** (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng cải tiến)  
-    - **Real-time log aggregation** (tổng hợp log thời gian thực – gom nhật ký tức thì) (**event-driven** – điều khiển bởi sự kiện)
-    - **Centralized logger hierarchy management** (quản lý phân cấp logger tập trung – điều khiển cấu trúc nhật ký trung tâm)
+    Features (tính năng – chức năng chính):
+    - Thread-safe singleton pattern (mẫu singleton an toàn luồng – thiết kế đơn lẻ không xung đột)
+    - Backward compatible (tương thích ngược) setup_logging() API (giao diện thiết lập log)
+    - Enhanced PID/TID tracking (theo dõi PID/TID nâng cao – giám sát ID tiến trình/luồng cải tiến)  
+    - Real-time log aggregation (tổng hợp log thời gian thực – gom nhật ký tức thì) (event-driven – điều khiển bởi sự kiện)
+    - Centralized logger hierarchy management (quản lý phân cấp logger tập trung – điều khiển cấu trúc nhật ký trung tâm)
     """
     
-    # ✅ **SINGLETON** (đơn lẻ – duy nhất): **Thread-safe instance management** (quản lý thể hiện an toàn luồng – điều khiển đối tượng không xung đột)
+    # ✅ SINGLETON (đơn lẻ – duy nhất): Thread-safe instance management (quản lý thể hiện an toàn luồng – điều khiển đối tượng không xung đột)
     _instance: Optional['EnhancedLogManager'] = None
     _lock = threading.RLock()
     
-    # ✅ **ENHANCED FORMATS** (định dạng nâng cao – cấu trúc cải tiến): **PID/TID tracking** (theo dõi PID/TID – giám sát ID tiến trình/luồng) từ **unified_logging.py**
+    # ✅ ENHANCED FORMATS (định dạng nâng cao – cấu trúc cải tiến): PID/TID tracking (theo dõi PID/TID – giám sát ID tiến trình/luồng) từ unified_logging.py
     STANDARD_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(correlation_id)s - %(message)s'
     ENHANCED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - [PID:%(process)d|TID:%(thread)d] - %(correlation_id)s - %(message)s'
     DATE_FORMAT = '%Y-%m-%d %H:%M:%S'

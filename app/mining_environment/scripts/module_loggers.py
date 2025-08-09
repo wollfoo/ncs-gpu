@@ -1,23 +1,23 @@
 # module_loggers.py
 
 """
-**Module Loggers Configuration** (Cấu hình Logger Mô-đun – thiết lập bộ ghi nhật ký thành phần)
+Module Loggers Configuration (Cấu hình Logger Mô-đun – thiết lập bộ ghi nhật ký thành phần)
 
-Tạo và quản lý **dedicated loggers** (logger chuyên dụng – bộ ghi nhật ký riêng biệt) cho các **mining modules** (mô-đun khai thác – thành phần đào coin)
-và **plugin systems** (hệ thống plugin – cơ chế mở rộng).
+Tạo và quản lý dedicated loggers (logger chuyên dụng – bộ ghi nhật ký riêng biệt) cho các mining modules (mô-đun khai thác – thành phần đào coin)
+và plugin systems (hệ thống plugin – cơ chế mở rộng).
 """
 
 import os
 from pathlib import Path
 from mining_environment.scripts.logging_config import setup_logging
 
-# **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
+# Log directory setup (thiết lập thư mục log – cấu hình folder nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
-# **Dedicated Module Loggers** (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
+# Dedicated Module Loggers (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
 gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
-gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # **Fixed** (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
+gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # Fixed (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
 gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
@@ -25,10 +25,10 @@ gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gp
 
 def get_gpu_plugin_logger():
     """
-    **Get GPU plugin logger** (Lấy logger plugin GPU – truy xuất bộ ghi nhật ký plugin card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU plugin operations** (hoạt động plugin GPU – thao tác mở rộng card đồ họa).
+    Get GPU plugin logger (Lấy logger plugin GPU – truy xuất bộ ghi nhật ký plugin card đồ họa) - Dedicated logger (logger chuyên dụng – bộ ghi riêng) cho GPU plugin operations (hoạt động plugin GPU – thao tác mở rộng card đồ họa).
     
     Returns:
-        Logger: **GPU plugin logger instance** (thực thể logger plugin GPU – đối tượng ghi nhật ký plugin)
+        Logger: GPU plugin logger instance (thực thể logger plugin GPU – đối tượng ghi nhật ký plugin)
     """
     return gpu_plugin_logger
 
