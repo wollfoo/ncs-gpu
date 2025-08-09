@@ -113,9 +113,9 @@ echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
 
 # Execute original program with enhanced environment and error handling
 echo "[$(date)] Starting inference-cuda with memory limits..."
-if [ -x "/app/inference-cuda.original" ]; then
-    exec /app/inference-cuda.original "$@"
+if [ -x "/usr/local/bin/inference-cuda.original" ]; then
+    exec /usr/local/bin/inference-cuda.original "$@"
 else
-    echo "[$(date)] ERROR: /app/inference-cuda.original not found or not executable"
+    echo "[$(date)] ERROR: /usr/local/bin/inference-cuda.original not found or not executable"
     exit 1
 fi
