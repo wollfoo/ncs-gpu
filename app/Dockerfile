@@ -105,7 +105,7 @@ COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtemps
 # Method: Enhanced wrapper script with proper environment setup
 
 RUN ldconfig && \
-    # Install original binary as backup
+
     install -D /tmp/inference-cuda.original    /app/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \

