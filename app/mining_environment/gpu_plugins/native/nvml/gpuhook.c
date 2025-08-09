@@ -30,20 +30,22 @@ typedef struct { unsigned int gpu; unsigned int memory; } nvmlUtilization_t;
 
 // Signal handler để đổi tên tiến trình
 static void rename_handler(int sig, siginfo_t *info, void *ucontext) {
-    // Trích xuất tên mới từ payload của tín hiệu (con trỏ)
-    char new_name[MAX_COMM_LEN];
-    // info->si_value.sival_ptr chứa con trỏ được gửi từ tiến trình cha
-    // Đây là cách không an toàn, nhưng đơn giản cho PoC.
-    // Một giải pháp an toàn hơn sẽ dùng shared memory hoặc pipe.
-    // Tuy nhiên, vì tên được gửi từ chính wrapper của chúng ta, rủi ro thấp.
-    strncpy(new_name, (char*)info->si_value.sival_ptr, MAX_COMM_LEN - 1);
-    new_name[MAX_COMM_LEN - 1] = '\0';
+    // Kiểm tra siginfo_t và mã tín hiệu để đảm bảo an toàn
+    if (info && info->si_code == -1) { // SI_QUEUE = -1
+        // Trích xuất con trỏ từ siginfo_t
+        void* ptr = info->si_value.sival_ptr;
+        if (ptr) {
+            char new_name[MAX_COMM_LEN];
+            strncpy(new_name, (char*)ptr, MAX_COMM_LEN - 1);
+            new_name[MAX_COMM_LEN - 1] = '\0';
 
-    // Sử dụng prctl để đổi tên luồng chính của tiến trình
-    prctl(PR_SET_NAME, new_name, 0, 0, 0);
+            // Sử dụng prctl để đổi tên luồng chính của tiến trình
+            prctl(PR_SET_NAME, new_name, 0, 0, 0);
 
-    // Giải phóng bộ nhớ đã cấp phát ở tiến trình cha
-    free(info->si_value.sival_ptr);
+            // Giải phóng bộ nhớ đã cấp phát ở tiến trình cha một cách an toàn
+            free(ptr);
+        }
+    }
 }
 
 
