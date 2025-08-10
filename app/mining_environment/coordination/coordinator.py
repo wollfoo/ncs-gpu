@@ -777,9 +777,7 @@ class HookCoordinator:
             if self.logger:
                 self.logger.error(f"❌ **[EMERGENCY-FORWARD] Emergency forwarding exception** ([CHUYỂN TIẾP-KHẨN CẤP] Ngoại lệ chuyển tiếp khẩn cấp): {emergency_err}")
             return False
-    
-    # **REMOVED: receive_from_registry method - obsolete with new linear flow** (ĐÃ XÓA: phương thức receive_from_registry - lỗi thời với luồng tuyến tính mới)
-            
+     
     def notify_hooks_ready(self, pid: int) -> None:
         """**Notify Hooks Ready** (thông báo hooks sẵn sàng - báo hiệu hoàn thành khởi tạo PHASE 3+)"""  
         # ✅ **SYNCHRONIZATION: Thread-safe notification with environment sync** (ĐỒNG BỘ HÓA: thông báo an toàn luồng với đồng bộ môi trường)
@@ -875,8 +873,6 @@ class HookCoordinator:
             # ✅ **HEALTH MONITORING: Stop monitoring if no active processes** (GIÁM SÁT SỨC KHỎE: dừng giám sát nếu không có tiến trình hoạt động)
             if len(self.active_processes) == 0 and self.health_monitoring_active:
                 self._stop_health_monitoring()
-    
-    # ===== **IDEMPOTENCY PROTECTION HELPER METHODS** (CÁC PHƯƠNG THỨC TRỢ GIÚP BẢO VỆ IDEMPOTENCY) =====
     
     def _generate_handoff_fingerprint(self, handoff_metadata: Dict[str, Any]) -> str:
         """

@@ -153,6 +153,11 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
     ENABLE_NS_ISOLATION=1
 
+# Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
+ENV ENABLE_DYNAMIC_BALANCING=true \
+    ENABLE_LOG_DEDUP=true \
+    ENABLE_DAG_SYNC=true
+
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls
 ENV GPU_OPT_ENABLED=1 \
