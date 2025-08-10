@@ -1288,73 +1288,92 @@ class OptimizedHardwareController:
         :param params: Original parameters
         :return: Scaled parameters
         """
+        self.logger.warning(f"🚨 [OHC._emergency_scaling] Entry - emergency scaling activated!")
         scaled = params.copy()
         
         # Reduce power by 30%
         if 'power_limit' in scaled:
+            original_power = scaled['power_limit']
             scaled['power_limit'] = int(scaled['power_limit'] * 0.7)
-            self.logger.info(f"Emergency: Reducing power to {scaled['power_limit']}W")
+            self.logger.info(f"⬇️ [OHC._emergency_scaling] Reducing power: {original_power}W → {scaled['power_limit']}W (-30%)")
         
         # Reduce clocks by 20%
         if 'sm_clock' in scaled:
+            original_clock = scaled['sm_clock']
             scaled['sm_clock'] = int(scaled['sm_clock'] * 0.8)
-            self.logger.info(f"Emergency: Reducing SM clock to {scaled['sm_clock']}MHz")
+            self.logger.info(f"⬇️ [OHC._emergency_scaling] Reducing SM clock: {original_clock}MHz → {scaled['sm_clock']}MHz (-20%)")
         
         # Add aggressive fan control
         scaled['fan_increase'] = 30.0  # 30% fan increase
+        self.logger.info(f"💨 [OHC._emergency_scaling] Setting aggressive fan increase: 30%")
         
+        self.logger.debug(f"✅ [OHC._emergency_scaling] Exit - scaled params: {list(scaled.keys())}")
         return scaled
     
     def _apply_nvml_controls(self, pid: int, gpu_index: int, params: Dict[str, Any]) -> bool:
         """
-        Apply controls via NVML nếu available
-        
-        :param params: Control parameters
-        :return: Success status
+        Apply NVML-based controls (power, clocks)
         """
+        self.logger.debug(f"⚡ [OHC._apply_nvml_controls] Entry - PID: {pid}, GPU: {gpu_index}, params: {list(params.keys())}")
+        success = True
+        
         try:
-            # Power limit với smooth transition thông qua GPUResourceManager để có tracking per-PID
-            
-            # Set power limit với smooth transition
+            # Power limit
             if 'power_limit' in params:
+                power_w = params['power_limit']
+                self.logger.debug(f"🔌 [OHC._apply_nvml_controls] Setting power limit to {power_w}W...")
+                
+                # Get current power for smooth transition
                 current_power = self._get_current_power(gpu_index)
                 target_power = params['power_limit']
                 
-                # Smooth transition để tránh spikes
+                # Smooth transition if large change
                 if abs(target_power - current_power) > 20:
-                    # Step-wise adjustment
+                    self.logger.debug(f"📈 [OHC._apply_nvml_controls] Large power change ({current_power}W → {target_power}W), using step-wise...")
                     steps = 3
                     for i in range(steps):
                         intermediate = current_power + (target_power - current_power) * (i+1) / steps
-                        try:
-                            self.gpu_manager.set_gpu_power_limit(pid, gpu_index, int(intermediate))
-                            time.sleep(0.1)
-                        except Exception as e:
-                            self.logger.warning(f"Cannot set power limit (step): {e}")
+                        self.logger.debug(f"  Step {i+1}/{steps}: Setting to {intermediate:.1f}W")
+                        if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, int(intermediate)):
+                            self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed at step {i+1}")
+                            success = False
+                            break
+                        time.sleep(0.1)
                 else:
-                    try:
-                        self.gpu_manager.set_gpu_power_limit(pid, gpu_index, int(target_power))
-                    except Exception as e:
-                        self.logger.warning(f"Cannot set power limit: {e}")
-                
-                self.logger.info(f"✅ Set power limit to {target_power}W")
-            
-            # Set clocks nếu supported
-            if 'sm_clock' in params and 'memory_clock' in params:
-                try:
-                    ok = self.gpu_manager.set_gpu_clocks(pid, gpu_index, params['sm_clock'], params['memory_clock'])
-                    if ok:
-                        self.logger.info(f"✅ Set clocks: SM={params['sm_clock']}MHz, Mem={params['memory_clock']}MHz")
+                    if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, power_w):
+                        self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set power limit {power_w}W")
+                        success = False
                     else:
-                        self.logger.warning("Cannot set GPU clocks via nvidia-smi")
-                except Exception as e:
-                    self.logger.warning(f"Cannot set GPU clocks: {e}")
+                        self.logger.info(f"✅ [OHC._apply_nvml_controls] Power limit set to {power_w}W")
             
-            return True
+            # Clock speeds
+            if 'sm_clock' in params and 'mem_clock' in params:
+                sm_mhz = params['sm_clock']
+                mem_mhz = params['mem_clock']
+                self.logger.debug(f"⏱️ [OHC._apply_nvml_controls] Setting clocks - SM: {sm_mhz}MHz, Mem: {mem_mhz}MHz...")
+                if not self.gpu_manager.set_gpu_clocks(pid, gpu_index, sm_mhz, mem_mhz):
+                    self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set clocks")
+                    success = False
+                else:
+                    self.logger.info(f"✅ [OHC._apply_nvml_controls] Clocks set - SM: {sm_mhz}MHz, Mem: {mem_mhz}MHz")
+            
+            # Temperature control
+            if 'temperature' in params:
+                temp_target = params['temperature']
+                fan_increase = (temp_target - 60) * 2  # Simple linear scaling
+                self.logger.debug(f"🌡️ [OHC._apply_nvml_controls] Setting temp target: {temp_target}°C...")
+                if not self.gpu_manager.limit_temperature(pid, gpu_index, temp_target, fan_increase):
+                    self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set temperature limit")
+                    success = False
+                else:
+                    self.logger.info(f"✅ [OHC._apply_nvml_controls] Temperature target set to {temp_target}°C")
             
         except Exception as e:
-            self.logger.warning(f"NVML control failed: {e}")
-            return False
+            self.logger.error(f"❌ [OHC._apply_nvml_controls] Exception: {e}", exc_info=True)
+            success = False
+        
+        self.logger.debug(f"{'✅' if success else '❌'} [OHC._apply_nvml_controls] Exit - success: {success}")
+        return success
 
     def _get_current_power(self, gpu_index: int) -> float:
         """
@@ -1362,27 +1381,37 @@ class OptimizedHardwareController:
         
         :return: Power in Watts
         """
+        self.logger.debug(f"🔍 [OHC._get_current_power] Getting power for GPU {gpu_index}")
+        
         try:
             gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             power_mw = pynvml.nvmlDeviceGetPowerUsage(gpu_handle)
-            return power_mw / 1000.0  # Convert to Watts
-        except:
-            return self.baseline_power  # Return baseline if can't read
+            power_w = power_mw / 1000.0  # Convert to Watts
+            self.logger.debug(f"✅ [OHC._get_current_power] GPU {gpu_index} power: {power_w:.1f}W")
+            return power_w
+        except Exception as e:
+            self.logger.warning(f"⚠️ [OHC._get_current_power] Cannot read power: {e}, using baseline {self.baseline_power}W")
+            return self.baseline_power
 
     def _apply_compute_simulation(self, gpu_index: int, params: Dict[str, Any]) -> bool:
         """
-        Fallback: Simulate power variation via compute load
-        
-        :param params: Control parameters
-        :return: Success status
+        Apply compute load simulation
         """
+        self.logger.debug(f"🔢 [OHC._apply_compute_simulation] Entry - GPU: {gpu_index}")
+        
         try:
-            # Calculate duty cycle based on target power
+            pattern = params.get('compute_pattern', 'sine')
+            duration = params.get('compute_duration', 10)
+            intensity = params.get('compute_intensity', 0.5)
+            self.logger.info(f"🎯 [OHC._apply_compute_simulation] Starting {pattern} pattern for {duration}s at {intensity*100}% intensity")
+            
+            # Calculate duty cycle
             target_power = params.get('power_limit', self.baseline_power)
             duty_cycle = target_power / self.baseline_power
             duty_cycle = max(0.5, min(1.0, duty_cycle))
+            self.logger.debug(f"📊 [OHC._apply_compute_simulation] Duty cycle: {duty_cycle:.2f}")
             
-            # Launch compute kernel với duty cycle
+            # Launch compute kernel
             compute_cmd = f"""
 python3 -c "
 import torch
@@ -1390,12 +1419,10 @@ import time
 import sys
 
 try:
-    # Allocate tensors
     a = torch.randn(2000, 2000, device='cuda')
     b = torch.randn(2000, 2000, device='cuda')
     
-    # Run với duty cycle
-    work_time = {duty_cycle * 0.1}  # 100ms window
+    work_time = {duty_cycle * 0.1}
     sleep_time = {(1 - duty_cycle) * 0.1}
     
     for _ in range(10):
@@ -1405,12 +1432,13 @@ try:
             torch.cuda.synchronize()
         time.sleep(sleep_time)
 except Exception as e:
-    print(f'Compute simulation error: {{e}}', file=sys.stderr)
+    print(f'Compute error: {{e}}', file=sys.stderr)
 " &
             """
             
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(gpu_index)
+            
             proc = subprocess.Popen(
                 compute_cmd, 
                 shell=True,
@@ -1420,14 +1448,36 @@ except Exception as e:
             )
             
             self.active_subprocesses.append(proc)
-            self.logger.info(f"✅ Launched compute simulation (duty cycle: {duty_cycle:.2f})")
+            self.logger.info(f"✅ [OHC._apply_compute_simulation] Started compute PID: {proc.pid}")
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Compute simulation failed: {e}")
+            self.logger.error(f"❌ [OHC._apply_compute_simulation] Failed: {e}", exc_info=True)
             return False
     
+    def _verify_and_adjust_baseline(self, gpu_index: int):
+        """Verify and adjust baseline metrics"""
+        self.logger.debug(f"🔧 [OHC._verify_and_adjust_baseline] Entry - verifying baseline for GPU {gpu_index}")
+        
+        try:
+            actual_temp = self.gpu_manager.get_gpu_temperature(gpu_index)
+            if actual_temp and abs(actual_temp - self.baseline_temp) > 5:
+                self.logger.info(f"📊 [OHC._verify_and_adjust_baseline] Adjusting baseline temp: {self.baseline_temp}°C → {actual_temp}°C (delta: {abs(actual_temp - self.baseline_temp)}°C)")
+                self.baseline_temp = actual_temp
+            else:
+                self.logger.debug(f"✅ [OHC._verify_and_adjust_baseline] Baseline temp OK: {self.baseline_temp}°C (actual: {actual_temp}°C)")
+            
+            actual_power = self._get_current_power(gpu_index)
+            if actual_power and abs(actual_power - self.baseline_power) > 10:
+                self.logger.info(f"⚡ [OHC._verify_and_adjust_baseline] Adjusting baseline power: {self.baseline_power}W → {actual_power}W (delta: {abs(actual_power - self.baseline_power)}W)")
+                self.baseline_power = actual_power
+            else:
+                self.logger.debug(f"✅ [OHC._verify_and_adjust_baseline] Baseline power OK: {self.baseline_power}W (actual: {actual_power}W)")
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ [OHC._verify_and_adjust_baseline] Baseline verification failed: {e}")
+
     def _manage_vram_allocation(self, gpu_index: int, params: Dict[str, Any]) -> bool:
         """
         Manage VRAM để mimic AI workload
@@ -1435,13 +1485,17 @@ except Exception as e:
         :param params: Control parameters
         :return: Success status
         """
+        self.logger.debug(f"💾 [OHC._manage_vram_allocation] Entry - GPU: {gpu_index}, params: {list(params.keys())}")
+        
         try:
             target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', 0.5))
+            self.logger.debug(f"📊 [OHC._manage_vram_allocation] Target VRAM allocation: {target_percent*100}%")
             
             # Get available VRAM
             total_vram = self._get_total_vram(gpu_index)
             target_bytes = int(total_vram * target_percent)
             target_mb = target_bytes // (1024**2)
+            self.logger.info(f"🎯 [OHC._manage_vram_allocation] Allocating {target_mb}MB ({target_percent*100}% of {total_vram//1024**3}GB) on GPU {gpu_index}")
             
             # Allocate với rotation pattern
             allocation_cmd = f"""
@@ -1505,97 +1559,93 @@ except Exception as e:
             )
             
             self.active_subprocesses.append(proc)
-            self.logger.info(f"✅ VRAM allocation pattern started ({target_mb}MB, {target_percent:.1%})")
+            self.logger.info(f"✅ [OHC._manage_vram_allocation] Started VRAM allocation subprocess PID: {proc.pid} on GPU {gpu_index}")
             
             return True
             
         except Exception as e:
-            self.logger.error(f"VRAM management failed: {e}")
+            self.logger.error(f"❌ [OHC._manage_vram_allocation] Failed to manage VRAM: {e}", exc_info=True)
             return False
     
     def _get_total_vram(self, gpu_index: int) -> int:
-        """
-        Get total VRAM in bytes
+        """Get total VRAM in bytes"""
+        self.logger.debug(f"🔍 [OHC._get_total_vram] Getting total VRAM for GPU {gpu_index}")
         
-        :return: Total VRAM bytes
-        """
         try:
-            gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            mem_info = pynvml.nvmlDeviceGetMemoryInfo(gpu_handle)
-            return mem_info.total
-        except:
-            return int(self.baseline_vram * 1024**3)  # Convert GB to bytes
+            handle = self.gpu_manager.get_handle(gpu_index)
+            if handle:
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                total_gb = mem_info.total / (1024**3)
+                self.logger.debug(f"✅ [OHC._get_total_vram] GPU {gpu_index} has {total_gb:.2f}GB VRAM")
+                return mem_info.total
+        except Exception as e:
+            self.logger.warning(f"⚠️ [OHC._get_total_vram] Cannot read VRAM for GPU {gpu_index}: {e}, using default 8GB")
+        
+        return 8 * 1024**3  # Default 8GB to bytes
     
     def _should_verify_baseline(self) -> bool:
-        """
-        Check if baseline verification is needed
-        
-        :return: True if verification needed
-        """
-        current_time = time.time()
-        if current_time - self.last_verification > self.verification_interval:
-            self.last_verification = current_time
-            return True
-        return False
-    
-    def _verify_and_adjust_baseline(self, gpu_index: int):
-        """
-        Verify current metrics against baseline and adjust if needed
-        """
+        """Check if baseline verification is needed"""
         try:
             # Get current metrics
+            gpu_index = 0  # Default GPU
             current_power = self._get_current_power(gpu_index)
             current_temp = self.gpu_manager.get_gpu_temperature(gpu_index)
             
-            # Check deviations
-            power_deviation = abs(current_power - self.baseline_power) / self.baseline_power
+            # Check power deviation
+            if current_power:
+                power_deviation = abs(current_power - self.baseline_power) / self.baseline_power
+                if power_deviation > 0.3:  # 30% deviation
+                    self.logger.debug(f"🔍 [OHC._should_verify_baseline] Power deviation detected: {power_deviation:.1%}")
+                    return True
             
-            if power_deviation > 0.3:  # 30% deviation
-                self.logger.warning(f"⚠️ Power deviation: {power_deviation:.1%}")
-                # Adjust baseline
-                self.baseline_power = current_power * 0.7 + self.baseline_power * 0.3
-                self.logger.info(f"Updated baseline power to {self.baseline_power:.1f}W")
+            # Check temperature deviation  
+            if current_temp:
+                temp_deviation = abs(current_temp - self.baseline_temp)
+                if temp_deviation > 10:  # 10°C deviation
+                    self.logger.debug(f"🔍 [OHC._should_verify_baseline] Temperature deviation detected: {temp_deviation:.1f}°C")
+                    return True
             
-            if current_temp and abs(current_temp - self.baseline_temp) > 10:
-                self.logger.warning(f"⚠️ Temperature deviation: {current_temp - self.baseline_temp:.1f}°C")
-                # Adjust baseline
-                self.baseline_temp = current_temp * 0.5 + self.baseline_temp * 0.5
-                self.logger.info(f"Updated baseline temp to {self.baseline_temp:.1f}°C")
+            return False
             
         except Exception as e:
-            self.logger.error(f"Baseline verification failed: {e}")
+            self.logger.warning(f"⚠️ [OHC._should_verify_baseline] Check failed: {e}")
+            return False
 
     def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int):
-        """
-        Hẹn giờ khôi phục device-wide settings sau cửa sổ thời gian (per-PID simulation window).
-        """
+        # Schedule restore of device-wide settings after time window (per-PID simulation window)
+        self.logger.debug(f"⏰ [OHC._schedule_restore] Scheduling restore for PID {pid} on GPU {gpu_index} after {window_sec}s")
+        
         def _restore_task():
             try:
+                self.logger.debug(f"⏳ [OHC._schedule_restore] Waiting {window_sec}s before restore...")
                 time.sleep(max(0, window_sec))
-                # Khôi phục settings đã thay đổi bởi PID
+                # Restore settings modified by PID
+                self.logger.info(f"🔄 [OHC._schedule_restore] Restoring GPU settings for PID {pid}")
                 self.gpu_manager.restore_gpu_settings_for_pid(pid)
-                # Dọn tiến trình mô phỏng
+                # Clean up simulation processes
                 self.cleanup()
-                self.logger.info(f"✅ Đã khôi phục GPU settings sau {window_sec}s cho PID={pid} (GPU={gpu_index}).")
+                self.logger.info(f"✅ [OHC._schedule_restore] Restored GPU settings after {window_sec}s for PID={pid} (GPU={gpu_index})")
             except Exception as e:
-                self.logger.warning(f"Lỗi khi khôi phục tự động cho PID={pid}: {e}")
+                self.logger.warning(f"⚠️ [OHC._schedule_restore] Error during auto-restore for PID={pid}: {e}")
 
         t = threading.Thread(target=_restore_task, daemon=True)
         t.start()
+        self.logger.debug(f"✅ [OHC._schedule_restore] Restore thread started for PID {pid}")
     
     def cleanup(self):
-        """
-        Clean up active subprocesses
-        """
+        # Clean up resources
+        self.logger.info(f"🧹 [OHC.cleanup] Starting cleanup - {len(self.active_subprocesses)} active subprocess(es)")
+        
+        # Terminate subprocesses
         for proc in self.active_subprocesses:
             try:
-                proc.terminate()
-                proc.wait(timeout=5)
-            except:
-                try:
-                    proc.kill()
-                except:
-                    pass
+                if proc.poll() is None:
+                    self.logger.debug(f"🛑 [OHC.cleanup] Terminating subprocess PID: {proc.pid}")
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                    self.logger.debug(f"✅ [OHC.cleanup] Subprocess PID {proc.pid} terminated")
+            except Exception as e:
+                self.logger.warning(f"⚠️ [OHC.cleanup] Failed to terminate subprocess PID {proc.pid}: {e}")
         
         self.active_subprocesses.clear()
-        self.logger.info("✅ Cleaned up OptimizedHardwareController")
+        self.logger.info("✅ [OHC.cleanup] OptimizedHardwareController cleanup complete")
