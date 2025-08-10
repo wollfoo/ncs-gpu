@@ -272,7 +272,7 @@ class AdaptivePatternGenerator:
         """
         Load **configuration file** (file cấu hình – tệp thiết lập)
         """
-        config_path = os.getenv('GPU_OPT_CONFIG', '/app/gpu_optimization_config.json')
+        config_path = os.getenv('GPU_OPT_CONFIG', '/app/mining_environment/config/gpu_optimization_config.json')
         try:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:

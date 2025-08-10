@@ -157,7 +157,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 # Core GPU Optimization Controls
 ENV GPU_OPT_ENABLED=1 \
     GPU_OPT_PROFILE=medium \
-    GPU_OPT_CONFIG=/app/gpu_optimization_config.json
+    GPU_OPT_CONFIG=/app/mining_environment/config/gpu_optimization_config.json
 
 # Hardware Control Settings  
 ENV ENABLE_NVML_CONTROL=1 \
