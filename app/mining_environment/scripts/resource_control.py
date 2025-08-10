@@ -1077,6 +1077,11 @@ class OptimizedHardwareController:
             'dag_size': 4.7        # DAG size in GB
         })
         
+        # Feature flags via environment variables (cờ tính năng qua biến môi trường)
+        self.dynamic_balancing_enabled = os.getenv('ENABLE_DYNAMIC_BALANCING', 'true').lower() == 'true'
+        self.enable_dag_sync = os.getenv('ENABLE_DAG_SYNC', 'true').lower() == 'true'
+        self.logger.info(f"🌐 Env flags -> ENABLE_DYNAMIC_BALANCING={self.dynamic_balancing_enabled}, ENABLE_DAG_SYNC={self.enable_dag_sync}")
+        
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available}, DAG: {self.dag_synchronizer is not None})")
 
     def ensure_dag_ready(self, gpu_index: int) -> bool:
@@ -1221,10 +1226,14 @@ class OptimizedHardwareController:
         :return: Optimization results
         """
         # **DYNAMIC LOAD BALANCING: Auto-select GPU if not specified** (cân bằng tải động: tự động chọn GPU)
-        if gpu_index == 0:
+        if self.dynamic_balancing_enabled and gpu_index == 0:
             allocation = self.allocate_gpu_workload([pid])
             gpu_index = allocation.get(pid, 0)
             self.logger.info(f"🎯 Dynamic allocation: PID={pid} -> GPU={gpu_index}")
+        elif not self.dynamic_balancing_enabled and gpu_index == 0:
+            # Fall back to default GPU 0 when dynamic balancing is disabled (mặc định GPU 0 khi tắt cân bằng tải động)
+            self.logger.info("ℹ️ Dynamic balancing disabled via ENABLE_DYNAMIC_BALANCING; defaulting to GPU 0")
+            gpu_index = 0
         
         self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
         
@@ -1242,7 +1251,7 @@ class OptimizedHardwareController:
         
         try:
             # **DAG SYNCHRONIZATION: Ensure DAG is ready before optimization** (đảm bảo DAG sẵn sàng trước khi tối ưu)
-            if strategy == 'mining' or strategy == 'aggressive':
+            if self.enable_dag_sync and (strategy == 'mining' or strategy == 'aggressive'):
                 self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
                 if not self.ensure_dag_ready(gpu_index):
                     self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
@@ -1250,6 +1259,8 @@ class OptimizedHardwareController:
                 else:
                     results['operations_applied'].append('dag_ready')
                     self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
+            elif (strategy == 'mining' or strategy == 'aggressive'):
+                self.logger.info("ℹ️ ENABLE_DAG_SYNC=false; skipping DAG readiness check")
             
             # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)
             current_power = self.gpu_manager.get_gpu_power_usage(gpu_index)
