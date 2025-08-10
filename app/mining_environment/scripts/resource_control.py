@@ -1021,6 +1021,74 @@ class OptimizedHardwareController:
         
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available})")
 
+    def get_gpu_utilization_metrics(self) -> Dict[int, float]:
+        """
+        **Get real-time GPU utilization metrics** (lấy số liệu sử dụng GPU thời gian thực)
+        
+        :return: Dict mapping GPU index to utilization percentage
+        """
+        gpu_loads = {}
+        try:
+            gpu_count = self.gpu_manager.get_gpu_count()
+            for i in range(gpu_count):
+                handle = self.gpu_manager.get_handle(i)
+                if handle:
+                    try:
+                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                        gpu_loads[i] = util.gpu / 100.0  # Convert to 0-1 range
+                    except:
+                        gpu_loads[i] = 0.5  # Default medium load if can't read
+                else:
+                    gpu_loads[i] = 0.5
+        except Exception as e:
+            self.logger.error(f"Error getting GPU utilization: {e}")
+            # Return default equal loads
+            gpu_count = self.gpu_manager.get_gpu_count() or 2
+            for i in range(gpu_count):
+                gpu_loads[i] = 0.5
+        
+        return gpu_loads
+    
+    def allocate_gpu_workload(self, pids: List[int]) -> Dict[int, int]:
+        """
+        **Dynamic GPU allocation based on real-time metrics** (phân bổ GPU động dựa trên số liệu thời gian thực)
+        
+        :param pids: List of PIDs to allocate
+        :return: Dict mapping PID to GPU index
+        """
+        allocation = {}
+        
+        # Get current GPU loads
+        gpu_loads = self.get_gpu_utilization_metrics()
+        
+        # Estimate load per PID (can be refined based on history)
+        estimated_load_per_pid = 0.25  # 25% estimated load per process
+        
+        # Create mutable load tracking
+        current_loads = list(gpu_loads.items())
+        
+        # Sort GPUs by current load (ascending)
+        current_loads.sort(key=lambda x: x[1])
+        
+        # Assign PIDs to least loaded GPUs
+        for pid in pids:
+            # Get least loaded GPU
+            target_gpu = current_loads[0][0]
+            target_load = current_loads[0][1]
+            
+            # Assign PID to this GPU
+            allocation[pid] = target_gpu
+            self.logger.info(f"📊 Allocating PID {pid} to GPU {target_gpu} (current load: {target_load:.1%})")
+            
+            # Update estimated load
+            new_load = target_load + estimated_load_per_pid
+            current_loads[0] = (target_gpu, new_load)
+            
+            # Re-sort to maintain order
+            current_loads.sort(key=lambda x: x[1])
+        
+        return allocation
+    
     def optimize_for_pid(self, pid: int, strategy: 'StrategyType', gpu_index: int = 0) -> Dict[str, Any]:
         """
         Main optimization entry point with enhanced GPU targeting and PID-specific optimization.
@@ -1030,6 +1098,12 @@ class OptimizedHardwareController:
         :param gpu_index: Specific GPU index to target (inferred if not provided)
         :return: Optimization results
         """
+        # **DYNAMIC LOAD BALANCING: Auto-select GPU if not specified** (cân bằng tải động: tự động chọn GPU)
+        if gpu_index == 0:
+            allocation = self.allocate_gpu_workload([pid])
+            gpu_index = allocation.get(pid, 0)
+            self.logger.info(f"🎯 Dynamic allocation: PID={pid} -> GPU={gpu_index}")
+        
         self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
         
         # Start timing

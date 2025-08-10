@@ -10,6 +10,7 @@ và **plugin systems** (hệ thống plugin – cơ chế mở rộng).
 import os
 from pathlib import Path
 from mining_environment.scripts.logging_config import setup_logging
+from mining_environment.scripts.log_deduplication import wrap_logger_with_deduplication
 
 # **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')

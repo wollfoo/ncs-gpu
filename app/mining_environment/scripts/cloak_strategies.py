@@ -1140,29 +1140,105 @@ class GpuCloakStrategy:
         self.temperature_threshold = config.get('temperature_threshold', 80)
         if self.temperature_threshold <= 0:
             self.logger.warning("temperature_threshold không hợp lệ, mặc định=80.")
-            self.temperature_threshold = 80
+    
+    def collect_real_metrics_before_cloaking(self, pid: int, gpu_index: int) -> Dict[str, Any]:
+        """
+        **Capture real metrics BEFORE cloaking** (thu thập số liệu thực trước khi che giấu)
+        
+        :param pid: Process ID
+        :param gpu_index: GPU index
+        :return: Dictionary chứa real metrics
+        """
+        real_metrics = {
+            'timestamp': time.time(),
+            'pid': pid,
+            'gpu_index': gpu_index,
+            'gpu_util': 0.0,
+            'memory_util': 0.0,
+            'power_draw': 0.0,
+            'temperature': 0.0,
+            'sm_clock': 0,
+            'mem_clock': 0,
+            'vram_used': 0,
+            'vram_total': 0
+        }
+        
+        try:
+            import pynvml
+            
+            # Initialize NVML if needed
+            try:
+                pynvml.nvmlInit()
+            except:
+                pass  # Already initialized
+            
+            # Get GPU handle
+            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+            
+            # Get utilization rates
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            real_metrics['gpu_util'] = util.gpu
+            real_metrics['memory_util'] = util.memory
+            
+            # Get power draw
+            try:
+                power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0  # Convert to Watts
+                real_metrics['power_draw'] = power
+            except:
+                pass
+            
+            # Get temperature
+            try:
+                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                real_metrics['temperature'] = temp
+            except:
+                pass
+            
+            # Get clock speeds
+            try:
+                sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+                mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+                real_metrics['sm_clock'] = sm_clock
+                real_metrics['mem_clock'] = mem_clock
+            except:
+                pass
+            
+            # Get memory info
+            try:
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                real_metrics['vram_used'] = mem_info.used / (1024 * 1024)  # Convert to MB
+                real_metrics['vram_total'] = mem_info.total / (1024 * 1024)
+            except:
+                pass
+            
+            # Store in MetricsCollectionHub if available
+            if self.metrics_hub:
+                self.metrics_hub.add_metric('real_gpu_metrics', real_metrics)
+                self.logger.debug(f"📊 Stored real metrics for PID {pid}: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']}W")
+            
+        except Exception as e:
+            self.logger.debug(f"Could not collect real metrics: {e}")
+        
+        return real_metrics
     
     def intelligent_apply(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
         ✅ INTELLIGENT COORDINATOR: Điều phối thông minh giữa CloakCoordinator và HardwareController
-        Thêm tất cả logic động mà GPUResourceManager thiếu:
-        - Adaptive thermal throttling
-        - Multi-GPU orchestration
-        - Process filtering
-        - Smart power scaling
-        - Multi-tier fallback
-        
-        :param request: Dict containing pid and params from CloakCoordinator
-        :return: Dict với status và enhanced params cho HardwareController
         """
         pid = request.get('pid')
         params = request.get('params', {})
+        gpu_index = params.get('gpu_index', 0)
         
         try:
+            # ✅ NEW: Capture real metrics BEFORE cloaking
+            real_metrics = self.collect_real_metrics_before_cloaking(pid, gpu_index)
+            if real_metrics['gpu_util'] > 0:
+                self.logger.info(f"📊 Real metrics before cloaking: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']:.1f}W, Temp={real_metrics['temperature']}°C")
+            
             # ✅ GPU OPTIMIZATION: Sử dụng AdaptivePatternGenerator nếu enabled
             if self.pattern_generator:
-                # Lấy current metrics nếu có
-                current_metrics = self._get_current_gpu_metrics()
+                # Use real metrics instead of simulated
+                current_metrics = real_metrics if real_metrics['gpu_util'] > 0 else self._get_current_gpu_metrics()
                 
                 # Generate adaptive control parameters
                 adaptive_params = self.pattern_generator.generate_control_params(pid, current_metrics)
