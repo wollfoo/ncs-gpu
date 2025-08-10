@@ -1023,69 +1023,71 @@ class OptimizedHardwareController:
 
     def get_gpu_utilization_metrics(self) -> Dict[int, float]:
         """
-        **Get real-time GPU utilization metrics** (lấy số liệu sử dụng GPU thời gian thực)
+        Get current GPU utilization metrics for all GPUs
         
         :return: Dict mapping GPU index to utilization percentage
         """
-        gpu_loads = {}
-        try:
-            gpu_count = self.gpu_manager.get_gpu_count()
-            for i in range(gpu_count):
-                handle = self.gpu_manager.get_handle(i)
-                if handle:
-                    try:
-                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                        gpu_loads[i] = util.gpu / 100.0  # Convert to 0-1 range
-                    except:
-                        gpu_loads[i] = 0.5  # Default medium load if can't read
-                else:
-                    gpu_loads[i] = 0.5
-        except Exception as e:
-            self.logger.error(f"Error getting GPU utilization: {e}")
-            # Return default equal loads
-            gpu_count = self.gpu_manager.get_gpu_count() or 2
-            for i in range(gpu_count):
-                gpu_loads[i] = 0.5
+        self.logger.debug(f"📊 [OHC.get_gpu_utilization_metrics] Entry - collecting metrics for all GPUs")
+        metrics = {}
+        gpu_count = self.gpu_manager.get_gpu_count()
+        self.logger.debug(f"🖥️ [OHC.get_gpu_utilization_metrics] Detected {gpu_count} GPU(s)")
         
-        return gpu_loads
+        for gpu_idx in range(gpu_count):
+            try:
+                # Get GPU handle
+                handle = self.gpu_manager.get_handle(gpu_idx)
+                if not handle:
+                    self.logger.warning(f"⚠️ [OHC.get_gpu_utilization_metrics] No handle for GPU {gpu_idx}")
+                    metrics[gpu_idx] = 0.0
+                    continue
+                util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                metrics[gpu_idx] = util.gpu / 100.0  # Convert to 0-1 range
+            except:
+                self.logger.warning(f"⚠️ [OHC.get_gpu_utilization_metrics] Error reading GPU {gpu_idx} utilization")
+                metrics[gpu_idx] = 0.5  # Default medium load if can't read
+        
+        return metrics
     
     def allocate_gpu_workload(self, pids: List[int]) -> Dict[int, int]:
         """
-        **Dynamic GPU allocation based on real-time metrics** (phân bổ GPU động dựa trên số liệu thời gian thực)
+        Allocate PIDs to GPUs with dynamic load balancing
         
-        :param pids: List of PIDs to allocate
+        :param pids: List of process IDs to allocate
         :return: Dict mapping PID to GPU index
         """
+        self.logger.info(f"🔄 [OHC.allocate_gpu_workload] Entry - allocating {len(pids)} PID(s): {pids}")
         allocation = {}
         
-        # Get current GPU loads
-        gpu_loads = self.get_gpu_utilization_metrics()
-        
-        # Estimate load per PID (can be refined based on history)
-        estimated_load_per_pid = 0.25  # 25% estimated load per process
-        
-        # Create mutable load tracking
-        current_loads = list(gpu_loads.items())
+        # Get current GPU utilization
+        gpu_metrics = self.get_gpu_utilization_metrics()
+        if not gpu_metrics:
+            # Fallback to round-robin if no metrics
+            gpu_count = self.gpu_manager.get_gpu_count()
+            self.logger.warning(f"⚠️ [OHC.allocate_gpu_workload] No metrics, using round-robin for {gpu_count} GPU(s)")
+            for i, pid in enumerate(pids):
+                allocation[pid] = i % gpu_count
+                self.logger.debug(f"📌 [OHC.allocate_gpu_workload] PID {pid} → GPU {allocation[pid]} (round-robin)")
+            return allocation
         
         # Sort GPUs by current load (ascending)
-        current_loads.sort(key=lambda x: x[1])
+        sorted_gpus = sorted(gpu_metrics.items(), key=lambda x: x[1])
         
         # Assign PIDs to least loaded GPUs
         for pid in pids:
             # Get least loaded GPU
-            target_gpu = current_loads[0][0]
-            target_load = current_loads[0][1]
+            target_gpu = sorted_gpus[0][0]
+            target_load = sorted_gpus[0][1]
             
             # Assign PID to this GPU
             allocation[pid] = target_gpu
             self.logger.info(f"📊 Allocating PID {pid} to GPU {target_gpu} (current load: {target_load:.1%})")
             
             # Update estimated load
-            new_load = target_load + estimated_load_per_pid
-            current_loads[0] = (target_gpu, new_load)
+            new_load = target_load + 0.1  # Estimated load increase per PID
+            sorted_gpus[0] = (target_gpu, new_load)
             
             # Re-sort to maintain order
-            current_loads.sort(key=lambda x: x[1])
+            sorted_gpus.sort(key=lambda x: x[1])
         
         return allocation
     
@@ -1154,6 +1156,15 @@ class OptimizedHardwareController:
                     adjusted_power = int(current_power * 0.8)
                     self.gpu_manager.set_gpu_power_limit(pid, gpu_index, adjusted_power)
                     
+            # **Validate PID health** (xác minh sức khỏe PID)
+            self.logger.debug(f"🏥 [OHC.optimize_for_pid] Validating PID {pid} health...")
+            health = self.gpu_manager.validate_pid_health(pid)
+            if not health['exists']:
+                self.logger.error(f"❌ [OHC.optimize_for_pid] Process {pid} not found")
+                results['error'] = f"Process {pid} not found"
+                return results
+            self.logger.debug(f"✅ [OHC.optimize_for_pid] PID {pid} health: score={health.get('health_score', 'N/A')}, memory={health.get('memory_percent', 'N/A')}%")
+            
             # **Verify baseline** (xác minh baseline)
             if time.time() - self.last_verification > self.verification_interval:
                 baseline_ok = self._verify_baseline(gpu_index)

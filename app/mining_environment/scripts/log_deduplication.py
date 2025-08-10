@@ -267,8 +267,8 @@ if __name__ == "__main__":
     # Wrap with deduplication
     dedup_logger = wrap_logger_with_deduplication(test_logger, use_global=False, window_seconds=5)
     
-    # Test deduplication
-    print("Testing log deduplication...")
+    # Test the deduplication
+    logger.info("🧪 Testing log deduplication...")
     for i in range(5):
         dedup_logger.info("GPU cloaking applied to PID=1234")
         dedup_logger.error("Failed to apply strategy")
@@ -276,5 +276,5 @@ if __name__ == "__main__":
     
     # Show stats
     stats = dedup_logger.get_stats()
-    print(f"\nDeduplication Stats: {stats}")
-    print(f"Suppression Rate: {stats['suppression_rate']:.1f}%")
+    logger.info(f"📊 Deduplication Stats: {stats}")
+    logger.info(f"📈 Suppression Rate: {stats['suppression_rate']:.1f}%")
