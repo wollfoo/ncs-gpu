@@ -1,132 +1,108 @@
+## 3. Phương án khuyến nghị – **Hybrid A′** (điều chỉnh từ Phương án A)
 
-## ✅ Vai Trò
-Bạn là một kiến trúc sư phần mềm AI chuyên thiết kế hệ thống GPU tối ưu hóa có khả năng **tách biệt hoàn toàn (full separation)** giữa các thành phần logic và cấu hình. Mục tiêu là thiết kế một hệ thống dễ mở rộng, dễ bảo trì và chuẩn hóa tốt.
+### 3.1 Cấu trúc thư mục đề xuất
 
----
-
-## ✅ Ngôn Ngữ
-- **BẮT BUỘC**: Trả lời hoàn toàn bằng **tiếng Việt**
-- **GIẢI THÍCH**: Mọi thuật ngữ tiếng Anh phải được chú thích bằng tiếng Việt (mục đích/chức năng rõ ràng)
-
-> **Cú pháp chuẩn:**  
-> **[English Term]** (Giải thích tiếng Việt – chức năng / vai trò)
-
----
-
-## 🗂️ Bối Cảnh Kỹ Thuật
-- **Docker image**: xây dựng từ `Dockerfile`, gắn tag `gputraining:latest`  
-- **Container**: tên `opus-container`, truy cập bằng: `sudo docker exec -it opus-container bash`
-- **Mount mã nguồn**: `-v "$(pwd)":/app:rw`
-
-### 🔁 Luồng xử lý chính (SEQUENTIAL FLOW)
-
-```markdown
-start_mining.py → stealth_inference_cuda.py → HookCoordinator → DirectPIDRegistry → ResourceManager → cloak_strategies.py → resource_control.py
-(setup_env.py chạy song song)
-````
-
----
-
-## 🎯 NHIỆM VỤ
-
-Hãy đề xuất phương án thiết kế **🌳Tách khối hoàn toàn (Full Separation)** cho **GPU Optimization** theo các yêu cầu sau:
-
----
-
-### 1️⃣ Modules & Configuration Files
-
-* 📦 **Liệt kê các module chính được tách riêng**
-* 📝 **Mô tả chức năng của từng module**
-* 📂 **Liệt kê các tệp cấu hình đi kèm mỗi module**
-* 🧾 **Mô tả nội dung chính mỗi tệp cấu hình** (các thông số quan trọng)
-
----
-
-### 2️⃣ Directory Tree – GPU Optimization Block
-
-* 🌲 **Sơ đồ cây thư mục (directory tree)** cho khối **GPU Optimization**
-* 📌 **Vai trò của từng thư mục chính**
-* 🔗 **Mối quan hệ phụ thuộc giữa các thư mục**
-
----
-
-### 3️⃣ Detailed Execution Steps
-
-* ⚙️ **Chuẩn bị môi trường** (environment preparation – thiết lập thư viện, môi trường chạy)
-* 🚀 **Triển khai từng module** (bước theo thứ tự)
-* 🔧 **Cấu hình và kết nối các module**
-* ✅ **Kiểm tra tính đúng đắn và xác nhận hoạt động**
-* 🧯 **Liệt kê lỗi thường gặp và cách xử lý**
-
----
-
-## 🧠 PHƯƠNG PHÁP LUẬN TRONG TRẢ LỜI
-
-Áp dụng các kỹ thuật suy luận sau:
-
-1. **TREE-OF-THOUGHT**: Phát triển nhiều hướng giải pháp → chọn hướng tối ưu
-
-2. **SELF-REFINE (≤2 vòng)**: Tự kiểm lại giải pháp của mình, cải tiến thêm
-
-3. **ANTI-HALLUCINATION**:
-
-   * 🧾 **Evidence-Only**: Chỉ dựa trên dữ liệu và thực tế
-   * 🚫 **No Creative Assumptions**: Không tự suy đoán
-   * 📚 **Factual Vietnamese**: Trình bày bằng tiếng Việt chính xác, không lan man
-   * 📌 **Source Citation**: Ghi rõ nguồn nếu cần
-   * 💻 **Verbatim Code Preservation**: Giữ nguyên mã mẫu, không cải biên
-
-4. **PRINCIPLES ÁP DỤNG**:
-
-   * **Think Big, Do Baby Steps**
-   * **Measure Twice, Cut Once**
-   * **Get It Working First**
-   * **Quantity & Order**
-   * **Always Double-Check**
-
----
-
-## 🎯 ĐẦU RA MONG MUỐN
-
-Trình bày kết quả như sau:
-
-```markdown
-# ✅ ĐỀ XUẤT TÁCH KHỐI HOÀN TOÀN
-
-## 1. Modules & Configuration Files
-### 📦 Module A: ...
-- Chức năng: ...
-- Cấu hình:
-  - config_a.yaml: mô tả tham số ..., ...
-...
-
-## 2. Directory Tree GPU Optimization
+```text
+/app/mining_environment/gpu_optimization/
+│
+├── __init__.py
+│
+├── orchestrator/                      # Điều phối tổng quát
+│   ├── __init__.py
+│   ├── orchestrator.py
+│   └── lifecycle_manager.py
+│
+├── monitoring/                        # Thu thập & dashboard
+│   ├── __init__.py
+│   ├── collectors/
+│   │   ├── gpu_metrics.py
+│   │   ├── process_metrics.py
+│   │   └── system_metrics.py
+│   ├── dashboard.py                   # gpu_monitoring_dashboard.py
+│   └── exporters/
+│       ├── prometheus.py
+│       └── json_exporter.py
+│
+├── strategies/                        # Chiến lược tối ưu
+│   ├── __init__.py
+│   ├── base.py
+│   ├── cloak.py                       # cloak_strategies.py
+│   ├── aggressive.py
+│   ├── balanced.py
+│   └── selector.py
+│
+├── resource_control/                  # Quản lý tài nguyên GPU & tiến trình
+│   ├── __init__.py
+│   ├── gpu_controller.py
+│   ├── power_manager.py
+│   ├── thermal_control.py
+│   └── pid_mapper.py
+│
+├── coordination/                      # Liên tiến trình / DAG
+│   ├── __init__.py
+│   ├── dag_synchronization.py
+│   ├── cross_process_coordination.py
+│   └── semaphore_pool.py
+│
+├── profiling/                         # Hiệu năng & báo cáo
+│   ├── __init__.py
+│   ├── performance_profiler.py
+│   ├── cuda_tracer.py
+│   └── report_generator.py
+│
+├── parallel_execution/                # Thực thi song song
+│   ├── __init__.py
+│   └── parallel_strategy_executor.py
+│
+├── config/
+│   ├── __init__.py
+│   ├── default.yaml
+│   └── loader.py
+│
+├── utils/
+│   ├── __init__.py
+│   ├── logger.py
+│   ├── validators.py
+│   └── exceptions.py
+│
+└── tests/ (unit, integration, fixtures)
 ```
-app/mining_environment/gpu_optimization/
 
-📁 gpu_optimization/
-├── scheduler/              # Điều phối lịch chạy
-├── monitor/                # Theo dõi hiệu năng GPU
-├── config/                 # Lưu cấu hình module
-├── logs/                   # Ghi log
-└── utils/                  # Hàm phụ trợ
+### 3.2 Lý do chọn
 
-* **Mô tả vai trò & phụ thuộc giữa các thư mục**
+1. **Đơn giản & rõ concern** – mỗi khả năng (`monitoring`, `strategies`, `profiling`, …) tách thư mục độc lập.  
+2. **Đầy đủ chức năng** – tất cả file liệt kê đã có nơi chứa cụ thể.  
+3. **Tuân thủ best practice Python** – package con với `__init__.py`, cấp sâu tối đa 2-3.  
+4. **Mở rộng tương lai** – thêm package mới chỉ cần tạo thư mục ngang cấp.  
+5. **Giảm script rời rạc** – mọi script di chuyển vào package tương ứng, chỉ để lại một CLI wrapper (nếu cần) ở `bin/` hoặc `scripts/`.
 
-...
+### 3.3 Ưu điểm / Nhược điểm
 
-## 3. Execution Plan
+| Tiêu chí | Ưu điểm | Nhược điểm |
+|----------|---------|-----------|
+| Tính rõ ràng | Dễ tra cứu, concern tách bạch | Nhiều thư mục hơn phương án C |
+| Bảo trì | Thêm-bớt module không ảnh hưởng package khác | Cần refactor import path |
+| Khả năng mở rộng | Tự nhiên hỗ trợ plugin strategy mới | N/A |
+| Phù hợp code hiện tại | 90 % – vì tên thư mục gần khớp, chỉ cần di chuyển | Refactor tương đối lớn cho `scripts/*.py` |
 
-* ✅ Bước 1: Thiết lập môi trường (cài thư viện: ..., cấu hình biến môi trường)
-* ✅ Bước 2: Triển khai module A → kiểm tra đầu ra ...
-* ✅ Bước 3: Cấu hình kết nối module A → B bằng file ...
-* ✅ Bước 4: Kiểm thử ...
-* ⚠️ Lỗi thường gặp: “CUDA out of memory” → Giải pháp: ...
+---
 
-...
+## 4. Kế hoạch migration
 
-# 🔁 SELF-REVIEW (2 vòng)
+| Bước | Mô tả | Công cụ |
+|------|-------|---------|
+| 1 | Tạo thư mục mới `gpu_optimization/` theo tree A′ | `mkdir -p …` |
+| 2 | Di chuyển file: <br>• `gpu_optimization_orchestrator.py` → `orchestrator/orchestrator.py` <br>• `gpu_resource_monitor.py` → `monitoring/collectors/process_metrics.py` <br>• `gpu_monitoring_dashboard.py` → `monitoring/dashboard.py` <br>• `parallel_strategy_executor.py` → `parallel_execution/parallel_strategy_executor.py` <br>• `performance_profiler.py` → `profiling/performance_profiler.py` <br>• `dag_synchronization.py` → `coordination/dag_synchronization.py` <br>• `cross_process_coordination.py` → `coordination/cross_process_coordination.py` <br>• `cloak_strategies.py` → `strategies/cloak.py` <br>• `resource_control.py` → `resource_control/gpu_controller.py` | `git mv` |
+| 3 | Cập nhật import path trong toàn codebase (grep `from .*gpu_.* import`) | automate sed/ruff |
+| 4 | Thêm `__init__.py` & re-export public API cho backwards-compat | code edit |
+| 5 | Chạy test / lint để bảo đảm ổn định | pytest, ruff |
+| 6 | Xoá thư mục `scripts/` cũ (hoặc giữ file CLI wrapper gọi vào package mới) | cleanup |
+| 7 | Cập nhật tài liệu `README`, `docs/` & config path | doc update |
 
-* Nhận định nhược điểm vòng 1: ...
-* Điều chỉnh vòng 2: ...
+**Thời gian ước tính**: 1-2 ngày (bao gồm test & review).
 
+---
+
+### Kết luận
+
+Phương án **Hybrid A′** đáp ứng tốt nhất các tiêu chí đơn giản − rõ ràng − đầy đủ − mở rộng. Việc migration chủ yếu là **di chuyển file & cập nhật import**, không thay đổi logic, nên rủi ro thấp và có thể thực hiện nhanh chóng.
