@@ -13,7 +13,8 @@ import random
 import json
 from collections import deque
 from datetime import datetime
-import numpy as np
+import math
+import statistics
 # **ABC removed** (đã xóa ABC – loại bỏ Abstract Base Classes) - không còn cần sau khi xóa **CloakStrategy base class** (lớp cơ sở CloakStrategy)
 from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING, Deque
 from pathlib import Path
@@ -31,6 +32,15 @@ cloak_logger = get_gpu_cloaking_logger()
 
 # ✅ **ERROR REPORTER** (báo cáo lỗi): Lấy **centralized error reporter instance** (thực thể báo cáo lỗi tập trung – đối tượng báo lỗi trung tâm)
 error_reporter = get_error_reporter()
+
+# Optional dependency: numpy (thư viện tính toán số – phụ thuộc tuỳ chọn)
+try:
+    import numpy as np  # type: ignore
+    _NUMPY_AVAILABLE = True
+except Exception:
+    np = None  # type: ignore
+    _NUMPY_AVAILABLE = False
+    cloak_logger.warning("[MetricsHub] numpy not available; using pure-Python fallback statistics")
 
 # **GPU-Only Mode** (chế độ chỉ GPU – hoạt động riêng card đồ họa): **CPU ResourceManager removed** (đã xóa trình quản lý tài nguyên CPU) cho **GPU-only operations** (hoạt động chỉ GPU – thao tác riêng card đồ họa)
 if TYPE_CHECKING:
@@ -171,22 +181,61 @@ class MetricsCollectionHub:
         if not values:
             return {}
         
-        # Calculate statistics using numpy
-        arr = np.array(values)
+        # Calculate statistics using numpy nếu khả dụng; fallback thuần Python nếu không có numpy
+        if _NUMPY_AVAILABLE and np is not None:  # type: ignore
+            arr = np.array(values, dtype=float)  # type: ignore
+            stats = {
+                'count': len(values),
+                'mean': float(np.mean(arr)),  # type: ignore
+                'std': float(np.std(arr)),    # type: ignore
+                'min': float(np.min(arr)),    # type: ignore
+                'max': float(np.max(arr)),    # type: ignore
+                'p25': float(np.percentile(arr, 25)),  # type: ignore
+                'p50': float(np.percentile(arr, 50)),  # type: ignore (median)
+                'p75': float(np.percentile(arr, 75)),  # type: ignore
+                'p90': float(np.percentile(arr, 90)),  # type: ignore
+                'p95': float(np.percentile(arr, 95)),  # type: ignore
+                'p99': float(np.percentile(arr, 99))   # type: ignore
+            }
+            return stats
+        
+        # Fallback: Thuần Python
+        n = len(values)
+        sorted_vals = sorted(values)
+        mean_val = sum(values) / n
+        try:
+            std_val = statistics.pstdev(values)
+        except Exception:
+            variance = sum((x - mean_val) ** 2 for x in values) / n
+            std_val = math.sqrt(variance)
+        
+        def percentile_linear(sorted_values: List[float], p: float) -> float:
+            if not sorted_values:
+                return float('nan')
+            k = (p / 100.0) * (n - 1)
+            f = math.floor(k)
+            c = math.ceil(k)
+            if f == c:
+                return float(sorted_values[int(k)])
+            d0 = sorted_values[int(f)] * (c - k)
+            d1 = sorted_values[int(c)] * (k - f)
+            return float(d0 + d1)
+        
         stats = {
-            'count': len(values),
-            'mean': float(np.mean(arr)),
-            'std': float(np.std(arr)),
-            'min': float(np.min(arr)),
-            'max': float(np.max(arr)),
-            'p25': float(np.percentile(arr, 25)),
-            'p50': float(np.percentile(arr, 50)),  # median
-            'p75': float(np.percentile(arr, 75)),
-            'p90': float(np.percentile(arr, 90)),
-            'p95': float(np.percentile(arr, 95)),
-            'p99': float(np.percentile(arr, 99))
+            'count': n,
+            'mean': float(mean_val),
+            'std': float(std_val),
+            'min': float(sorted_vals[0]),
+            'max': float(sorted_vals[-1]),
+            'p25': percentile_linear(sorted_vals, 25),
+            'p50': percentile_linear(sorted_vals, 50),
+            'p75': percentile_linear(sorted_vals, 75),
+            'p90': percentile_linear(sorted_vals, 90),
+            'p95': percentile_linear(sorted_vals, 95),
+            'p99': percentile_linear(sorted_vals, 99)
         }
         
+        self.logger.info(f"[MetricsHub] Fallback stats (no numpy) for {metric_type}.{field}: count={n}")
         return stats
     
     def aggregate_all_metrics(self) -> Dict[str, Any]:

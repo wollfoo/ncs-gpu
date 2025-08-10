@@ -17,6 +17,7 @@ aiorwlock
 readerwriterlock
 ratelimiter
 pydantic
+numpy
 
 # Thư viện Python cho xử lý hệ thống
 importlib-metadata>=4.12.0

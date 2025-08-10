@@ -32,9 +32,5 @@ def initialize_mining_environment():
     logger.info("**Môi trường mining** (môi trường khai thác) đã được **khởi tạo** (thiết lập)")
 
 
-<<<<<<< Current (Your changes)
-# Khởi tạo tự động khi import package
-=======
 # **Khởi tạo tự động** (thiết lập tự động) khi **import package** (nhập gói)
->>>>>>> Incoming (Background Agent changes)
 initialize_mining_environment()
