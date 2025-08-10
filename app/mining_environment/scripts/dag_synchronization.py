@@ -28,12 +28,18 @@ from contextlib import contextmanager
 
 # Import logging from existing module
 try:
-    from mining_environment.scripts.module_loggers import get_gpu_optimization_logger
+    from .module_loggers import get_gpu_optimization_logger
     logger = get_gpu_optimization_logger()
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    try:
+        # Fallback to direct import for standalone testing
+        from module_loggers import get_gpu_optimization_logger
+        logger = get_gpu_optimization_logger()
+    except ImportError:
+        # Final fallback to basic logging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
 
 class DAGState(Enum):
     """DAG calculation states (trạng thái tính toán DAG)"""

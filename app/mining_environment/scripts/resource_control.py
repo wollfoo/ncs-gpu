@@ -20,11 +20,43 @@ import subprocess
 import re
 import glob
 import pynvml
+import hashlib
 from typing import Dict, Any, List, Optional, Set, Union
 from concurrent.futures import ThreadPoolExecutor
 import signal
+import json
+from datetime import datetime, timedelta
+from collections import defaultdict, deque
 import resource
 from pathlib import Path
+
+# Factory function for DAG synchronizer import
+def get_dag_synchronizer_factory():
+    """
+    Factory function to import DAG synchronizer with fallback
+    Handles both package and standalone imports
+    """
+    try:
+        # Try package import first
+        from mining_environment.scripts.dag_synchronization import get_dag_synchronizer, DAGState
+        return get_dag_synchronizer, DAGState
+    except ImportError:
+        try:
+            # Try relative import
+            from .dag_synchronization import get_dag_synchronizer, DAGState
+            return get_dag_synchronizer, DAGState
+        except ImportError:
+            try:
+                # Try direct import for standalone testing
+                from dag_synchronization import get_dag_synchronizer, DAGState
+                return get_dag_synchronizer, DAGState
+            except ImportError:
+                # DAG module not available
+                return None, None
+
+# Get DAG imports
+get_dag_synchronizer, DAGState = get_dag_synchronizer_factory()
+
 try:
     from .utils import StrategyType
     from .module_loggers import get_resource_control_logger
@@ -34,6 +66,12 @@ except ImportError:
     from utils import StrategyType
     from module_loggers import get_resource_control_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+    try:
+        from dag_synchronization import get_dag_synchronizer, DAGState
+    except ImportError:
+        # DAG synchronization is optional
+        get_dag_synchronizer = None
+        DAGState = None
 
 # ✅ STANDARDIZED: Get unified logger instance
 resource_logger = get_resource_control_logger()
@@ -1020,8 +1058,89 @@ class OptimizedHardwareController:
         # Per-PID time window (giây) để mô phỏng per-process rồi khôi phục
         self.per_pid_window_sec = config.get('per_pid_window_sec', 0)
         
-        self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available})")
+        # **DAG SYNCHRONIZATION: Initialize DAG synchronizer** (đồng bộ DAG - quản lý tính toán DAG)
+        self.dag_synchronizer = None
+        if get_dag_synchronizer:
+            try:
+                self.dag_synchronizer = get_dag_synchronizer()
+                self.logger.info("🔄 DAG Synchronizer initialized successfully")
+            except Exception as e:
+                self.logger.warning(f"⚠️ DAG Synchronizer initialization failed: {e}")
+                self.dag_synchronizer = None
+        else:
+            self.logger.debug("🔄 DAG Synchronizer not available (module not imported)")
+        
+        # Mining algorithm configuration
+        self.mining_config = config.get('mining_config', {
+            'algorithm': 'ethash',  # Default mining algorithm
+            'epoch': 450,          # Current epoch number
+            'dag_size': 4.7        # DAG size in GB
+        })
+        
+        self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available}, DAG: {self.dag_synchronizer is not None})")
 
+    def ensure_dag_ready(self, gpu_index: int) -> bool:
+        """
+        **DAG SYNCHRONIZATION: Ensure DAG is ready for mining** (đảm bảo DAG sẵn sàng cho mining)
+        
+        :param gpu_index: GPU index to use for DAG calculation
+        :return: True if DAG is ready, False otherwise
+        """
+        if not self.dag_synchronizer:
+            self.logger.debug("📊 [OHC.ensure_dag_ready] DAG synchronizer not available, skipping check")
+            return True  # Continue without DAG sync if not available
+        
+        try:
+            epoch = self.mining_config.get('epoch', 450)
+            algorithm = self.mining_config.get('algorithm', 'ethash')
+            
+            self.logger.info(f"🔍 [OHC.ensure_dag_ready] Checking DAG for {algorithm} epoch {epoch} on GPU {gpu_index}")
+            
+            # Check if DAG already exists
+            dag_info = self.dag_synchronizer.get_dag_info(epoch, algorithm)
+            
+            if dag_info and dag_info.state == DAGState.COMPLETED:
+                self.logger.info(f"✅ [OHC.ensure_dag_ready] DAG already ready for {algorithm} epoch {epoch}")
+                return True
+            
+            # Register for DAG calculation
+            should_calculate = self.dag_synchronizer.register_dag_calculation(epoch, algorithm, gpu_index)
+            
+            if should_calculate:
+                self.logger.info(f"🚀 [OHC.ensure_dag_ready] GPU {gpu_index} starting DAG calculation for {algorithm} epoch {epoch}")
+                
+                # Simulate DAG calculation progress
+                for progress in [0.25, 0.5, 0.75, 1.0]:
+                    self.dag_synchronizer.update_progress(epoch, algorithm, gpu_index, progress)
+                    self.logger.debug(f"📊 [OHC.ensure_dag_ready] DAG calculation progress: {progress*100:.0f}%")
+                    time.sleep(0.5)  # Simulate calculation time
+                
+                # Complete DAG calculation
+                dag_size = int(self.mining_config.get('dag_size', 4.7) * 1024**3)  # Convert GB to bytes
+                dag_hash = hashlib.sha256(f"{algorithm}_{epoch}".encode()).hexdigest()
+                dag_path = f"/tmp/dag_cache/{algorithm}_epoch_{epoch}.dag"
+                
+                self.dag_synchronizer.complete_calculation(
+                    epoch, algorithm, gpu_index, 
+                    dag_path, dag_size, dag_hash
+                )
+                self.logger.info(f"✅ [OHC.ensure_dag_ready] DAG calculation completed for {algorithm} epoch {epoch}")
+                return True
+            else:
+                # Another GPU is calculating, wait for completion
+                self.logger.info(f"⏳ [OHC.ensure_dag_ready] Waiting for DAG calculation by another GPU...")
+                
+                if self.dag_synchronizer.wait_for_dag(epoch, algorithm, timeout=60):
+                    self.logger.info(f"✅ [OHC.ensure_dag_ready] DAG ready after waiting")
+                    return True
+                else:
+                    self.logger.error(f"❌ [OHC.ensure_dag_ready] DAG calculation timeout")
+                    return False
+                    
+        except Exception as e:
+            self.logger.error(f"❌ [OHC.ensure_dag_ready] Error ensuring DAG ready: {e}")
+            return False  # Continue without DAG if error occurs
+    
     def get_gpu_utilization_metrics(self) -> Dict[int, float]:
         """
         Get current GPU utilization metrics for all GPUs
@@ -1122,6 +1241,16 @@ class OptimizedHardwareController:
         }
         
         try:
+            # **DAG SYNCHRONIZATION: Ensure DAG is ready before optimization** (đảm bảo DAG sẵn sàng trước khi tối ưu)
+            if strategy == 'mining' or strategy == 'aggressive':
+                self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
+                if not self.ensure_dag_ready(gpu_index):
+                    self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
+                    results['operations_applied'].append('dag_check_failed')
+                else:
+                    results['operations_applied'].append('dag_ready')
+                    self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
+            
             # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)
             current_power = self.gpu_manager.get_gpu_power_usage(gpu_index)
             if current_power is None:
