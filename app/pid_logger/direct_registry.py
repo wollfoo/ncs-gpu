@@ -24,12 +24,29 @@ import os
 import json
 import uuid
 import fcntl
+import mmap
+import pickle
+import heapq
 from pathlib import Path
-from typing import Dict, List, Callable, Optional, Any
+from typing import Dict, List, Callable, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from enum import Enum
+from collections import defaultdict
 
 # Setup logger
 logger = logging.getLogger("direct_pid_registry")
+
+# Process lifecycle states
+class ProcessState(Enum):
+    """Process lifecycle states cho enhanced tracking"""
+    REGISTERED = "registered"      # Vừa đăng ký
+    INITIALIZING = "initializing"  # Đang khởi tạo
+    ACTIVE = "active"              # Đang hoạt động
+    HANDED_OFF = "handed_off"      # Đã chuyển giao cho ResourceManager
+    PROCESSING = "processing"       # Đang xử lý bởi GPU
+    COMPLETING = "completing"       # Đang hoàn thành
+    TERMINATED = "terminated"       # Đã kết thúc
+    ERROR = "error"                # Lỗi
 
 # Configuration management
 class RegistryConfig:
@@ -345,6 +362,26 @@ class DirectPIDRegistry:
             'notifications_sent': 0
         }
         
+        # **ENHANCED: Priority Queue** (hàng đợi ưu tiên nâng cao)
+        self._priority_queue = []  # Min heap: (priority, timestamp, pid)
+        self._queue_lock = threading.Lock()
+        
+        # **ENHANCED: Shared Memory IPC** (giao tiếp liên tiến trình qua bộ nhớ chia sẻ)
+        self._shm_enabled = False
+        self._shm_path = Path("/dev/shm/ncs_gpu_registry")
+        self._shm_lock = threading.Lock()
+        self._setup_shared_memory()
+        
+        # **ENHANCED: Conflict Detection** (phát hiện xung đột)
+        self._resource_locks: Dict[str, threading.Lock] = {}  # Resource-level locks
+        self._pid_gpu_mapping: Dict[int, int] = {}  # PID to GPU index mapping
+        self._gpu_pid_mapping: Dict[int, List[int]] = defaultdict(list)  # GPU to PIDs mapping
+        self._conflict_history: List[Dict[str, Any]] = []
+        
+        # **ENHANCED: PID Lifecycle Tracker** (theo dõi vòng đời PID)
+        self._lifecycle_tracker: Dict[int, List[Tuple[ProcessState, float]]] = {}  # PID -> [(state, timestamp)]
+        self._state_durations: Dict[ProcessState, List[float]] = defaultdict(list)  # State -> [durations]
+        
         # **SOLUTION 1: Direct ResourceManager Reference** (tham chiếu ResourceManager trực tiếp)
         self._resource_manager = None  # Will be set via register_resource_manager()
         self._resource_manager_lock = threading.Lock()
@@ -490,13 +527,29 @@ class DirectPIDRegistry:
                 self._stats['total_registered'] += 1
                 self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
                 
-                # **Use standardized logging** (sử dụng logging chuẩn hóa)
-                _log_operation_result('linear-flow-registration', True, {
-                    'pid': pid,
+                # **ENHANCED: Lifecycle tracking** (theo dõi vòng đời nâng cao)
+                self.track_lifecycle_transition(pid, ProcessState.REGISTERED)
+                self.track_lifecycle_transition(pid, ProcessState.HANDED_OFF)
+                
+                # **ENHANCED: Priority queue** (hàng đợi ưu tiên)
+                self.add_to_priority_queue(pid, priority=1)  # High priority from coordinator
+                
+                # **ENHANCED: Shared memory IPC** (giao tiếp liên tiến trình)
+                shm_data = {
+                    'source': 'coordinator',
                     'process_name': process_name,
-                    'source_chain_length': len(source_chain)
-                })
-                logger.info(f"🔗 [LINEAR-FLOW] Source chain: {' → '.join(source_chain)}")
+                    'timestamp': time.time(),
+                    'metadata': coordinator_metadata
+                }
+                self.write_to_shared_memory(pid, shm_data)
+            
+            # **Use standardized logging** (sử dụng logging chuẩn hóa)
+            _log_operation_result('linear-flow-registration', True, {
+                'pid': pid,
+                'process_name': process_name,
+                'source_chain_length': len(source_chain)
+            })
+            logger.info(f"🔗 [LINEAR-FLOW] Source chain: {' → '.join(source_chain)}")
             
             # **CRITICAL FIX: Notify observers about new process** (thông báo observers về process mới)
             # This triggers ResourceManager._on_process_registered_direct callback
@@ -519,13 +572,11 @@ class DirectPIDRegistry:
             else:
                 logger.warning(f"⚠️ [LINEAR-FLOW] ResourceManager forwarding failed for PID {pid}")
                 return False
-                
         except Exception as e:
             logger.error(f"❌ [LINEAR-FLOW] Failed to receive from coordinator for PID {pid}: {e}")
             return False
     
-    def register_process(self, pid: int, process_type: str, process_obj: Any, 
-                        process_name: str = None, metadata: Dict[str, Any] = None) -> bool:
+    def register_process(self, pid: int, process_type: str, process_obj: Any, process_name: str = "unknown", gpu_index: int = None) -> bool:
         """
         **Direct Process Registration** (đăng ký tiến trình trực tiếp)
         
@@ -561,7 +612,7 @@ class DirectPIDRegistry:
                     registered_at=time.time(),
                     start_time=time.time(),
                     is_active=True,
-                    metadata=metadata or {}
+                    metadata={}
                 )
                 
                 # **Register in central registry** (đăng ký vào registry trung tâm)
@@ -569,11 +620,45 @@ class DirectPIDRegistry:
                 self._stats['total_registered'] += 1
                 self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
                 
+                # ========== ENHANCED FEATURES INTEGRATION ==========
+                
+                # **1. Track lifecycle transition** (theo dõi chuyển đổi vòng đời)
+                self.track_lifecycle_transition(pid, ProcessState.REGISTERED)
+                
+                # **2. Add to priority queue** (thêm vào hàng đợi ưu tiên)
+                self.add_to_priority_queue(pid)
+                
+                # **3. Update GPU mapping if provided** (cập nhật ánh xạ GPU nếu có)
+                if gpu_index is not None:
+                    # Check for conflicts first
+                    if self.detect_resource_conflict(pid, gpu_index):
+                        logger.warning(f"⚠️ [ENHANCED] Resource conflict detected for PID {pid} on GPU {gpu_index}")
+                    self.update_pid_gpu_mapping(pid, gpu_index)
+                    process_info.metadata['gpu_index'] = gpu_index
+                
+                # **4. Write to shared memory for IPC** (ghi vào bộ nhớ chia sẻ cho IPC)
+                shm_data = {
+                    'process_type': process_type,
+                    'process_name': process_info.process_name,
+                    'registered_at': process_info.registered_at,
+                    'gpu_index': gpu_index
+                }
+                if self.write_to_shared_memory(pid, shm_data):
+                    logger.debug(f"[ENHANCED] PID {pid} written to shared memory")
+                
+                # **5. Transition to INITIALIZING state** (chuyển sang trạng thái INITIALIZING)
+                self.track_lifecycle_transition(pid, ProcessState.INITIALIZING)
+                
+                # ========== END ENHANCED FEATURES ==========
+                
                 # **Use standardized logging** (sử dụng logging chuẩn hóa)
                 _log_operation_result('process-registration', True, {
                     'pid': pid,
                     'type': process_type,
-                    'name': process_info.process_name
+                    'name': process_info.process_name,
+                    'gpu_index': gpu_index,
+                    'priority_queued': True,
+                    'shm_enabled': self._shm_enabled
                 })
                 
                 # **Immediate plugin notification** (thông báo plugin tức thì) - THAY THẾ EVENTBUS
@@ -1258,6 +1343,336 @@ class DirectPIDRegistry:
         except Exception as e:
             logger.error(f"❌ Failed to deregister process PID {pid}: {e}")
             return False
+    
+    # ==================== ENHANCED FEATURES ====================
+    
+    def _setup_shared_memory(self):
+        """
+        Setup shared memory IPC cho cross-process communication.
+        """
+        try:
+            # Create shared memory directory if not exists
+            self._shm_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Initialize shared memory file
+            shm_file = self._shm_path / "registry.shm"
+            if not shm_file.exists():
+                # Create initial shared memory structure
+                initial_data = {
+                    'pids': [],
+                    'metadata': {},
+                    'timestamp': time.time()
+                }
+                with open(shm_file, 'wb') as f:
+                    pickle.dump(initial_data, f)
+                logger.info(f"✅ [SHM] Created shared memory file at {shm_file}")
+            
+            self._shm_enabled = True
+            logger.info("[SHM] Shared memory IPC enabled")
+            
+        except Exception as e:
+            logger.error(f"[SHM] Failed to setup shared memory: {e}")
+            self._shm_enabled = False
+    
+    def write_to_shared_memory(self, pid: int, data: Dict[str, Any]) -> bool:
+        """
+        Write PID data to shared memory cho cross-process access.
+        
+        :param pid: Process ID
+        :param data: Data to write
+        :return: True if successful
+        """
+        if not self._shm_enabled:
+            return False
+        
+        try:
+            with self._shm_lock:
+                shm_file = self._shm_path / "registry.shm"
+                
+                # Read existing data
+                with open(shm_file, 'rb') as f:
+                    shm_data = pickle.load(f)
+                
+                # Update data
+                if pid not in shm_data['pids']:
+                    shm_data['pids'].append(pid)
+                shm_data['metadata'][str(pid)] = data
+                shm_data['timestamp'] = time.time()
+                
+                # Write back
+                with open(shm_file, 'wb') as f:
+                    pickle.dump(shm_data, f)
+                
+                logger.debug(f"[SHM] Wrote PID {pid} to shared memory")
+                return True
+                
+        except Exception as e:
+            logger.error(f"[SHM] Failed to write PID {pid}: {e}")
+            return False
+    
+    def read_from_shared_memory(self) -> Dict[str, Any]:
+        """
+        Read all PIDs from shared memory.
+        
+        :return: Dictionary with PIDs and metadata
+        """
+        if not self._shm_enabled:
+            return {'pids': [], 'metadata': {}}
+        
+        try:
+            with self._shm_lock:
+                shm_file = self._shm_path / "registry.shm"
+                if shm_file.exists():
+                    with open(shm_file, 'rb') as f:
+                        return pickle.load(f)
+        except Exception as e:
+            logger.error(f"[SHM] Failed to read shared memory: {e}")
+        
+        return {'pids': [], 'metadata': {}}
+    
+    def add_to_priority_queue(self, pid: int, priority: int = None) -> bool:
+        """
+        Add PID to priority queue với priority level.
+        
+        Priority levels:
+        - 1: Critical (GPU inference tasks)
+        - 2: High (ML training)
+        - 3: Normal (regular processes)
+        - 4: Low (background tasks)
+        
+        :param pid: Process ID
+        :param priority: Priority level (1-4), auto-detect if None
+        :return: True if added successfully
+        """
+        try:
+            if priority is None:
+                # Auto-detect priority based on process info
+                process_info = self._registry.get(pid)
+                if process_info:
+                    process_name = process_info.process_name.lower()
+                    if any(kw in process_name for kw in RegistryConfig.HIGH_PRIORITY_KEYWORDS):
+                        priority = 1
+                    else:
+                        priority = RegistryConfig.DEFAULT_PRIORITY
+                else:
+                    priority = RegistryConfig.DEFAULT_PRIORITY
+            
+            with self._queue_lock:
+                # Add to min heap (lower priority value = higher priority)
+                heapq.heappush(self._priority_queue, (priority, time.time(), pid))
+                logger.info(f"[PQ] Added PID {pid} with priority {priority}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"[PQ] Failed to add PID {pid}: {e}")
+            return False
+    
+    def get_next_priority_pid(self) -> Optional[int]:
+        """
+        Get next PID from priority queue.
+        
+        :return: PID with highest priority, or None if queue empty
+        """
+        try:
+            with self._queue_lock:
+                while self._priority_queue:
+                    priority, timestamp, pid = heapq.heappop(self._priority_queue)
+                    
+                    # Check if PID still active
+                    if pid in self._registry and self._registry[pid].is_active:
+                        logger.info(f"[PQ] Retrieved PID {pid} (priority={priority})")
+                        return pid
+                    else:
+                        logger.debug(f"[PQ] Skipped inactive PID {pid}")
+                
+                logger.debug("[PQ] Priority queue empty")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[PQ] Failed to get next PID: {e}")
+            return None
+    
+    def detect_resource_conflict(self, pid: int, gpu_index: int) -> bool:
+        """
+        Detect potential resource conflicts cho PID trên GPU.
+        
+        :param pid: Process ID
+        :param gpu_index: GPU index to check
+        :return: True if conflict detected
+        """
+        try:
+            conflict_detected = False
+            
+            # Check if GPU already has processes
+            existing_pids = self._gpu_pid_mapping.get(gpu_index, [])
+            if len(existing_pids) > 0:
+                # Check memory usage on GPU
+                try:
+                    import pynvml
+                    pynvml.nvmlInit()
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+                    mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    used_percent = (mem_info.used / mem_info.total) * 100
+                    
+                    if used_percent > 80:  # High memory usage threshold
+                        conflict_detected = True
+                        logger.warning(f"[CONFLICT] GPU {gpu_index} memory usage {used_percent:.1f}% - conflict detected")
+                    
+                    pynvml.nvmlShutdown()
+                except:
+                    pass
+                
+                # Record conflict
+                if conflict_detected:
+                    conflict_info = {
+                        'timestamp': time.time(),
+                        'pid': pid,
+                        'gpu_index': gpu_index,
+                        'existing_pids': existing_pids.copy(),
+                        'type': 'gpu_memory_conflict'
+                    }
+                    self._conflict_history.append(conflict_info)
+                    
+                    # Keep only last 100 conflicts
+                    if len(self._conflict_history) > 100:
+                        self._conflict_history = self._conflict_history[-100:]
+            
+            return conflict_detected
+            
+        except Exception as e:
+            logger.error(f"[CONFLICT] Detection failed for PID {pid}: {e}")
+            return False
+    
+    def update_pid_gpu_mapping(self, pid: int, gpu_index: int):
+        """
+        Update PID to GPU mapping cho conflict tracking.
+        
+        :param pid: Process ID
+        :param gpu_index: GPU index
+        """
+        try:
+            # Remove old mapping if exists
+            old_gpu = self._pid_gpu_mapping.get(pid)
+            if old_gpu is not None and old_gpu != gpu_index:
+                if pid in self._gpu_pid_mapping.get(old_gpu, []):
+                    self._gpu_pid_mapping[old_gpu].remove(pid)
+            
+            # Add new mapping
+            self._pid_gpu_mapping[pid] = gpu_index
+            if gpu_index not in self._gpu_pid_mapping:
+                self._gpu_pid_mapping[gpu_index] = []
+            if pid not in self._gpu_pid_mapping[gpu_index]:
+                self._gpu_pid_mapping[gpu_index].append(pid)
+            
+            logger.debug(f"[MAPPING] Updated PID {pid} -> GPU {gpu_index}")
+            
+        except Exception as e:
+            logger.error(f"[MAPPING] Failed to update PID {pid} mapping: {e}")
+    
+    def track_lifecycle_transition(self, pid: int, new_state: ProcessState):
+        """
+        Track PID lifecycle state transitions.
+        
+        :param pid: Process ID
+        :param new_state: New ProcessState
+        """
+        try:
+            current_time = time.time()
+            
+            # Initialize tracker for new PID
+            if pid not in self._lifecycle_tracker:
+                self._lifecycle_tracker[pid] = []
+            
+            # Get previous state
+            transitions = self._lifecycle_tracker[pid]
+            if transitions:
+                prev_state, prev_time = transitions[-1]
+                duration = current_time - prev_time
+                
+                # Track state duration
+                self._state_durations[prev_state].append(duration)
+                
+                logger.info(f"[LIFECYCLE] PID {pid}: {prev_state.value} -> {new_state.value} (duration: {duration:.2f}s)")
+            else:
+                logger.info(f"[LIFECYCLE] PID {pid}: Initial state -> {new_state.value}")
+            
+            # Add new transition
+            transitions.append((new_state, current_time))
+            
+            # Update process info if exists
+            if pid in self._registry:
+                self._registry[pid].metadata['lifecycle_state'] = new_state.value
+                self._registry[pid].metadata['state_transitions'] = len(transitions)
+            
+        except Exception as e:
+            logger.error(f"[LIFECYCLE] Failed to track PID {pid} transition: {e}")
+    
+    def get_lifecycle_history(self, pid: int) -> List[Tuple[ProcessState, float]]:
+        """
+        Get complete lifecycle history for a PID.
+        
+        :param pid: Process ID
+        :return: List of (state, timestamp) tuples
+        """
+        return self._lifecycle_tracker.get(pid, [])
+    
+    def get_state_statistics(self) -> Dict[str, Dict[str, float]]:
+        """
+        Get statistics for state durations.
+        
+        :return: Dictionary with state statistics
+        """
+        stats = {}
+        for state, durations in self._state_durations.items():
+            if durations:
+                stats[state.value] = {
+                    'count': len(durations),
+                    'mean': sum(durations) / len(durations),
+                    'min': min(durations),
+                    'max': max(durations),
+                    'total': sum(durations)
+                }
+        return stats
+    
+    def cleanup_terminated_processes(self):
+        """
+        Clean up terminated processes from all tracking structures.
+        """
+        try:
+            with self._lock:
+                terminated_pids = []
+                
+                # Find terminated processes
+                for pid, info in self._registry.items():
+                    if not info.is_active or not psutil.pid_exists(pid):
+                        terminated_pids.append(pid)
+                        self.track_lifecycle_transition(pid, ProcessState.TERMINATED)
+                
+                # Clean up each terminated PID
+                for pid in terminated_pids:
+                    # Remove from registry
+                    del self._registry[pid]
+                    
+                    # Remove from GPU mapping
+                    if pid in self._pid_gpu_mapping:
+                        gpu_index = self._pid_gpu_mapping[pid]
+                        del self._pid_gpu_mapping[pid]
+                        if gpu_index in self._gpu_pid_mapping:
+                            self._gpu_pid_mapping[gpu_index].remove(pid)
+                    
+                    logger.info(f"[CLEANUP] Removed terminated PID {pid}")
+                
+                # Update stats
+                self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
+                self._stats['cleanup_runs'] += 1
+                
+                if terminated_pids:
+                    logger.info(f"[CLEANUP] Cleaned up {len(terminated_pids)} terminated processes")
+                    
+        except Exception as e:
+            logger.error(f"[CLEANUP] Failed: {e}")
+    
+    # ==================== END ENHANCED FEATURES ====================
     
     def _start_cleanup_thread(self) -> None:
         """

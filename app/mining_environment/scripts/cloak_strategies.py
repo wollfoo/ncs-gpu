@@ -10,8 +10,12 @@ import psutil
 import threading
 import time
 import random
+import json
+from collections import deque
+from datetime import datetime
+import numpy as np
 # **ABC removed** (đã xóa ABC – loại bỏ Abstract Base Classes) - không còn cần sau khi xóa **CloakStrategy base class** (lớp cơ sở CloakStrategy)
-from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING
+from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING, Deque
 from pathlib import Path
 
 from .utils import MiningProcess, StrategyType
@@ -44,6 +48,291 @@ else:
 
 
 ###############################################################################
+#                         **METRICS COLLECTION HUB** (TRUNG TÂM THU THẬP SỐ LIỆU)                        #
+###############################################################################
+
+class MetricsCollectionHub:
+    """
+    Metrics Collection Hub - Trung tâm thu thập và phân tích số liệu GPU/Process.
+    
+    Features:
+    - Circular buffer (bộ đệm vòng) để lưu trữ số liệu hiệu quả
+    - Data aggregation (tổng hợp dữ liệu) với mean, std, percentiles
+    - JSON logging (ghi log định dạng JSON) cho phân tích
+    - Metrics export API (API xuất số liệu) cho monitoring tools
+    - Thread-safe operations (hoạt động an toàn luồng)
+    """
+    
+    def __init__(self, buffer_size: int = 1000, log_interval: int = 60):
+        """
+        Initialize MetricsCollectionHub.
+        
+        :param buffer_size: Kích thước buffer tối đa cho mỗi metric type
+        :param log_interval: Khoảng thời gian (giây) giữa các lần ghi log tự động
+        """
+        self.logger = cloak_logger
+        self.buffer_size = buffer_size
+        self.log_interval = log_interval
+        
+        # Circular buffers cho các loại metrics khác nhau
+        self.metrics_buffers: Dict[str, Deque[Dict[str, Any]]] = {
+            'gpu_usage': deque(maxlen=buffer_size),      # GPU utilization metrics
+            'memory_usage': deque(maxlen=buffer_size),   # Memory (RAM/VRAM) metrics  
+            'process_health': deque(maxlen=buffer_size), # Process health scores
+            'temperature': deque(maxlen=buffer_size),    # GPU temperature metrics
+            'power': deque(maxlen=buffer_size),          # Power consumption metrics
+            'clock_speeds': deque(maxlen=buffer_size),   # GPU clock speeds
+            'io_activity': deque(maxlen=buffer_size),    # I/O read/write metrics
+            'network': deque(maxlen=buffer_size)         # Network traffic metrics
+        }
+        
+        # Thread locks cho thread-safe operations
+        self.buffer_locks: Dict[str, threading.Lock] = {
+            key: threading.Lock() for key in self.metrics_buffers.keys()
+        }
+        
+        # Statistics cache (cache thống kê)
+        self.stats_cache: Dict[str, Dict[str, Any]] = {}
+        self.stats_cache_lock = threading.Lock()
+        self.last_stats_update = 0
+        
+        # JSON log file path
+        self.log_dir = Path("/tmp/gpu_metrics")
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Background logging thread
+        self.logging_thread = None
+        self.stop_logging = threading.Event()
+        
+        self.logger.info(f"[MetricsHub] Initialized with buffer_size={buffer_size}, log_interval={log_interval}s")
+    
+    def add_metric(self, metric_type: str, data: Dict[str, Any]) -> bool:
+        """
+        Add a new metric to the appropriate buffer.
+        
+        :param metric_type: Loại metric (gpu_usage, memory_usage, etc.)
+        :param data: Dictionary chứa metric data với timestamp
+        :return: True nếu thành công
+        """
+        if metric_type not in self.metrics_buffers:
+            self.logger.warning(f"[MetricsHub] Unknown metric type: {metric_type}")
+            return False
+        
+        # Add timestamp if not present
+        if 'timestamp' not in data:
+            data['timestamp'] = time.time()
+        
+        # Thread-safe addition to buffer
+        with self.buffer_locks[metric_type]:
+            self.metrics_buffers[metric_type].append(data)
+        
+        self.logger.debug(f"[MetricsHub] Added {metric_type} metric: {data}")
+        return True
+    
+    def get_metrics(self, metric_type: str, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get metrics from buffer.
+        
+        :param metric_type: Loại metric cần lấy
+        :param last_n: Số lượng metrics gần nhất cần lấy (None = tất cả)
+        :return: List of metric dictionaries
+        """
+        if metric_type not in self.metrics_buffers:
+            return []
+        
+        with self.buffer_locks[metric_type]:
+            buffer = list(self.metrics_buffers[metric_type])
+        
+        if last_n and last_n < len(buffer):
+            return buffer[-last_n:]
+        return buffer
+    
+    def calculate_statistics(self, metric_type: str, field: str) -> Dict[str, float]:
+        """
+        Calculate statistics (mean, std, min, max, percentiles) cho một field cụ thể.
+        
+        :param metric_type: Loại metric
+        :param field: Field name trong metric data để tính toán
+        :return: Dictionary chứa statistics
+        """
+        metrics = self.get_metrics(metric_type)
+        if not metrics:
+            return {}
+        
+        # Extract values for the specified field
+        values = []
+        for m in metrics:
+            if field in m:
+                try:
+                    values.append(float(m[field]))
+                except (ValueError, TypeError):
+                    continue
+        
+        if not values:
+            return {}
+        
+        # Calculate statistics using numpy
+        arr = np.array(values)
+        stats = {
+            'count': len(values),
+            'mean': float(np.mean(arr)),
+            'std': float(np.std(arr)),
+            'min': float(np.min(arr)),
+            'max': float(np.max(arr)),
+            'p25': float(np.percentile(arr, 25)),
+            'p50': float(np.percentile(arr, 50)),  # median
+            'p75': float(np.percentile(arr, 75)),
+            'p90': float(np.percentile(arr, 90)),
+            'p95': float(np.percentile(arr, 95)),
+            'p99': float(np.percentile(arr, 99))
+        }
+        
+        return stats
+    
+    def aggregate_all_metrics(self) -> Dict[str, Any]:
+        """
+        Aggregate tất cả metrics và tính statistics cho mỗi loại.
+        
+        :return: Dictionary chứa aggregated metrics và statistics
+        """
+        aggregated = {
+            'timestamp': time.time(),
+            'metrics': {}
+        }
+        
+        # Define key fields for each metric type
+        key_fields = {
+            'gpu_usage': ['utilization', 'memory_used'],
+            'memory_usage': ['memory_usage_mb', 'gpu_memory_mb'],
+            'process_health': ['health_score', 'cpu_percent'],
+            'temperature': ['temperature'],
+            'power': ['power_draw', 'power_limit'],
+            'clock_speeds': ['graphics_clock', 'memory_clock'],
+            'io_activity': ['read_bytes', 'write_bytes'],
+            'network': ['bytes_sent', 'bytes_recv']
+        }
+        
+        for metric_type, fields in key_fields.items():
+            type_stats = {}
+            for field in fields:
+                stats = self.calculate_statistics(metric_type, field)
+                if stats:
+                    type_stats[field] = stats
+            
+            if type_stats:
+                aggregated['metrics'][metric_type] = type_stats
+        
+        # Update cache
+        with self.stats_cache_lock:
+            self.stats_cache = aggregated
+            self.last_stats_update = time.time()
+        
+        return aggregated
+    
+    def export_to_json(self, filepath: Optional[Path] = None) -> Path:
+        """
+        Export metrics to JSON file.
+        
+        :param filepath: Custom filepath (nếu None, tự động tạo với timestamp)
+        :return: Path to exported file
+        """
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = self.log_dir / f"metrics_{timestamp}.json"
+        
+        # Aggregate all metrics
+        aggregated = self.aggregate_all_metrics()
+        
+        # Add raw metrics samples
+        aggregated['raw_samples'] = {}
+        for metric_type in self.metrics_buffers.keys():
+            # Get last 10 samples of each type
+            samples = self.get_metrics(metric_type, last_n=10)
+            if samples:
+                aggregated['raw_samples'][metric_type] = samples
+        
+        # Write to JSON file
+        with open(filepath, 'w') as f:
+            json.dump(aggregated, f, indent=2, default=str)
+        
+        self.logger.info(f"[MetricsHub] Exported metrics to {filepath}")
+        return filepath
+    
+    def start_background_logging(self):
+        """
+        Start background thread để tự động log metrics theo interval.
+        """
+        if self.logging_thread and self.logging_thread.is_alive():
+            self.logger.warning("[MetricsHub] Background logging already running")
+            return
+        
+        def logging_worker():
+            while not self.stop_logging.is_set():
+                try:
+                    # Export metrics to JSON
+                    self.export_to_json()
+                    
+                    # Log summary to console
+                    stats = self.aggregate_all_metrics()
+                    self.logger.info(f"[MetricsHub] Periodic stats update: {len(stats['metrics'])} metric types tracked")
+                    
+                except Exception as e:
+                    self.logger.error(f"[MetricsHub] Error in background logging: {e}")
+                
+                # Wait for next interval
+                self.stop_logging.wait(self.log_interval)
+        
+        self.logging_thread = threading.Thread(target=logging_worker, daemon=True)
+        self.logging_thread.start()
+        self.logger.info("[MetricsHub] Started background logging thread")
+    
+    def stop_background_logging(self):
+        """
+        Stop background logging thread.
+        """
+        if self.logging_thread:
+            self.stop_logging.set()
+            self.logging_thread.join(timeout=5)
+            self.logger.info("[MetricsHub] Stopped background logging thread")
+    
+    def get_export_api_data(self) -> Dict[str, Any]:
+        """
+        Get data formatted cho external monitoring tools API.
+        
+        Format phù hợp với Prometheus, Grafana, etc.
+        
+        :return: Dictionary với metrics theo format chuẩn
+        """
+        # Use cached stats if recent enough
+        with self.stats_cache_lock:
+            if time.time() - self.last_stats_update < 5:  # Cache for 5 seconds
+                return self.stats_cache
+        
+        # Otherwise calculate fresh
+        return self.aggregate_all_metrics()
+    
+    def clear_metrics(self, metric_type: Optional[str] = None):
+        """
+        Clear metrics buffers.
+        
+        :param metric_type: Clear specific type, hoặc None để clear tất cả
+        """
+        if metric_type:
+            if metric_type in self.metrics_buffers:
+                with self.buffer_locks[metric_type]:
+                    self.metrics_buffers[metric_type].clear()
+                self.logger.info(f"[MetricsHub] Cleared {metric_type} metrics")
+        else:
+            for key in self.metrics_buffers.keys():
+                with self.buffer_locks[key]:
+                    self.metrics_buffers[key].clear()
+            self.logger.info("[MetricsHub] Cleared all metrics")
+    
+    def __del__(self):
+        """Cleanup on deletion."""
+        self.stop_background_logging()
+
+###############################################################################
 #                         **SIMPLIFIED CLOAK COORDINATOR** (BỘ ĐIỀU PHỐI NGỤY TRANG ĐƠN GIẢN HÓA)                        #
 ###############################################################################
 
@@ -68,7 +357,216 @@ class CloakCoordinator:
         # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
         self.hw_controller = HardwareController(config)
         
+        # **INTELLIGENCE LAYER: Strategy scoring weights** (trọng số chấm điểm chiến lược)
+        self.strategy_weights = {
+            'temperature': 0.35,     # Temperature safety is critical
+            'power_efficiency': 0.25,  # Power usage optimization
+            'performance': 0.20,     # Mining/compute performance
+            'resource_usage': 0.10,  # Memory/GPU utilization
+            'system_load': 0.10     # Overall system load
+        }
+        
+        # **Decision tree thresholds** (ngưỡng cây quyết định)
+        self.decision_thresholds = {
+            'temp_critical': 78,
+            'temp_warning': 72,
+            'temp_safe': 65,
+            'power_high': 200,
+            'power_medium': 150,
+            'power_low': 100,
+            'gpu_util_high': 80,
+            'gpu_util_medium': 50,
+            'gpu_util_low': 30
+        }
+        
+        # **Context awareness state** (trạng thái nhận thức ngữ cảnh)
+        self.context_state = {
+            'time_of_day': None,     # Peak vs off-peak hours
+            'system_load': 'normal',  # low/normal/high
+            'thermal_state': 'safe',  # safe/warning/critical
+            'optimization_mode': 'balanced'  # aggressive/balanced/conservative
+        }
+        
+        # **Strategy history for learning** (lịch sử chiến lược để học)
+        self.strategy_history = deque(maxlen=100)
+        
         self.logger.info("[CS] **CloakCoordinator initialized** (CloakCoordinator đã khởi tạo – bộ điều phối ngụy trang đã thiết lập) - **Stage 2 ready** (giai đoạn 2 sẵn sàng)")
+    
+    def select_optimal_strategy(self, pid: int, current_metrics: Dict[str, Any]) -> str:
+        """
+        **INTELLIGENCE LAYER: Dynamic Strategy Selector** (bộ chọn chiến lược động)
+        Uses decision tree logic and feature scoring to select optimal strategy
+        
+        :param pid: Process ID
+        :param current_metrics: Current system metrics (temp, power, gpu util, etc.)
+        :return: Selected strategy name
+        """
+        # **Step 1: Feature extraction** (trích xuất đặc trưng)
+        features = self.extract_features(current_metrics)
+        
+        # **Step 2: Update context awareness** (cập nhật nhận thức ngữ cảnh)
+        self.update_context_awareness(features)
+        
+        # **Step 3: Decision tree logic** (logic cây quyết định)
+        # Critical temperature - immediate safety response
+        if features['temperature'] >= self.decision_thresholds['temp_critical']:
+            self.logger.warning(f"🔥 Critical temp for PID {pid}: {features['temperature']}°C")
+            return 'emergency_cooling'
+            
+        # **Step 4: Score each strategy** (chấm điểm mỗi chiến lược)
+        strategy_scores = {}
+        
+        # GPU strategy scoring
+        gpu_score = self.calculate_strategy_score('gpu', features)
+        strategy_scores['gpu'] = gpu_score
+        
+        # Network strategy scoring (for distributed workloads)
+        if features['network_activity'] > 0.5:
+            network_score = self.calculate_strategy_score('network', features)
+            strategy_scores['network'] = network_score
+            
+        # Memory strategy scoring (for high RAM usage)
+        if features['memory_usage'] > 70:
+            memory_score = self.calculate_strategy_score('memory', features)
+            strategy_scores['memory'] = memory_score
+            
+        # **Step 5: Select highest scoring strategy** (chọn chiến lược điểm cao nhất)
+        best_strategy = max(strategy_scores, key=strategy_scores.get)
+        best_score = strategy_scores[best_strategy]
+        
+        # **Step 6: Record decision for learning** (ghi lại quyết định để học)
+        self.strategy_history.append({
+            'timestamp': time.time(),
+            'pid': pid,
+            'features': features,
+            'context': self.context_state.copy(),
+            'selected_strategy': best_strategy,
+            'score': best_score,
+            'all_scores': strategy_scores
+        })
+        
+        self.logger.info(f"🎯 Selected strategy '{best_strategy}' (score: {best_score:.2f}) for PID {pid}")
+        return best_strategy
+    
+    def extract_features(self, metrics: Dict[str, Any]) -> Dict[str, float]:
+        """
+        **Extract normalized features** (trích xuất đặc trưng chuẩn hóa) from raw metrics
+        
+        :param metrics: Raw system metrics
+        :return: Normalized features (0-1 scale)
+        """
+        features = {}
+        
+        # Temperature feature (0=cold, 1=critical)
+        temp = metrics.get('temperature', 50)
+        features['temperature'] = temp
+        features['temp_normalized'] = min(1.0, max(0, (temp - 30) / 50))
+        
+        # Power feature (0=low, 1=high)
+        power = metrics.get('power_draw', 100)
+        features['power'] = power
+        features['power_normalized'] = min(1.0, power / 300)
+        
+        # GPU utilization (0=idle, 1=full)
+        gpu_util = metrics.get('gpu_utilization', 50)
+        features['gpu_util'] = gpu_util
+        features['gpu_util_normalized'] = gpu_util / 100
+        
+        # Memory usage
+        mem_used = metrics.get('memory_used_mb', 0)
+        mem_total = metrics.get('memory_total_mb', 8000)
+        features['memory_usage'] = (mem_used / mem_total * 100) if mem_total > 0 else 0
+        
+        # Network activity (placeholder)
+        features['network_activity'] = metrics.get('network_activity', 0)
+        
+        # System load
+        features['cpu_load'] = metrics.get('cpu_percent', 50)
+        
+        return features
+    
+    def update_context_awareness(self, features: Dict[str, float]):
+        """
+        **Update context state** (cập nhật trạng thái ngữ cảnh) based on current features
+        
+        :param features: Extracted features
+        """
+        import datetime
+        
+        # **Time of day awareness** (nhận thức thời gian trong ngày)
+        current_hour = datetime.datetime.now().hour
+        if 9 <= current_hour <= 17:
+            self.context_state['time_of_day'] = 'business_hours'
+        elif 18 <= current_hour <= 23:
+            self.context_state['time_of_day'] = 'peak_hours'
+        else:
+            self.context_state['time_of_day'] = 'off_peak'
+            
+        # **Thermal state** (trạng thái nhiệt)
+        temp = features['temperature']
+        if temp >= self.decision_thresholds['temp_critical']:
+            self.context_state['thermal_state'] = 'critical'
+        elif temp >= self.decision_thresholds['temp_warning']:
+            self.context_state['thermal_state'] = 'warning'
+        else:
+            self.context_state['thermal_state'] = 'safe'
+            
+        # **System load state** (trạng thái tải hệ thống)
+        if features['gpu_util'] > 80 or features['cpu_load'] > 80:
+            self.context_state['system_load'] = 'high'
+        elif features['gpu_util'] < 30 and features['cpu_load'] < 30:
+            self.context_state['system_load'] = 'low'
+        else:
+            self.context_state['system_load'] = 'normal'
+            
+        # **Optimization mode** (chế độ tối ưu)
+        if self.context_state['thermal_state'] == 'critical':
+            self.context_state['optimization_mode'] = 'conservative'
+        elif self.context_state['time_of_day'] == 'off_peak':
+            self.context_state['optimization_mode'] = 'aggressive'
+        else:
+            self.context_state['optimization_mode'] = 'balanced'
+    
+    def calculate_strategy_score(self, strategy: str, features: Dict[str, float]) -> float:
+        """
+        **Calculate weighted score** (tính điểm có trọng số) for a strategy
+        
+        :param strategy: Strategy name
+        :param features: Normalized features
+        :return: Score (0-100)
+        """
+        score = 0.0
+        
+        if strategy == 'gpu':
+            # GPU strategy excels when GPU util is medium-high but temp is safe
+            score += (1.0 - features['temp_normalized']) * self.strategy_weights['temperature'] * 100
+            score += features['gpu_util_normalized'] * self.strategy_weights['performance'] * 100
+            score += (1.0 - features['power_normalized']) * self.strategy_weights['power_efficiency'] * 100
+            
+            # Context bonuses
+            if self.context_state['time_of_day'] == 'off_peak':
+                score *= 1.2  # 20% bonus during off-peak
+            if self.context_state['thermal_state'] == 'safe':
+                score *= 1.1  # 10% bonus when thermally safe
+                
+        elif strategy == 'network':
+            # Network strategy for distributed workloads
+            score += features['network_activity'] * self.strategy_weights['performance'] * 100
+            score += (1.0 - features['temp_normalized']) * self.strategy_weights['temperature'] * 50
+            
+        elif strategy == 'memory':
+            # Memory strategy for high RAM usage scenarios
+            score += (features['memory_usage'] / 100) * self.strategy_weights['resource_usage'] * 100
+            score += (1.0 - features['cpu_load'] / 100) * self.strategy_weights['system_load'] * 100
+            
+        elif strategy == 'emergency_cooling':
+            # Emergency strategy when temperature is critical
+            if features['temperature'] >= self.decision_thresholds['temp_critical']:
+                score = 100  # Maximum priority
+            else:
+                score = 0
+                
+        return min(100, max(0, score))  # Clamp to 0-100
     
     def process_request(self, request: CloakRequest) -> CloakResult:
         """**Stage 2: Strategy Coordinator** (Giai đoạn 2: Điều phối chiến lược – bộ phối hợp phương pháp)

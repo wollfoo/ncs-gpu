@@ -68,6 +68,24 @@ class GPUResourceManager:
         self.config = config
         self.gpu_initialized = False
         self.process_gpu_settings: Dict[int, Dict[int, Dict[str, Any]]] = {}
+        
+        # **INTELLIGENCE LAYER: Temperature Model Parameters** (tham số mô hình nhiệt độ)
+        self.temp_history: Dict[int, List[tuple]] = {}  # GPU index -> [(timestamp, temp)]
+        self.power_history: Dict[int, List[tuple]] = {}  # GPU index -> [(timestamp, power)]
+        
+        # **Newton's Cooling Law Constants** (hằng số định luật làm lạnh Newton)
+        self.cooling_coefficient = config.get('cooling_coefficient', 0.05)  # k value
+        self.ambient_temp = config.get('ambient_temp', 25.0)  # Room temperature (°C)
+        
+        # **Heat Generation Parameters** (tham số sinh nhiệt)
+        self.thermal_efficiency = config.get('thermal_efficiency', 0.85)  # η = 85%
+        self.heat_capacity = config.get('heat_capacity', 200.0)  # J/°C
+        
+        # **Safety Thresholds** (ngưỡng an toàn)
+        self.temp_safe = config.get('temp_safe', 65)  # Safe operating temp
+        self.temp_warning = config.get('temp_warning', 72)  # Warning threshold
+        self.temp_critical = config.get('temp_critical', 78)  # Critical threshold
+        self.temp_emergency = config.get('temp_emergency', 82)  # Emergency shutdown
 
         # Tự động khởi tạo NVML
         self.initialize_nvml()
@@ -420,6 +438,310 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi khi lấy default power limit của GPU={gpu_index}: {e}")
             return None
 
+    def predict_temperature_trajectory(self, gpu_index: int, power_watts: float, 
+                                       time_horizon: float = 60.0) -> Dict[str, Any]:
+        """
+        **INTELLIGENCE LAYER: Predict temperature trajectory** (dự đoán quỹ đạo nhiệt độ)
+        Using Newton's Cooling Law: dT/dt = -k(T - T_ambient) + Q/C
+        
+        :param gpu_index: GPU index to predict for
+        :param power_watts: Power consumption in watts
+        :param time_horizon: Time to predict ahead (seconds)
+        :return: Prediction results with trajectory and safety status
+        """
+        try:
+            # **Get current temperature** (lấy nhiệt độ hiện tại)
+            handle = self.get_handle(gpu_index)
+            if not handle:
+                return {'error': 'Cannot get GPU handle'}
+                
+            current_temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            
+            # **Calculate heat generation rate** (tính tốc độ sinh nhiệt)
+            # Q = P × η (Power × Thermal Efficiency)
+            heat_generation = power_watts * self.thermal_efficiency
+            
+            # **Predict temperature over time** (dự đoán nhiệt độ theo thời gian)
+            trajectory = []
+            dt = 1.0  # Time step (seconds)
+            temp = float(current_temp)
+            
+            for t in range(int(time_horizon)):
+                # **Newton's Cooling Law** (định luật làm lạnh Newton)
+                # dT/dt = -k(T - T_ambient) + Q/C
+                cooling_rate = -self.cooling_coefficient * (temp - self.ambient_temp)
+                heating_rate = heat_generation / self.heat_capacity
+                
+                # **Temperature change** (thay đổi nhiệt độ)
+                dT = (cooling_rate + heating_rate) * dt
+                temp += dT
+                
+                # **Record trajectory point** (ghi điểm quỹ đạo)
+                trajectory.append({
+                    'time': t,
+                    'temperature': temp,
+                    'cooling_rate': cooling_rate,
+                    'heating_rate': heating_rate
+                })
+                
+            # **Analyze trajectory for safety** (phân tích quỹ đạo về an toàn)
+            max_temp = max(p['temperature'] for p in trajectory)
+            steady_state_temp = trajectory[-1]['temperature']
+            
+            # **Determine safety status** (xác định trạng thái an toàn)
+            safety_status = 'SAFE'
+            if max_temp >= self.temp_emergency:
+                safety_status = 'EMERGENCY'
+            elif max_temp >= self.temp_critical:
+                safety_status = 'CRITICAL'
+            elif max_temp >= self.temp_warning:
+                safety_status = 'WARNING'
+                
+            # **Calculate cooling efficiency** (tính hiệu suất làm mát)
+            cooling_efficiency = self.calculate_cooling_efficiency(
+                current_temp, steady_state_temp, power_watts
+            )
+            
+            # **Store history** (lưu lịch sử)
+            if gpu_index not in self.temp_history:
+                self.temp_history[gpu_index] = []
+            self.temp_history[gpu_index].append((time.time(), current_temp))
+            
+            # Keep only last 100 entries
+            if len(self.temp_history[gpu_index]) > 100:
+                self.temp_history[gpu_index] = self.temp_history[gpu_index][-100:]
+                
+            return {
+                'current_temperature': current_temp,
+                'predicted_max': max_temp,
+                'steady_state': steady_state_temp,
+                'safety_status': safety_status,
+                'cooling_efficiency': cooling_efficiency,
+                'trajectory': trajectory[:10],  # Return first 10 points
+                'recommendations': self.get_temperature_recommendations(max_temp, power_watts)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Temperature prediction error for GPU {gpu_index}: {e}")
+            return {'error': str(e)}
+    
+    def calculate_cooling_efficiency(self, current_temp: float, steady_temp: float, 
+                                    power_watts: float) -> float:
+        """
+        **Calculate cooling system efficiency** (tính hiệu suất hệ thống làm mát)
+        
+        :param current_temp: Current GPU temperature
+        :param steady_temp: Predicted steady-state temperature
+        :param power_watts: Power consumption
+        :return: Efficiency percentage (0-100)
+        """
+        try:
+            # **Ideal cooling would maintain ambient temperature** (làm mát lý tưởng duy trì nhiệt độ môi trường)
+            temp_rise = steady_temp - self.ambient_temp
+            
+            # **Efficiency based on temperature rise per watt** (hiệu suất dựa trên độ tăng nhiệt/watt)
+            if power_watts > 0:
+                temp_per_watt = temp_rise / power_watts
+                # Good cooling: < 0.2°C/W, Poor: > 0.5°C/W
+                if temp_per_watt < 0.2:
+                    efficiency = 100.0
+                elif temp_per_watt > 0.5:
+                    efficiency = 20.0
+                else:
+                    # Linear interpolation
+                    efficiency = 100.0 - ((temp_per_watt - 0.2) / 0.3) * 80.0
+            else:
+                efficiency = 100.0
+                
+            return max(0.0, min(100.0, efficiency))
+            
+        except Exception:
+            return 50.0  # Default medium efficiency
+            
+    def get_temperature_recommendations(self, predicted_max: float, power_watts: float) -> List[str]:
+        """
+        **Generate optimization recommendations** (tạo khuyến nghị tối ưu)
+        
+        :param predicted_max: Predicted maximum temperature
+        :param power_watts: Current power consumption
+        :return: List of recommendations
+        """
+        recommendations = []
+        
+        if predicted_max >= self.temp_emergency:
+            recommendations.append("⚠️ EMERGENCY: Reduce power immediately to prevent damage")
+            recommendations.append(f"📉 Reduce power by {int((power_watts * 0.3))}W minimum")
+            
+        elif predicted_max >= self.temp_critical:
+            recommendations.append("🔴 CRITICAL: Temperature approaching limits")
+            recommendations.append(f"📉 Consider reducing power by {int((power_watts * 0.2))}W")
+            recommendations.append("🌡️ Increase cooling or reduce workload")
+            
+        elif predicted_max >= self.temp_warning:
+            recommendations.append("🟡 WARNING: Temperature elevated but manageable")
+            recommendations.append(f"📊 Monitor closely, consider {int((power_watts * 0.1))}W reduction")
+            
+        else:
+            recommendations.append("✅ SAFE: Temperature within normal range")
+            if predicted_max < self.temp_safe - 10:
+                available_headroom = self.temp_safe - predicted_max
+                recommendations.append(f"📈 Can increase power by ~{int(available_headroom * 2)}W safely")
+                
+        return recommendations
+
+    def validate_pid_health(self, pid: int) -> Dict[str, Any]:
+        """
+        Enhanced PID Health Monitoring - Kiểm tra sức khỏe toàn diện của tiến trình.
+        
+        Kiểm tra:
+        - Process existence (sự tồn tại tiến trình)
+        - Process status (trạng thái: running/zombie/stopped) 
+        - Memory usage (sử dụng bộ nhớ RAM và VRAM)
+        - CPU utilization (mức sử dụng CPU)
+        - GPU affinity (GPU được sử dụng bởi PID)
+        - I/O activity (hoạt động đọc/ghi)
+        - Health score (điểm sức khỏe tổng hợp 0-100)
+        
+        :param pid: Process ID cần kiểm tra
+        :return: Dict chứa các metrics về sức khỏe của tiến trình
+        """
+        health_metrics = {
+            'pid': pid,
+            'pid_exists': False,
+            'process_status': 'unknown',
+            'memory_usage_mb': 0,
+            'cpu_percent': 0.0,
+            'gpu_index': None,
+            'gpu_memory_mb': 0,
+            'io_counters': None,
+            'health_score': 0,
+            'timestamp': time.time(),
+            'errors': []
+        }
+        
+        try:
+            # Step 1: Check process existence
+            if not psutil.pid_exists(pid):
+                health_metrics['errors'].append('Process does not exist')
+                self.logger.warning(f"PID {pid} does not exist")
+                return health_metrics
+            
+            health_metrics['pid_exists'] = True
+            
+            # Step 2: Get process object and basic info
+            try:
+                process = psutil.Process(pid)
+                
+                # Process status (running/zombie/stopped/sleeping)
+                health_metrics['process_status'] = process.status()
+                
+                # Memory usage (RAM)
+                mem_info = process.memory_info()
+                health_metrics['memory_usage_mb'] = mem_info.rss / (1024 * 1024)  # Convert to MB
+                
+                # CPU utilization (call twice with interval for accurate measurement)
+                process.cpu_percent()  # First call to initialize
+                time.sleep(0.1)  # Small delay for measurement
+                health_metrics['cpu_percent'] = process.cpu_percent()
+                
+                # I/O counters (if available)
+                try:
+                    io_counters = process.io_counters()
+                    health_metrics['io_counters'] = {
+                        'read_count': io_counters.read_count,
+                        'write_count': io_counters.write_count,
+                        'read_bytes': io_counters.read_bytes,
+                        'write_bytes': io_counters.write_bytes
+                    }
+                except (psutil.AccessDenied, AttributeError):
+                    self.logger.debug(f"Cannot access I/O counters for PID {pid}")
+                
+            except psutil.NoSuchProcess:
+                health_metrics['errors'].append('Process terminated during check')
+                return health_metrics
+            except psutil.AccessDenied:
+                health_metrics['errors'].append('Access denied to process info')
+                self.logger.warning(f"Access denied to PID {pid} info")
+            
+            # Step 3: Check GPU affinity and VRAM usage
+            gpu_index = self.infer_gpu_index_for_pid(pid)
+            if gpu_index is not None:
+                health_metrics['gpu_index'] = gpu_index
+                
+                # Get GPU memory usage for this PID
+                try:
+                    handle = self.get_handle(gpu_index)
+                    if handle:
+                        # Try to get process GPU memory usage
+                        try:
+                            procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+                            for proc in procs:
+                                if proc.pid == pid:
+                                    health_metrics['gpu_memory_mb'] = proc.usedGpuMemory / (1024 * 1024)
+                                    break
+                        except:
+                            # Fallback to graphics processes
+                            try:
+                                procs = pynvml.nvmlDeviceGetGraphicsRunningProcesses(handle)
+                                for proc in procs:
+                                    if proc.pid == pid:
+                                        health_metrics['gpu_memory_mb'] = proc.usedGpuMemory / (1024 * 1024)
+                                        break
+                            except:
+                                pass
+                except Exception as e:
+                    self.logger.debug(f"Cannot get GPU memory for PID {pid}: {e}")
+            
+            # Step 4: Calculate health score (0-100)
+            score = 100
+            
+            # Deduct points based on issues
+            if health_metrics['process_status'] == 'zombie':
+                score -= 50  # Zombie process is very unhealthy
+            elif health_metrics['process_status'] == 'stopped':
+                score -= 30  # Stopped process needs attention
+            elif health_metrics['process_status'] == 'sleeping':
+                score -= 5   # Sleeping is normal but not actively working
+            
+            # Memory usage check (deduct if using too much)
+            if health_metrics['memory_usage_mb'] > 8192:  # > 8GB RAM
+                score -= 20
+            elif health_metrics['memory_usage_mb'] > 4096:  # > 4GB RAM
+                score -= 10
+            
+            # CPU usage check
+            if health_metrics['cpu_percent'] > 90:
+                score -= 15  # Very high CPU usage
+            elif health_metrics['cpu_percent'] < 1:
+                score -= 10  # Too low, might be idle
+            
+            # GPU memory check
+            if health_metrics['gpu_memory_mb'] > 8192:  # > 8GB VRAM
+                score -= 15
+            elif health_metrics['gpu_memory_mb'] < 100 and gpu_index is not None:
+                score -= 10  # Has GPU but not using VRAM
+            
+            # Ensure score is in valid range
+            health_metrics['health_score'] = max(0, min(100, score))
+            
+            # Log health check result
+            self.logger.debug(
+                f"PID {pid} health check: status={health_metrics['process_status']}, "
+                f"RAM={health_metrics['memory_usage_mb']:.1f}MB, "
+                f"CPU={health_metrics['cpu_percent']:.1f}%, "
+                f"GPU={health_metrics['gpu_index']}, "
+                f"VRAM={health_metrics['gpu_memory_mb']:.1f}MB, "
+                f"score={health_metrics['health_score']}/100"
+            )
+            
+        except Exception as e:
+            health_metrics['errors'].append(f"Unexpected error: {str(e)}")
+            self.logger.error(f"Error in validate_pid_health for PID {pid}: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+        
+        return health_metrics
+
     def infer_gpu_index_for_pid(self, pid: int) -> Optional[int]:
         """
         Suy luận GPU index chứa tiến trình pid (per-PID mapping – ánh xạ PID sang GPU).
@@ -698,6 +1020,102 @@ class OptimizedHardwareController:
         self.per_pid_window_sec = config.get('per_pid_window_sec', 0)
         
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available})")
+
+    def optimize_for_pid(self, pid: int, strategy: 'StrategyType', gpu_index: int = 0) -> Dict[str, Any]:
+        """
+        Main optimization entry point with enhanced GPU targeting and PID-specific optimization.
+        
+        :param pid: Process ID to optimize for
+        :param strategy: Strategy type to apply
+        :param gpu_index: Specific GPU index to target (inferred if not provided)
+        :return: Optimization results
+        """
+        self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
+        
+        # Start timing
+        start_time = time.time()
+        results = {
+            'success': False,
+            'pid': pid,
+            'strategy': strategy,
+            'gpu_index': gpu_index,
+            'baseline_verified': False,
+            'operations_applied': [],
+            'temperature_prediction': None  # **INTELLIGENCE LAYER: Temperature prediction result**
+        }
+        
+        try:
+            # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)
+            current_power = self.gpu_manager.get_gpu_power_usage(gpu_index)
+            if current_power is None:
+                current_power = 150  # Default baseline
+            
+            # **INTELLIGENCE LAYER: Predict temperature trajectory** (dự đoán quỹ đạo nhiệt độ)
+            temp_prediction = self.gpu_manager.predict_temperature_trajectory(
+                gpu_index=gpu_index,
+                power_watts=current_power,
+                time_horizon=60.0  # Predict 60 seconds ahead
+            )
+            
+            results['temperature_prediction'] = temp_prediction
+            
+            # **Check safety status from prediction** (kiểm tra trạng thái an toàn từ dự đoán)
+            if temp_prediction and 'safety_status' in temp_prediction:
+                safety_status = temp_prediction['safety_status']
+                
+                if safety_status == 'EMERGENCY':
+                    self.logger.error(f"🚨 EMERGENCY: Temperature prediction critical for GPU {gpu_index}")
+                    results['operations_applied'].append('emergency_throttle')
+                    # Apply emergency scaling
+                    emergency_params = self._emergency_scaling({'power_limit': current_power})
+                    self.apply_optimization(pid, emergency_params)
+                    results['success'] = False
+                    results['error'] = 'Temperature emergency - optimization aborted'
+                    return results
+                    
+                elif safety_status == 'CRITICAL':
+                    self.logger.warning(f"⚠️ CRITICAL: Adjusting strategy for temperature safety")
+                    results['operations_applied'].append('safety_adjustment')
+                    # Reduce power by 20%
+                    adjusted_power = int(current_power * 0.8)
+                    self.gpu_manager.set_gpu_power_limit(pid, gpu_index, adjusted_power)
+                    
+            # **Verify baseline** (xác minh baseline)
+            if time.time() - self.last_verification > self.verification_interval:
+                baseline_ok = self._verify_baseline(gpu_index)
+                results['baseline_verified'] = baseline_ok
+                if not baseline_ok:
+                    self._adjust_baseline(gpu_index)
+                    results['operations_applied'].append('baseline_adjusted')
+                self.last_verification = time.time()
+            
+            # **Apply strategy-specific optimizations** (áp dụng tối ưu hóa theo chiến lược)
+            strategy_params = self._get_strategy_params(strategy)
+            strategy_params['gpu_index'] = gpu_index
+            
+            # **Add temperature recommendations to params** (thêm khuyến nghị nhiệt độ)
+            if temp_prediction and 'recommendations' in temp_prediction:
+                strategy_params['temp_recommendations'] = temp_prediction['recommendations']
+            
+            # **Apply optimization** (áp dụng tối ưu hóa)
+            success = self.apply_optimization(pid, strategy_params)
+            results['success'] = success
+            
+            if success:
+                results['operations_applied'].append(f'strategy_{strategy}_applied')
+                self.logger.info(f"✅ Optimization successful for PID {pid}")
+            else:
+                self.logger.error(f"❌ Optimization failed for PID {pid}")
+            
+            # **Record duration** (ghi lại thời gian)
+            results['duration'] = time.time() - start_time
+            
+        except Exception as e:
+            self.logger.error(f"Optimization error for PID {pid}: {e}")
+            results['error'] = str(e)
+            results['success'] = False
+            
+        return results
 
     def apply_optimization(self, pid: int, params: Dict[str, Any]) -> bool:
         """
