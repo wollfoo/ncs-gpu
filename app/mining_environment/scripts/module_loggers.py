@@ -9,12 +9,29 @@ và **plugin systems** (hệ thống plugin – cơ chế mở rộng).
 
 import os
 from pathlib import Path
-from mining_environment.scripts.logging_config import setup_logging
-from mining_environment.scripts.log_deduplication import wrap_logger_with_deduplication
+
+# Handle both package and standalone imports
+try:
+    from mining_environment.scripts.logging_config import setup_logging
+    from mining_environment.scripts.log_deduplication import wrap_logger_with_deduplication
+except ImportError:
+    try:
+        from .logging_config import setup_logging
+        from .log_deduplication import wrap_logger_with_deduplication
+    except ImportError:
+        # Fallback for standalone execution
+        from logging_config import setup_logging
+        from log_deduplication import wrap_logger_with_deduplication
 
 # **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
+# Default log directory as specified
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
-Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
+# Create directory if it doesn't exist (will fail silently if no permissions)
+try:
+    Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    # Log directory exists but no write permission - that's OK for reading
+    pass
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
 # Enable deduplication for high-frequency loggers

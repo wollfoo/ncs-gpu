@@ -19,13 +19,16 @@ import statistics
 from typing import Dict, List, Any, Optional, Type, cast, TYPE_CHECKING, Deque
 from pathlib import Path
 
-from .utils import MiningProcess, StrategyType
-
-# ✅ **UNIFIED LOGGING** (ghi nhật ký thống nhất): Sử dụng **centralized logging system** (hệ thống ghi nhật ký tập trung – cơ chế log trung tâm)
-from .module_loggers import get_gpu_cloaking_logger
-
-# ✅ **ERROR MANAGEMENT** (quản lý lỗi): Sử dụng **centralized error handling system** (hệ thống xử lý lỗi tập trung – cơ chế quản lý ngoại lệ trung tâm)
-from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+# Handle both package and standalone imports
+try:
+    from .utils import MiningProcess, StrategyType
+    from .module_loggers import get_gpu_cloaking_logger
+    from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+except ImportError:
+    # Fallback for standalone execution
+    from utils import MiningProcess, StrategyType
+    from module_loggers import get_gpu_cloaking_logger
+    from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ **STANDARDIZED** (chuẩn hóa): Lấy **unified logger instance** (thực thể logger thống nhất – đối tượng ghi nhật ký đồng bộ) (khớp **hierarchy** – phân cấp)
 cloak_logger = get_gpu_cloaking_logger()
