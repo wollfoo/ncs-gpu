@@ -859,6 +859,7 @@ class AdaptivePatternGenerator:
                 'max_temperature': 78,
                 'min_hashrate_retention': 0.85,
                 'power_stddev_target': 5
+            }
         }
     
     def generate_control_params(self, pid: int, current_metrics: Dict[str, Any] = None) -> Dict[str, Any]:

@@ -25,14 +25,15 @@ from concurrent.futures import ThreadPoolExecutor
 import signal
 import resource
 from pathlib import Path
-from .utils import StrategyType
-
-# ✅ UNIFIED LOGGING: Use centralized logging system
-# Migration Phase 3: Updated to use new logging architecture
-from .module_loggers import get_resource_control_logger
-
-# ✅ ERROR MANAGEMENT: Use centralized error handling system
-from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+try:
+    from .utils import StrategyType
+    from .module_loggers import get_resource_control_logger
+    from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
+except ImportError:
+    # Fallback to absolute imports for standalone testing
+    from utils import StrategyType
+    from module_loggers import get_resource_control_logger
+    from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ STANDARDIZED: Get unified logger instance
 resource_logger = get_resource_control_logger()
