@@ -59,7 +59,7 @@
 
 ## 2. Directory Tree GPU Optimization
 
-```
+``` 
 /app/mining_environment/gpu_optimization/
 │
 ├── 📁 core/                      # Lõi hệ thống
@@ -77,7 +77,7 @@
 │       ├── pid_manager.py      # Quản lý PID
 │       └── resource_mapper.py  # Ánh xạ PID→GPU
 │
-├── 📁 strategies/                # Chiến lược tối ưu
+├── 📁 strategies/               # Chiến lược tối ưu
 │   ├── base_strategy.py        # Abstract strategy
 │   ├── implementations/
 │   │   ├── aggressive.py       # Max performance
@@ -95,7 +95,7 @@
 │       ├── json_exporter.py   # Export JSON
 │       └── prometheus.py      # Prometheus format
 │
-├── 📁 coordination/              # Điều phối liên process
+├── 📁 coordination/           # Điều phối liên process
 │   ├── ipc_manager.py         # Inter-process communication
 │   ├── semaphore_pool.py      # Semaphore management
 │   └── conflict_resolver.py   # Giải quyết xung đột
@@ -119,7 +119,7 @@
 │   │   └── stealth.yaml
 │   └── loader.py              # Config loader với validation
 │
-├── 📁 utils/                     # Tiện ích dùng chung
+├── 📁 utils/                  # Tiện ích dùng chung
 │   ├── logger.py              # Centralized logging
 │   ├── decorators.py          # Common decorators
 │   ├── validators.py          # Input validation
@@ -136,6 +136,51 @@
     ├── metrics/
     └── errors/
 ```
+
+
+
+
+```
+/app/mining_environment/
+├── optimization_gpu/              # Module block riêng biệt
+│   ├── __init__.py                # Single entry point
+│   ├── core/
+│   │   ├── orchestrator.py        # Điều phối chính
+│   │   ├── controller.py          # OptimizedHardwareController
+│   │   └── coordinator.py         # Intelligent coordination
+│   ├── strategies/
+│   │   ├── cloak_strategies.py    # Các chiến lược
+│   │   ├── parallel_executor.py   # Thực thi song song
+│   │   └── adaptive_pattern.py    # Pattern generator
+│   ├── monitoring/
+│   │   ├── metrics_hub.py         # MetricsCollectionHub
+│   │   ├── performance_profiler.py # Profiling
+│   │   └── dag_sync.py            # DAG synchronization
+│   └── coordination/
+│       └── cross_process.py       # Cross-process coordination
+```
+
+/app/mining_environment/gpu_optimization
+
+
+  ├── gpu_optimization/         # Khối GPU Optimization độc lập
+  │   ├── __init__.py          # Single entry point
+  │   ├── orchestrator.py      # Main orchestrator
+  │   ├── strategies/          # Optimization strategies
+  │   │   ├── metrics_hub.py
+  │   │   ├── pattern_generator.py
+  │   │   └── hardware_controller.py
+  │   ├── modules/             # Support modules
+  │   │   ├── dag_sync.py
+  │   │   ├── cross_process.py
+  │   │   ├── parallel_executor.py
+  │   │   └── profiler.py
+  │   └── config/              # Configuration
+  │       └── optimization.yml
+
+
+
+
 
 ### **Mối quan hệ phụ thuộc giữa các thư mục:**
 
@@ -302,3 +347,25 @@ tail -f logs/orchestrator/*.log
   ```
 
 **Kết luận**: Thiết kế này đảm bảo **separation of concerns** (tách biệt trách nhiệm), **scalability** (khả năng mở rộng), và **maintainability** (dễ bảo trì) cao. Mỗi module độc lập với config riêng, dễ test và deploy từng phần.
+
+
+
+
+
+
+
+
+các module cũ của GPU optimization
+
+```
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/gpu_monitoring_dashboard.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/gpu_optimization_orchestrator.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/gpu_resource_monitor.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/parallel_strategy_executor.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/performance_profiler.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/dag_synchronization.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/cross_process_coordination.py
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/cloak_strategies.py (quyết định chiến lược, sẵn sàng nhận GPUResourceManager của resource_control.py)
+
+/home/azureuser/ncs-gpu/app/mining_environment/scripts/resource_control.py ( thực thi NVML/CLI, ánh xạ PID→GPU, cô lập bằng CUDA_VISIBLE_DEVICES, và khôi phục theo PID )
+```
