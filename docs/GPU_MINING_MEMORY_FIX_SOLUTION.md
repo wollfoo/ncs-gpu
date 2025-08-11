@@ -177,9 +177,7 @@ Phát hiện LD_PRELOAD conflicts trước khi start mining
 class HookConflictDetector:
     def __init__(self):
         self.conflicting_hooks = [
-            'libgpuhook.so',
-            'libtempspoof.so',
-            'libcudahook.so'
+            'libcudahook.so'  # Removed libgpuhook.so and libtempspoof.so
         ]
         
     def detect_ld_preload_conflicts(self) -> List[str]:

@@ -340,15 +340,14 @@ def main():
 
                 def _simplified_hook_sequencing():
                     """
-                    Hook sequencing disabled – gpu_plugins and related hook libraries removed.
-                    Perform readiness check only; do not enable any external hooks.
+                    Perform readiness check only; hooks are disabled.
                     """
                     try:
                         logger.info("🚀 [HOOK-SEQ] Starting readiness check (hooks disabled)...")
                         if not _enhanced_readiness_check(process, timeout=30, subprocess_env=clean_env):
                             logger.error("❌ [HOOK-SEQ] Readiness check failed - DAG allocation incomplete")
                             return False
-                        logger.info("✅ [HOOK-SEQ] Readiness check passed - proceeding without external hooks")
+                        logger.info("✅ [HOOK-SEQ] Readiness check passed - proceeding")
                         return True
                     except Exception as e:
                         logger.error(f"❌ [HOOK-SEQ] Failed: {e}")

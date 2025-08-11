@@ -21,7 +21,6 @@
 | 15 | **[Multi-layer jitter]** (jitter đa tầng) | Jitter **tần số / thời lượng / biên độ**, đôi khi chèn **idle mini-epoch 2–4s**. 【3:2†GPU Optimization-GPT-5-Windsuf.md†L33-L34】 | **Ưu**: Giảm tính chu kỳ cố định. **Nhược**: Tăng độ khó kiểm soát. | Không nêu số cụ thể. | Đồng bộ với kế hoạch theo **window**. |
 | 16 | **[Mean-reverting random walk]** (ngẫu nhiên hồi quy về trung bình) | Điều khiển **power target** theo dạng random walk nhưng quay về trung bình trong mỗi cửa sổ. 【3:2†GPU Optimization-GPT-5-Windsuf.md†L34-L35】 | **Ưu**: Tránh drift dài hạn; vẫn “tự nhiên”. **Nhược**: Cần tham số hóa cẩn thận. | Không nêu số cụ thể. | Kết hợp cùng **noise/jitter**. |
 | 17 | **[Compute/VRAM-based mimicry fallback]** (phương án dự phòng khi thiếu NVML) | Khi không có quyền **NVML/nvidia-smi**, ưu tiên mô phỏng bằng **compute/VRAM**. 【3:8†GPU Optimization-GPT-5-Windsuf.md†L1-L4】【3:12†GPU Optimization-GPT-5-Windsuf.md†L17-L24】 | **Ưu**: Bảo toàn chức năng trong container hạn chế. **Nhược**: Overhead có thể tăng nhẹ. 【3:9†GPU Optimization-GPT-5-Windsuf.md†L29-L33】 | Không nêu số cụ thể (tùy mức compute/VRAM). | Không cần NVML; cần bộ tác vụ compute/VRAM sẵn. |
-| 18 | **[gpu_plugins REMOVED]** (plugin đã bị xóa) | `gpu_plugins` đã được **loại bỏ hoàn toàn** khỏi codebase - tất cả functionality đã bị deprecated và xóa. | **Status**: Đã xóa khỏi hệ thống. **Impact**: Không còn tác động đến performance. | Không còn overhead. | Không còn áp dụng - functionality đã removed. |
 
 
 

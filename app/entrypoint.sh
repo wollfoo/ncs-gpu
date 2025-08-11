@@ -255,13 +255,6 @@ check_gpu_environment() {
         log "$LOG_WARN" "NVML library not found at expected location"
     fi
     
-    # Check if LD_PRELOAD includes our GPU hooks
-    if [[ "$LD_PRELOAD" == *"libgpuhook.so"* ]]; then
-        log "$LOG_INFO" "GPU hooks configured in LD_PRELOAD"
-    else  
-        log "$LOG_WARN" "GPU hooks not properly configured in LD_PRELOAD"
-    fi
-    
     # Check if our GPU binaries exist
     if [ -f "$CUDA_COMMAND" ]; then
         log "$LOG_INFO" "CUDA command found at $CUDA_COMMAND"

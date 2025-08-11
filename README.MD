@@ -33,8 +33,6 @@ opus-training
 │   │   └── libcloak.so
 │   ├── cuda (thư mục CUDA – mã hook GPU và kernel)
 │   │   ├── gpuhook.c
-│   │   ├── libgpuhook.so
-│   │   ├── libmpo.so
 │   │   └── mpo_kernel.cu
 │   ├── ebpf_loader.py (script load eBPF – tải chương trình eBPF cho lọc telemetry)
 │   ├── entrypoint.sh (script entry point – khởi động container Docker)

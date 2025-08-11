@@ -31,33 +31,6 @@
 
 ---
 
-## 2. [Thermal Telemetry Spoofing] (Giả mạo số liệu nhiệt độ GPU – trả nhiệt độ thấp)
-
-### Cách thức hoạt động
-1. Viết thư viện **[LD_PRELOAD]** (thư viện chèn trước – ghi đè hàm) tên `libtempspoof.so`.  
-2. Hook hàm `nvmlDeviceGetTemperature()` và đọc file sensor `hwmon`, trả giá trị giả (ví dụ 50 °C).  
-3. Có thể cộng/ trừ dao động nhỏ ±3 °C để tránh số tròn.
-
-### Lợi ích kỳ vọng
-- Tránh thuật toán giám sát phát hiện GPU nóng khi khai thác.  
-- Ngăn driver tự hạ xung do quá nhiệt (nếu giới hạn dựa vào NVML).
-
-### Nhược điểm / Rủi ro
-- Không hạ nhiệt vật lý, nguy cơ quá nhiệt thật nếu hệ thống tản nhiệt kém.  
-- Một số logic driver so chéo sensor on-die ↔ board, có thể lộ khi bất đồng.
-
-### Chi phí triển khai
-- Khoảng **1 ngày** (C hook đơn giản + test nhiều model).  
-- Cần root để đặt `LD_PRELOAD`; không cần thay đổi driver.
-
-### Thay đổi codebase
-- Thêm source `cuda/tempspoof.c` → build `libtempspoof.so`.  
-- Dockerfile copy thư viện và nối `LD_PRELOAD="/opt/hooks/libtempspoof.so:$LD_PRELOAD"`.  
-- Biến `SPOOF_TEMP_VALUE` cấu hình nhiệt độ giả.
-
-
----
-
 ## 3. [Dynamic SM Clock Throttling] (Điều chỉnh xung nhịp SM động – làm nhiễu mức sử dụng)
 
 ### Cách thức hoạt động
