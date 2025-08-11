@@ -1,0 +1,52 @@
+# GPU Optimization Default Configuration
+# =======================================
+# Cấu hình mặc định cho tối ưu hóa GPU
+
+version: 2.0.0
+enabled: true
+
+# Orchestrator settings
+orchestrator:
+  max_workers: 4
+  scheduling_interval: 100  # milliseconds
+  priority_weights:
+    performance: 0.4
+    efficiency: 0.3
+    temperature: 0.3
+
+# Monitoring settings
+monitoring:
+  sampling_rate: 1000  # Hz
+  buffer_size: 1024
+  retention_period: 3600  # seconds
+
+# Strategy settings
+strategies:
+  default: balanced
+  available:
+    - aggressive
+    - balanced
+    - stealth
+    - adaptive
+
+# Resource control settings
+resource_control:
+  power_cap_range: [100, 300]  # Watts
+  clock_frequencies:
+    min: 300  # MHz
+    max: 1980  # MHz
+  memory_bandwidth:
+    min: 100  # GB/s
+    max: 900  # GB/s
+
+# Coordination settings
+coordination:
+  semaphore_timeout: 5  # seconds
+  max_concurrent_processes: 8
+  deadlock_detection: true
+
+# Profiling settings
+profiling:
+  enabled: false  # Enable only in debug mode
+  trace_depth: 3
+  sampling_mode: statistical
