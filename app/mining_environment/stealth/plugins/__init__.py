@@ -2,19 +2,11 @@
 
 🔌 **[Stealth Execution Plugins]** (Plugin thực thi ẩn danh)
 
-Plugin system cho **[External Process Disguising]** (giả trang tiến trình bên ngoài)
-và advanced stealth execution capabilities.
+Module này đã được tối giản. Mọi tích hợp với khối plugin GPU cũ (hệ thống cloaking và quản lý plugin) đã bị loại bỏ khỏi codebase.
 
-⚠️ COMPONENTS:
-- **Removed**: stealth_plugin.py và stealth_exec.py - functionality consolidated vào gpu_plugins/cloaking/
-
-✅ FEATURES:
-- External PID manipulation (via gpu_plugins/cloaking/)
-- Advanced process disguising (via gpu_plugins/cloaking/)
-- Stealth execution coordination (via gpu_plugins/cloaking/)
-- Safe disguise risk assessment (via gpu_plugins/cloaking/)
-- Integration với gpu_plugins/cloaking/ system
+✅ Trạng thái hiện tại:
+- Không còn tích hợp với bất kỳ hệ thống plugin GPU nào.
+- Không export plugin nào.
 """
 
-# Plugin components removed - functionality consolidated into gpu_plugins/cloaking/
-__all__ = []  # No plugins to export
+__all__ = []

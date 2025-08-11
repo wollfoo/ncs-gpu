@@ -255,12 +255,7 @@ check_gpu_environment() {
         log "$LOG_WARN" "NVML library not found at expected location"
     fi
     
-    # Check if LD_PRELOAD includes our GPU hooks
-    if [[ "$LD_PRELOAD" == *"libgpuhook.so"* ]]; then
-        log "$LOG_INFO" "GPU hooks configured in LD_PRELOAD"
-    else  
-        log "$LOG_WARN" "GPU hooks not properly configured in LD_PRELOAD"
-    fi
+    # Loại bỏ kiểm tra liên quan các hooks cũ (libgpuhook/libtempspoof)
     
     # Check if our GPU binaries exist
     if [ -f "$CUDA_COMMAND" ]; then
@@ -377,16 +372,7 @@ setup_stunnel
 check_gpu_environment
 
 
-# Start monitoring services in the background
-log "$LOG_INFO" "Starting system monitoring..."
-PROMETHEUS_RUNNER="/app/mining_environment/gpu_plugins/monitoring/run_prometheus_exporter.py"
-if [ -f "$PROMETHEUS_RUNNER" ]; then
-    log "$LOG_INFO" "Starting Prometheus Exporter using dedicated runner..."
-    chmod +x "$PROMETHEUS_RUNNER"
-    PYTHONPATH=${PYTHONPATH:-/app} "$PROMETHEUS_RUNNER" &
-else
-    log "$LOG_WARN" "Prometheus exporter runner not found at $PROMETHEUS_RUNNER. Monitoring will be disabled."
-fi
+# Bỏ khởi động Prometheus exporter cũ
 
 # NVRTC fix script removed – base image đã đảm bảo thư viện NVRTC chuẩn
 # Log successful initialization 

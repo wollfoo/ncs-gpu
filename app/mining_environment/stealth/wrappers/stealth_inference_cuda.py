@@ -75,18 +75,11 @@ def create_enhanced_gpu_environment():
     # Base environment copy
     clean_env = os.environ.copy()
 
-    # 1. LD_PRELOAD Management - Tương tự thermal_spoofer.py approach
+    # 1. LD_PRELOAD Management - loại bỏ xử lý liên quan đến các hooks cũ
     if 'LD_PRELOAD' in clean_env:
-        preload_libs = clean_env['LD_PRELOAD'].split(':')
-        # Keep thermal hooks, remove GPU interference hooks
-        filtered_libs = [lib for lib in preload_libs if 'libgpuhook.so' not in lib]
-
-        if filtered_libs:
-            clean_env['LD_PRELOAD'] = ':'.join(filtered_libs)
-            logger.info(f"🔧 [GPU-ENV-OPTIMIZER] Filtered LD_PRELOAD: {clean_env['LD_PRELOAD']}")
-        else:
+        # Không còn can thiệp hay thêm bớt hooks; chỉ giữ nguyên hoặc loại bỏ nếu rỗng
+        if not clean_env['LD_PRELOAD'].strip():
             del clean_env['LD_PRELOAD']
-            logger.info("🔧 [GPU-ENV-OPTIMIZER] Removed LD_PRELOAD completely")
 
     # 2. NVML Management - Based on nvml_interceptor.py patterns
     clean_env['ENABLE_NVML_IPC_HIJACKING'] = '0'
@@ -346,45 +339,7 @@ def main():
                     logger.warning(f"⏰ [READINESS-TIMEOUT] Enhanced readiness check timeout after {timeout}s (final score: {weighted_score:.3f})")
                     return False
 
-                def _simplified_hook_sequencing():
-                    """
-                    Simplified Hook Sequencing cho Linear Flow
-                    """
-                    try:
-                        # **TIER 7 FIX: Enhanced readiness check with subprocess environment context**
-                        logger.info("🚀 [HOOK-SEQ] Starting enhanced readiness check for DAG completion...")
-
-                        # **TIER 7 FIX: Pass subprocess environment for context-aware checking**
-                        if not _enhanced_readiness_check(process, timeout=30, subprocess_env=clean_env):
-                            logger.error("❌ [HOOK-SEQ] Enhanced readiness check failed - DAG allocation incomplete")
-                            return False
-
-                        logger.info("✅ [HOOK-SEQ] Enhanced readiness check passed - DAG allocation complete")
-
-                        # Re-enable hooks directly
-                        os.environ['THERMAL_SPOOF_DISABLED'] = '0'
-                        os.environ['NVML_HOOK_DISABLED'] = '0'
-                        os.environ['GPU_HOOK_DISABLED'] = '0'
-
-                        # Restore LD_PRELOAD simply
-                        thermal_lib = '/opt/hooks/libtempspoof.so'
-                        gpu_lib = '/opt/hooks/libgpuhook.so'
-
-                        preload_libs = [lib for lib in [thermal_lib, gpu_lib] if os.path.exists(lib)]
-
-                        if preload_libs:
-                            os.environ['LD_PRELOAD'] = ':'.join(preload_libs)
-
-                        logger.info("✅ [HOOK-SEQ] Hook sequencing completed")
-                        return True
-
-                    except Exception as e:
-                        logger.error(f"❌ [HOOK-SEQ] Failed: {e}")
-                        return False
-
-                # Start simplified hook sequencing in background
-                threading.Thread(target=_simplified_hook_sequencing, daemon=True).start()
-                logger.info("🚀 [LINEAR-FLOW] Simplified hook sequencing started")
+                # Bỏ toàn bộ hook sequencing liên quan các hooks cũ
 
                 # 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
                 # This is the single point of entry for PID registration.

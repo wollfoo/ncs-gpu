@@ -9,7 +9,7 @@
 .
 .
 .
-**Nhiệm vụ**: Thiết kế và triển khai chức năng **config** cấu hình cho hệ thống GPU optimization với focus vào **production-ready code**.
+**Nhiệm vụ**: Thiết kế và triển khai chức năng **utils** Công cụ hỗ trợ cho hệ thống GPU optimization với focus vào **production-ready code**.
 
 ## ĐÁNH GIÁ NĂNG LỰC
 .
@@ -29,7 +29,7 @@ Trước khi bắt đầu, hãy tự đánh giá:
 
 ```yaml
 Tầng 1 - Phân Tích:
-  - Context: Vai trò của config trong toàn hệ thống
+  - Context: Vai trò của utils trong toàn hệ thống
   - Dependencies: Modules phụ thuộc và được phụ thuộc
   - Constraints: Giới hạn 700 dòng/module, production-ready
   
@@ -59,10 +59,10 @@ Tầng 3 - Triển Khai:
     - **coordination**: Liên tiến trình / DAG
     - **profiling**: Hiệu năng & báo cáo
     - **parallel_execution**: Thực thi song song
-- **Mục tiêu**: Xây dưng các chức năng còn lại của khối **gpu_optimization** bao gồm :
     - **config**: Cấu hình
+- **Mục tiêu**: Xây dưng các chức năng còn lại của khối **gpu_optimization** bao gồm :
     - **utils**: Công cụ hỗ trợ
-    - **tests**: Kiểm thử
+
 
 ### Cấu trúc thư mục **gpu_optimization**
 ```
@@ -75,24 +75,25 @@ Tầng 3 - Triển Khai:
 ├── coordination/             # Liên tiến trình / DAG ( Đã Xây dựng )
 ├── profiling/                # Hiệu năng & báo cáo ( Đã tục Xây dựng )
 ├── parallel_execution/       # Thực thi song song ( Đã xây dựng )
-├── config/                   # Cấu hình ( tiếp tục xây dựng )
-├── utils/                    # Công cụ hỗ trợ ( Xây dựng sau )
+├── config/                   # Cấu hình ( đã xây dựng )
+├── utils/                    # Công cụ hỗ trợ ( tiếp tục Xây dựng )
 └── tests/
 
 ```
 
-### Nhiệm vụ : TRIỂN KHAI XÂY DỰNG **config** cấu hình thuộc thuộc khối **gpu_optimization**
+### Nhiệm vụ : TRIỂN KHAI XÂY DỰNG **utils** Công cụ hỗ trợ  thuộc khối **gpu_optimization**
 
 ```python
-/app/mining_environment/gpu_optimization/config/    # cấu hình 
-├── __init__.py                             
-├── default.yaml
-└── loader.py
-
+/app/mining_environment/gpu_optimization/utils/    # Công cụ hỗ trợ              
+├── __init__.py
+├── logger.py
+├── validators.py
+└── exceptions.py
+    
 ```
 
 ### Yêu cầu kỹ thuật
-- **Xây dựng mới hoàn toàn**: Rà soát kỹ **gpu_optimization** để xây dựng cấu hình phù hợp với khối **gpu_optimization**
+- **Xây dựng mới hoàn toàn**: Rà soát kỹ **gpu_optimization** để xây dựng **utils** Công cụ hỗ trợ phù hợp với khối **gpu_optimization**
 
 ### Luồng xử lý mong đợi
 1. `start_mining.py` (khởi động hệ thống)
@@ -105,14 +106,14 @@ Tầng 3 - Triển Khai:
 1. Đảm bảo hoàn thành cấu hình của **config** phiên bản Production ready
 2. **Tích hợp liền mạch** với **luồng xử lý mong đợi** và các chức năng khác của **`gpu_optimization`**
    *(`start_mining.py` → `stealth_inference_cuda.py` → `HookCoordinator` → `DirectPIDRegistry` → `ResourceManager` → `gpu_optimization`), bao gồm `orchestrator` (điều phối), `monitoring` (giám sát), và `strategies` (chiến lược).* và `resource_control` (quản lý và thực thi tài nguyên ).*
-   và `coordination` (liên kết giữa các tiến trình và DAG) và `profiling` (hiệu năng & báo cáo) và `parallel_execution` (thực thi song song) và `config` (cấu hình) và `utils` (công cụ hỗ trợ) và `tests` (kiểm thử)
+   và `coordination` (liên kết giữa các tiến trình và DAG) và `profiling` (hiệu năng & báo cáo) và `parallel_execution` (thực thi song song) và `config` (cấu hình) và `utils` (công cụ hỗ trợ) 
 
 # Yêu cầu khi làm việc
 
 1 – Vai trò
 2 – Đánh giá
 3 - Suy luận sâu (thinking hard)
-3 – TREE-OF-THOUGHT (😭) – Đẻ nhiều nhánh, tự chọn nhánh cấu hình tốt nhất và phù hợp với Logic chính của chương trình trong codebase.
+3 – TREE-OF-THOUGHT (😭) – Đẻ nhiều nhánh, tự chọn nhánh **utils** Công cụ hỗ trợ tốt nhất và phù hợp với Logic chính của chương trình trong codebase.
 4 – SELF-REFINE – Tự phê bình, tự sửa nhiều vòng (≤2 vòng)
 5 – ANTI-HALLUCINATION 
   - Evidence-Only Principle
@@ -128,3 +129,26 @@ Tầng 3 - Triển Khai:
 11 – Định dạng đầu ra
 12 – Thu hẹp phạm vi
 
+
+
+
+
+## 1️⃣ Language Rules
+**MANDATORY**: Respond in Vietnamese.   
+**WITH EXPLANATION**: Every English term must include a Vietnamese description.
+
+### Standard Syntax
+**\[English Term]** (Vietnamese description – function/purpose)
+
+Yêu cầu: Kiểm tra toàn bộ codebase để xác định bất kỳ thành phần nào đang sử dụng hoặc kích hoạt các chức năng trong khối `gpu_plugins`. Sau khi xác định, cập nhật các thành phần đó để loại bỏ hoàn toàn sự phụ thuộc vào khối `gpu_plugins`. Đảm bảo rằng sau khi cập nhật, không còn bất kỳ mã nào tham chiếu đến khối chức năng `gpu_plugins`. Lưu ý rằng việc loại bỏ này nhằm mục đích dọn dẹp hệ thống và loại bỏ các chức năng không còn sử dụng. Sau khi cập nhật, cần kiểm tra kỹ lưỡng để đảm bảo không có lỗi phát sinh và các chức năng khác vẫn hoạt động bình thường.
+
+**[codebase]** (nguồn mã tổng thể – tập hợp tất cả các tệp mã nguồn của dự án)
+**[component]** (thành phần – một phần của hệ thống có chức năng cụ thể, như hàm, lớp, module, hoặc tệp)
+**[function]** (chức năng – một khối mã thực hiện một nhiệm vụ cụ thể)
+**[class]** (lớp – một khuôn mẫu để tạo đối tượng, chứa các thuộc tính và phương thức)
+**[module]** (mô-đun – một tệp Python chứa các định nghĩa và câu lệnh)
+**[file]** (tệp – một đơn vị lưu trữ dữ liệu hoặc mã)
+**[path]** (đường dẫn – vị trí của một tệp hoặc thư mục trong hệ thống tệp)
+**[dependency]** (sự phụ thuộc – mối quan hệ mà một thành phần cần đến một thành phần khác)
+**[update]** (cập nhật – thay đổi mã để sửa lỗi hoặc cải thiện)
+**[regression]** (sự suy giảm – một lỗi mới xuất hiện sau khi cập nhật, làm hỏng chức năng đã có)

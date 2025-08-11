@@ -97,9 +97,7 @@ COPY inference-cuda.original libmlls-cuda.so /tmp/
 COPY entrypoint.sh /app/entrypoint.sh
 
 # Copy NVRTC wrapper script for runtime compilation fixes  
-COPY mining_environment/gpu_plugins/native/cuda/libmpo.so /tmp/libmpo.so
-COPY mining_environment/gpu_plugins/native/nvml/libgpuhook.so /tmp/libgpuhook.so
-COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtempspoof.so 
+# Loại bỏ sao chép các thư viện hook cũ (không còn sử dụng)
 
 
 # Method: Enhanced wrapper script with proper environment setup
@@ -107,10 +105,7 @@ COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtemps
 RUN ldconfig && \
     install -D /tmp/inference-cuda.original    /usr/local/bin/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
-    install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
-    install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \
-    install -D /tmp/libtempspoof.so   /opt/hooks/libtempspoof.so && \
-    mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && chmod 644 /opt/mpo/libmpo.so && \
+    mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && \
     rm -rf /tmp/*
 
 # Create enhanced NVRTC wrapper script
@@ -206,7 +201,8 @@ RUN set -eux; \
         ldconfig; \
     fi
 
-ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0:/opt/hooks/libgpuhook.so:/opt/hooks/libtempspoof.so"
+# Bỏ LD_PRELOAD các hook cũ (chỉ giữ NVRTC builtins)
+ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0"
 
 # ------------------  (14)  Verification và cleanup ------------------------
 RUN set -eux; \
@@ -235,9 +231,9 @@ LABEL maintainer="Transformer Mining Team" \
       opencl.enabled="true" \
       ebpf.enabled="true" \
       ebpf.mode="runtime-load-only" \
-      gpu.cloaking="multi-layer" \
-      gpu.plugins="modular-architecture" \
-      gpu.debug="integrated" \
+      gpu.cloaking="removed" \
+      gpu.plugins="removed" \
+      gpu.debug="disabled" \
       security.level="high" \
       version.sync="cuda-12.0-enforced"
 
