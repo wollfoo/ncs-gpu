@@ -7,16 +7,20 @@ Core orchestration logic for GPU optimization
 
 import os
 import time
+import json
 import logging
 import psutil
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from typing import Dict, Any, Optional, List
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 from enum import Enum
 
-# **Setup logger** (thiết lập logger)
+# Internal imports
+from ..core.base import BaseOptimizer
+from ..config.loader import ConfigLoader
+from .lifecycle_manager import LifecycleManager, LifecycleState
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +68,9 @@ class GPUOrchestrator:
         """
         self.config = config
         self.logger = logger
+        
+        # **Lifecycle Manager** (quản lý vòng đời)
+        self.lifecycle = LifecycleManager(config.get('lifecycle', {}))
         
         # **Core components** (thành phần lõi)
         self.executor = None
