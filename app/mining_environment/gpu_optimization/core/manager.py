@@ -15,10 +15,11 @@ from datetime import datetime
 import threading
 
 # Import orchestrator and other components
+# Fix circular import - sửa import vòng tròn
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from orchestrator.orchestrator import GPUOrchestrator
+from gpu_optimization.orchestrator.orchestrator import GPUOrchestrator
 
 # Optional imports - these modules may not be ready yet
 try:

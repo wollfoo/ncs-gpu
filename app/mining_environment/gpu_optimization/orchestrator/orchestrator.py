@@ -14,11 +14,17 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
+from dataclasses import dataclass
 from enum import Enum
 
 # Internal imports
-from ..core.base import BaseOptimizer
-from ..config.loader import ConfigLoader
+# Fix circular import - sửa import vòng tròn
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from gpu_optimization.core.base import BaseOptimizer
+from gpu_optimization.config.loader import ConfigLoader
 from .lifecycle_manager import LifecycleManager, LifecycleState
 
 logger = logging.getLogger(__name__)
