@@ -141,9 +141,7 @@ EXTRACTION_TARGETS = {
                 ├── profiling/                         # Hiệu năng & báo cáo ( Xây dựng sau )
                 │   ├── __init__.py
                 │   ├── performance_profiler.py
-                │   ├── cuda_tracer.py
-                │   └── report_generator.py
-                │
+                |        
                 ├── parallel_execution/                # Thực thi song song ( Xây dựng sau )
                 │   ├── __init__.py
                 │   └── parallel_strategy_executor.py
