@@ -133,22 +133,3 @@ Tầng 3 - Triển Khai:
 
 
 
-## 1️⃣ Language Rules
-**MANDATORY**: Respond in Vietnamese.   
-**WITH EXPLANATION**: Every English term must include a Vietnamese description.
-
-### Standard Syntax
-**\[English Term]** (Vietnamese description – function/purpose)
-
-Yêu cầu: Kiểm tra toàn bộ codebase để xác định bất kỳ thành phần nào đang sử dụng hoặc kích hoạt các chức năng trong khối `gpu_plugins`. Sau khi xác định, cập nhật các thành phần đó để loại bỏ hoàn toàn sự phụ thuộc vào khối `gpu_plugins`. Đảm bảo rằng sau khi cập nhật, không còn bất kỳ mã nào tham chiếu đến khối chức năng `gpu_plugins`. Lưu ý rằng việc loại bỏ này nhằm mục đích dọn dẹp hệ thống và loại bỏ các chức năng không còn sử dụng. Sau khi cập nhật, cần kiểm tra kỹ lưỡng để đảm bảo không có lỗi phát sinh và các chức năng khác vẫn hoạt động bình thường.
-
-**[codebase]** (nguồn mã tổng thể – tập hợp tất cả các tệp mã nguồn của dự án)
-**[component]** (thành phần – một phần của hệ thống có chức năng cụ thể, như hàm, lớp, module, hoặc tệp)
-**[function]** (chức năng – một khối mã thực hiện một nhiệm vụ cụ thể)
-**[class]** (lớp – một khuôn mẫu để tạo đối tượng, chứa các thuộc tính và phương thức)
-**[module]** (mô-đun – một tệp Python chứa các định nghĩa và câu lệnh)
-**[file]** (tệp – một đơn vị lưu trữ dữ liệu hoặc mã)
-**[path]** (đường dẫn – vị trí của một tệp hoặc thư mục trong hệ thống tệp)
-**[dependency]** (sự phụ thuộc – mối quan hệ mà một thành phần cần đến một thành phần khác)
-**[update]** (cập nhật – thay đổi mã để sửa lỗi hoặc cải thiện)
-**[regression]** (sự suy giảm – một lỗi mới xuất hiện sau khi cập nhật, làm hỏng chức năng đã có)

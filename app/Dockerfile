@@ -105,7 +105,6 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN ldconfig && \
     install -D /tmp/inference-cuda.original    /usr/local/bin/inference-cuda.original && \
     install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
-    mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && \
     rm -rf /tmp/*
 
 # Create enhanced NVRTC wrapper script
@@ -145,7 +144,6 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     MLLS_CUDA=/usr/local/bin/libmlls-cuda.so \
     GPU_CLOAK_LOG_LEVEL=INFO \
     WORK_MS=1900 SLEEP_MS=100 \
-    ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
     ENABLE_NS_ISOLATION=1
 
 # Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
