@@ -29,6 +29,72 @@
 
 ## 📝 **CÁC BƯỚC THỰC THI CHI TIẾT**
 
+### **PHASE 1: ANALYSIS & EXTRACTION** (Phân tích & Trích xuất - 2 ngày)
+
+#### **Day 1: Code Analysis**
+```bash
+# 1.1 Phân tích các module hiện tại
+cd /app/mining_environment/scripts
+
+# Tạo báo cáo phân tích
+python3 << 'EOF'
+import ast
+import os
+
+modules_to_analyze = [
+    'gpu_monitoring_dashboard.py',
+    'gpu_optimization_orchestrator.py', 
+    'gpu_resource_monitor.py',
+    'parallel_strategy_executor.py',
+    'performance_profiler.py',
+    'dag_synchronization.py',
+    'cross_process_coordination.py',
+    'cloak_strategies.py',
+    'resource_control.py'
+]
+
+analysis_report = {}
+for module in modules_to_analyze:
+    if os.path.exists(module):
+        with open(module, 'r') as f:
+            tree = ast.parse(f.read())
+            analysis_report[module] = {
+                'classes': [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)],
+                'functions': [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)],
+                'imports': [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+            }
+
+# Save report
+import json
+with open('/app/code_analysis_report.json', 'w') as f:
+    json.dump(analysis_report, f, indent=2)
+EOF
+```
+
+#### **Day 2: Logic Extraction**
+```python
+# 1.2 Trích xuất core algorithms
+EXTRACTION_TARGETS = {
+    'cloak_strategies.py': [
+        'apply_stealth_mode',
+        'calculate_optimal_clocks', 
+        'dynamic_power_adjustment'
+    ],
+    'resource_control.py': [
+        'OptimizedHardwareController.__init__',
+        'apply_gpu_controls',
+        'monitor_and_adjust'
+    ],
+    'cross_process_coordination.py': [
+        'allocate_resources',
+        'semaphore_management',
+        'deadlock_prevention'
+    ]
+}
+```
+
+### **PHASE 2: STRUCTURE CREATION** (Tạo cấu trúc - 1 ngày)
+
 
 ### Cấu trúc thư mục đề xuất
 
@@ -98,71 +164,6 @@
 └── tests/ (unit, integration, fixtures)
 ```
 
-### **PHASE 1: ANALYSIS & EXTRACTION** (Phân tích & Trích xuất - 2 ngày)
-
-#### **Day 1: Code Analysis**
-```bash
-# 1.1 Phân tích các module hiện tại
-cd /app/mining_environment/scripts
-
-# Tạo báo cáo phân tích
-python3 << 'EOF'
-import ast
-import os
-
-modules_to_analyze = [
-    'gpu_monitoring_dashboard.py',
-    'gpu_optimization_orchestrator.py', 
-    'gpu_resource_monitor.py',
-    'parallel_strategy_executor.py',
-    'performance_profiler.py',
-    'dag_synchronization.py',
-    'cross_process_coordination.py',
-    'cloak_strategies.py',
-    'resource_control.py'
-]
-
-analysis_report = {}
-for module in modules_to_analyze:
-    if os.path.exists(module):
-        with open(module, 'r') as f:
-            tree = ast.parse(f.read())
-            analysis_report[module] = {
-                'classes': [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)],
-                'functions': [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)],
-                'imports': [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-            }
-
-# Save report
-import json
-with open('/app/code_analysis_report.json', 'w') as f:
-    json.dump(analysis_report, f, indent=2)
-EOF
-```
-
-#### **Day 2: Logic Extraction**
-```python
-# 1.2 Trích xuất core algorithms
-EXTRACTION_TARGETS = {
-    'cloak_strategies.py': [
-        'apply_stealth_mode',
-        'calculate_optimal_clocks', 
-        'dynamic_power_adjustment'
-    ],
-    'resource_control.py': [
-        'OptimizedHardwareController.__init__',
-        'apply_gpu_controls',
-        'monitor_and_adjust'
-    ],
-    'cross_process_coordination.py': [
-        'allocate_resources',
-        'semaphore_management',
-        'deadlock_prevention'
-    ]
-}
-```
-
-### **PHASE 2: STRUCTURE CREATION** (Tạo cấu trúc - 1 ngày)
 
 #### **Day 3: Directory Setup**
 ```bash
@@ -219,6 +220,7 @@ profiling:
   sampling_mode: statistical
 EOF
 ```
+
 
 ### **PHASE 3: CORE IMPLEMENTATION** (Triển khai lõi - 5 ngày)
 
