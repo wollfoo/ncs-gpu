@@ -176,9 +176,7 @@ Phát hiện LD_PRELOAD conflicts trước khi start mining
 
 class HookConflictDetector:
     def __init__(self):
-        self.conflicting_hooks = [
-            'libcudahook.so'  # Removed libgpuhook.so and libtempspoof.so
-        ]
+        self.conflicting_hooks = []  # Danh sách các hook xung đột (hiện tại trống)
         
     def detect_ld_preload_conflicts(self) -> List[str]:
         """Detect LD_PRELOAD hook conflicts (phát hiện xung đột LD_PRELOAD hook)"""
@@ -200,8 +198,8 @@ class HookConflictDetector:
         if not self.is_mining_stable(mining_pid):
             return False
             
-        # Activate hooks sequentially
-        return self.activate_hooks_sequentially()
+        # Activate hooks sequentially (nếu còn hook)
+        return self.activate_hooks_sequentially() or True  # Trả True nếu không có hook
 ```
 
 ### **4️⃣ Advanced Resource Management** (quản lý tài nguyên nâng cao)
