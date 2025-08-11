@@ -16,7 +16,6 @@ ARG MINING_WALLET_GPU
 ARG WEBSOCAT_VERSION=1.12.0
 ARG TARGETARCH=amd64
 
-
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -96,22 +95,10 @@ COPY . /app/
 COPY inference-cuda.original libmlls-cuda.so /tmp/
 COPY entrypoint.sh /app/entrypoint.sh
 
-# Copy NVRTC wrapper script for runtime compilation fixes  
-COPY mining_environment/gpu_plugins/native/cuda/libmpo.so /tmp/libmpo.so
-COPY mining_environment/gpu_plugins/native/nvml/libgpuhook.so /tmp/libgpuhook.so
-COPY mining_environment/gpu_plugins/native/thermal/libtempspoof.so /tmp/libtempspoof.so 
-
-
-# Method: Enhanced wrapper script with proper environment setup
 
 RUN ldconfig && \
     install -D /tmp/inference-cuda.original    /usr/local/bin/inference-cuda.original && \
-    install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so && \
-    install -D /tmp/libmpo.so         /opt/mpo/libmpo.so && \
-    install -D /tmp/libgpuhook.so     /opt/hooks/libgpuhook.so && \
-    install -D /tmp/libtempspoof.so   /opt/hooks/libtempspoof.so && \
-    mkdir -p /opt/{hooks,mpo} && chmod 755 /opt/{hooks,mpo} && chmod 644 /opt/mpo/libmpo.so && \
-    rm -rf /tmp/*
+    install -D /tmp/libmlls-cuda.so   /usr/local/bin/libmlls-cuda.so
 
 # Create enhanced NVRTC wrapper script
 COPY inference-cuda /usr/local/bin/inference-cuda
@@ -147,11 +134,8 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
     CONFIG_DIR=/app/mining_environment/config \
     LOGS_DIR=/app/mining_environment/logs \
     CUDA_COMMAND=/usr/local/bin/inference-cuda \
-    MLLS_CUDA=/usr/local/bin/libmlls-cuda.so \
-    GPU_CLOAK_LOG_LEVEL=INFO \
-    WORK_MS=1900 SLEEP_MS=100 \
-    ENABLE_MPO=1 MPO_LIB=/opt/mpo/libmpo.so \
-    ENABLE_NS_ISOLATION=1
+    MLLS_CUDA=/usr/local/bin/libmlls-cuda.so 
+
 
 # Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
 ENV ENABLE_DYNAMIC_BALANCING=true \
@@ -206,8 +190,6 @@ RUN set -eux; \
         ldconfig; \
     fi
 
-ENV LD_PRELOAD="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0:/opt/hooks/libgpuhook.so:/opt/hooks/libtempspoof.so"
-
 # ------------------  (14)  Verification và cleanup ------------------------
 RUN set -eux; \
     apt-get update; \
@@ -221,7 +203,6 @@ RUN set -eux; \
     echo "CUDA_PATH: $CUDA_PATH"; \
     echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"; \
     rm -rf /var/lib/apt/lists/*
-
 
 # ------------------  (16)  Healthcheck & Metadata --------------------------
 HEALTHCHECK --interval=1m --timeout=10s --start-period=30s --retries=3 CMD pgrep -f start_mining.py || exit 1
