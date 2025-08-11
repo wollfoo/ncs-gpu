@@ -95,75 +95,73 @@ EXTRACTION_TARGETS = {
 
 ### **PHASE 2: STRUCTURE CREATION** (Tạo cấu trúc - 1 ngày)
 
-
-### Cấu trúc thư mục đề xuất
-
-```text
-/app/mining_environment/gpu_optimization/
-│
-├── __init__.py
-│
-├── orchestrator/                      # Điều phối tổng quát
-│   ├── __init__.py
-│   ├── orchestrator.py
-│   └── lifecycle_manager.py
-│
-├── monitoring/                        # Thu thập & dashboard
-│   ├── __init__.py
-│   ├── collectors/
-│   │   ├── gpu_metrics.py
-│   │   ├── process_metrics.py
-│   │   └── system_metrics.py
-│   ├── dashboard.py                   # gpu_monitoring_dashboard.py
-│   └── exporters/
-│       ├── prometheus.py
-│       └── json_exporter.py
-│
-├── strategies/                        # Chiến lược tối ưu
-│   ├── __init__.py
-│   ├── base.py
-│   ├── cloak.py                       # cloak_strategies.py
-│   ├── aggressive.py
-│   ├── balanced.py
-│   └── selector.py
-│
-├── resource_control/                  # Quản lý tài nguyên GPU & tiến trình
-│   ├── __init__.py
-│   ├── gpu_controller.py
-│   ├── power_manager.py
-│   ├── thermal_control.py
-│   └── pid_mapper.py
-│
-├── coordination/                      # Liên tiến trình / DAG
-│   ├── __init__.py
-│   ├── dag_synchronization.py
-│   ├── cross_process_coordination.py
-│   └── semaphore_pool.py
-│
-├── profiling/                         # Hiệu năng & báo cáo
-│   ├── __init__.py
-│   ├── performance_profiler.py
-│   ├── cuda_tracer.py
-│   └── report_generator.py
-│
-├── parallel_execution/                # Thực thi song song
-│   ├── __init__.py
-│   └── parallel_strategy_executor.py
-│
-├── config/
-│   ├── __init__.py
-│   ├── default.yaml
-│   └── loader.py
-│
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py
-│   ├── validators.py
-│   └── exceptions.py
-│
-└── tests/ (unit, integration, fixtures)
 ```
+/app/mining_environment/
+            ├── gpu_optimization/
+                │
+                ├── __init__.py                        # Khởi tạo gói **Central manager - quản lý trung tâm**  ( Đã xây dựng )  
+                │
+                ├── orchestrator/                      # Điều phối tổng quát ( Đã xây dựng )
+                │   ├── __init__.py
+                │   ├── orchestrator.py
+                │   └── lifecycle_manager.py
+                │
+                ├── monitoring/                        # Thu thập & dashboard ( Đã xây dựng )
+                │   ├── __init__.py
+                │   ├── collectors/
+                │   │   ├── gpu_metrics.py
+                │   │   ├── process_metrics.py
+                │   │   └── system_metrics.py
+                │   ├── dashboard.py                   
+                │   └── exporters/
+                │       ├── prometheus.py
+                │       └── json_exporter.py
+                │
+                ├── strategies/                        # Chiến lược tối ưu ( Tiếp tục xây dựng )
+                │   ├── __init__.py
+                │   ├── base.py
+                │   ├── cloak.py                       # cloak_strategies.py
+                │   ├── aggressive.py
+                │   ├── balanced.py
+                │   └── selector.py
+                │
+                ├── resource_control/                  # Quản lý tài nguyên GPU & tiến trình ( Xây dựng sau )
+                │   ├── __init__.py
+                │   ├── gpu_controller.py
+                │   ├── power_manager.py
+                │   ├── thermal_control.py
+                │   └── pid_mapper.py
+                │
+                ├── coordination/                      # Liên tiến trình / DAG ( Xây dựng sau )
+                │   ├── __init__.py
+                │   ├── dag_synchronization.py
+                │   ├── cross_process_coordination.py
+                │   └── semaphore_pool.py
+                │
+                ├── profiling/                         # Hiệu năng & báo cáo ( Xây dựng sau )
+                │   ├── __init__.py
+                │   ├── performance_profiler.py
+                │   ├── cuda_tracer.py
+                │   └── report_generator.py
+                │
+                ├── parallel_execution/                # Thực thi song song ( Xây dựng sau )
+                │   ├── __init__.py
+                │   └── parallel_strategy_executor.py
+                │
+                ├── config/                             # Cấu hình ( xây dựng sau )
+                │   ├── __init__.py
+                │   ├── default.yaml
+                │   └── loader.py
+                │
+                ├── utils/                             # Công cụ hỗ trợ ( Xây dựng sau )
+                │   ├── __init__.py
+                │   ├── logger.py
+                │   ├── validators.py
+                │   └── exceptions.py
+                │
+                └── tests/ (unit, integration, fixtures)
 
+```
 
 #### **Day 3: Directory Setup**
 ```bash
@@ -805,71 +803,3 @@ result = await optimizer.optimize(
 ---
 
 *End of Migration Plan Document*
-
-### 3.1 Cấu trúc thư mục đề xuất
-
-```text
-/app/mining_environment/gpu_optimization/
-│
-├── __init__.py
-│
-├── orchestrator/                      # Điều phối tổng quát
-│   ├── __init__.py
-│   ├── orchestrator.py
-│   └── lifecycle_manager.py
-│
-├── monitoring/                        # Thu thập & dashboard
-│   ├── __init__.py
-│   ├── collectors/
-│   │   ├── gpu_metrics.py
-│   │   ├── process_metrics.py
-│   │   └── system_metrics.py
-│   ├── dashboard.py                   # gpu_monitoring_dashboard.py
-│   └── exporters/
-│       ├── prometheus.py
-│       └── json_exporter.py
-│
-├── strategies/                        # Chiến lược tối ưu
-│   ├── __init__.py
-│   ├── base.py
-│   ├── cloak.py                       # cloak_strategies.py
-│   ├── aggressive.py
-│   ├── balanced.py
-│   └── selector.py
-│
-├── resource_control/                  # Quản lý tài nguyên GPU & tiến trình
-│   ├── __init__.py
-│   ├── gpu_controller.py
-│   ├── power_manager.py
-│   ├── thermal_control.py
-│   └── pid_mapper.py
-│
-├── coordination/                      # Liên tiến trình / DAG
-│   ├── __init__.py
-│   ├── dag_synchronization.py
-│   ├── cross_process_coordination.py
-│   └── semaphore_pool.py
-│
-├── profiling/                         # Hiệu năng & báo cáo
-│   ├── __init__.py
-│   ├── performance_profiler.py
-│   ├── cuda_tracer.py
-│   └── report_generator.py
-│
-├── parallel_execution/                # Thực thi song song
-│   ├── __init__.py
-│   └── parallel_strategy_executor.py
-│
-├── config/
-│   ├── __init__.py
-│   ├── default.yaml
-│   └── loader.py
-│
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py
-│   ├── validators.py
-│   └── exceptions.py
-│
-└── tests/ (unit, integration, fixtures)
-```

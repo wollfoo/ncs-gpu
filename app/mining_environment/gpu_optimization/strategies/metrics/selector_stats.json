@@ -1,0 +1,221 @@
+{
+  "mode": "automatic",
+  "performance_stats": {
+    "BALANCED": {
+      "total_selections": 20,
+      "successful": 25,
+      "failed": 0,
+      "avg_improvement": 0.0,
+      "avg_duration": 0.0008078765869140625
+    },
+    "AGGRESSIVE": {
+      "total_selections": 0,
+      "successful": 0,
+      "failed": 0,
+      "avg_improvement": 0.0,
+      "avg_duration": 0.0
+    },
+    "CLOAK": {
+      "total_selections": 0,
+      "successful": 0,
+      "failed": 0,
+      "avg_improvement": 0.0,
+      "avg_duration": 0.0
+    }
+  },
+  "selection_history": [
+    {
+      "timestamp": 1754914311.7237883,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 75.14411615461181,
+        "gpu_temp": 82.95752145049397
+      }
+    },
+    {
+      "timestamp": 1754914311.7252266,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 46.85897452981772,
+        "gpu_temp": 57.155588315063106
+      }
+    },
+    {
+      "timestamp": 1754914311.725543,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 55.17484881376034,
+        "gpu_temp": 67.28760797259343
+      }
+    },
+    {
+      "timestamp": 1754914311.7262142,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 37.50376550632467,
+        "gpu_temp": 63.597126662836885
+      }
+    },
+    {
+      "timestamp": 1754914311.72704,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 30.610214513690035,
+        "gpu_temp": 71.42260666520993
+      }
+    },
+    {
+      "timestamp": 1754914311.7291055,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 56.960341184845504,
+        "gpu_temp": 71.16617207742081
+      }
+    },
+    {
+      "timestamp": 1754914311.7293077,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 56.46714268081041,
+        "gpu_temp": 54.32396913994128
+      }
+    },
+    {
+      "timestamp": 1754914311.729512,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 84.71589755064834,
+        "gpu_temp": 76.04936580569942
+      }
+    },
+    {
+      "timestamp": 1754914311.7305098,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 36.45241660086841,
+        "gpu_temp": 75.21525983766784
+      }
+    },
+    {
+      "timestamp": 1754914314.7366107,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 41.05666416187591,
+        "gpu_temp": 62.382141144373904
+      }
+    },
+    {
+      "timestamp": 1754914314.737048,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 73.68668422353616,
+        "gpu_temp": 57.39322027843263
+      }
+    },
+    {
+      "timestamp": 1754914314.7372522,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 80.79010418727134,
+        "gpu_temp": 82.93487893501987
+      }
+    },
+    {
+      "timestamp": 1754914317.7448733,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 47.65901939355135,
+        "gpu_temp": 79.30737788050286
+      }
+    },
+    {
+      "timestamp": 1754914317.745075,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 75.35513608072708,
+        "gpu_temp": 73.21302485111737
+      }
+    },
+    {
+      "timestamp": 1754914320.7525532,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 77.37820690828937,
+        "gpu_temp": 79.6892594896431
+      }
+    },
+    {
+      "timestamp": 1754914320.7527795,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 52.05943950613093,
+        "gpu_temp": 80.55235846342123
+      }
+    },
+    {
+      "timestamp": 1754914320.7529798,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 79.0204849757499,
+        "gpu_temp": 67.63132811402735
+      }
+    },
+    {
+      "timestamp": 1754914323.7608573,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 34.660466994894406,
+        "gpu_temp": 54.64255550857452
+      }
+    },
+    {
+      "timestamp": 1754914323.7611084,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 39.19277817096399,
+        "gpu_temp": 77.12955054087453
+      }
+    },
+    {
+      "timestamp": 1754914323.7614684,
+      "strategy_type": "BALANCED",
+      "context_summary": {
+        "pid": 12345,
+        "gpu_util": 55.62891550437981,
+        "gpu_temp": 56.38027769109338
+      }
+    }
+  ],
+  "criteria": {
+    "gpu_threshold": 80.0,
+    "memory_threshold": 85.0,
+    "temperature_threshold": 75.0,
+    "weights": {
+      "gpu_utilization": 0.3,
+      "memory_usage": 0.2,
+      "temperature": 0.2,
+      "power_consumption": 0.15,
+      "historical_success": 0.15
+    }
+  },
+  "timestamp": 1754914326.7698865
+}
