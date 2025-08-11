@@ -75,20 +75,12 @@ def create_enhanced_gpu_environment():
     # Base environment copy
     clean_env = os.environ.copy()
 
-    # 1. LD_PRELOAD Management - Tương tự thermal_spoofer.py approach
+    # 1. LD_PRELOAD Management - Clean removal to avoid legacy hooks
     if 'LD_PRELOAD' in clean_env:
-        preload_libs = clean_env['LD_PRELOAD'].split(':')
-        # Keep thermal hooks, remove GPU interference hooks
-        filtered_libs = [lib for lib in preload_libs if 'libgpuhook.so' not in lib]
+        clean_env.pop('LD_PRELOAD', None)
+        logger.info("🔧 [GPU-ENV-OPTIMIZER] Removed LD_PRELOAD completely (legacy hooks disabled)")
 
-        if filtered_libs:
-            clean_env['LD_PRELOAD'] = ':'.join(filtered_libs)
-            logger.info(f"🔧 [GPU-ENV-OPTIMIZER] Filtered LD_PRELOAD: {clean_env['LD_PRELOAD']}")
-        else:
-            del clean_env['LD_PRELOAD']
-            logger.info("🔧 [GPU-ENV-OPTIMIZER] Removed LD_PRELOAD completely")
-
-    # 2. NVML Management - Based on nvml_interceptor.py patterns
+    # 2. NVML Management - Defaults only (no external interceptors)
     clean_env['ENABLE_NVML_IPC_HIJACKING'] = '0'
     clean_env['GPU_MINING_SUBPROCESS'] = '1'
 
@@ -348,36 +340,16 @@ def main():
 
                 def _simplified_hook_sequencing():
                     """
-                    Simplified Hook Sequencing cho Linear Flow
+                    Hook sequencing disabled – gpu_plugins and related hook libraries removed.
+                    Perform readiness check only; do not enable any external hooks.
                     """
                     try:
-                        # **TIER 7 FIX: Enhanced readiness check with subprocess environment context**
-                        logger.info("🚀 [HOOK-SEQ] Starting enhanced readiness check for DAG completion...")
-
-                        # **TIER 7 FIX: Pass subprocess environment for context-aware checking**
+                        logger.info("🚀 [HOOK-SEQ] Starting readiness check (hooks disabled)...")
                         if not _enhanced_readiness_check(process, timeout=30, subprocess_env=clean_env):
-                            logger.error("❌ [HOOK-SEQ] Enhanced readiness check failed - DAG allocation incomplete")
+                            logger.error("❌ [HOOK-SEQ] Readiness check failed - DAG allocation incomplete")
                             return False
-
-                        logger.info("✅ [HOOK-SEQ] Enhanced readiness check passed - DAG allocation complete")
-
-                        # Re-enable hooks directly
-                        os.environ['THERMAL_SPOOF_DISABLED'] = '0'
-                        os.environ['NVML_HOOK_DISABLED'] = '0'
-                        os.environ['GPU_HOOK_DISABLED'] = '0'
-
-                        # Restore LD_PRELOAD simply
-                        thermal_lib = '/opt/hooks/libtempspoof.so'
-                        gpu_lib = '/opt/hooks/libgpuhook.so'
-
-                        preload_libs = [lib for lib in [thermal_lib, gpu_lib] if os.path.exists(lib)]
-
-                        if preload_libs:
-                            os.environ['LD_PRELOAD'] = ':'.join(preload_libs)
-
-                        logger.info("✅ [HOOK-SEQ] Hook sequencing completed")
+                        logger.info("✅ [HOOK-SEQ] Readiness check passed - proceeding without external hooks")
                         return True
-
                     except Exception as e:
                         logger.error(f"❌ [HOOK-SEQ] Failed: {e}")
                         return False
