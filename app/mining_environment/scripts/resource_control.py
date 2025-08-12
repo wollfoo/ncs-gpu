@@ -1112,6 +1112,9 @@ class OptimizedHardwareController:
         
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available}, DAG: {self.dag_synchronizer is not None})")
 
+        # Clean-code: cấu hình thời gian chờ DAG và helpers
+        self.dag_wait_timeout_sec: int = int(self.config.get('dag_wait_timeout_sec', 60))
+
     def ensure_dag_ready(self, gpu_index: int) -> bool:
         """
         **DAG SYNCHRONIZATION: Ensure DAG is ready for mining** (đảm bảo DAG sẵn sàng cho mining)
@@ -1163,7 +1166,8 @@ class OptimizedHardwareController:
                 # Another GPU is calculating, wait for completion
                 self.logger.info(f"⏳ [OHC.ensure_dag_ready] Waiting for DAG calculation by another GPU...")
                 
-                if self.dag_synchronizer.wait_for_dag(epoch, algorithm, timeout=60):
+                # Dùng timeout cấu hình để clean-code và dễ điều chỉnh
+                if self.dag_synchronizer.wait_for_dag(epoch, algorithm, timeout=self.dag_wait_timeout_sec):
                     self.logger.info(f"✅ [OHC.ensure_dag_ready] DAG ready after waiting")
                     return True
                 else:
@@ -1279,7 +1283,8 @@ class OptimizedHardwareController:
         
         try:
             # **DAG SYNCHRONIZATION: Ensure DAG is ready before optimization** (đảm bảo DAG sẵn sàng trước khi tối ưu)
-            if self.enable_dag_sync and (strategy == 'mining' or strategy == 'aggressive'):
+        # PHƯƠNG ÁN A: Bật DAG sync cho cả chiến lược 'GPU' để phục vụ cloaking/stealth
+        if self.enable_dag_sync and (strategy in ('mining', 'aggressive', 'GPU')):
                 self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
                 if not self.ensure_dag_ready(gpu_index):
                     self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
@@ -1287,7 +1292,7 @@ class OptimizedHardwareController:
                 else:
                     results['operations_applied'].append('dag_ready')
                     self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
-            elif (strategy == 'mining' or strategy == 'aggressive'):
+        elif (strategy in ('mining', 'aggressive', 'GPU')):
                 self.logger.info("ℹ️ ENABLE_DAG_SYNC=false; skipping DAG readiness check")
             
             # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)

@@ -199,7 +199,7 @@ class DAGSynchronizer:
                 elif info.state == DAGState.IN_PROGRESS:
                     # Check if calculation is stale (> 5 minutes)
                     if time.time() - info.start_time > 300:
-                    logger.warning(f"⚠️ DAG {dag_key} calculation stale (tính toán DAG bị treo – dữ liệu cũ), taking over (tiếp quản)")
+                        logger.warning(f"⚠️ DAG {dag_key} calculation stale (tính toán DAG bị treo – dữ liệu cũ), taking over (tiếp quản)")
                     else:
                         logger.info(f"⏳ DAG {dag_key} already in progress (GPU {info.gpu_id})")
                         return False
