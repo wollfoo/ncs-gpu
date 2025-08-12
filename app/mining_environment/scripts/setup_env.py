@@ -155,6 +155,71 @@ def validate_memory_config(config, logger):
         raise
 
 
+def detect_gpu_count(logger) -> int:
+    """
+    Detect number of NVIDIA GPUs available using nvidia-smi.
+    Trả về số lượng GPU; 0 nếu không có hoặc không truy cập được.
+    """
+    try:
+        if shutil.which("nvidia-smi") is None:
+            logger.info("ℹ️ NVIDIA-SMI not found – assuming 0 GPU (không tìm thấy nvidia-smi – giả định không có GPU)")
+            return 0
+        result = subprocess.run(
+            ["bash", "-lc", "nvidia-smi -L | wc -l"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        count_str = result.stdout.strip()
+        return int(count_str) if count_str.isdigit() else 0
+    except Exception as e:
+        logger.warning(f"⚠️ Cannot detect GPU count (không thể phát hiện số GPU): {e}")
+        return 0
+
+
+def apply_auto_defaults(resource_config: Dict[str, Any], environmental_limits: Dict[str, Any], logger) -> None:
+    """
+    Apply auto-detected defaults at hard 85% for resources when config is missing/zero.
+    Áp các mặc định tự động (giới hạn cứng 85%) khi cấu hình trống/0 để phù hợp nhiều máy chủ.
+    """
+    try:
+        # Ensure nested dicts exist
+        resource_allocation = resource_config.setdefault("resource_allocation", {})
+        gpu_cfg = resource_allocation.setdefault("gpu", {})
+        baseline_thresholds = resource_config.setdefault("baseline_thresholds", {})
+
+        # Auto GPU usage percent → 85%
+        max_usage = gpu_cfg.get("max_usage_percent")
+        needs_auto_gpu = (
+            max_usage is None
+            or max_usage == 0
+            or (isinstance(max_usage, list) and len(max_usage) == 0)
+        )
+        if needs_auto_gpu:
+            gpu_count = detect_gpu_count(logger)
+            auto_percent = 90
+            auto_value_list = [auto_percent] * max(1, gpu_count)
+            gpu_cfg["max_usage_percent"] = auto_value_list
+            logger.info(
+                f"ℹ️ [AUTO] GPU max_usage_percent auto-set to {auto_percent}% x {len(auto_value_list)} device(s)"
+            )
+
+        # Auto RAM baseline threshold → 85% if missing (để tránh cảnh báo không cần thiết)
+        ram_thr = baseline_thresholds.get("ram_usage_percent")
+        if not isinstance(ram_thr, (int, float)):
+            baseline_thresholds["ram_usage_percent"] = 85
+            logger.info("ℹ️ [AUTO] baseline_thresholds.ram_usage_percent auto-set to 85%")
+
+        # Auto RAM_PERCENT_THRESHOLD env limit → 85% nếu thiếu
+        mem_limits = environmental_limits.setdefault("memory_limits", {}) if isinstance(environmental_limits, dict) else {}
+        if isinstance(mem_limits, dict):
+            if not isinstance(mem_limits.get("ram_percent_threshold"), (int, float)):
+                mem_limits["ram_percent_threshold"] = 85
+                logger.info("ℹ️ [AUTO] environmental_limits.memory_limits.ram_percent_threshold auto-set to 85%")
+    except Exception as e:
+        logger.warning(f"⚠️ [AUTO] Failed to apply auto defaults (không áp được mặc định tự động): {e}")
+
 def load_json_config(config_path, logger):
     """
     **Load JSON Configuration File** (tải tệp cấu hình JSON – đọc file config JSON)
@@ -610,6 +675,9 @@ def setup():
     system_params = load_json_config(system_params_path, logger)
     environmental_limits = load_json_config(environmental_limits_path, logger)
     resource_config = load_json_config(resource_config_path, logger)
+
+    # Apply auto defaults (85%) before validations to remove dependency on hard-coded defaults
+    apply_auto_defaults(resource_config, environmental_limits, logger)
 
     # **Memory Configuration Validation** (xác thực cấu hình bộ nhớ – validate memory config)
     logger.info("🔍 **[SETUP] Starting memory configuration validation** (bắt đầu xác thực cấu hình bộ nhớ – starting memory config validation)...")

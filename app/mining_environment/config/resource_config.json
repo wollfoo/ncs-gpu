@@ -51,10 +51,7 @@
             "max_allocation_mb": 0
         },
         "gpu": {
-            "max_usage_percent": [
-                90,
-                90
-            ],
+            "max_usage_percent": 0,
             "accelerators": {
                 "count": 2,
                 "model": "Nvidia Tesla V100",
