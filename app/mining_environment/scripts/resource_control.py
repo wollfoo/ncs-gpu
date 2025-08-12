@@ -137,25 +137,25 @@ class GPUResourceManager:
         """
         try:
             pynvml.nvmlInit()
-            self.logger.info("pynvml đã được khởi tạo.")
+            self.logger.info("✅ [pynvml] (thư viện quản lý NVIDIA – Python bindings) initialized (đã được khởi tạo)")
             self.gpu_initialized = True
             return True
         except pynvml.NVMLError as error:
-            self.logger.error(f"Lỗi khi khởi tạo pynvml: {error}")
+            self.logger.error(f"❌ Error initializing [pynvml] (thư viện quản lý NVIDIA – Python bindings): {error}")
             self.gpu_initialized = False
             return False
         except Exception as e:
             # ✅ ERROR REPORTING: GPU initialization failure
             error_reporter.report_error(
                 ErrorCode.RESOURCE_MANAGER_INIT_FAILED,
-                f"Lỗi khi khởi tạo pynvml: {e}",
+                f"Lỗi khi khởi tạo [pynvml] (thư viện quản lý NVIDIA – Python bindings): {e}",
                 ErrorSeverity.HIGH,
                 module='resource_control',
                 function='GPUResourceManager._initialize_nvml',
                 context_data={'component': 'pynvml', 'error': str(e)},
                 exception=e
             )
-            self.logger.error(f"Lỗi khi khởi tạo pynvml: {e}")
+            self.logger.error(f"❌ Error initializing [pynvml] (thư viện quản lý NVIDIA – Python bindings): {e}")
             self.gpu_initialized = False
             return False
 
@@ -188,7 +188,7 @@ class GPUResourceManager:
         :return: Handle thiết bị GPU, hoặc None nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("GPUResourceManager chưa init. Không thể lấy handle GPU.")
+            self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể lấy [GPU handle] (tay cầm thiết bị GPU – định danh thiết bị).")
             return None
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
@@ -206,7 +206,7 @@ class GPUResourceManager:
         :return: Power limit (int) hoặc None nếu lỗi.
         """
         if not self.gpu_initialized:
-            self.logger.error("GPUResourceManager chưa init. Không thể lấy power limit.")
+            self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể lấy [power limit] (giới hạn công suất).")
             return None
         try:
             handle = self.get_handle(gpu_index)
@@ -231,7 +231,7 @@ class GPUResourceManager:
         :return: True nếu thành công, False nếu thất bại.
         """
         if not self.gpu_initialized:
-            self.logger.error("GPUResourceManager chưa init. Không thể set power limit.")
+            self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể set [power limit] (đặt giới hạn công suất).")
             return False
         try:
             handle = self.get_handle(gpu_index)
@@ -293,7 +293,7 @@ class GPUResourceManager:
         :return: True nếu thành công, False nếu thất bại.
         """
         if not self.gpu_initialized:
-            self.logger.error("GPUResourceManager chưa init. Không thể set clocks.")
+            self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể set [GPU clocks] (đặt xung nhịp GPU).")
             return False
         try:
             handle = self.get_handle(gpu_index)
@@ -353,7 +353,7 @@ class GPUResourceManager:
         """
         try:
             if not self.gpu_initialized:
-                self.logger.error("GPUResourceManager chưa init. Không thể limit_temperature.")
+                self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể thực hiện limit_temperature (giới hạn nhiệt độ).")
                 return False
 
             # Lấy nhiệt độ hiện tại
@@ -458,7 +458,7 @@ class GPUResourceManager:
         """
         try:
             if not self.gpu_initialized:
-                self.logger.error("GPUResourceManager chưa init. Không thể lấy nhiệt độ GPU.")
+                self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể lấy nhiệt độ GPU.")
                 return None
             handle = self.get_handle(gpu_index)
             if not handle:
