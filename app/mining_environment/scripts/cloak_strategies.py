@@ -1706,12 +1706,12 @@ class StrategyEngine:
     
     def optimize(self, pid: int, gpu_index: int = 0, strategies: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Execute GPU optimization cho một process.
+        Execute GPU optimization cho một process (đồng bộ với orchestrator strategy names).
         
         Args:
             pid: Process ID cần optimize
             gpu_index: GPU device index
-            strategies: Danh sách strategies cần áp dụng (memory, compute, power)
+            strategies: Danh sách strategies cần áp dụng ('gpu_power','gpu_clock','temperature','memory')
             
         Returns:
             Dict chứa kết quả optimization
@@ -1719,9 +1719,9 @@ class StrategyEngine:
         try:
             self.logger.info(f"🎯 [StrategyEngine] Starting optimization for PID {pid} on GPU {gpu_index}")
             
-            # Default strategies nếu không specify
+            # Default strategies đồng bộ với orchestrator
             if strategies is None:
-                strategies = ['memory', 'compute', 'power']
+                strategies = ['gpu_power', 'gpu_clock', 'temperature', 'memory']
             
             results = {
                 'success': True,
@@ -1731,39 +1731,22 @@ class StrategyEngine:
                 'metrics': {}
             }
             
-            # Thu thập baseline metrics
-            baseline_metrics = self.metrics_hub.collect_metrics(pid) if self.metrics_hub else {}
-            results['metrics']['baseline'] = baseline_metrics
+            # Thu thập baseline metrics (sử dụng export API thay vì collect_metrics không tồn tại)
+            if self.metrics_hub:
+                results['metrics']['baseline'] = self.metrics_hub.get_export_api_data()
             
-            # Áp dụng từng strategy qua existing components
-            for strategy in strategies:
+            # Áp dụng từng strategy qua apply_strategy mapping
+            for strategy_name in strategies:
                 try:
-                    if strategy == 'memory' and self.pattern_generator:
-                        # Memory optimization qua AdaptivePatternGenerator
-                        self.pattern_generator.generate_pattern('memory_efficient')
-                        results['strategies_applied'].append('memory')
-                        
-                    elif strategy == 'compute' and self.cloak_coordinator:
-                        # Compute optimization qua CloakCoordinator
-                        self.cloak_coordinator.apply_strategy(
-                            GpuCloakStrategy(target_pid=pid)
-                        )
-                        results['strategies_applied'].append('compute')
-                        
-                    elif strategy == 'power' and self.hardware_controller:
-                        # Power optimization qua OptimizedHardwareController  
-                        self.hardware_controller.apply_optimizations({
-                            'power_limit': 150,
-                            'temperature_target': 75
-                        })
-                        results['strategies_applied'].append('power')
-                        
+                    ok = self.apply_strategy(strategy_name, params={'pid': pid, 'gpu_index': gpu_index})
+                    if ok:
+                        results['strategies_applied'].append(strategy_name)
                 except Exception as e:
-                    self.logger.warning(f"⚠️ [StrategyEngine] Failed to apply {strategy}: {e}")
+                    self.logger.warning(f"⚠️ [StrategyEngine] Failed to apply {strategy_name}: {e}")
             
             # Thu thập post-optimization metrics
-            post_metrics = self.metrics_hub.collect_metrics(pid) if self.metrics_hub else {}
-            results['metrics']['post'] = post_metrics
+            if self.metrics_hub:
+                results['metrics']['post'] = self.metrics_hub.get_export_api_data()
             
             self.logger.info(f"✅ [StrategyEngine] Optimization completed: {results['strategies_applied']}")
             return results
@@ -1779,34 +1762,61 @@ class StrategyEngine:
     
     def apply_strategy(self, strategy_name: str, params: Optional[Dict] = None) -> bool:
         """
-        Apply một strategy cụ thể với parameters.
+        Apply một strategy cụ thể với parameters (đồng bộ mapping với orchestrator).
         
-        Args:
-            strategy_name: Tên strategy (gpu_cloak, memory_optimize, etc.)
-            params: Parameters cho strategy
-            
-        Returns:
-            True nếu thành công
+        Mapping:
+          - 'gpu_power'      → CloakCoordinator.process_request('gpu', power_limit)
+          - 'gpu_clock'      → CloakCoordinator.process_request('gpu', sm_clock/memory_clock)
+          - 'temperature'    → CloakCoordinator.process_request('gpu', temp_threshold)
+          - 'memory'         → CloakCoordinator.process_request('gpu', vram_target)
+          - Back-compat: 'gpu_cloak' → 'gpu'; 'power_optimize' → 'gpu_power'; 'memory_optimize' → 'memory'
         """
         try:
             self.logger.info(f"📋 [StrategyEngine] Applying strategy: {strategy_name}")
-            
-            # Route đến appropriate handler
+            params = params or {}
+            pid = params.get('pid', os.getpid())
+            gpu_index = params.get('gpu_index', 0)
+
+            # Backward compatibility name mapping
             if strategy_name == 'gpu_cloak':
-                pid = params.get('pid', os.getpid())
-                self.cloak_coordinator.apply_strategy(
-                    GpuCloakStrategy(target_pid=pid)
-                )
+                strategy_name = 'gpu'
+            elif strategy_name == 'power_optimize':
+                strategy_name = 'gpu_power'
             elif strategy_name == 'memory_optimize':
-                self.pattern_generator.generate_pattern('memory_efficient')
-            elif strategy_name == 'power_optimize' and self.hardware_controller:
-                self.hardware_controller.apply_optimizations(params or {})
+                strategy_name = 'memory'
+
+            # Build parameter overrides per strategy
+            override_params: Dict[str, Any] = {'gpu_index': gpu_index}
+            if strategy_name == 'gpu_power':
+                override_params['power_limit'] = getattr(self.config, 'gpu_power_limit', 150)
+                mapped_strategy = 'gpu'
+            elif strategy_name == 'gpu_clock':
+                override_params['sm_clock'] = getattr(self.config, 'gpu_sm_clock', 1200)
+                override_params['memory_clock'] = getattr(self.config, 'gpu_memory_clock', 877)
+                mapped_strategy = 'gpu'
+            elif strategy_name == 'temperature':
+                override_params['temp_threshold'] = getattr(self.config, 'gpu_temp_threshold', 75)
+                mapped_strategy = 'gpu'
+            elif strategy_name == 'memory':
+                # Target VRAM ratio (0..1). Dùng default nếu config không có.
+                override_params['vram_target'] = getattr(self.config, 'gpu_vram_target', 0.5)
+                mapped_strategy = 'gpu'
+            elif strategy_name == 'gpu':
+                mapped_strategy = 'gpu'
             else:
                 self.logger.warning(f"⚠️ [StrategyEngine] Unknown strategy: {strategy_name}")
                 return False
-                
-            return True
-            
+
+            # Compose CloakRequest và forward qua CloakCoordinator
+            request = CloakRequest(
+                pid=pid,
+                strategy_name=mapped_strategy,
+                params=override_params,
+                metadata={'source': 'strategy_engine'}
+            )
+            result = self.cloak_coordinator.process_request(request)
+            return bool(getattr(result, 'success', False))
+
         except Exception as e:
             self.logger.error(f"❌ [StrategyEngine] Failed to apply {strategy_name}: {e}")
             return False
