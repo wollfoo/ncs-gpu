@@ -124,20 +124,20 @@ class GPUOptimizationOrchestrator:
         self.metrics_hub.start_background_logging()
         self.logger.info("✅ Metrics Collection Hub initialized (Trung tâm thu thập số liệu đã khởi tạo – bộ gom chỉ số hoạt động)")
         
-        # **Initialize core engines** (khởi tạo engine lõi)
-        self.strategy_engine = StrategyEngine()
-        self.logger.info("✅ Strategy Engine initialized")
+        # **Initialize core engines** (khởi tạo engine lõi) với fallback an toàn
+        try:
+            self.strategy_engine = StrategyEngine()
+            self.logger.info("✅ Strategy Engine initialized")
+        except Exception as e:
+            self.strategy_engine = None
+            self.logger.warning(f"⚠️ StrategyEngine initialization failed, continuing without it: {e}")
         
         # **Initialize Hardware Controller** (khởi tạo điều khiển phần cứng)
         gpu_config = self.config.get('gpu_config', {})
         gpu_logger = logger.getChild('gpu')
-        gpu_manager = GPUResourceManager(gpu_config, gpu_logger)
-        
-        self.hardware_controller = OptimizedHardwareController(
-            gpu_manager=gpu_manager,
-            baseline_power=300,  # Default baseline
-            baseline_temp=70     # Default baseline
-        )
+        # Khởi tạo OptimizedHardwareController theo chữ ký (config, logger)
+        safe_gpu_config = {**gpu_config, 'baseline_power': 300, 'baseline_temp': 70}
+        self.hardware_controller = OptimizedHardwareController(safe_gpu_config, gpu_logger)
         self.logger.info("✅ Hardware Controller initialized")
     
     @profile_function(track_memory=True)
@@ -193,14 +193,21 @@ class GPUOptimizationOrchestrator:
             tasks = self._prepare_strategy_tasks(pid, gpu_index, strategies)
             
             # **Step 4: Execute strategies in parallel** (thực thi chiến lược song song)
-            self.logger.info(f"🔄 Executing {len(tasks)} strategies in parallel (thực thi {len(tasks)} chiến lược song song – chạy đồng thời)...")
-            execution_results = self.parallel_executor.execute_parallel(tasks)
+            if tasks:
+                self.logger.info(f"🔄 Executing {len(tasks)} strategies in parallel (thực thi {len(tasks)} chiến lược song song – chạy đồng thời)...")
+                execution_results = self.parallel_executor.execute_parallel(tasks)
+            else:
+                execution_results = {}
             
             # **Step 5: Apply hardware optimizations** (áp dụng tối ưu phần cứng)
-            hw_results = self.hardware_controller.apply_gpu_optimizations(
-                pid, 
-                gpu_index,
-                window_sec=60  # 1 minute window
+            try:
+                from .utils import StrategyType
+            except Exception:
+                StrategyType = type('StrategyType', (), {'GPU': 'GPU'})
+            hw_results = self.hardware_controller.optimize_for_pid(
+                pid=pid,
+                strategy=StrategyType.GPU,
+                gpu_index=gpu_index
             )
             
             # **Step 6: Collect post-optimization metrics** (thu thập số liệu sau tối ưu)
@@ -354,12 +361,13 @@ class GPUOptimizationOrchestrator:
             def execute_strategy(s=strategy, p=pid, g=gpu_index):
                 """Execute single strategy"""
                 try:
-                    # Apply through strategy engine
-                    result = self.strategy_engine.apply_strategy(
-                        strategy_type=s,
-                        pid=p,
-                        params={'gpu_index': g}
-                    )
+                    # Apply through strategy engine nếu sẵn sàng (API align: strategy_name, params)
+                    result = None
+                    if self.strategy_engine is not None:
+                        result = self.strategy_engine.apply_strategy(
+                            strategy_name=s,
+                            params={'pid': p, 'gpu_index': g}
+                        )
                     
                     # Collect metrics after strategy
                     metrics = self._collect_gpu_metrics(g)
@@ -385,8 +393,9 @@ class GPUOptimizationOrchestrator:
             
             tasks.append(task)
         
-        # Add dependencies
-        self._add_task_dependencies(tasks)
+        # Add dependencies nếu có tasks
+        if tasks:
+            self._add_task_dependencies(tasks)
         
         return tasks
     

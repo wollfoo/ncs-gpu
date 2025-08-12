@@ -260,13 +260,9 @@ class ResourceManager(IResourceManager):
             self._gpu_orchestrator = None
             if GPU_OPT_AVAILABLE:
                 try:
-                    # Kiểm tra biến môi trường GPU_OPT_ENABLED
-                    gpu_opt_enabled = os.environ.get('GPU_OPT_ENABLED', '1') == '1'
-                    if gpu_opt_enabled:
-                        self._gpu_orchestrator = GPUOptimizationOrchestrator()
-                        module_logger.info("✅ [RM] GPU Optimization Orchestrator initialized successfully")
-                    else:
-                        module_logger.info("ℹ️ [RM] GPU Optimization disabled by environment variable")
+                    # ✅ Unconditional initialization (khởi tạo không điều kiện)
+                    self._gpu_orchestrator = GPUOptimizationOrchestrator()
+                    module_logger.info("✅ [RM] GPU Optimization Orchestrator initialized successfully (unconditional)")
                 except Exception as e:
                     module_logger.error(f"❌ [RM] Failed to initialize GPU Orchestrator: {e}")
                     self._gpu_orchestrator = None
@@ -697,12 +693,19 @@ class ResourceManager(IResourceManager):
                         # Xác định GPU index (mặc định 0)
                         gpu_index = 0
                         
-                        # Gọi orchestrator để tối ưu
-                        opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
-                            pid=process.pid,
-                            gpu_index=gpu_index,
-                            strategies=None  # Sử dụng tất cả strategies có sẵn
-                        )
+                        # Gọi orchestrator để tối ưu ở background để không block luồng
+                        def _optimize_async(pid_val: int, gpu_idx: int):
+                            try:
+                                self._gpu_orchestrator.optimize_gpu_for_process(
+                                    pid=pid_val,
+                                    gpu_index=gpu_idx,
+                                    strategies=None
+                                )
+                            except Exception as _e:
+                                self.logger.error(f"[RM] ❌ GPU Optimization async exception for PID {pid_val}: {_e}")
+
+                        t = threading.Thread(target=_optimize_async, args=(process.pid, gpu_index), name=f"RM-GPU-OPT-{process.pid}", daemon=True)
+                        t.start()
                         
                         if opt_result.get('success', False):
                             self.logger.info(f"[RM] ✅ GPU Optimization successful for PID {process.pid}")

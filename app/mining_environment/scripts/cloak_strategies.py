@@ -425,6 +425,17 @@ class CloakCoordinator:
         
         # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
         self.hw_controller = HardwareController(config)
+
+        # ✅ Initialize intelligent GPU coordinator by default (non-blocking if unavailable)
+        try:
+            self.gpu_cloak_strategy = GpuCloakStrategy(
+                config=self.config,
+                logger=self.logger,
+                hw_controller=self.hw_controller
+            )
+        except Exception:
+            # Không chặn pipeline nếu không khởi tạo được intelligent coordinator
+            self.gpu_cloak_strategy = None
         
         # **INTELLIGENCE LAYER: Strategy scoring weights** (trọng số chấm điểm chiến lược)
         self.strategy_weights = {
@@ -1032,8 +1043,8 @@ class GpuCloakStrategy:
         self.config = config
         self.hw_controller = hw_controller  # NEW: Store HardwareController reference
         
-        # ✅ GPU OPTIMIZATION: Initialize AdaptivePatternGenerator nếu enabled
-        gpu_opt_enabled = os.getenv('GPU_OPT_ENABLED', '0') == '1'
+        # ✅ GPU OPTIMIZATION: Initialize AdaptivePatternGenerator (default ON; có thể tắt qua env)
+        gpu_opt_enabled = os.getenv('GPU_OPT_ENABLED', '1') == '1'
         if gpu_opt_enabled:
             gpu_opt_profile = os.getenv('GPU_OPT_PROFILE', 'medium')
             self.pattern_generator = AdaptivePatternGenerator(profile=gpu_opt_profile)
@@ -1676,15 +1687,17 @@ class StrategyEngine:
             config: GPU optimization configuration dict
         """
         self.config = config or {}
-        self.logger = get_logger()
-        self.cloak_coordinator = CloakCoordinator()
+        # Dùng cloak_logger làm logger hợp lệ thay cho get_logger (không tồn tại)
+        self.logger = cloak_logger
+        self.cloak_coordinator = CloakCoordinator(self.config)
         self.metrics_hub = MetricsCollectionHub()
         self.pattern_generator = AdaptivePatternGenerator()
         
         # Import OptimizedHardwareController từ resource_control
         try:
             from .resource_control import OptimizedHardwareController
-            self.hardware_controller = OptimizedHardwareController()
+            # Khởi tạo controller theo chữ ký (config, logger)
+            self.hardware_controller = OptimizedHardwareController(self.config, self.logger)
         except ImportError:
             self.logger.warning("⚠️ [StrategyEngine] OptimizedHardwareController not available")
             self.hardware_controller = None
