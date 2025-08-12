@@ -265,7 +265,7 @@ class IPCServer:
         """
         try:
             if self.is_started:
-            logger.warning("⚠️ [IPC-SERVER] Server already started (máy chủ đã khởi động – trạng thái đang chạy)")
+                logger.warning("⚠️ [IPC-SERVER] Server already started (máy chủ đã khởi động – trạng thái đang chạy)")
                 return True
             
             logger.info("🚀 [IPC-SERVER] Starting IPC Server (đang khởi động máy chủ IPC – bắt đầu phục vụ)...")
