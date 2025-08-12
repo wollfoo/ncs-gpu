@@ -1283,8 +1283,8 @@ class OptimizedHardwareController:
         
         try:
             # **DAG SYNCHRONIZATION: Ensure DAG is ready before optimization** (đảm bảo DAG sẵn sàng trước khi tối ưu)
-        # PHƯƠNG ÁN A: Bật DAG sync cho cả chiến lược 'GPU' để phục vụ cloaking/stealth
-        if self.enable_dag_sync and (strategy in ('mining', 'aggressive', 'GPU')):
+            # PHƯƠNG ÁN A: Bật DAG sync cho cả chiến lược 'GPU' để phục vụ cloaking/stealth
+            if self.enable_dag_sync and (strategy in ('mining', 'aggressive', 'GPU')):
                 self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
                 if not self.ensure_dag_ready(gpu_index):
                     self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
@@ -1292,7 +1292,7 @@ class OptimizedHardwareController:
                 else:
                     results['operations_applied'].append('dag_ready')
                     self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
-        elif (strategy in ('mining', 'aggressive', 'GPU')):
+            elif (strategy in ('mining', 'aggressive', 'GPU')):
                 self.logger.info("ℹ️ ENABLE_DAG_SYNC=false; skipping DAG readiness check")
             
             # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)
