@@ -696,25 +696,52 @@ class ResourceManager(IResourceManager):
                         # Gọi orchestrator để tối ưu ở background để không block luồng
                         def _optimize_async(pid_val: int, gpu_idx: int):
                             try:
+                                # Cooldown window để tránh xung đột ngay sau cloaking
+                                try:
+                                    cooldown_sec = float(os.getenv('GPU_OPT_COOLDOWN_SEC', '2.0'))
+                                except Exception:
+                                    cooldown_sec = 2.0
+                                if cooldown_sec > 0:
+                                    time.sleep(cooldown_sec)
+
+                                # Thực thi tối ưu hoá ở nền
                                 self._gpu_orchestrator.optimize_gpu_for_process(
                                     pid=pid_val,
                                     gpu_index=gpu_idx,
                                     strategies=None
                                 )
+                                
+                                # Thu kết quả để đánh giá rollback (nếu cần)
+                                try:
+                                    opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
+                                        pid=pid_val,
+                                        gpu_index=gpu_idx,
+                                        strategies=None
+                                    )
+                                    hw = opt_result.get('hardware_results', {}) if isinstance(opt_result, dict) else {}
+                                    safety = None
+                                    if isinstance(hw, dict):
+                                        pred = hw.get('temperature_prediction', {})
+                                        if isinstance(pred, dict):
+                                            safety = pred.get('safety_status')
+
+                                    if (isinstance(hw, dict) and not hw.get('success', False)) or hw.get('error') or safety in ('CRITICAL', 'EMERGENCY'):
+                                        self.logger.warning(f"[RM] ⚠️ Hardware optimization indicates risk or failure for PID {pid_val} (safety={safety}) – attempting rollback")
+                                        try:
+                                            hc = getattr(self._gpu_orchestrator, 'hardware_controller', None)
+                                            gm = getattr(hc, 'gpu_manager', None) if hc else None
+                                            if gm and hasattr(gm, 'restore_gpu_settings_for_pid'):
+                                                restored = gm.restore_gpu_settings_for_pid(pid_val)
+                                                self.logger.info(f"[RM] 🔄 Rollback GPU settings for PID {pid_val}: {restored}")
+                                        except Exception as rb_err:
+                                            self.logger.error(f"[RM] ❌ Rollback failed for PID {pid_val}: {rb_err}")
+                                except Exception as eval_err:
+                                    self.logger.debug(f"[RM] Skipping optimization result evaluation due to error: {eval_err}")
                             except Exception as _e:
                                 self.logger.error(f"[RM] ❌ GPU Optimization async exception for PID {pid_val}: {_e}")
 
                         t = threading.Thread(target=_optimize_async, args=(process.pid, gpu_index), name=f"RM-GPU-OPT-{process.pid}", daemon=True)
                         t.start()
-                        
-                        if opt_result.get('success', False):
-                            self.logger.info(f"[RM] ✅ GPU Optimization successful for PID {process.pid}")
-                            self.logger.info(f"[RM] Strategies applied: {opt_result.get('strategies_applied', [])}")
-                            self.logger.debug(f"[RM] Optimization duration: {opt_result.get('duration', 0):.2f}s")
-                        else:
-                            self.logger.warning(f"[RM] ⚠️ GPU Optimization incomplete for PID {process.pid}")
-                            if opt_result.get('errors'):
-                                self.logger.error(f"[RM] Errors: {opt_result['errors']}")
                                 
                     except Exception as e:
                         self.logger.error(f"[RM] ❌ GPU Optimization exception for PID {process.pid}: {e}")
