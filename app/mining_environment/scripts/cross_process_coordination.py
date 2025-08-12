@@ -549,7 +549,7 @@ class InterProcessMessenger:
         self.server_thread = threading.Thread(target=self._server_loop, daemon=True)
         self.server_thread.start()
         
-        logger.info(f"📨 **Message server started** (máy chủ nhắn tin đã khởi động): PID {self.pid}")
+        logger.info(f"📨 **Message server started** (máy chủ nhắn tin đã khởi động – server IPC sẵn sàng): PID {self.pid}")
     
     def _server_loop(self):
         """Server loop to accept connections"""
@@ -569,7 +569,7 @@ class InterProcessMessenger:
                 continue
             except Exception as e:
                 if self.running:
-                    logger.error(f"❌ **Server error** (lỗi máy chủ): {e}")
+                    logger.error(f"❌ **Server error** (lỗi máy chủ – sự cố dịch vụ): {e}")
     
     def _handle_connection(self, conn: socket.socket):
         """Handle incoming connection"""
@@ -593,11 +593,11 @@ class InterProcessMessenger:
             message = pickle.loads(data)
             if isinstance(message, ProcessMessage):
                 self.message_queue.put(message)
-                logger.debug(f"📥 **Message received** (tin nhắn đã nhận): "
+                logger.debug(f"📥 **Message received** (tin nhắn đã nhận – thông điệp vào): "
                            f"from PID {message.sender_pid} "
                            f"type {message.message_type.value}")
         except Exception as e:
-            logger.error(f"❌ **Connection error** (lỗi kết nối): {e}")
+            logger.error(f"❌ **Connection error** (lỗi kết nối – sự cố truyền thông): {e}")
         finally:
             conn.close()
     
@@ -650,10 +650,10 @@ class InterProcessMessenger:
                 client.close()
                 success_count += 1
                 
-                logger.debug(f"📤 **Message sent** (tin nhắn đã gửi): "
+                logger.debug(f"📤 **Message sent** (tin nhắn đã gửi – thông điệp ra): "
                            f"to PID {target_pid} type {message_type.value}")
             except Exception as e:
-                logger.error(f"❌ **Failed to send message** (gửi tin nhắn thất bại): "
+                logger.error(f"❌ **Failed to send message** (gửi tin nhắn thất bại – lỗi truyền): "
                            f"to PID {target_pid}: {e}")
         
         return success_count > 0
@@ -683,7 +683,7 @@ class InterProcessMessenger:
         if self.socket_path.exists():
             self.socket_path.unlink()
         
-        logger.info(f"📪 **Message server stopped** (máy chủ nhắn tin đã dừng): PID {self.pid}")
+        logger.info(f"📪 **Message server stopped** (máy chủ nhắn tin đã dừng – server IPC ngừng hoạt động): PID {self.pid}")
 
 
 class CrossProcessCoordinator:

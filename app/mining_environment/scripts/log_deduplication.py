@@ -174,10 +174,10 @@ class DeduplicatingLogger:
     
     def _log_with_dedup(self, level: str, message: str, *args, **kwargs):
         """
-        Log with deduplication.
+        Log with deduplication (ghi log có khử trùng – loại bỏ trùng lặp).
         
-        :param level: Log level
-        :param message: Message to log
+        :param level: Log level (mức log – cấp độ ghi nhật ký)
+        :param message: Message to log (thông điệp cần ghi – nội dung log)
         """
         # Format message with args if provided
         if args:

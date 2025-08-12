@@ -154,7 +154,7 @@ class DAGSynchronizer:
             
             return state
         except Exception as e:
-            logger.error(f"❌ Failed to load DAG state: {e}")
+            logger.error(f"❌ Failed to load DAG state (tải trạng thái DAG thất bại – lỗi đọc file): {e}")
             return {}
     
     def _save_state(self, state: Dict[str, DAGInfo]):
@@ -172,7 +172,7 @@ class DAGSynchronizer:
             with open(self.state_file, 'w') as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            logger.error(f"❌ Failed to save DAG state: {e}")
+            logger.error(f"❌ Failed to save DAG state (lưu trạng thái DAG thất bại – lỗi ghi file): {e}")
     
     def register_dag_calculation(self, epoch: int, algorithm: str, gpu_id: int) -> bool:
         """
@@ -199,7 +199,7 @@ class DAGSynchronizer:
                 elif info.state == DAGState.IN_PROGRESS:
                     # Check if calculation is stale (> 5 minutes)
                     if time.time() - info.start_time > 300:
-                        logger.warning(f"⚠️ DAG {dag_key} calculation stale, taking over")
+                    logger.warning(f"⚠️ DAG {dag_key} calculation stale (tính toán DAG bị treo – dữ liệu cũ), taking over (tiếp quản)")
                     else:
                         logger.info(f"⏳ DAG {dag_key} already in progress (GPU {info.gpu_id})")
                         return False
@@ -307,7 +307,7 @@ class DAGSynchronizer:
                     if gpu_id in self.gpu_assignments:
                         del self.gpu_assignments[gpu_id]
                 
-                logger.error(f"❌ DAG {dag_key} failed on GPU {gpu_id}: {error}")
+                logger.error(f"❌ DAG {dag_key} failed on GPU {gpu_id} (tính DAG thất bại – lỗi thực thi): {error}")
     
     def get_dag_info(self, epoch: int, algorithm: str) -> Optional[DAGInfo]:
         """
@@ -355,7 +355,7 @@ class DAGSynchronizer:
             
             time.sleep(1)  # Check every second
         
-        logger.error(f"⏱️ Timeout waiting for DAG {dag_key}")
+        logger.error(f"⏱️ Timeout waiting for DAG {dag_key} (hết thời gian chờ DAG – timeout đợi DAG)")
         return False
     
     def cleanup_old_dags(self, max_age_hours: int = 24):

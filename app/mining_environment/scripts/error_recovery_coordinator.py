@@ -100,7 +100,7 @@ class ErrorRecoveryCoordinator:
         self.logger = get_coordination_logger()
         self.error_reporter = get_error_reporter()
         
-        self.logger.info("✅ [RecoveryCoordinator] Error recovery coordinator initialized")
+            self.logger.info("✅ [RecoveryCoordinator] Error recovery coordinator initialized (bộ điều phối khôi phục lỗi đã khởi tạo – hệ thống phục hồi sẵn sàng)")
     
     def register_recovery_handler(
         self, 
@@ -142,7 +142,7 @@ class ErrorRecoveryCoordinator:
         try:
             # ✅ CIRCUIT BREAKER CHECK
             if self._is_circuit_breaker_open(error_context.error_code):
-                self.logger.warning(f"🚫 [RecoveryCoordinator] Circuit breaker OPEN for {error_context.error_code.value}")
+                 self.logger.warning(f"🚫 [RecoveryCoordinator] Circuit breaker OPEN (cầu dao mở – tạm ngưng nỗ lực) for {error_context.error_code.value}")
                 future = Future()
                 future.set_exception(Exception("Circuit breaker is open"))
                 return future
@@ -208,7 +208,7 @@ class ErrorRecoveryCoordinator:
                 self.recovery_metrics['successful_recoveries'] += 1
             
             self._update_circuit_breaker_success(error_context.error_code)
-            self.logger.info(f"✅ [RecoveryCoordinator] Recovery successful for error: {error_context.error_id}")
+            self.logger.info(f"✅ [RecoveryCoordinator] Recovery successful (khôi phục thành công – xử lý lỗi xong) for error: {error_context.error_id}")
             
             return result
             
@@ -218,7 +218,7 @@ class ErrorRecoveryCoordinator:
                 self.recovery_metrics['failed_recoveries'] += 1
             
             self._update_circuit_breaker_failure(error_context.error_code)
-            self.logger.error(f"❌ [RecoveryCoordinator] Recovery failed for error: {error_context.error_id} - {e}")
+            self.logger.error(f"❌ [RecoveryCoordinator] Recovery failed (khôi phục thất bại – lỗi tiếp diễn) for error: {error_context.error_id} - {e}")
             raise e
     
     def _execute_exponential_backoff(

@@ -195,13 +195,12 @@ class PerformanceProfiler:
                     
                     # Log if slow
                     if wall_time > 1.0:  # More than 1 second
-                        logger.warning(f"⚠️ **Slow function** (hàm chậm): {func_name} "
-                                     f"took {wall_time:.3f}s")
+                    logger.warning(f"⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): {func_name} took {wall_time:.3f}s (mất {wall_time:.3f} giây)")
                     
                     return result
                     
                 except Exception as e:
-                    logger.error(f"❌ Error in {func_name}: {e}")
+                    logger.error(f"❌ Error in {func_name} (lỗi trong hàm – ngoại lệ runtime): {e}")
                     raise
             
             return wrapper
@@ -445,7 +444,7 @@ class PerformanceProfiler:
                 }
             }
         
-        logger.info("📊 **Dashboard generated** (bảng điều khiển đã tạo)")
+        logger.info("📊 **Dashboard generated** (bảng điều khiển đã tạo – dữ liệu tổng hợp hiệu năng sẵn sàng)")
         
         return dashboard
     

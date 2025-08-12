@@ -72,15 +72,15 @@ class PrivilegedOperationManager:
         self._cache_ttl = 300  # 5 minutes
         
         if not self.is_root:
-            self.logger.warning("⚠️ Not running as root - some operations may fail")
+            self.logger.warning("⚠️ Not running as root (không chạy với quyền root – có thể thất bại) - some operations may fail (một số thao tác có thể lỗi)")
         else:
-            self.logger.info("🔑 Running as root - all privileged operations available")
+            self.logger.info("🔑 Running as root (đang chạy với quyền root – đặc quyền đầy đủ) - all privileged operations available (mọi thao tác đặc quyền khả dụng)")
         
     def _run_command(self, command: List[str], check: bool = True) -> subprocess.CompletedProcess:
         """
         Chạy command trực tiếp (vì đã là root)
         """
-        self.logger.debug(f"[ROOT] Running: {' '.join(command)}")
+        self.logger.debug(f"[ROOT] Running (đang chạy lệnh – quyền root): {' '.join(command)}")
         
         # Clone current env nhưng tạm thời gỡ bỏ LD_PRELOAD để tránh gpuhook can thiệp vào các tiện ích hệ thống
         env = os.environ.copy()
@@ -100,10 +100,10 @@ class PrivilegedOperationManager:
         cleaned_stdout = (result.stdout or "").strip()
         
         if result.returncode != 0:
-            self.logger.error(f"[ROOT] Command failed: {cleaned_stderr}")
+            self.logger.error(f"[ROOT] Command failed (lệnh thất bại – lỗi thực thi): {cleaned_stderr}")
         else:
             if cleaned_stdout:
-                self.logger.debug(f"[ROOT] Success: {cleaned_stdout[:200]}...")
+                self.logger.debug(f"[ROOT] Success (thành công – lệnh hoàn tất): {cleaned_stdout[:200]}...")
             
         return result
     

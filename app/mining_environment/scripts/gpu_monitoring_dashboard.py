@@ -69,7 +69,7 @@ class GPUMonitoringDashboard:
                     'timestamp': datetime.now().isoformat()
                 })
             except Exception as e:
-                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU status: {e}")
+                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU status (lỗi lấy trạng thái GPU – API gặp sự cố): {e}")
                 return jsonify({
                     'success': False,
                     'error': str(e),
@@ -87,7 +87,7 @@ class GPUMonitoringDashboard:
                     'timestamp': datetime.now().isoformat()
                 })
             except Exception as e:
-                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU health: {e}")
+                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU health (lỗi lấy sức khỏe GPU – truy vấn thất bại): {e}")
                 return jsonify({
                     'success': False,
                     'error': str(e),
@@ -117,7 +117,7 @@ class GPUMonitoringDashboard:
                     'timestamp': datetime.now().isoformat()
                 })
             except Exception as e:
-                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU metrics: {e}")
+                self.logger.error(f"❌ [DASHBOARD API] Error getting GPU metrics (lỗi lấy chỉ số GPU – dữ liệu không khả dụng): {e}")
                 return jsonify({
                     'success': False,
                     'error': str(e),

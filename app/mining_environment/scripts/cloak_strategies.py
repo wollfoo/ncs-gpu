@@ -43,7 +43,7 @@ try:
 except Exception:
     np = None  # type: ignore
     _NUMPY_AVAILABLE = False
-    cloak_logger.warning("[MetricsHub] numpy not available; using pure-Python fallback statistics")
+    cloak_logger.warning("[MetricsHub] [numpy] (thư viện numpy – thư viện tính toán số) not available (không khả dụng) – using pure-Python fallback statistics (sử dụng thống kê thuần Python – cơ chế dự phòng)")
 
 # **GPU-Only Mode** (chế độ chỉ GPU – hoạt động riêng card đồ họa): **CPU ResourceManager removed** (đã xóa trình quản lý tài nguyên CPU) cho **GPU-only operations** (hoạt động chỉ GPU – thao tác riêng card đồ họa)
 if TYPE_CHECKING:
@@ -759,13 +759,13 @@ class CloakCoordinator:
                             message='Emergency GPU configuration applied'
                         )
                     else:
-                        self.logger.error(f"[CS] ❌ Intelligent coordination failed: {coordinator_result.get('error')}")
+                        self.logger.error(f"[CS] ❌ Intelligent coordination failed (phối hợp thông minh thất bại – lỗi điều phối): {coordinator_result.get('error')}")
                         # Fallback to direct hardware controller
-                        self.logger.info("[CS] 🔄 Falling back to direct hardware controller")
+                        self.logger.info("[CS] 🔄 Falling back to direct hardware controller (quay về bộ điều khiển phần cứng trực tiếp – cơ chế dự phòng)")
 
             else:
                 # No intelligent coordinator available, use direct routing
-                self.logger.info("[CS] 📡 Direct routing to hardware controller (no intelligent coordinator)")
+                self.logger.info("[CS] 📡 Direct routing to hardware controller (định tuyến trực tiếp tới bộ điều khiển phần cứng – không có [intelligent coordinator] (bộ điều phối thông minh))")
 
             # FALLBACK: Direct forward to hardware controller
             control_params = {
@@ -783,7 +783,7 @@ class CloakCoordinator:
             return result
 
         except Exception as e:
-            self.logger.error(f"[CS] ❌ GPU strategy exception: {e}")
+            self.logger.error(f"[CS] ❌ GPU strategy exception (ngoại lệ chiến lược GPU – lỗi áp dụng GPU): {e}")
             return CloakResult(
                 success=False,
                 pid=request.pid,
@@ -1178,10 +1178,10 @@ class GpuCloakStrategy:
             # Store in MetricsCollectionHub if available
             if self.metrics_hub:
                 self.metrics_hub.add_metric('real_gpu_metrics', real_metrics)
-                self.logger.debug(f"📊 Stored real metrics for PID {pid}: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']}W")
+            self.logger.debug(f"📊 Stored real metrics (đã lưu số liệu thực – ghi nhận chỉ số) for PID {pid}: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']}W")
             
         except Exception as e:
-            self.logger.debug(f"Could not collect real metrics: {e}")
+            self.logger.debug(f"Could not collect real metrics (không thể thu thập số liệu thực – lỗi lấy chỉ số): {e}")
         
         return real_metrics
     
@@ -1386,7 +1386,7 @@ class GpuCloakStrategy:
             pynvml.nvmlShutdown()
             
         except Exception as e:
-            self.logger.debug(f"⚠️ Cannot get GPU metrics via NVML: {e}")
+            self.logger.debug(f"⚠️ Cannot get GPU metrics via [NVML] (không thể lấy chỉ số GPU qua NVML – thư viện quản lý NVIDIA): {e}")
             # Return default metrics
             metrics = {
                 'power': 150,
@@ -1431,7 +1431,7 @@ class GpuCloakStrategy:
                 json.dump(existing, f)
                 
         except Exception as e:
-            self.logger.debug(f"⚠️ Cannot store pattern metrics: {e}")
+            self.logger.debug(f"⚠️ Cannot store pattern metrics (không thể lưu chỉ số mẫu – lỗi ghi dữ liệu): {e}")
     
     def _delegate_with_fallback(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1572,7 +1572,7 @@ class GpuCloakStrategy:
             self.logger.debug(f"[STEALTH] Wake up after {random_sleep_sec} seconds sleep")
             
         except Exception as e:
-            self.logger.warning(f"⚠️ [STEALTH] Random sleep failed: {e}, continuing without delay")
+            self.logger.warning(f"⚠️ [STEALTH] Random sleep failed (ngủ ngẫu nhiên thất bại – lỗi tạm dừng): {e}, continuing without delay (tiếp tục không trì hoãn)")
 
 
 def _register_strategy_recovery_handlers() -> None:
@@ -1647,10 +1647,10 @@ def _register_strategy_recovery_handlers() -> None:
         error_reporter.register_recovery_handler(ErrorCode.STRATEGY_TIMEOUT, recover_strategy_timeout)
         error_reporter.register_recovery_handler(ErrorCode.RESOURCE_ALLOCATION_FAILED, recover_resource_allocation_failed)
         
-        cloak_logger.info("✅ [Recovery] Strategy recovery handlers registered successfully")
+        cloak_logger.info("✅ [Recovery] Strategy recovery handlers registered successfully (đăng ký bộ xử lý phục hồi chiến lược thành công – handlers đã sẵn sàng)")
         
     except Exception as e:
-        cloak_logger.error(f"❌ [Recovery] Failed to register recovery handlers: {e}")
+        cloak_logger.error(f"❌ [Recovery] Failed to register recovery handlers (đăng ký bộ xử lý phục hồi thất bại – lỗi khởi tạo): {e}")
 
 # ✅ AUTO-REGISTER: Tự động đăng ký recovery handlers khi module được import
 _register_strategy_recovery_handlers()

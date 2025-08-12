@@ -400,14 +400,14 @@ class CentralizedErrorReporter:
     def shutdown(self) -> None:
         """**Graceful shutdown of error reporter** (tắt trình báo cáo lỗi nhẹ nhàng – đóng hệ thống báo lỗi an toàn)"""
         try:
-            self.logger.info("🛑 [ErrorReporter] Shutting down error reporter...")
+            self.logger.info("🛑 [ErrorReporter] Shutting down error reporter (đang tắt trình báo cáo lỗi – kết thúc dịch vụ)...")
             
             # ✅ SHUTDOWN EXECUTOR
             self.error_executor.shutdown(wait=True, timeout=10)
             
             # ✅ FINAL METRICS
             final_metrics = self.get_error_metrics()
-            self.logger.info(f"📊 [ErrorReporter] Final metrics: {final_metrics['total_errors']} total errors")
+            self.logger.info(f"📊 [ErrorReporter] Final metrics (số liệu cuối): {final_metrics['total_errors']} total errors (tổng số lỗi)")
             
         except Exception as e:
             self.logger.error(f"❌ [ErrorReporter] Shutdown error: {e}")

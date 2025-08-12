@@ -114,7 +114,7 @@ class GPUOptimizationOrchestrator:
             default_timeout=self.config['strategy_timeout']
         )
         self.parallel_executor = _parallel_executor
-        self.logger.info("✅ Parallel Strategy Executor initialized")
+        self.logger.info("✅ Parallel Strategy Executor initialized (Bộ thực thi chiến lược song song đã khởi tạo – cơ chế thực thi đồng thời)")
         
         # **Initialize Metrics Hub** (khởi tạo trung tâm số liệu)
         _metrics_hub = MetricsCollectionHub(
@@ -122,7 +122,7 @@ class GPUOptimizationOrchestrator:
         )
         self.metrics_hub = _metrics_hub
         self.metrics_hub.start_background_logging()
-        self.logger.info("✅ Metrics Collection Hub initialized")
+        self.logger.info("✅ Metrics Collection Hub initialized (Trung tâm thu thập số liệu đã khởi tạo – bộ gom chỉ số hoạt động)")
         
         # **Initialize core engines** (khởi tạo engine lõi)
         self.strategy_engine = StrategyEngine()
@@ -173,8 +173,7 @@ class GPUOptimizationOrchestrator:
         }
         
         try:
-            self.logger.info(f"🎯 **Starting GPU optimization** "
-                           f"(bắt đầu tối ưu GPU) for PID {pid} on GPU {gpu_index}")
+            self.logger.info(f"🎯 **Starting GPU optimization** (bắt đầu tối ưu GPU – khởi động quá trình tối ưu) for PID {pid} on GPU {gpu_index}")
             
             # **Step 1: Request resource coordination** (yêu cầu điều phối tài nguyên)
             if self.coordinator:
@@ -194,7 +193,7 @@ class GPUOptimizationOrchestrator:
             tasks = self._prepare_strategy_tasks(pid, gpu_index, strategies)
             
             # **Step 4: Execute strategies in parallel** (thực thi chiến lược song song)
-            self.logger.info(f"🔄 Executing {len(tasks)} strategies in parallel...")
+            self.logger.info(f"🔄 Executing {len(tasks)} strategies in parallel (thực thi {len(tasks)} chiến lược song song – chạy đồng thời)...")
             execution_results = self.parallel_executor.execute_parallel(tasks)
             
             # **Step 5: Apply hardware optimizations** (áp dụng tối ưu phần cứng)
@@ -220,7 +219,7 @@ class GPUOptimizationOrchestrator:
             self.execution_stats['successful'] += 1
             
         except Exception as e:
-            self.logger.error(f"❌ Optimization failed for PID {pid}: {e}")
+            self.logger.error(f"❌ Optimization failed for PID {pid} (tối ưu thất bại – lỗi áp dụng): {e}")
             results['errors'].append(str(e))
             self.execution_stats['failed'] += 1
             
@@ -251,8 +250,7 @@ class GPUOptimizationOrchestrator:
                 avg = self.execution_stats['avg_duration']
                 self.execution_stats['avg_duration'] = (avg * (total - 1) + duration) / total
             
-            self.logger.info(f"✅ **Optimization completed** "
-                           f"(tối ưu hoàn thành) in {duration:.2f}s")
+            self.logger.info(f"✅ **Optimization completed** (tối ưu hoàn thành – quy trình kết thúc) in {duration:.2f}s")
         
         return results
     
