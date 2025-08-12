@@ -1352,7 +1352,7 @@ class DirectPIDRegistry:
         """
         try:
             # Create shared memory directory if not exists
-            self._shm_path.parent.mkdir(parents=True, exist_ok=True)
+            self._shm_path.mkdir(parents=True, exist_ok=True)
             
             # Initialize shared memory file
             shm_file = self._shm_path / "registry.shm"

@@ -238,6 +238,27 @@ class GPUResourceManager:
             if not handle or power_limit_w <= 0:
                 return False
 
+            # Lấy giới hạn power limit từ GPU
+            try:
+                min_limit_mw, max_limit_mw = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
+                min_limit_w = min_limit_mw // 1000
+                max_limit_w = max_limit_mw // 1000
+                
+                # Validate và điều chỉnh power limit trong khoảng cho phép
+                if power_limit_w < min_limit_w:
+                    self.logger.warning(f"Power limit {power_limit_w}W dưới mức tối thiểu {min_limit_w}W, điều chỉnh lên {min_limit_w}W")
+                    power_limit_w = min_limit_w
+                elif power_limit_w > max_limit_w:
+                    self.logger.warning(f"Power limit {power_limit_w}W vượt mức tối đa {max_limit_w}W, điều chỉnh xuống {max_limit_w}W")
+                    power_limit_w = max_limit_w
+            except pynvml.NVMLError as e:
+                self.logger.warning(f"Không thể lấy power limit constraints, sử dụng giá trị mặc định: {e}")
+                # Fallback cho Tesla T4
+                max_limit_w = 70
+                if power_limit_w > max_limit_w:
+                    self.logger.warning(f"Power limit {power_limit_w}W có thể vượt giới hạn, điều chỉnh xuống {max_limit_w}W")
+                    power_limit_w = max_limit_w
+
             # Lưu power limit cũ
             current_mw = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
             current_w = current_mw // 1000
@@ -403,8 +424,15 @@ class GPUResourceManager:
                     boost_pct = 30
                 self.logger.debug(f"diff_temp={diff_temp}°C => boost_pct={boost_pct}%")
 
-                # Tăng công suất (nhưng không vượt quá 250W)
-                desired_power_limit = min(250, int(current_power_limit * (1 + boost_pct / 100)))
+                # Tăng công suất (nhưng không vượt quá giới hạn GPU)
+                # Lấy giới hạn tối đa từ GPU
+                try:
+                    min_limit_mw, max_limit_mw = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
+                    max_limit_w = max_limit_mw // 1000
+                except pynvml.NVMLError:
+                    max_limit_w = 70  # Fallback cho Tesla T4
+                
+                desired_power_limit = min(max_limit_w, int(current_power_limit * (1 + boost_pct / 100)))
                 if self.set_gpu_power_limit(pid, gpu_index, desired_power_limit):
                     self.logger.info(f"Tăng power limit GPU={gpu_index} lên {desired_power_limit}W (PID={pid}).")
 
