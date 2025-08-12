@@ -25,20 +25,22 @@ try:
     from .cross_process_coordination import CrossProcessCoordinator, ResourceType
     from .parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
     from .performance_profiler import get_profiler, profile_function
-    from .module_loggers import get_optimization_logger
+    from .module_loggers import get_gpu_optimization_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
-except ImportError:
-    # Fallback for standalone testing
-    from .cloak_strategies import StrategyEngine, MetricsCollectionHub
-    from resource_control import OptimizedHardwareController, GPUResourceManager
-    from .cross_process_coordination import CrossProcessCoordinator, ResourceType
-    from .parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
-    from .performance_profiler import PerformanceProfiler, profile_function
-    from module_loggers import get_optimization_logger
-    from error_management import get_error_reporter, ErrorCode, ErrorSeverity
+except ImportError as e:
+    # Fallback for standalone testing - use absolute imports
+    import sys
+    sys.path.insert(0, '/home/azureuser/opus-gpu/app')
+    from mining_environment.scripts.cloak_strategies import StrategyEngine, MetricsCollectionHub
+    from mining_environment.scripts.resource_control import OptimizedHardwareController, GPUResourceManager
+    from mining_environment.scripts.cross_process_coordination import CrossProcessCoordinator, ResourceType
+    from mining_environment.scripts.parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
+    from mining_environment.scripts.performance_profiler import PerformanceProfiler, profile_function
+    from mining_environment.scripts.module_loggers import get_gpu_optimization_logger
+    from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity
 
 # **Logger setup** (thiết lập logger)
-logger = get_optimization_logger()
+logger = get_gpu_optimization_logger()
 error_reporter = get_error_reporter()
 
 # **Global instances** (thực thể toàn cục)

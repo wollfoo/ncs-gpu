@@ -31,6 +31,17 @@ from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheE
 # **Module logger** (logger module – bộ ghi nhật ký thành phần)
 module_logger = get_resource_manager_logger()
 
+# **GPU Optimization import** (nhập module tối ưu GPU – khắc phục lỗi import)
+try:
+    import sys
+    sys.path.insert(0, '/home/azureuser/opus-gpu/app')
+    from mining_environment.scripts.gpu_optimization_orchestrator import GPUOptimizationOrchestrator
+    GPU_OPT_AVAILABLE = True
+    module_logger.info("✅ [RM] GPU Optimization Orchestrator imported successfully")
+except ImportError as e:
+    GPU_OPT_AVAILABLE = False
+    module_logger.warning(f"⚠️ [RM] GPU Optimization Orchestrator not available: {e}")
+
 class SharedResourceManager:
     """
     **Shared resource manager** (trình quản lý tài nguyên dùng chung – bộ điều khiển tài nguyên chia sẻ) cho **GPU operations** (hoạt động GPU – thao tác card đồ họa).
@@ -244,6 +255,21 @@ class ResourceManager(IResourceManager):
                 'cross_process_requests': 0
             }
             self._setup_ipc_bridge()
+            
+            # **🚀 GPU OPTIMIZATION ORCHESTRATOR** (khởi tạo bộ điều phối tối ưu GPU)
+            self._gpu_orchestrator = None
+            if GPU_OPT_AVAILABLE:
+                try:
+                    # Kiểm tra biến môi trường GPU_OPT_ENABLED
+                    gpu_opt_enabled = os.environ.get('GPU_OPT_ENABLED', '1') == '1'
+                    if gpu_opt_enabled:
+                        self._gpu_orchestrator = GPUOptimizationOrchestrator()
+                        module_logger.info("✅ [RM] GPU Optimization Orchestrator initialized successfully")
+                    else:
+                        module_logger.info("ℹ️ [RM] GPU Optimization disabled by environment variable")
+                except Exception as e:
+                    module_logger.error(f"❌ [RM] Failed to initialize GPU Orchestrator: {e}")
+                    self._gpu_orchestrator = None
             
             self._initialized = True
             module_logger.info("**ResourceManager initialization successful** (ResourceManager khởi tạo thành công – thiết lập trình quản lý hoàn tất)")
@@ -662,6 +688,37 @@ class ResourceManager(IResourceManager):
             if result.success:
                 self.logger.info(f"[RM] ✅ Cloaking successful for PID {process.pid}")
                 self.logger.debug(f"[RM] Applied controls: {result.applied_controls}")
+                
+                # **🚀 TRIGGER GPU OPTIMIZATION** (kích hoạt tối ưu GPU – gọi orchestrator)
+                if self._gpu_orchestrator is not None:
+                    try:
+                        self.logger.info(f"[RM] 🎯 Triggering GPU Optimization for PID {process.pid}")
+                        
+                        # Xác định GPU index (mặc định 0)
+                        gpu_index = 0
+                        
+                        # Gọi orchestrator để tối ưu
+                        opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
+                            pid=process.pid,
+                            gpu_index=gpu_index,
+                            strategies=None  # Sử dụng tất cả strategies có sẵn
+                        )
+                        
+                        if opt_result.get('success', False):
+                            self.logger.info(f"[RM] ✅ GPU Optimization successful for PID {process.pid}")
+                            self.logger.info(f"[RM] Strategies applied: {opt_result.get('strategies_applied', [])}")
+                            self.logger.debug(f"[RM] Optimization duration: {opt_result.get('duration', 0):.2f}s")
+                        else:
+                            self.logger.warning(f"[RM] ⚠️ GPU Optimization incomplete for PID {process.pid}")
+                            if opt_result.get('errors'):
+                                self.logger.error(f"[RM] Errors: {opt_result['errors']}")
+                                
+                    except Exception as e:
+                        self.logger.error(f"[RM] ❌ GPU Optimization exception for PID {process.pid}: {e}")
+                        import traceback
+                        self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
+                else:
+                    self.logger.debug(f"[RM] GPU Optimization not available for PID {process.pid}")
             else:
                 self.logger.error(f"[RM] ❌ Cloaking failed: {result.error_msg}")
 
