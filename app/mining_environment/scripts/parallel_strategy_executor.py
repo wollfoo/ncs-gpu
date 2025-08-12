@@ -438,7 +438,7 @@ def apply_parallel_strategies(pid: int,
     
     # Import strategy modules
     try:
-        from cloak_strategies import StrategyEngine, CloakRequest
+        from .cloak_strategies import StrategyEngine, CloakRequest
         from resource_control import ResourceManager
     except ImportError as e:
         logger.error(f"❌ Failed to import required modules: {e}")

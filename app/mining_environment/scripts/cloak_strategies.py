@@ -1038,8 +1038,35 @@ class GpuCloakStrategy:
             gpu_opt_profile = os.getenv('GPU_OPT_PROFILE', 'medium')
             self.pattern_generator = AdaptivePatternGenerator(profile=gpu_opt_profile)
             self.logger.info(f"🎯 [GPU OPTIMIZATION] Enabled với profile '{gpu_opt_profile}'")
+            
+            # 🆕 ORCHESTRATOR ACTIVATION: Khởi tạo GPU Optimization Orchestrator
+            try:
+                from .gpu_optimization_orchestrator import GPUOptimizationOrchestrator
+                
+                # Initialize orchestrator với config
+                self.gpu_orchestrator = GPUOptimizationOrchestrator(
+                    gpu_index=0,
+                    optimization_config={
+                        'enabled': True,
+                        'profile': gpu_opt_profile,
+                        'thresholds': config.get('gpu_optimization', {}).get('threshold', {})
+                    }
+                )
+                self.logger.info("✅ [GPU Optimization Orchestrator] Initialized successfully")
+                
+                # Kích hoạt cross-process coordination và parallel execution
+                self.gpu_orchestrator.start_background_optimization()
+                self.logger.info("✅ [GPU Optimization Orchestrator] Background optimization started")
+                
+            except ImportError as e:
+                self.logger.warning(f"⚠️ [GPU Optimization Orchestrator] Not available: {e}")
+                self.gpu_orchestrator = None
+            except Exception as e:
+                self.logger.error(f"❌ [GPU Optimization Orchestrator] Initialization failed: {e}")
+                self.gpu_orchestrator = None
         else:
             self.pattern_generator = None
+            self.gpu_orchestrator = None
             self.logger.info("🔧 [GPU OPTIMIZATION] Disabled - using standard cloaking")
 
         # ✅ MULTI-LEVEL FALLBACK MECHANISM: 3 layers of GPU manager creation
@@ -1648,3 +1675,156 @@ def _register_strategy_recovery_handlers() -> None:
 
 # ✅ AUTO-REGISTER: Tự động đăng ký recovery handlers khi module được import
 _register_strategy_recovery_handlers()
+
+
+# ============================================================================
+# STRATEGY ENGINE - GPU OPTIMIZATION ORCHESTRATOR INTERFACE
+# ============================================================================
+
+class StrategyEngine:
+    """
+    **[StrategyEngine]** (lớp điều phối chiến lược – kết nối orchestrator với strategies)
+    
+    Minimal implementation để khắc phục ImportError và kích hoạt GPU Optimization layer.
+    Wrapper pattern delegate đến existing CloakCoordinator và optimization classes.
+    """
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Khởi tạo StrategyEngine với configuration.
+        
+        Args:
+            config: GPU optimization configuration dict
+        """
+        self.config = config or {}
+        self.logger = get_logger()
+        self.cloak_coordinator = CloakCoordinator()
+        self.metrics_hub = MetricsCollectionHub()
+        self.pattern_generator = AdaptivePatternGenerator()
+        
+        # Import OptimizedHardwareController từ resource_control
+        try:
+            from .resource_control import OptimizedHardwareController
+            self.hardware_controller = OptimizedHardwareController()
+        except ImportError:
+            self.logger.warning("⚠️ [StrategyEngine] OptimizedHardwareController not available")
+            self.hardware_controller = None
+            
+        self.logger.info("✅ [StrategyEngine] Initialized successfully")
+    
+    def optimize(self, pid: int, gpu_index: int = 0, strategies: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Execute GPU optimization cho một process.
+        
+        Args:
+            pid: Process ID cần optimize
+            gpu_index: GPU device index
+            strategies: Danh sách strategies cần áp dụng (memory, compute, power)
+            
+        Returns:
+            Dict chứa kết quả optimization
+        """
+        try:
+            self.logger.info(f"🎯 [StrategyEngine] Starting optimization for PID {pid} on GPU {gpu_index}")
+            
+            # Default strategies nếu không specify
+            if strategies is None:
+                strategies = ['memory', 'compute', 'power']
+            
+            results = {
+                'success': True,
+                'pid': pid,
+                'gpu_index': gpu_index,
+                'strategies_applied': [],
+                'metrics': {}
+            }
+            
+            # Thu thập baseline metrics
+            baseline_metrics = self.metrics_hub.collect_metrics(pid) if self.metrics_hub else {}
+            results['metrics']['baseline'] = baseline_metrics
+            
+            # Áp dụng từng strategy qua existing components
+            for strategy in strategies:
+                try:
+                    if strategy == 'memory' and self.pattern_generator:
+                        # Memory optimization qua AdaptivePatternGenerator
+                        self.pattern_generator.generate_pattern('memory_efficient')
+                        results['strategies_applied'].append('memory')
+                        
+                    elif strategy == 'compute' and self.cloak_coordinator:
+                        # Compute optimization qua CloakCoordinator
+                        self.cloak_coordinator.apply_strategy(
+                            GpuCloakStrategy(target_pid=pid)
+                        )
+                        results['strategies_applied'].append('compute')
+                        
+                    elif strategy == 'power' and self.hardware_controller:
+                        # Power optimization qua OptimizedHardwareController  
+                        self.hardware_controller.apply_optimizations({
+                            'power_limit': 150,
+                            'temperature_target': 75
+                        })
+                        results['strategies_applied'].append('power')
+                        
+                except Exception as e:
+                    self.logger.warning(f"⚠️ [StrategyEngine] Failed to apply {strategy}: {e}")
+            
+            # Thu thập post-optimization metrics
+            post_metrics = self.metrics_hub.collect_metrics(pid) if self.metrics_hub else {}
+            results['metrics']['post'] = post_metrics
+            
+            self.logger.info(f"✅ [StrategyEngine] Optimization completed: {results['strategies_applied']}")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ [StrategyEngine] Optimization failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'pid': pid,
+                'gpu_index': gpu_index
+            }
+    
+    def apply_strategy(self, strategy_name: str, params: Optional[Dict] = None) -> bool:
+        """
+        Apply một strategy cụ thể với parameters.
+        
+        Args:
+            strategy_name: Tên strategy (gpu_cloak, memory_optimize, etc.)
+            params: Parameters cho strategy
+            
+        Returns:
+            True nếu thành công
+        """
+        try:
+            self.logger.info(f"📋 [StrategyEngine] Applying strategy: {strategy_name}")
+            
+            # Route đến appropriate handler
+            if strategy_name == 'gpu_cloak':
+                pid = params.get('pid', os.getpid())
+                self.cloak_coordinator.apply_strategy(
+                    GpuCloakStrategy(target_pid=pid)
+                )
+            elif strategy_name == 'memory_optimize':
+                self.pattern_generator.generate_pattern('memory_efficient')
+            elif strategy_name == 'power_optimize' and self.hardware_controller:
+                self.hardware_controller.apply_optimizations(params or {})
+            else:
+                self.logger.warning(f"⚠️ [StrategyEngine] Unknown strategy: {strategy_name}")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ [StrategyEngine] Failed to apply {strategy_name}: {e}")
+            return False
+    
+    def shutdown(self):
+        """Cleanup resources khi shutdown."""
+        try:
+            if hasattr(self, 'cloak_coordinator'):
+                # Cleanup coordinator resources
+                pass
+            self.logger.info("✅ [StrategyEngine] Shutdown completed")
+        except Exception as e:
+            self.logger.error(f"❌ [StrategyEngine] Shutdown error: {e}")

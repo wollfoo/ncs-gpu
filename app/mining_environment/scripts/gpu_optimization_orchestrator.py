@@ -29,11 +29,11 @@ try:
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
 except ImportError:
     # Fallback for standalone testing
-    from cloak_strategies import StrategyEngine, MetricsCollectionHub
+    from .cloak_strategies import StrategyEngine, MetricsCollectionHub
     from resource_control import OptimizedHardwareController, GPUResourceManager
-    from cross_process_coordination import CrossProcessCoordinator, ResourceType
-    from parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
-    from performance_profiler import get_profiler, profile_function
+    from .cross_process_coordination import CrossProcessCoordinator, ResourceType
+    from .parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
+    from .performance_profiler import PerformanceProfiler, profile_function
     from module_loggers import get_optimization_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity
 
