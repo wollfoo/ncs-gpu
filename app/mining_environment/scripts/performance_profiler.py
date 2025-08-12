@@ -195,7 +195,7 @@ class PerformanceProfiler:
                     
                     # Log if slow
                     if wall_time > 1.0:  # More than 1 second
-                    logger.warning(f"⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): {func_name} took {wall_time:.3f}s (mất {wall_time:.3f} giây)")
+                        logger.warning(f"⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): {func_name} took {wall_time:.3f}s (mất {wall_time:.3f} giây)")
                     
                     return result
                     
