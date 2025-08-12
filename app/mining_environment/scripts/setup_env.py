@@ -67,12 +67,28 @@ def validate_memory_config(config, logger):
         
         # **Configuration Analysis** (phân tích cấu hình)
         resource_allocation = config.get('resource_allocation', {})
+        if not isinstance(resource_allocation, dict):
+            resource_allocation = {}
+            config['resource_allocation'] = resource_allocation
         ram_config = resource_allocation.get('ram', {})
+        if not isinstance(ram_config, dict):
+            ram_config = {}
+            resource_allocation['ram'] = ram_config
         max_allocation_mb = ram_config.get('max_allocation_mb', 0)
-        
+
+        # **Auto-detect hard cap at 85% of total RAM** (giới hạn cứng 85% RAM khi ở chế độ tự động)
         if max_allocation_mb == 0:
-            logger.info("ℹ️ [MEMORY VALIDATION] No max_allocation_mb configured - using system defaults")
-            return True
+            safety_threshold = 0.85  # 85% safety threshold (ngưỡng an toàn 85%)
+            safe_allocation = int(available_ram * safety_threshold)  # bytes
+            safe_allocation_gb = safe_allocation / (1024 ** 3)
+            computed_mb = int(safe_allocation / (1024 * 1024))
+            # Update in-memory config to propagate downstream (cập nhật config trong bộ nhớ)
+            ram_config['max_allocation_mb'] = computed_mb
+            logger.info(
+                f"ℹ️ [MEMORY VALIDATION] Auto-detect mode enabled → hard cap set to 85% of system RAM: "
+                f"{safe_allocation_gb:.1f}GB ({computed_mb} MB)"
+            )
+            max_allocation_mb = computed_mb
             
         # **Convert MB to bytes for comparison** (chuyển đổi MB sang byte để so sánh)
         configured_ram = max_allocation_mb * 1024 * 1024
@@ -405,9 +421,13 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
 
         # 1. **Check RAM Allocation** (kiểm tra cấp phát RAM – validate RAM allocation)
         ram_allocation = resource_config.get('resource_allocation', {}).get('ram', {})
-        ram_max_mb = ram_allocation.get('max_allocation_mb')
-        if not validate_threshold(ram_max_mb, 1024, 200000, "max_allocation_mb"):
-            sys.exit(1)
+        ram_max_mb = ram_allocation.get('max_allocation_mb', 0)
+        # Allow 0 as "auto-detect" mode to remove hard memory limit
+        if ram_max_mb == 0:
+            logger.info("ℹ️ **max_allocation_mb=0** => **Auto-detect mode** (chế độ tự động – không giới hạn cứng). **Skipping strict RAM threshold validation** (bỏ qua kiểm tra ngưỡng RAM nghiêm ngặt).")
+        else:
+            if not validate_threshold(ram_max_mb, 1024, 200000, "max_allocation_mb"):
+                sys.exit(1)
 
         # ✅ **CPU LOGIC REMOVED** (logic CPU đã xóa) - **Only GPU processing remains** (chỉ còn xử lý GPU)
         logger.info("✅ **CPU configuration skipped** (bỏ qua cấu hình CPU – skip CPU config) - **GPU-only mode enabled** (chế độ chỉ GPU đã bật – GPU-only mode ON)")

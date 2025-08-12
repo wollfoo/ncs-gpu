@@ -1,6 +1,5 @@
 {
     "_comment": "Cấu hình tài nguyên dành cho ResourceManager...",
-
     "processes": {
         "GPU": "inference-cuda"
     },
@@ -8,7 +7,6 @@
         "inference-cuda": 3
     },
     "network_interface": "eth0",
-
     "optimization_parameters": {
         "gpu_power_adjustment_step": 10,
         "gpu_load_balancing": "round_robin",
@@ -17,40 +15,46 @@
         "tensor_core_utilization": true,
         "disk_io_limit_step_mbps": 10
     },
-
     "cloaking_strategies": {
-        "gpu_cloaking":   { 
-            "enabled": true, 
-            "debug": true, 
+        "gpu_cloaking": {
+            "enabled": true,
+            "debug": true,
             "stealth_mode": true,
             "adaptive_throttling": true,
             "smart_power_scaling": true,
             "emergency_fallback": true
         },
-        "network":        { "enabled": true, "debug": true },
-        "memory":         { 
-            "enabled": true, 
-            "debug": true, 
-            "smart_mode": true, 
+        "network": {
+            "enabled": true,
+            "debug": true
+        },
+        "memory": {
+            "enabled": true,
+            "debug": true,
+            "smart_mode": true,
             "gpu_aware": true,
             "memory_limit_mb": 0
         },
-        "cache":          { "enabled": true, "debug": true }
+        "cache": {
+            "enabled": true,
+            "debug": true
+        }
     },
-
     "hook_coordination": {
         "sequential_activation": true,
         "activation_delay_ms": 100,
         "memory_safety_priority": true,
         "gpu_process_detection": true
     },
-
     "resource_allocation": {
         "ram": {
-            "max_allocation_mb": 98304
+            "max_allocation_mb": 0
         },
         "gpu": {
-            "max_usage_percent": [90,90],
+            "max_usage_percent": [
+                90,
+                90
+            ],
             "accelerators": {
                 "count": 2,
                 "model": "Nvidia Tesla V100",
@@ -76,18 +80,15 @@
             "limit_percent": 50
         }
     },
-
     "monitoring_parameters": {
         "temperature_monitoring_interval_seconds": 15,
         "power_monitoring_interval_seconds": 15,
         "azure_monitor_interval_seconds": 300,
         "optimization_interval_seconds": 30
     },
-
     "temperature_limits": {
         "gpu_max_celsius": 85
     },
-
     "power_limits": {
         "total_power_watts": {
             "max": 650
@@ -97,14 +98,12 @@
             "gpu_per_unit": 250
         }
     },
-
     "baseline_thresholds": {
         "gpu_usage_percent": 90,
         "ram_usage_percent": 75,
         "disk_io_usage_mbps": 90,
         "network_usage_mbps": 90
     },
-
     "safe_restore_parameters": {
         "enable_safe_restore": true,
         "max_retry_attempts": 3,
@@ -116,7 +115,6 @@
             "check_traffic_anomalies": true
         }
     },
-
     "azure_integration": {
         "sentinel": {
             "alert_check_days": 1
@@ -131,18 +129,15 @@
             "check_interval_minutes": 10
         }
     },
-
     "azure_anomaly_detector": {
         "api_base": "https://eastus2.api.cognitive.microsoft.com/",
         "key_vault_url": "https://llmsskeyvault.vault.azure.net/"
     },
-
     "azure_openai": {
         "api_base": "https://interchangeczz.openai.azure.com/",
         "deployment_name": "gpt-4o",
         "api_version": "2024-08-01-preview"
     },
-
     "server_config": {
         "server_type": "Standard_NC12s_v3",
         "os_name": "Ubuntu",
@@ -154,7 +149,6 @@
             "storage_usage_percent": 90.0
         }
     },
-
     "optimization_goals": {
         "ram_allocation_mb": "Ensure sufficient RAM allocation without waste.",
         "gpu_usage_percent": "Balance GPU usage to avoid bottlenecks.",
@@ -162,17 +156,14 @@
         "network_bandwidth_limit_mbps": "Optimize network bandwidth to efficiently transmit data.",
         "cache_limit_percent": "Efficiently allocate cache to improve data retrieval speed."
     },
-
     "ai_driven_monitoring": {
         "enabled": true
     },
-
     "log_analytics": {
         "enabled": true,
         "log_level": "DEBUG",
         "log_destination": "logs/resource_manager.log"
     },
-
     "alert_thresholds": {
         "gpu_usage_percent": 90,
         "ram_usage_percent": 90,
