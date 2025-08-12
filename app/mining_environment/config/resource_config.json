@@ -4,7 +4,7 @@
         "GPU": "inference-cuda"
     },
     "process_priority_map": {
-        "inference-cuda": 3
+        "inference-cuda": 1
     },
     "network_interface": "eth0",
     "optimization_parameters": {
