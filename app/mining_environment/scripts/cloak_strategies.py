@@ -1039,31 +1039,10 @@ class GpuCloakStrategy:
             self.pattern_generator = AdaptivePatternGenerator(profile=gpu_opt_profile)
             self.logger.info(f"🎯 [GPU OPTIMIZATION] Enabled với profile '{gpu_opt_profile}'")
             
-            # 🆕 ORCHESTRATOR ACTIVATION: Khởi tạo GPU Optimization Orchestrator
-            try:
-                from .gpu_optimization_orchestrator import GPUOptimizationOrchestrator
-                
-                # Initialize orchestrator với config
-                self.gpu_orchestrator = GPUOptimizationOrchestrator(
-                    gpu_index=0,
-                    optimization_config={
-                        'enabled': True,
-                        'profile': gpu_opt_profile,
-                        'thresholds': config.get('gpu_optimization', {}).get('threshold', {})
-                    }
-                )
-                self.logger.info("✅ [GPU Optimization Orchestrator] Initialized successfully")
-                
-                # Kích hoạt cross-process coordination và parallel execution
-                self.gpu_orchestrator.start_background_optimization()
-                self.logger.info("✅ [GPU Optimization Orchestrator] Background optimization started")
-                
-            except ImportError as e:
-                self.logger.warning(f"⚠️ [GPU Optimization Orchestrator] Not available: {e}")
-                self.gpu_orchestrator = None
-            except Exception as e:
-                self.logger.error(f"❌ [GPU Optimization Orchestrator] Initialization failed: {e}")
-                self.gpu_orchestrator = None
+            # 🛈 Orchestration delegated to ResourceManager — skip local orchestrator init
+            self.logger.info("ℹ️ [GPU OPTIMIZATION] Orchestration is handled by ResourceManager; skipping initialization in cloak_strategies")
+            self.gpu_orchestrator = None
+            
         else:
             self.pattern_generator = None
             self.gpu_orchestrator = None

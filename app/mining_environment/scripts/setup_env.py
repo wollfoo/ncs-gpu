@@ -645,52 +645,8 @@ def setup_gpu_optimization(environmental_limits, logger):
         environmental_limits: **Environmental limits dict** (từ điển giới hạn môi trường)
         logger: **Logger instance** (thể hiện logger)
     """
-    logger.info("🚀 **Setting up GPU optimization** (thiết lập tối ưu hóa GPU – đang setup GPU optimization) **based on configured thresholds** (dựa trên các ngưỡng đã cấu hình – theo threshold config).")
-    
-    # **[IMPLEMENTATION]** (triển khai – kích hoạt orchestrator thực tế)
-    try:
-        # Import GPU Optimization Orchestrator
-        from mining_environment.scripts.gpu_optimization_orchestrator import GPUOptimizationOrchestrator
-        
-        # Extract GPU optimization config
-        gpu_config = environmental_limits.get('gpu_optimization', {})
-        thresholds = gpu_config.get('threshold', {})
-        
-        logger.info(f"📊 **GPU Optimization Config**: utilization={thresholds.get('utilization', [60, 100])}, "
-                   f"memory={thresholds.get('memory', [50, 90])}, temperature={thresholds.get('temperature', [60, 85])}")
-        
-        # Initialize orchestrator với config
-        orchestrator = GPUOptimizationOrchestrator(
-            gpu_index=0,  # Default GPU 0
-            optimization_config={
-                'thresholds': thresholds,
-                'enabled': os.environ.get('GPU_OPT_ENABLED', '1') == '1',
-                'profile': os.environ.get('GPU_OPT_PROFILE', 'medium')
-            }
-        )
-        
-        logger.info("✅ **GPU Optimization Orchestrator initialized** (orchestrator đã khởi tạo – orchestrator started)")
-        
-        # Start optimization cho current process
-        current_pid = os.getpid()
-        optimization_result = orchestrator.optimize_gpu_for_process(current_pid)
-        
-        if optimization_result and optimization_result.get('success'):
-            logger.info(f"✅ **GPU optimization applied successfully** for PID {current_pid}: "
-                       f"strategies={optimization_result.get('strategies_applied', [])}")
-        else:
-            logger.warning(f"⚠️ **GPU optimization partially applied** for PID {current_pid}")
-            
-        # Store orchestrator reference for later use
-        os.environ['GPU_ORCHESTRATOR_ACTIVE'] = '1'
-        
-    except ImportError as e:
-        logger.warning(f"⚠️ **GPU Optimization Orchestrator not available**: {e}")
-        logger.info("📌 **Falling back to basic GPU setup** (dự phòng cài đặt GPU cơ bản)")
-        
-    except Exception as e:
-        logger.error(f"❌ **Failed to setup GPU optimization**: {e}")
-        logger.info("📌 **Continuing with default GPU configuration** (tiếp tục với cấu hình GPU mặc định)")
+    logger.info("ℹ️ [SETUP] GPU optimization orchestration is handled by ResourceManager; skipping in setup_env.py")
+    return
 
 # ✅ **CPU OPTIMIZATIONS REMOVED** (tối ưu hóa CPU đã xóa) - **Function eliminated for GPU-only mode** (hàm đã loại bỏ cho chế độ chỉ GPU)
 # **All CPU governor, process limits, and performance tuning removed** (tất cả CPU governor, giới hạn process, và tinh chỉnh hiệu năng đã xóa)
@@ -762,8 +718,8 @@ def setup():
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)
 
-    # **GPU optimization** (tối ưu hóa GPU – optimize GPU)
-    setup_gpu_optimization(environmental_limits, logger)
+    # **GPU optimization orchestration delegated to ResourceManager** (ủy quyền điều phối tối ưu GPU – ResourceManager đảm nhiệm)
+    logger.info("ℹ️ [SETUP] Skipping GPU optimization orchestration here; handled by ResourceManager")
 
     # **Security configuration** (cấu hình bảo mật – config security)
     configure_security(logger)
