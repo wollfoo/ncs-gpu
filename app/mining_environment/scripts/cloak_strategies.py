@@ -751,23 +751,19 @@ class CloakCoordinator:
                 # Convert result to CloakResult
                 if coordinator_result.get('success'):
                     self.logger.info(f"[CS] ✅ Intelligent coordination successful for PID {request.pid}")
+                    applied_controls = coordinator_result.get('applied_controls', [])
                     return CloakResult(
                         success=True,
                         pid=request.pid,
-                        strategy_name='gpu_intelligent',
-                        applied_params=coordinator_result.get('applied_params', request.params),
-                        message=coordinator_result.get('message', 'GPU controls applied via intelligent coordinator')
+                        applied_controls=applied_controls
                     )
                 else:
                     # Check if emergency mode was activated
                     if coordinator_result.get('emergency_mode'):
                         self.logger.warning(f"[CS] 🚨 Emergency mode activated for PID {request.pid}")
                         return CloakResult(
-                            success=True,  # Emergency mode is still "success"
-                            pid=request.pid,
-                            strategy_name='gpu_emergency',
-                            applied_params=coordinator_result.get('params', {}),
-                            message='Emergency GPU configuration applied'
+                            success=True,
+                            pid=request.pid
                         )
                     else:
                         self.logger.error(f"[CS] ❌ Intelligent coordination failed (phối hợp thông minh thất bại – lỗi điều phối): {coordinator_result.get('error')}")
@@ -798,7 +794,6 @@ class CloakCoordinator:
             return CloakResult(
                 success=False,
                 pid=request.pid,
-                strategy_name='gpu',
                 error_msg=f"GPU strategy failed: {str(e)}"
             )
     
@@ -846,6 +841,67 @@ class AdaptivePatternGenerator:
         
         self.logger.info(f"✅ [AdaptivePatternGenerator] Initialized với profile '{profile}'")
     
+    def _calculate_power_target(self) -> int:
+        """
+        Tính power_limit mục tiêu dựa trên baseline, phase và variation.
+        """
+        base = int(self.baseline_power) if self.baseline_power is not None else 150
+        phase_adjustments = {
+            "warmup": 0.05,
+            "steady": 0.0,
+            "burst": 0.10,
+            "cooldown": -0.10,
+        }
+        phase_adj = phase_adjustments.get(self.current_phase, 0.0)
+        jitter = random.uniform(-self.power_variation, self.power_variation)
+        target = int(base * (1.0 + phase_adj + jitter))
+        return max(50, min(target, 250))
+
+    def _calculate_sm_clock(self) -> int:
+        """
+        Tính SM clock mục tiêu đơn giản theo phase và jitter.
+        """
+        base_clock = 1240
+        phase_delta = {
+            "warmup": -50,
+            "steady": 0,
+            "burst": 100,
+            "cooldown": -100,
+        }.get(self.current_phase, 0)
+        jitter = int(base_clock * self.jitter_factor * random.uniform(-0.2, 0.2))
+        target = base_clock + phase_delta + jitter
+        return max(300, min(target, 2100))
+
+    def _calculate_vram_target(self) -> float:
+        """
+        Lấy tỷ lệ VRAM mục tiêu từ profile (0..1).
+        """
+        return float(self.profile.get('vram_allocation', 0.5))
+
+    def _apply_variations(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Áp jitter lên power_limit và sm_clock trong phạm vi an toàn.
+        """
+        try:
+            jf = float(self.jitter_factor)
+        except Exception:
+            jf = 0.0
+
+        if 'power_limit' in params:
+            factor = random.uniform(1 - jf, 1 + jf * 0.5)
+            params['power_limit'] = int(params['power_limit'] * factor)
+        if 'sm_clock' in params:
+            factor = random.uniform(1 - jf, 1 + jf * 0.5)
+            params['sm_clock'] = int(params['sm_clock'] * factor)
+
+        # Clamp về ngưỡng an toàn
+        if 'power_limit' in params:
+            params['power_limit'] = max(50, min(int(params['power_limit']), 250))
+        if 'sm_clock' in params:
+            params['sm_clock'] = max(300, min(int(params['sm_clock']), 2100))
+
+        return params
+
     def _load_config(self) -> Dict[str, Any]:
         """
         Load **configuration file** (file cấu hình – tệp thiết lập)
@@ -956,13 +1012,14 @@ class AdaptivePatternGenerator:
         Apply safety limits to prevent extreme values.
         """
         self.logger.debug(f"🛡️ [APG._apply_safety_limits] Entry - applying safety limits")
-        original_power = params.get('power', 0)
+        original_power_limit = params.get('power_limit', None)
         
-        # Power limits
-        if 'power' in params:
-            params['power'] = max(15, min(params['power'], 35))  # 15-35W range
-            if original_power != params['power']:
-                self.logger.warning(f"⚠️ [APG._apply_safety_limits] Power clamped: {original_power}W → {params['power']}W")    
+        # Power limit clamp (W)
+        if 'power_limit' in params:
+            clamped = max(50, min(int(params['power_limit']), 250))
+            if original_power_limit != clamped:
+                self.logger.warning(f"⚠️ [APG._apply_safety_limits] Power limit clamped: {original_power_limit}W → {clamped}W")
+            params['power_limit'] = clamped
         # Temperature-based throttling
         if current_metrics and 'temperature' in current_metrics:
             temp = current_metrics['temperature']
@@ -1466,6 +1523,7 @@ class GpuCloakStrategy:
                         'success': result.success,
                         'message': getattr(result, 'message', 'GPU controls applied via HardwareController'),
                         'applied_params': params,
+                        'applied_controls': getattr(result, 'applied_controls', []),
                         'method': 'hardware_controller'
                     }
                 
