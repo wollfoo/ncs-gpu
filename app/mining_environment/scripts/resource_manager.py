@@ -706,14 +706,7 @@ class ResourceManager(IResourceManager):
                                 if cooldown_sec > 0:
                                     time.sleep(cooldown_sec)
 
-                                # Thực thi tối ưu hoá ở nền
-                                self._gpu_orchestrator.optimize_gpu_for_process(
-                                    pid=pid_val,
-                                    gpu_index=gpu_idx,
-                                    strategies=None
-                                )
-                                
-                                # Thu kết quả để đánh giá rollback (nếu cần)
+                                # Thực thi tối ưu hoá và lấy kết quả một lần (tránh double-call)
                                 try:
                                     opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
                                         pid=pid_val,

@@ -732,6 +732,8 @@ class GPUResourceManager:
                 return health_metrics
             
             health_metrics['pid_exists'] = True
+            # Alias for backward compatibility to avoid downstream KeyError
+            health_metrics['exists'] = health_metrics['pid_exists']
             
             # Step 2: Get process object and basic info
             try:
@@ -1371,7 +1373,14 @@ class OptimizedHardwareController:
             # **Validate PID health** (xác minh sức khỏe PID)
             self.logger.debug(f"🏥 [OHC.optimize_for_pid] Validating PID {pid} health...")
             health = self.gpu_manager.validate_pid_health(pid)
-            if not health['exists']:
+            # FIX: dùng khóa 'pid_exists' thay vì 'exists' (tránh [KeyError] (lỗi truy cập khóa – ngoại lệ khi khóa không tồn tại))
+            # Backward-compatible: ưu tiên 'pid_exists'; chỉ fallback sang 'exists' nếu có, không truy cập trực tiếp để tránh KeyError
+            pid_exists = False
+            try:
+                pid_exists = bool(health.get('pid_exists', False) or health.get('exists', False))
+            except Exception:
+                pid_exists = False
+            if not pid_exists:
                 self.logger.error(f"❌ [OHC.optimize_for_pid] Process {pid} not found")
                 results['error'] = f"Process {pid} not found"
                 return results
