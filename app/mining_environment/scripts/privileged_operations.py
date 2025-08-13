@@ -28,10 +28,10 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
                 except Exception as e:
                     last_error = e
                     if attempt < max_retries - 1:
-                        self.logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e}")
+                        self.logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e} (lần thử {attempt + 1} thất bại cho {func.__name__} – lỗi: {e})")
                         time.sleep(delay * (attempt + 1))  # Exponential backoff
                     else:
-                        self.logger.error(f"All {max_retries} attempts failed for {func.__name__}: {e}")
+                        self.logger.error(f"All {max_retries} attempts failed for {func.__name__}: {e} (tất cả {max_retries} lần thử đều thất bại cho {func.__name__} – lỗi: {e})")
             if last_error:
                 raise last_error
             else:
@@ -109,9 +109,9 @@ class PrivilegedOperationManager:
     
     def load_ebpf_program(self, bpf_obj_path: str) -> bool:
         """
-        eBPF functionality removed for memory optimization
+        eBPF functionality removed for memory optimization (chức năng eBPF đã bị gỡ để tối ưu bộ nhớ)
         """
-        self.logger.warning("eBPF functionality has been removed for memory optimization")
+        self.logger.warning("eBPF functionality has been removed for memory optimization (chức năng eBPF đã bị gỡ để tối ưu bộ nhớ)")
         return False
     
     def create_namespace_isolation(self, command: List[str]) -> subprocess.Popen:
@@ -130,7 +130,7 @@ class PrivilegedOperationManager:
                 stderr=subprocess.PIPE
             )
             
-            self.logger.info(f"Created isolated process with PID: {process.pid}")
+            self.logger.info(f"Created isolated process with PID: {process.pid} (đã tạo tiến trình cô lập với PID: {process.pid})")
             return process
             
         except Exception as e:
@@ -150,7 +150,7 @@ class PrivilegedOperationManager:
             ], check=False)
             
             if result.returncode == 0:
-                self.logger.info(f"GPU {gpu_id} clocks set: SM={sm_clock}MHz, MEM={mem_clock}MHz")
+                self.logger.info(f"GPU {gpu_id} clocks set: SM={sm_clock}MHz, MEM={mem_clock}MHz (đã đặt xung nhịp GPU: SM={sm_clock}MHz, MEM={mem_clock}MHz)")
                 return True
             else:
                 # Try alternative method via sysfs
@@ -174,11 +174,11 @@ class PrivilegedOperationManager:
             
             for path in sysfs_paths:
                 if Path(path).exists():
-                    self.logger.info(f"Found sysfs control at: {path}")
+                    self.logger.info(f"Found sysfs control at: {path} (tìm thấy điểm điều khiển sysfs tại: {path})")
                     # Implement sysfs clock control if needed
                     return True
                     
-            self.logger.warning(f"No sysfs controls found for GPU {gpu_id}")
+            self.logger.warning(f"No sysfs controls found for GPU {gpu_id} (không tìm thấy điều khiển sysfs cho GPU {gpu_id})")
             return False
             
         except Exception as e:
@@ -270,7 +270,7 @@ class PrivilegedOperationManager:
         current_time = time.time()
         if (self._gpu_info_cache is not None and 
             current_time - self._gpu_info_cache_time < self._cache_ttl):
-            self.logger.debug("Returning cached GPU info")
+            self.logger.debug("Returning cached GPU info (trả về thông tin GPU từ bộ đệm – cache)")
             return self._gpu_info_cache
             
         access_info = {

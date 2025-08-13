@@ -611,7 +611,7 @@ class IPCClient:
         self.max_retries = IPCBridgeConfig.MAX_RETRIES
         self.retry_delay = IPCBridgeConfig.INITIAL_RETRY_DELAY
         
-        logger.info(f"🏗️ [IPC-CLIENT] IPCClient initialized with process_id: {self.process_id}")
+        logger.info(f"🏗️ [IPC-CLIENT] IPCClient initialized with process_id: {self.process_id} (IPCClient đã khởi tạo với process_id: {self.process_id})")
     
     def send_message(self, message_type: IPCMessageType, payload: Dict[str, Any], 
                     priority: IPCPriority = IPCPriority.NORMAL, 
@@ -674,7 +674,7 @@ class IPCClient:
                 time.sleep(retry_delay * (attempt + 1))
             return False
         except Exception as err:
-            logger.debug(f"Queue send failed: {err}")
+            logger.debug(f"Queue send failed: {err} (gửi qua queue thất bại – lỗi: {err})")
             return False
 
     def _send_via_file(self, message: IPCMessage) -> bool:
@@ -723,7 +723,7 @@ class IPCClient:
                 raise write_error
                 
         except Exception as e:
-            logger.error(f"❌ [IPC-CLIENT] File-based send failed: {e}")
+            logger.error(f"❌ [IPC-CLIENT] File-based send failed: {e} (gửi qua file thất bại – lỗi: {e})")
             return False
     
     def send_pid_forward(self, pid: int, metadata: Dict[str, Any]) -> bool:
@@ -782,7 +782,7 @@ def test_ipc_bridge() -> bool:
         bool: True nếu test thành công
     """
     try:
-        logger.info("🧪 [IPC-TEST] Starting IPC Bridge test...")
+        logger.info("🧪 [IPC-TEST] Starting IPC Bridge test... (bắt đầu kiểm thử IPC Bridge)")
         
         # **Test Message Creation** (kiểm tra tạo tin nhắn)
         test_message = IPCMessage(
