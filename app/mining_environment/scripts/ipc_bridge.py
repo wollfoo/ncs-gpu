@@ -370,7 +370,7 @@ class IPCServer:
                         self.message_queue.put(priority_tuple, block=False)
                         with self.stats_lock:
                             self.stats['messages_received'] += 1
-                logger.warning(f"⚠️ [IPC-SERVER] Queue was full (hàng đợi đầy – quá tải), succeeded on retry {attempt+1} (thành công ở lần thử {attempt+1})")
+                        logger.warning(f"⚠️ [IPC-SERVER] Queue was full (hàng đợi đầy – quá tải), succeeded on retry {attempt+1} (thành công ở lần thử {attempt+1})")
                         return True
                     except queue.Full:
                         continue
@@ -539,7 +539,7 @@ class IPCServer:
             queued = self.send_message_to_queue(message)
             
             if queued:
-            logger.debug(f"📁 [IPC-MONITOR] File message queued (đã xếp hàng thông điệp từ tệp): {message_file.name}")
+                logger.debug(f"📁 [IPC-MONITOR] File message queued (đã xếp hàng thông điệp từ tệp): {message_file.name}")
                 
                 # **Remove Processed File** (xóa file đã xử lý)
                 try:
@@ -565,9 +565,9 @@ class IPCServer:
                     if file_age > IPCBridgeConfig.FILE_CLEANUP_AGE:
                         file_path.unlink()
                         cleanup_count += 1
-                logger.debug(f"🧹 [IPC-CLEANUP] Removed old file (đã xóa tệp cũ – dọn dẹp): {file_path.name} (age: {file_age:.1f}s)")
+                        logger.debug(f"🧹 [IPC-CLEANUP] Removed old file (đã xóa tệp cũ – dọn dẹp): {file_path.name} (age: {file_age:.1f}s)")
                 except Exception as file_err:
-                logger.debug(f"⚠️ [IPC-CLEANUP] Could not process file (không thể xử lý tệp – lỗi quyền/định dạng) {file_path.name}: {file_err}")
+                    logger.debug(f"⚠️ [IPC-CLEANUP] Could not process file (không thể xử lý tệp – lỗi quyền/định dạng) {file_path.name}: {file_err}")
             
             if cleanup_count > 0:
                 logger.debug(f"🧹 [IPC-CLEANUP] Cleaned up (đã dọn dẹp – xóa tệp cũ) {cleanup_count} old message files")
