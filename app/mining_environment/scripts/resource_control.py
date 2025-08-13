@@ -221,6 +221,31 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi get_gpu_power_limit GPU={gpu_index}: {e}")
             return None
 
+    def get_gpu_power_usage(self, gpu_index: int) -> Optional[float]:
+        """
+        **Get GPU Power Usage** (lấy mức tiêu thụ điện hiện tại của GPU – đơn vị Watt)
+        
+        Backward-compat alias để đáp ứng các callsite hiện có.
+        - Ưu tiên NVML; nếu không đọc được, trả None để callsite xử lý fallback.
+        
+        :param gpu_index: Chỉ số GPU
+        :return: Công suất hiện tại (W) hoặc None nếu không đọc được
+        """
+        try:
+            if not self.gpu_initialized:
+                return None
+            handle = self.get_handle(gpu_index)
+            if not handle:
+                return None
+            power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
+            return float(power_mw) / 1000.0  # mW -> W
+        except Exception as e:
+            self.logger.debug(f"[GPUResourceManager] Cannot read power usage for GPU={gpu_index}: {e}")
+            return None
+
+    # Backward-compat alias (bí danh tương thích ngược)
+    get_current_power_usage = get_gpu_power_usage
+
     def set_gpu_power_limit(self, pid: Optional[int], gpu_index: int, power_limit_w: int) -> bool:
         """
         Đặt power limit cho GPU (đồng bộ).
