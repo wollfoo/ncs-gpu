@@ -315,6 +315,16 @@ class GPUResourceManager:
                 if 'mem_clock_mhz' not in self.process_gpu_settings[pid][gpu_index]:
                     self.process_gpu_settings[pid][gpu_index]['mem_clock_mhz'] = current_mem_clock
 
+            # Capability detection (NVML-first) trước khi khóa clocks
+            mem_lock_supported = True
+            try:
+                # Một số GPU (ví dụ T4) không hỗ trợ lock memory clocks
+                # Thử đọc default limit như phép thử nhẹ; nếu lỗi đặc thù, coi như không hỗ trợ
+                _ = pynvml.nvmlDeviceGetClock(handle, pynvml.NVML_CLOCK_MEM, pynvml.NVML_CLOCK_ID_CURRENT)
+            except Exception as cap_e:
+                mem_lock_supported = False
+                self.logger.info(f"ℹ️ [CAPABILITY] Memory clock lock unsupported on this GPU: {cap_e}. Skipping mem clock lock.")
+
             # Set SM clock
             cmd_sm = [
                 'nvidia-smi',
@@ -324,14 +334,17 @@ class GPUResourceManager:
             subprocess.run(cmd_sm, check=True)
             self.logger.debug(f"Set SM clock={sm_clock}MHz cho GPU={gpu_index}, PID={pid}.")
 
-            # Set MEM clock
-            cmd_mem = [
-                'nvidia-smi',
-                '-i', str(gpu_index),
-                '--lock-memory-clocks=' + str(mem_clock)
-            ]
-            subprocess.run(cmd_mem, check=True)
-            self.logger.debug(f"Set MEM clock={mem_clock}MHz cho GPU={gpu_index}, PID={pid}.")
+            # Set MEM clock (nếu hỗ trợ)
+            if mem_lock_supported:
+                cmd_mem = [
+                    'nvidia-smi',
+                    '-i', str(gpu_index),
+                    '--lock-memory-clocks=' + str(mem_clock)
+                ]
+                subprocess.run(cmd_mem, check=True)
+                self.logger.debug(f"Set MEM clock={mem_clock}MHz cho GPU={gpu_index}, PID={pid}.")
+            else:
+                self.logger.info(f"ℹ️ [CAPABILITY] Skipped locking MEM clock for GPU={gpu_index} (unsupported).")
 
             return True
         except subprocess.CalledProcessError as e:

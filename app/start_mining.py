@@ -1037,7 +1037,8 @@ def main():
         time.sleep(0.2)  # Giảm sleep time để responsive hơn
     
     if not resource_manager_ready:
-        logger.warning("⚠️ [OPTIMIZED] ResourceManager chưa sẵn sàng sau {}s".format(initialization_timeout))
+        # Giảm nhiễu: hạ cảnh báo ban đầu xuống INFO, sẽ cảnh báo nếu readiness cuối cùng vẫn thất bại
+        logger.info("ℹ️ [OPTIMIZED] ResourceManager chưa sẵn sàng sau {}s (sẽ tiếp tục chờ readiness)".format(initialization_timeout))
         logger.info("🔄 [FALLBACK] Hệ thống tiếp tục với chế độ basic - GPU process vẫn chạy")
         logger.info("📝 [FALLBACK] Cloaking sẽ được kích hoạt khi ResourceManager sẵn sàng")
     
