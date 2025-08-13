@@ -1,221 +1,236 @@
-## 📊 **BÁO CÁO PHÂN TÍCH LỖI HỆ THỐNG GPU**
+Mục tiêu: Điều tra chuỗi GPU Optimization trong `/app`, kiểm tra log, tìm nguyên nhân thiếu log cho 3 class, xác minh kích hoạt tối ưu GPU và đề xuất -
+### Checklist Năng Lực Cần Thiết
+- ✅ Hiểu cơ chế quản lý tiến trình GPU (GPU process management – quản lý vòng đời, ánh xạ PID→GPU)
+- ✅ Kinh nghiệm đọc – phân tích log (log analysis – bóc tách luồng, đối chiếu theo mốc thời gian)
+- ✅ Thành thạo Docker, bash, Python scripting
+- ✅ Sử dụng TREE-OF-THOUGHT (tư duy phân nhánh) & SELF-REFINE (tự phê bình)
+- ✅ Evidence-only, anti-hallucination (chỉ dựa chứng cứ, không suy diễn)
 
-### 🎯 **NGUYÊN NHÂN GỐC ĐÃ XÁC ĐỊNH**
-
-#### **1. Thông Tin Lỗi Chi Tiết**
-
-**Log Error** (nhật ký lỗi - bản ghi sự cố):
-- **Thời điểm**: `2025-08-13 09:23:22,784` và `09:23:23,354`
-- **Module báo lỗi**: `gpu_optimization.gpu`
-- **PID bị ảnh hưởng**: 240 (tiến trình [inference-cuda](cci:7://file:///home/azureuser/opus-gpu/app/inference-cuda:0:0-0:0))
-- **Nội dung lỗi**: `'exists'` - đây là **KeyError** (lỗi khóa không tồn tại - khi truy cập dictionary với key không có)
-
-#### **2. Vị Trí Phát Sinh Lỗi**
-
-📍 **File nguồn**: [/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0)
-- **Dòng 1412-1413**: Nơi bắt **exception** (ngoại lệ - lỗi runtime) và ghi log
-- **Dòng 1376**: Điểm phát sinh lỗi thực sự
-
-#### **3. Nguyên Nhân Kỹ Thuật**
-
-**Mâu thuẫn trong data structure** (cấu trúc dữ liệu - cách tổ chức thông tin):
-
-1. **Method [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29)** (dòng 697-750) trả về dictionary với key `'pid_exists'` (dòng 734)
-2. **Method [optimize_for_pid](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1288:4-1416:22)** (dòng 1376) lại cố gắng truy cập key `'exists'` trước
-
-**Code hiện tại** (dòng 1376):
-```python
-if not health.get('pid_exists', health.get('exists', False)):
+### Surface-Level (đọc nhanh code & log)
+- Luồng chính đã được triển khai đầy đủ theo kiến trúc tuyến tính:
+  - `stealth_inference_cuda.py` gọi `HookCoordinator` để bàn giao PID:
+```360:381:app/mining_environment/stealth/wrappers/stealth_inference_cuda.py
+# 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
+coordinator = get_hook_coordinator()
+success = coordinator.receive_from_stealth_wrapper(
+    pid=process.pid,
+    process_metadata=process_metadata,
+    subprocess_env=clean_env
+)
+```
+  - `HookCoordinator` nhận PID và thực hiện readiness check, sau đó chuyển tiếp đến `DirectPIDRegistry`:
+```584:617:app/mining_environment/coordination/coordinator.py
+self.logger.info(f"🚀 **[LINEAR-FLOW] Receiving PID {pid} ...**")
+# **STEP 1: Register PID with HookCoordinator**
+self.hooks_ready[pid] = False
+...
+# **TIER 7.1 FIX** Enhanced readiness check ...
+readiness_result = self._enhanced_readiness_check(pid, timeout=30, subprocess_env=subprocess_env)
+```
+  - `DirectPIDRegistry` thông báo observers và forward đến `ResourceManager` + gửi ACK môi trường:
+```540:571:app/pid_logger/direct_registry.py
+self._notify_observers(process_info)
+logger.info(f"📢 [LINEAR-FLOW] Notified {len(self._observers)} observers about PID {pid}")
+rm_success = self._forward_to_resource_manager(pid, coordinator_metadata, process_info)
+os.environ[ack_env_var] = str(ack_timestamp)
+```
+  - `ResourceManager` có callback observer và trigger cloaking + gọi GPU Optimization:
+```643:689:app/mining_environment/scripts/resource_manager.py
+def trigger_cloaking(...):
+    self.cloak_coordinator = CloakCoordinator(self.config)
+    request = CloakRequest(pid=process.pid, strategy_name=None, params={}, metadata={"source": source, "process_name": process.name})
+    result = self.cloak_coordinator.process_request(request)
+    if result.success:
+        self.logger.info(f"[RM] ✅ Cloaking successful for PID {process.pid}")
+        ...
+```
+```691:741:app/mining_environment/scripts/resource_manager.py
+if self._gpu_orchestrator is not None:
+    self.logger.info(f"[RM] 🎯 Triggering GPU Optimization for PID {process.pid}")
+    t = threading.Thread(target=_optimize_async, args=(process.pid, gpu_index), name=f"RM-GPU-OPT-{process.pid}", daemon=True)
+    t.start()
+```
+  - `CloakCoordinator` định tuyến GPU strategy xuống `HardwareController`:
+```780:789:app/mining_environment/scripts/cloak_strategies.py
+control_params = {'pid': request.pid, **request.params}
+result = self.hw_controller.apply_gpu_controls(control_params)
+```
+- Hệ thống `IPC Bridge` được bật ở cả RM (server) và DirectRegistry (client):
+```381:435:app/mining_environment/scripts/resource_manager.py
+self._ipc_server = create_ipc_server()
+self._ipc_server.register_callback(IPCMessageType.PID_FORWARD, self._handle_ipc_pid_forward)
+server_started = self._ipc_server.start()
+```
+```1703:1729:app/pid_logger/direct_registry.py
+from mining_environment.scripts.ipc_bridge import create_ipc_client
+self._ipc_client = create_ipc_client(process_id=process_id)
+self._ipc_enabled = True
+```
+- Module loggers tách log theo file chuyên biệt (không dồn vào `mining_debug.log`):
+```28:39:app/mining_environment/scripts/module_loggers.py
+_gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')
+_gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 ```
 
-Vấn đề: Code đang cố truy cập `health.get('exists')` nhưng key này **không tồn tại** trong dictionary, gây ra **KeyError**.
-
----
-
-## 💡 **ĐỀ XUẤT GIẢI PHÁP REFACTOR**
-
-### **Phương Án 1: Sửa Thứ Tự Truy Cập Key** *(Khuyến nghị)*
-
-**Ý tưởng thiết kế**:
-- Đảo ngược thứ tự kiểm tra key trong dictionary
-- Ưu tiên key `'pid_exists'` (key chính thức) trước
-- Chỉ **fallback** (dự phòng - phương án thay thế) sang `'exists'` nếu cần **backward compatibility** (tương thích ngược - hỗ trợ code cũ)
-
-**Vị trí cần sửa**: Dòng 1376 trong file [resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0)
-
-**Logic mới**:
-1. Kiểm tra key `'pid_exists'` trước (key đúng theo thiết kế)
-2. Nếu không có, mới kiểm tra key `'exists'` (cho compatibility)
-3. Nếu cả hai đều không có, trả về `False` (mặc định an toàn)
-
-### **Phương Án 2: Chuẩn Hóa Data Schema** 
-
-**Ý tưởng thiết kế**:
-- Tạo một **data validator** (bộ kiểm tra dữ liệu - đảm bảo cấu trúc đúng) trung gian
-- Chuẩn hóa tất cả dictionary response từ [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29)
-- Đảm bảo luôn có cả hai key `'pid_exists'` và `'exists'` (mirror value)
-
-**Ưu điểm**:
-- Không phá vỡ **existing code** (mã hiện tại - code đang chạy)
-- Hỗ trợ cả **legacy** (cũ - phiên bản trước) và **modern** (mới - phiên bản hiện tại) code
-
-### **Phương Án 3: Wrapper Method An Toàn**
-
-**Ý tưởng thiết kế**:
-- Tạo method helper `_safe_get_pid_exists(health_dict)`
-- Method này xử lý mọi trường hợp key variation
-- Sử dụng **try-except** (thử-bắt lỗi) để handle các edge case
-
----
-
-## ✅ **KHUYẾN NGHỊ TRIỂN KHAI**
-
-### **Bước 1: Hot Fix Ngay** (Sửa nhanh - khắc phục tạm thời)
-- Áp dụng **Phương án 1** để dừng lỗi ngay lập tức
-- Chỉ cần sửa 1 dòng code, ít rủi ro nhất
-- **Testing scope** (phạm vi kiểm thử - vùng cần test): Chỉ cần test [optimize_for_pid](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1288:4-1416:22) method
-
-### **Bước 2: Refactor Dài Hạn** (Tái cấu trúc - cải thiện code)
-- Implement **Phương án 2** hoặc **3** cho **robustness** (độ bền vững - khả năng chịu lỗi)
-- Viết **unit tests** (kiểm thử đơn vị - test từng function) cho mọi trường hợp
-- Document rõ **data contract** (hợp đồng dữ liệu - quy định cấu trúc)
-
-### **Bước 3: Monitoring & Validation** (Giám sát & Xác thực)
-- Thêm **defensive logging** (ghi log phòng thủ - log chi tiết để debug)
-- Monitor các **edge cases** (trường hợp biên - tình huống đặc biệt)
-- Thiết lập **alerts** (cảnh báo - thông báo khi có vấn đề) cho KeyError tương tự
-
----
-
-## 🔍 **KIỂM TRA BỔ SUNG**
-
-Tôi khuyến nghị kiểm tra thêm:
-1. **Cross-reference** (đối chiếu chéo - so sánh nhiều nguồn) với các caller khác của [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29)
-2. Xem có **version mismatch** (lệch phiên bản - code không đồng bộ) giữa các module không
-3. Kiểm tra **deployment history** (lịch sử triển khai - các lần update gần đây)
-
----
-
-## 📋 **TÓM TẮT**
-
-**Lỗi**: KeyError `'exists'` do mâu thuẫn key name trong dictionary
-**Nguyên nhân**: Code cũ dùng key `'exists'`, code mới dùng `'pid_exists'`  
-**Giải pháp nhanh**: Đảo thứ tự kiểm tra key, ưu tiên `'pid_exists'` trước
-**Giải pháp lâu dài**: Chuẩn hóa data schema, thêm validation layer
-
-Hệ thống đã được phân tích theo **THINKING HARD** (tư duy sâu - phân tích 3 tầng) và tuân thủ nguyên tắc **Evidence-Only** (chỉ dựa chứng cứ - không suy đoán).
-
-*Planned for action*
-
-### Planner Response
-
-## 🔬 **KIỂM TRA BỔ SUNG & VALIDATION**
-
-Tôi sẽ thực hiện kiểm tra thêm để đảm bảo phân tích chính xác theo nguyên tắc **Always Double-Check** (luôn kiểm tra lại - xác minh kỹ càng):
-
-*Grep searched codebase*
-
-### Planner Response
-
-Tốt! Chỉ có **1 vị trí duy nhất** trong toàn bộ codebase sử dụng pattern `health.get('exists'`. Hãy kiểm tra xem có nơi nào khác gọi [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29) và xử lý kết quả không:
-
-*Grep searched codebase*
-
-### Planner Response
-
-Tôi thấy chỉ có **1 nơi duy nhất** gọi [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29) (dòng 1373). Hãy kiểm tra xem có **inconsistency** (không nhất quán - mâu thuẫn) nào trong cách các module khác handle PID health không:
-
-*Grep searched codebase*
-
-### Planner Response
-
-Phát hiện quan trọng! Tôi thấy **dòng 1374** đã có comment sẵn về vấn đề này:
-
+### Mid-Level (làm rõ class/hàm và log tương ứng)
+- `MetricsCollectionHub` (trung tâm số liệu) có mặt và khởi tạo:
+```67:86:app/mining_environment/scripts/cloak_strategies.py
+class MetricsCollectionHub:
+    """
+    Metrics Collection Hub - Trung tâm thu thập và phân tích số liệu GPU/Process.
 ```
-# FIX: dùng khóa 'pid_exists' thay vì 'exists' (tránh [KeyError])
+- `AdaptivePatternGenerator` (bộ tạo pattern) có log “Initialized với profile …”:
+```809:843:app/mining_environment/scripts/cloak_strategies.py
+class AdaptivePatternGenerator:
+    ...
+    self.logger.info(f"✅ [AdaptivePatternGenerator] Initialized với profile '{profile}'")
+```
+- `OptimizedHardwareController` có hiện diện và dùng NVML-first:
+```1073:1111:app/mining_environment/scripts/resource_control.py
+class OptimizedHardwareController:
+    """
+    ✅ ENHANCED: Hardware controller tối ưu không dùng GPU plugins
+    Focus on NVML ...
+```
+- GPU Optimization Orchestrator khởi tạo `MetricsCollectionHub` + `OptimizedHardwareController`:
+```120:142:app/mining_environment/scripts/gpu_optimization_orchestrator.py
+_metrics_hub = MetricsCollectionHub(buffer_size=self.config['metrics_buffer_size'])
+self.metrics_hub.start_background_logging()
+...
+self.hardware_controller = OptimizedHardwareController(safe_gpu_config, gpu_logger)
 ```
 
-Điều này cho thấy **developer** (lập trình viên - người phát triển) đã nhận ra vấn đề nhưng **implementation** (triển khai - cách thực hiện) vẫn chưa đúng!
+### Phân tích log trọng yếu (trích từ /app/mining_environment/logs)
+- `cloak_strategies.log`: có log của 3 class cần kiểm tra:
+  - MetricsHub init + thread chạy, nhưng cảnh báo “No metrics found …” lặp lại mỗi phút.
+  - AdaptivePatternGenerator initialized ‘medium’.
+  - OptimizedHardwareController initialized (NVML: True, DAG: True).
+- `gpu_optimization.log`: Orchestrator, Parallel Executor, Cross-Process Coordinator, Metrics Hub, Hardware Controller đều khởi tạo OK.
+- `coordination.log`: Nhận PID 907 từ stealth wrapper, readiness đạt 0.86, forward đến DirectPIDRegistry, ACK được set (qua env-var).
+- `resource_manager.log`: RM khởi tạo OK, IPC server OK, nhưng chỉ thấy “No processes to monitor” định kỳ; không thấy “PID queued/processed” hay “Cloaking successful …”.
+- `direct_registry.log`: trống (không được cấu hình logger file handler trong module).
 
-*Planned for action*
+Kết luận mid-level:
+- Lý do “không thấy log” của 3 class là vì log đã được tách sang các file module chuyên biệt, không đẩy vào `mining_debug.log`. Mapping ở `module_loggers.py` xác nhận điều này.
+- Dòng chảy PID: đến `HookCoordinator` OK → `DirectPIDRegistry` OK → nghi vấn nghẽn ở tuyến `DirectPIDRegistry → ResourceManager` theo đường IPC (RM không nhận PID vào queue, không có cloaking/optimize).
 
-### Planner Response
+### Deep-Level (nguyên nhân gốc, bottleneck, đề xuất)
+Nguyên nhân gốc (root causes):
+1) Split logging by module dẫn tới “không thấy log” khi chỉ xem `mining_debug.log`.
+   - Bằng chứng cấu hình logger riêng: `cloak_strategies.log`, `gpu_optimization.log` (module_loggers mapping).
+2) IPC handoff PID có dấu hiệu không đến được `ResourceManager`:
+   - `coordination.log` báo đã gửi đến DirectRegistry và ACK, nhưng `resource_manager.log` không có “IPC-HANDLER Received …” hay “PID queued/processed”.
+   - Khả năng cao: IPC client gửi không thành công, hoặc IPC server không nhận/không xử lý được message PID_FORWARD (khác process).
+3) Cảnh báo MetricsHub “No metrics found …” lặp lại:
+   - `MetricsCollectionHub.aggregate_all_metrics()` mong chờ các loại buffer: `gpu_usage`, `memory_usage`, `process_health`, `temperature`, `power`, `clock_speeds`, `io_activity`, `network`.
+   - Thực tế Orchestrator thêm metric vào loại `baseline`, `post_optimization` (không nằm trong danh mục mà `calculate_statistics` xử lý), còn `GpuCloakStrategy` chỉ bơm `gpu_usage/power/temperature/clock_speeds` trong warmup (chỉ chạy nếu strategy được kích hoạt).
+   - Vì handoff đến RM/Coordinator không chạy đến bước strategy, các buffer key chính không được bơm → cảnh báo.
 
-## 📝 **BÁO CÁO TỔNG KẾT DEBUG GPU SYSTEM**
+Giải pháp refactor (ý tưởng, không code)
+- Về logging tập trung:
+  - “Unified forwarding” (chuyển tiếp hợp nhất) từ logger module sang `unified.log` hoặc `mining_debug.log` ở mức INFO quan trọng; giữ file chuyên biệt để phân tách chi tiết.
+  - Thêm “registry logger” thực sự trong `direct_registry.py` bằng cách sử dụng `get_registry_logger()` (hiện module chỉ `logging.getLogger("direct_pid_registry")` → không có file handler).
+- Về IPC handoff (điểm nghẽn chính):
+  - “Ready handshake” (bắt tay sẵn sàng) giữa RM IPC server và DirectRegistry IPC client: client chỉ gửi PID khi đã nhận được “READY” heartbeat từ server.
+  - “Ack end-to-end” (xác nhận 2 chiều): ngoài env var ACK nội bộ ở DirectRegistry, bổ sung ACK do RM phát ra sau khi đã put queue thành công; DirectRegistry ghi nhận và log “end-to-end ack”.
+  - “Backpressure & retry” (hạn chế tràn và thử lại): DirectRegistry tăng `MAX_RETRIES` và “jitter” giữa lần gửi, có thống kê thành công/thất bại; RM ghi log mọi request đến `_handle_ipc_pid_forward` để dễ đối chiếu.
+  - “File-based audit” (giám sát qua file): bật fallback ghi một `pid_forward_audit.json` kèm timestamp, source_chain mỗi khi gửi/nhận; dọn dẹp định kỳ (có sẵn `FILE-FALLBACK` đường đi; chỉ dùng audit nhẹ, không thay luồng).
+- Về MetricsHub warning:
+  - Chuẩn hóa key metric: khi Orchestrator thu thập baseline/post, đồng thời “map” sang `gpu_usage`/`power`/`temperature`/`clock_speeds` để `calculate_statistics` có dữ liệu; hoặc mở rộng `aggregate_all_metrics()` để thêm `baseline/post_optimization` vào pipeline thống kê.
+  - Bật `GpuCloakStrategy` path sớm (nếu cloaking thành công) để warmup bơm dữ liệu vào các buffer keys đã chuẩn hóa.
+- Về đảm bảo luồng chính:
+  - “Force single entry point” (điểm vào đơn): giữ nguyên `stealth_inference_cuda.py → HookCoordinator → DirectPIDRegistry → ResourceManager → CloakCoordinator → HardwareController`. Loại bỏ mọi fallback singleton/observer xuyên tiến trình (chỉ dùng IPC làm chính; observer dùng nội tiến trình).
+  - “Health probes” (đầu dò sức khỏe): 
+    - RM: log “Received cross-process PID forward” + “PID queued” + “PID processed” theo từng PID.
+    - DirectRegistry: log “IPC client connected”, “IPC send success/failure” theo PID.
+    - HookCoordinator: thời gian từ receive → forward → ack.
+- Về an toàn nhiệt & clocks:
+  - Xác thực trên `OptimizedHardwareController` chỉ tăng/giảm xung trong giới hạn NVML; nếu `set clocks` không hỗ trợ (ví dụ T4), degrade gracefully (đã có) và báo cáo kết quả để RM cân nhắc rollback (đã có rollback hook).
 
-### ✨ **PHÁT HIỆN QUAN TRỌNG NHẤT**
-
-Tôi đã phát hiện một **irony** (nghịch lý - điều mâu thuẫn) trong code:
-
-**Dòng 1374-1376** trong [/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0):
-```python
-# FIX: dùng khóa 'pid_exists' thay vì 'exists' (tránh [KeyError])
-# Backward-compatible: nếu hệ thống sau này thêm 'exists' alias thì vẫn hoạt động.
-if not health.get('pid_exists', health.get('exists', False)):
+### Trả lời 10 nhiệm vụ
+1) Rà soát `/app`: Đã rà toàn bộ khu vực `app/mining_environment` trọng tâm (scripts/coordination/stealth/pid_logger).
+2) Phân tích log:
+   - Log lớp yêu cầu đã xuất hiện ở file module riêng: `cloak_strategies.log`, `gpu_optimization.log`.
+   - `resource_manager.log` không thấy nhận/queue/processed PID → nghi nghẽn IPC.
+3) Lý do không thấy log 3 class:
+   - Do log tách riêng theo module (không đổ vào `mining_debug.log`). Mapping:
+```28:39:app/mining_environment/scripts/module_loggers.py
+_gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'INFO')
+_gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'INFO')
 ```
-
-Developer đã **biết vấn đề** và thậm chí đã comment về nó, nhưng code vẫn **sai logic**!
-
-### 🎯 **VẤN ĐỀ CỐT LÕI**
-
-**Logic hiện tại** (sai):
+4) GPU Optimization có kích hoạt?
+   - Orchestrator khởi tạo OK, nhưng không có bằng chứng `optimize_gpu_for_process(...)` hoàn thành sau cloaking vì RM không nhận/queue PID → tối ưu chưa thực thi trọn vẹn.
+5) Xác minh log module scripts:
+   - `gpu_optimization_orchestrator.py`: có log init (Cross-Process Coordinator, Parallel Strategy Executor, Metrics Hub, Hardware Controller).
+   - `dag_synchronization.py`: thấy “DAG Synchronizer initialized successfully” từ `OptimizedHardwareController`.
+   - `cross_process_coordination.py`: có “Cross-Process Coordinator initialized” (trong `gpu_optimization.log`).
+   - `parallel_strategy_executor.py`: “Parallel Strategy Executor initialized”.
+   - `performance_profiler.py`: “Performance Profiler initialized” (trong `mining_environment.log`).
+6) Chuỗi luồng chính: bằng chứng theo từng bước đã nêu (các code block ở trên).
+7) Lỗi/tắc nghẽn & khắc phục:
+   - Bottleneck: IPC PID handoff DirectRegistry→RM.
+   - Khắc phục: “Ready handshake”, “end-to-end ack”, “retry có backoff & jitter”, “audit nhẹ”, tăng log chi tiết ở `_handle_ipc_pid_forward()`.
+8) Xác định vị trí chi tiết (module/file/hàm/dòng):
+   - Handoff vào Coordinator:
+```360:381:app/mining_environment/stealth/wrappers/stealth_inference_cuda.py
+success = coordinator.receive_from_stealth_wrapper(...)
 ```
-health.get('pid_exists', health.get('exists', False))
+   - Coordinator nhận & readiness:
+```584:617:app/mining_environment/coordination/coordinator.py
+readiness_result = self._enhanced_readiness_check(...)
 ```
-Điều này có nghĩa:
-1. Lấy `'pid_exists'` trước
-2. Nếu không có, lấy `'exists'` 
-3. Nhưng `health.get('exists')` sẽ gây **KeyError** vì key `'exists'` không tồn tại!
-
-**Logic đúng phải là**:
+   - DirectRegistry notify + forward + ACK:
+```540:571:app/pid_logger/direct_registry.py
+self._notify_observers(process_info)
+rm_success = self._forward_to_resource_manager(...)
+os.environ[ack_env_var] = str(ack_timestamp)
 ```
-health.get('pid_exists', False)
+   - RM trigger cloaking + optimize:
+```643:699:app/mining_environment/scripts/resource_manager.py
+result = self.cloak_coordinator.process_request(request)
+... self._gpu_orchestrator.optimize_gpu_for_process(...)
 ```
-Hoặc nếu cần **backward compatibility**:
+   - Coordinator định tuyến xuống HardwareController:
+```780:789:app/mining_environment/scripts/cloak_strategies.py
+result = self.hw_controller.apply_gpu_controls(control_params)
 ```
-health.get('pid_exists') or health.get('exists', False)
+   - 3 class cần log:
+```67:86:app/mining_environment/scripts/cloak_strategies.py
+class MetricsCollectionHub:
 ```
+```809:843:app/mining_environment/scripts/cloak_strategies.py
+class AdaptivePatternGenerator:
+```
+```1073:1111:app/mining_environment/scripts/resource_control.py
+class OptimizedHardwareController:
+```
+9) Đề xuất refactor (không code, ý tưởng):
+   - Logging:
+     - “Dual sink” (2 đích): giữ file module + forward các sự kiện quan trọng mức INFO sang `unified.log`.
+     - Thêm `get_registry_logger()` vào `direct_registry.py` để bật `direct_registry.log`.
+   - IPC:
+     - Bắt tay “READY” server↔client trước khi gửi PID.
+     - ACK hai chiều (DirectRegistry→RM→DirectRegistry) cho mỗi PID.
+     - Tăng retry/backoff + thống kê gửi/nhận.
+     - Audit nhẹ PID-forward.
+   - Metrics:
+     - Chuẩn hóa key metric (map baseline/post → gpu_usage/power/temperature/clock_speeds).
+     - Bật warmup của `GpuCloakStrategy` ngay sau cloaking thành công để bơm số liệu.
+   - Đảm bảo luồng chính:
+     - Chỉ IPC làm kênh cross-process (không phụ thuộc observer chia sẻ bộ nhớ giữa process).
 
-### 📊 **THỐNG KÊ KIỂM TRA**
+### Từ khóa có giải thích
+- **IPC Bridge** (cầu IPC – kênh giao tiếp liên tiến trình)
+- **Observer** (quan sát viên – callback đăng ký nhận sự kiện)
+- **Backoff** (giảm tải – chờ lâu dần khi retry)
+- **Handshake** (bắt tay – thỏa thuận sẵn sàng)
+- **Baseline metrics** (số liệu cơ sở – đo ban đầu)
+- **Warmup** (làm nóng – giai đoạn khởi động bơm dữ liệu/điều chỉnh nhẹ)
 
-| **Metric** | **Giá trị** | **Ý nghĩa** |
-|------------|-------------|-------------|
-| Số lần lỗi xuất hiện | 2 lần | Tại 09:23:22 và 09:23:23 |
-| Số file bị ảnh hưởng | 1 file | Chỉ [resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0) |
-| Số chỗ gọi [validate_pid_health](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:696:4-847:29) | 1 chỗ | Dòng 1373 |
-| Số chỗ dùng pattern sai | 1 chỗ | Dòng 1376 |
-| **Risk level** (mức độ rủi ro) | **Low** | Sửa đơn giản, ít side effect |
+Tiến độ vừa làm: tôi đã rà mã then chốt, đối chiếu log chuyên biệt, xác định nghẽn tại “DirectPIDRegistry → ResourceManager” (IPC), và đưa ra giải pháp refactor khả thi không đổi cấu trúc thư mục hay sinh module mới.
 
-### 🛠️ **GIẢI PHÁP CUỐI CÙNG**
-
-**Immediate Fix** (sửa ngay - khắc phục tức thì):
-- **File**: [/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0)
-- **Dòng**: 1376
-- **Thay đổi**: Bỏ phần `health.get('exists', False)` thừa
-- **Test scope** (phạm vi test): Chỉ cần test với PID tồn tại và không tồn tại
-
-### ✅ **CHECKLIST TRIỂN KHAI**
-
-- [ ] **Backup** file [resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0) trước khi sửa
-- [ ] Sửa logic tại dòng 1376
-- [ ] Test với PID thực (240) và PID fake (99999)
-- [ ] Monitor log 5 phút sau khi deploy
-- [ ] Document lại fix trong **changelog** (nhật ký thay đổi)
-
-### 🏆 **KẾT LUẬN**
-
-**Status**: ✅ **Debug hoàn tất thành công**
-
-Tôi đã áp dụng đầy đủ **methodology** (phương pháp luận - quy trình làm việc):
-- ✅ **THINKING HARD**: Phân tích 3 tầng (Surface → Mid → Deep)
-- ✅ **Evidence-Only**: Mọi kết luận đều có bằng chứng từ log/code
-- ✅ **Think Big, Do Baby Steps**: Phân tích toàn diện, đề xuất sửa từng bước
-- ✅ **Measure Twice, Cut Once**: Kiểm tra kỹ trước khi đề xuất
-- ✅ **Get It Working First**: Ưu tiên hot fix trước, refactor sau
-- ✅ **Always Double-Check**: Đã cross-check nhiều nguồn
-
-**Root cause** (nguyên nhân gốc): Developer đã nhận ra vấn đề nhưng implement sai logic fallback.
-
-**Solution** (giải pháp): Sửa 1 dòng code, rủi ro thấp, hiệu quả cao.
-
-Hệ thống đã được **thoroughly analyzed** (phân tích kỹ lưỡng - rà soát toàn diện) và sẵn sàng để **apply fix** (áp dụng sửa lỗi - triển khai khắc phục).
+- Tóm tắt ngắn
+  - Log 3 class có đủ trong `cloak_strategies.log`/`gpu_optimization.log`; không xuất hiện ở `mining_debug.log` do cấu hình tách logger.
+  - Luồng chính đến DirectRegistry OK; nghẽn ở handoff IPC sang ResourceManager (RM không nhận PID).
+  - MetricsHub cảnh báo vì key metric không được bơm do strategy không chạy và orchestrator dùng “baseline/post” không nằm trong tập khóa `aggregate_all_metrics`.
+  - Khuyến nghị: củng cố IPC (handshake, end-to-end ACK, retry/backoff, audit), hợp nhất metric keys, bật forward log quan trọng sang `unified.log`, thêm logger cho DirectRegistry.
