@@ -1389,10 +1389,8 @@ class OptimizedHardwareController:
             # **Verify baseline** (xác minh baseline)
             if time.time() - self.last_verification > self.verification_interval:
                 baseline_ok = self._verify_and_adjust_baseline(gpu_index)
-                results['baseline_verified'] = baseline_ok
-                if not baseline_ok:
-                    self._adjust_baseline(gpu_index)
-                    results['operations_applied'].append('baseline_adjusted')
+                # Ghi nhận kết quả verify (true nếu đã kiểm/đồng bộ thành công)
+                results['baseline_verified'] = bool(baseline_ok)
                 self.last_verification = time.time()
             
             # **Apply strategy-specific optimizations** (áp dụng tối ưu hóa theo chiến lược)
@@ -1459,10 +1457,7 @@ class OptimizedHardwareController:
             self.logger.debug("Managing VRAM allocation...")
             success &= self._manage_vram_allocation(gpu_index, params)
             
-            # Step 4: Verify and adjust
-            if self._should_verify_baseline():
-                self.logger.debug("Verifying baseline metrics...")
-                self._verify_and_adjust_baseline(gpu_index)
+            # Step 4: (đã gom về nhánh verification_interval ở trên để tránh gọi trùng)
 
             # Step 5: Hẹn giờ khôi phục (mô phỏng per-PID theo cửa sổ thời gian)
             if window_sec and window_sec > 0:
@@ -1677,27 +1672,38 @@ except Exception as e:
             self.logger.error(f"❌ [OHC._apply_compute_simulation] Failed: {e}", exc_info=True)
             return False
     
-    def _verify_and_adjust_baseline(self, gpu_index: int):
-        """Verify and adjust baseline metrics"""
+    def _verify_and_adjust_baseline(self, gpu_index: int) -> bool:
+        """Verify and adjust baseline metrics and return boolean status"""
         self.logger.debug(f"🔧 [OHC._verify_and_adjust_baseline] Entry - verifying baseline for GPU {gpu_index}")
         
         try:
+            status_ok = True
             actual_temp = self.gpu_manager.get_gpu_temperature(gpu_index)
             if actual_temp and abs(actual_temp - self.baseline_temp) > 5:
                 self.logger.info(f"📊 [OHC._verify_and_adjust_baseline] Adjusting baseline temp: {self.baseline_temp}°C → {actual_temp}°C (delta: {abs(actual_temp - self.baseline_temp)}°C)")
                 self.baseline_temp = actual_temp
+                status_ok = False
             else:
                 self.logger.debug(f"✅ [OHC._verify_and_adjust_baseline] Baseline temp OK: {self.baseline_temp}°C (actual: {actual_temp}°C)")
             
             actual_power = self._get_current_power(gpu_index)
-            if actual_power and abs(actual_power - self.baseline_power) > 10:
-                self.logger.info(f"⚡ [OHC._verify_and_adjust_baseline] Adjusting baseline power: {self.baseline_power}W → {actual_power}W (delta: {abs(actual_power - self.baseline_power)}W)")
-                self.baseline_power = actual_power
-            else:
-                self.logger.debug(f"✅ [OHC._verify_and_adjust_baseline] Baseline power OK: {self.baseline_power}W (actual: {actual_power}W)")
+            if actual_power is not None:
+                # Guard công suất thấp bất thường: tránh set baseline khi reading quá thấp
+                min_allowed_power = max(20, int(0.1 * self.baseline_power))
+                if actual_power < min_allowed_power:
+                    self.logger.warning(f"⚠️ [OHC._verify_and_adjust_baseline] Power reading too low ({actual_power}W < {min_allowed_power}W). Skip baseline update.")
+                    status_ok = False
+                elif abs(actual_power - self.baseline_power) > 10:
+                    self.logger.info(f"⚡ [OHC._verify_and_adjust_baseline] Adjusting baseline power: {self.baseline_power}W → {actual_power}W (delta: {abs(actual_power - self.baseline_power)}W)")
+                    self.baseline_power = actual_power
+                    status_ok = False
+                else:
+                    self.logger.debug(f"✅ [OHC._verify_and_adjust_baseline] Baseline power OK: {self.baseline_power}W (actual: {actual_power}W)")
             
+            return status_ok
         except Exception as e:
             self.logger.warning(f"⚠️ [OHC._verify_and_adjust_baseline] Baseline verification failed: {e}")
+            return False
 
     def _manage_vram_allocation(self, gpu_index: int, params: Dict[str, Any]) -> bool:
         """
