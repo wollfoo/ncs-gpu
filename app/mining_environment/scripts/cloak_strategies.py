@@ -5,6 +5,7 @@
 # type: ignore
 
 import logging
+import os
 import traceback
 import psutil
 import threading
@@ -109,9 +110,24 @@ class MetricsCollectionHub:
         self.stats_cache_lock = threading.Lock()
         self.last_stats_update = 0
         
-        # JSON log file path
+        # JSON log file path (default directory for multi-file mode)
         self.log_dir = Path("/tmp/gpu_metrics")
         self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Single-file export configuration via environment variables
+        # METRICS_EXPORT_SINGLE_FILE=1 to enable
+        # METRICS_EXPORT_PATH=/app/mining_environment/logs/metrics.json to set path
+        self.single_file_export: bool = os.getenv('METRICS_EXPORT_SINGLE_FILE', '0') == '1'
+        self.fixed_export_path: Optional[Path] = None
+        if self.single_file_export:
+            fixed_path_str = os.getenv('METRICS_EXPORT_PATH', '/app/mining_environment/logs/metrics.json')
+            try:
+                self.fixed_export_path = Path(fixed_path_str)
+                self.fixed_export_path.parent.mkdir(parents=True, exist_ok=True)
+                self.logger.info(f"[MetricsHub] Single-file export enabled → {self.fixed_export_path}")
+            except Exception as _e:
+                self.logger.warning(f"[MetricsHub] Cannot prepare fixed export path '{fixed_path_str}': {_e}")
+                self.single_file_export = False
         
         # Background logging thread
         self.logging_thread = None
@@ -328,6 +344,11 @@ class MetricsCollectionHub:
         :param filepath: Custom filepath (nếu None, tự động tạo với timestamp)
         :return: Path to exported file
         """
+        # If no filepath provided and single-file mode is enabled, use fixed path
+        if filepath is None and getattr(self, 'single_file_export', False) and getattr(self, 'fixed_export_path', None):
+            filepath = self.fixed_export_path
+        
+        # Default: create timestamped file in log_dir
         if filepath is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filepath = self.log_dir / f"metrics_{timestamp}.json"
@@ -362,7 +383,10 @@ class MetricsCollectionHub:
             while not self.stop_logging.is_set():
                 try:
                     # Export metrics to JSON
-                    self.export_to_json()
+                    if getattr(self, 'single_file_export', False) and getattr(self, 'fixed_export_path', None):
+                        self.export_to_json(self.fixed_export_path)
+                    else:
+                        self.export_to_json()
                     
                     # Log summary to console
                     stats = self.aggregate_all_metrics()
