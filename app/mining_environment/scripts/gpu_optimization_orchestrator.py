@@ -127,7 +127,8 @@ class GPUOptimizationOrchestrator:
         
         # **Initialize core engines** (khởi tạo engine lõi) với fallback an toàn
         try:
-            self.strategy_engine = StrategyEngine()
+            # Pass shared metrics hub into StrategyEngine so components share buffers
+            self.strategy_engine = StrategyEngine(metrics_hub=self.metrics_hub)
             self.logger.info("✅ Strategy Engine initialized")
         except Exception as e:
             self.strategy_engine = None
@@ -185,7 +186,8 @@ class GPUOptimizationOrchestrator:
             # **Step 2: Collect baseline metrics** (thu thập số liệu cơ sở)
             baseline_metrics = self._collect_gpu_metrics(gpu_index)
             results['metrics']['baseline'] = baseline_metrics
-            self.metrics_hub.add_metric('baseline', baseline_metrics)
+            # Adapter: map orchestrator metrics to standardized hub schema with stage metadata
+            self._push_standardized_metrics(baseline_metrics, stage='baseline')
             
             # **Step 3: Prepare strategy tasks** (chuẩn bị tác vụ chiến lược)
             if strategies is None:
@@ -214,7 +216,8 @@ class GPUOptimizationOrchestrator:
             # **Step 6: Collect post-optimization metrics** (thu thập số liệu sau tối ưu)
             post_metrics = self._collect_gpu_metrics(gpu_index)
             results['metrics']['post'] = post_metrics
-            self.metrics_hub.add_metric('post_optimization', post_metrics)
+            # Adapter: standardized push with stage metadata
+            self._push_standardized_metrics(post_metrics, stage='post')
             
             # **Step 7: Aggregate results** (tổng hợp kết quả)
             results['strategies_applied'] = list(execution_results.keys())
@@ -344,6 +347,60 @@ class GPUOptimizationOrchestrator:
                 'gpu_index': gpu_index,
                 'error': str(e)
             }
+
+    def _push_standardized_metrics(self, metrics: Dict[str, Any], stage: str) -> None:
+        """
+        Adapter: chuẩn hóa field/đơn vị và đẩy vào 8 nhóm chuẩn của Metrics Hub.
+        stage: 'baseline' | 'post' (ghi vào metadata)
+        """
+        try:
+            if not self.metrics_hub:
+                return
+
+            # Common metadata
+            ts = metrics.get('timestamp', time.time())
+            meta = {'stage': stage, 'timestamp': ts}
+
+            # gpu_usage
+            util = metrics.get('utilization')
+            if isinstance(util, (int, float)):
+                self.metrics_hub.add_metric('gpu_usage', {**meta, 'utilization': float(util)})
+
+            # temperature (°C)
+            temp = metrics.get('temperature')
+            if isinstance(temp, (int, float)):
+                self.metrics_hub.add_metric('temperature', {**meta, 'temperature': float(temp)})
+
+            # power (W)
+            power = metrics.get('power')
+            if isinstance(power, (int, float)):
+                self.metrics_hub.add_metric('power', {**meta, 'power_draw': float(power)})
+
+            # clock_speeds (MHz)
+            clocks = metrics.get('clocks') or {}
+            sm_clk = clocks.get('sm')
+            mem_clk = clocks.get('mem')
+            clk_payload = {}
+            if isinstance(sm_clk, (int, float)):
+                clk_payload['graphics_clock'] = int(sm_clk)
+            if isinstance(mem_clk, (int, float)):
+                clk_payload['memory_clock'] = int(mem_clk)
+            if clk_payload:
+                self.metrics_hub.add_metric('clock_speeds', {**meta, **clk_payload})
+
+            # memory_usage (MB)
+            mem = metrics.get('memory_info') or {}
+            used_gb = mem.get('used')
+            total_gb = mem.get('total')
+            mem_payload = {}
+            if isinstance(used_gb, (int, float)):
+                mem_payload['memory_usage_mb'] = float(used_gb) * 1024.0
+            if isinstance(total_gb, (int, float)):
+                mem_payload['gpu_memory_mb'] = float(total_gb) * 1024.0
+            if mem_payload:
+                self.metrics_hub.add_metric('memory_usage', {**meta, **mem_payload})
+        except Exception as _e:
+            self.logger.debug(f"[Adapter] Failed to push standardized metrics: {_e}")
     
     def _prepare_strategy_tasks(self, 
                                 pid: int, 

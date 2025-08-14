@@ -116,6 +116,16 @@ class MetricsCollectionHub:
         # Background logging thread
         self.logging_thread = None
         self.stop_logging = threading.Event()
+
+        # Rate-limit unknown-type warnings & grace period for empty metrics
+        # Unknown-type already-warned set
+        self._unknown_type_warned: set = set()
+        # Init time to compute grace period for empty metrics warnings
+        try:
+            import time as _time  # local alias to avoid shadowing
+            self._init_time = _time.time()
+        except Exception:
+            self._init_time = 0
         
         self.logger.info(f"[MetricsHub] Initialized with buffer_size={buffer_size}, log_interval={log_interval}s")
     
@@ -130,7 +140,12 @@ class MetricsCollectionHub:
         self.logger.debug(f" [MetricsHub.add_metric] Entry - type: {metric_type}, data_keys: {list(data.keys())}")
         
         if metric_type not in self.metrics_buffers:
-            self.logger.warning(f" [MetricsHub.add_metric] Unknown metric type: {metric_type}, available: {list(self.metrics_buffers.keys())}")
+            # Rate-limit: warn once per unknown type, then downgrade to debug
+            if metric_type not in self._unknown_type_warned:
+                self._unknown_type_warned.add(metric_type)
+                self.logger.warning(f" [MetricsHub.add_metric] Unknown metric type: {metric_type}, available: {list(self.metrics_buffers.keys())}")
+            else:
+                self.logger.debug(f" [MetricsHub.add_metric] Unknown metric type (suppressed): {metric_type}")
             return False
         
         # Add timestamp nếu chưa có
@@ -186,7 +201,15 @@ class MetricsCollectionHub:
         
         metrics = self.get_metrics(metric_type)
         if not metrics:
-            self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+            # Grace period: downgrade to DEBUG for first 120s after init
+            try:
+                import time as _time  # local alias
+                if self._init_time and (_time.time() - self._init_time) < 120:
+                    self.logger.debug(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+                else:
+                    self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+            except Exception:
+                self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
             return {}
         
         # Extract values for the specified field
@@ -1753,7 +1776,7 @@ class StrategyEngine:
     Wrapper pattern delegate đến existing CloakCoordinator và optimization classes.
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, metrics_hub: Optional[MetricsCollectionHub] = None):
         """
         Khởi tạo StrategyEngine với configuration.
         
@@ -1764,7 +1787,8 @@ class StrategyEngine:
         # Dùng cloak_logger làm logger hợp lệ thay cho get_logger (không tồn tại)
         self.logger = cloak_logger
         self.cloak_coordinator = CloakCoordinator(self.config)
-        self.metrics_hub = MetricsCollectionHub()
+        # Use shared Metrics Hub if provided, otherwise create one
+        self.metrics_hub = metrics_hub if metrics_hub is not None else MetricsCollectionHub()
         self.pattern_generator = AdaptivePatternGenerator()
         
         # Import OptimizedHardwareController từ resource_control
@@ -1776,6 +1800,13 @@ class StrategyEngine:
             self.logger.warning("⚠️ [StrategyEngine] OptimizedHardwareController not available")
             self.hardware_controller = None
             
+        # Inject shared metrics hub into gpu_cloak_strategy if available
+        try:
+            if hasattr(self.cloak_coordinator, 'gpu_cloak_strategy') and self.cloak_coordinator.gpu_cloak_strategy:
+                setattr(self.cloak_coordinator.gpu_cloak_strategy, 'metrics_hub', self.metrics_hub)
+        except Exception:
+            pass
+
         self.logger.info("✅ [StrategyEngine] Initialized successfully")
     
     def optimize(self, pid: int, gpu_index: int = 0, strategies: Optional[List[str]] = None) -> Dict[str, Any]:
