@@ -325,9 +325,9 @@ class GPUResourceManager:
             if not handle or sm_clock <= 0 or mem_clock <= 0:
                 return False
 
-            # Lấy SM/MEM clock hiện tại
-            current_sm_clock = pynvml.nvmlDeviceGetClock(handle, pynvml.NVML_CLOCK_SM, pynvml.NVML_CLOCK_ID_CURRENT)
-            current_mem_clock = pynvml.nvmlDeviceGetClock(handle, pynvml.NVML_CLOCK_MEM, pynvml.NVML_CLOCK_ID_CURRENT)
+            # Lấy SM/MEM clock hiện tại (NVML API chuẩn)
+            current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+            current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
 
             if pid is not None:
                 if pid not in self.process_gpu_settings:
@@ -344,8 +344,8 @@ class GPUResourceManager:
             mem_lock_supported = True
             try:
                 # Một số GPU (ví dụ T4) không hỗ trợ lock memory clocks
-                # Thử đọc default limit như phép thử nhẹ; nếu lỗi đặc thù, coi như không hỗ trợ
-                _ = pynvml.nvmlDeviceGetClock(handle, pynvml.NVML_CLOCK_MEM, pynvml.NVML_CLOCK_ID_CURRENT)
+                # Kiểm tra nhẹ bằng cách đọc clock info; nếu lỗi đặc thù, coi như không hỗ trợ
+                _ = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
             except Exception as cap_e:
                 mem_lock_supported = False
                 self.logger.info(f"ℹ️ [CAPABILITY] Memory clock lock unsupported on this GPU: {cap_e}. Skipping mem clock lock.")
@@ -413,7 +413,7 @@ class GPUResourceManager:
                 return False
 
             try:
-                current_sm_clock = pynvml.nvmlDeviceGetClock(handle, pynvml.NVML_CLOCK_SM, pynvml.NVML_CLOCK_ID_CURRENT)
+                current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
             except Exception as ex:
                 self.logger.error(f"Không thể lấy xung nhịp SM của GPU={gpu_index}: {ex}")
                 return False
@@ -1322,9 +1322,13 @@ class OptimizedHardwareController:
         }
         
         try:
+            # **Normalize strategy for robust comparisons** (chuẩn hóa chiến lược để so sánh ổn định)
+            normalized_strategy = self._normalize_strategy(strategy)
+            self.logger.debug(f"🧭 [OHC.optimize_for_pid] Normalized strategy: {normalized_strategy}")
+
             # **DAG SYNCHRONIZATION: Ensure DAG is ready before optimization** (đảm bảo DAG sẵn sàng trước khi tối ưu)
             # PHƯƠNG ÁN A: Bật DAG sync cho cả chiến lược 'GPU' để phục vụ cloaking/stealth
-            if self.enable_dag_sync and (strategy in ('mining', 'aggressive', 'GPU')):
+            if self.enable_dag_sync and (normalized_strategy in ('mining', 'aggressive', 'gpu')):
                 self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
                 if not self.ensure_dag_ready(gpu_index):
                     self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
@@ -1332,7 +1336,7 @@ class OptimizedHardwareController:
                 else:
                     results['operations_applied'].append('dag_ready')
                     self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
-            elif (strategy in ('mining', 'aggressive', 'GPU')):
+            elif (normalized_strategy in ('mining', 'aggressive', 'gpu')):
                 self.logger.info("ℹ️ ENABLE_DAG_SYNC=false; skipping DAG readiness check")
             
             # **INTELLIGENCE LAYER: Get current power for prediction** (lấy công suất hiện tại để dự đoán)
@@ -1394,7 +1398,12 @@ class OptimizedHardwareController:
                 self.last_verification = time.time()
             
             # **Apply strategy-specific optimizations** (áp dụng tối ưu hóa theo chiến lược)
+            if not hasattr(self, '_get_strategy_params'):
+                self.logger.error("❌ [OHC.optimize_for_pid] Missing method _get_strategy_params. Please implement strategy parameter mapper.")
+                results['error'] = "Missing _get_strategy_params"
+                return results
             strategy_params = self._get_strategy_params(strategy)
+            self.logger.debug(f"🧩 [OHC.optimize_for_pid] Strategy params (pre-normalize): {list(strategy_params.keys())}")
             strategy_params['gpu_index'] = gpu_index
             
             # **Add temperature recommendations to params** (thêm khuyến nghị nhiệt độ)
@@ -1447,11 +1456,15 @@ class OptimizedHardwareController:
             # Step 2: Try NVML control first
             if self.nvml_available:
                 self.logger.debug("Applying NVML controls...")
-                success &= self._apply_nvml_controls(pid, gpu_index, params)
+                normalized = self._normalize_params(params)
+                self.logger.debug(f"🧪 [OHC.apply_optimization] Normalized params: {list(normalized.keys())}")
+                success &= self._apply_nvml_controls(pid, gpu_index, normalized)
             else:
                 # Fallback: Compute-based simulation
                 self.logger.debug("NVML not available, using compute simulation...")
-                success &= self._apply_compute_simulation(gpu_index, params)
+                normalized = self._normalize_params(params)
+                self.logger.debug(f"🧪 [OHC.apply_optimization] Normalized params (compute): {list(normalized.keys())}")
+                success &= self._apply_compute_simulation(gpu_index, normalized)
             
             # Step 3: VRAM management (always available)
             self.logger.debug("Managing VRAM allocation...")
@@ -1608,6 +1621,85 @@ class OptimizedHardwareController:
         except Exception as e:
             self.logger.warning(f"⚠️ [OHC._get_current_power] Cannot read power: {e}, using baseline {self.baseline_power}W")
             return self.baseline_power
+
+    def _normalize_strategy(self, strategy: Any) -> str:
+        """
+        **Normalize strategy** (chuẩn hóa chiến lược) để so sánh ổn định.
+        Hỗ trợ enum/str/objects, trả về chuỗi lowercase.
+        """
+        try:
+            if isinstance(strategy, str):
+                return strategy.lower()
+            value = getattr(strategy, 'value', None)
+            if isinstance(value, str):
+                return value.lower()
+            name = getattr(strategy, 'name', None)
+            if isinstance(name, str):
+                return name.lower()
+            return str(strategy).lower()
+        except Exception:
+            return 'gpu'
+
+    def _normalize_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        **Parameter Normalization** (chuẩn hóa tham số – tương thích ngược)
+        Map alias cũ → khóa chuẩn: memory_clock→mem_clock, temp_threshold→temperature...
+        """
+        try:
+            normalized = dict(params) if params else {}
+            if 'memory_clock' in normalized and 'mem_clock' not in normalized:
+                normalized['mem_clock'] = normalized.pop('memory_clock')
+            if 'temp_threshold' in normalized and 'temperature' not in normalized:
+                normalized['temperature'] = normalized.pop('temp_threshold')
+            if 'vram_percent' in normalized and 'vram_allocation' not in normalized:
+                normalized['vram_allocation'] = normalized.pop('vram_percent')
+            return normalized
+        except Exception:
+            return params
+
+    def _get_strategy_params(self, strategy: Any) -> Dict[str, Any]:
+        """
+        **Strategy Parameter Builder** (hàm dựng tham số chiến lược)
+        Trả về dict tham số theo chiến lược, dùng profile và baseline.
+        """
+        s = self._normalize_strategy(strategy)
+        params: Dict[str, Any] = {}
+        # Giá trị mặc định theo profile/baseline
+        profile = self.profile or {}
+        power_var = float(profile.get('power_variation', 0.15))
+        clock_var = float(profile.get('clock_variation', 0.10))
+        vram_alloc = float(profile.get('vram_allocation', 0.5))
+
+        # Power mục tiêu dựa baseline
+        target_power = int(max(20, min(self.power_max, self.baseline_power * (1.0 + power_var * 0.2))))
+
+        if s in ('gpu', 'mining', 'aggressive'):
+            params['power_limit'] = target_power
+            # Clocks: tăng nhẹ theo biến thể profile
+            try:
+                handle = self.gpu_manager.get_handle(0)  # chỉ để tham chiếu clock hiện tại
+                if handle:
+                    current_sm = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+                    params['sm_clock'] = int(min(1245, current_sm * (1.0 + clock_var * 0.2)))
+            except Exception:
+                # fallback an toàn
+                params['sm_clock'] = 1020
+            params['mem_clock'] = params.get('mem_clock', 877)
+            params['temperature'] = int(self.temp_warning)
+            params['vram_allocation'] = vram_alloc
+            params['window_sec'] = self.per_pid_window_sec or 0
+        elif s in ('temperature',):
+            params['temperature'] = int(self.temp_warning)
+            params['power_limit'] = target_power
+        elif s in ('memory', 'vram'):
+            params['vram_allocation'] = vram_alloc
+        else:
+            # Mặc định coi như GPU strategy
+            params['power_limit'] = target_power
+            params['mem_clock'] = 877
+            params['temperature'] = int(self.temp_warning)
+
+        return params
 
     def _apply_compute_simulation(self, gpu_index: int, params: Dict[str, Any]) -> bool:
         """
