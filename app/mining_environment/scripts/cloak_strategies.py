@@ -1266,9 +1266,37 @@ class GpuCloakStrategy:
             except:
                 pass
             
-            # Store in MetricsCollectionHub if available
+            # Store in MetricsCollectionHub if available (standardized types)
             if self.metrics_hub:
-                self.metrics_hub.add_metric('real_gpu_metrics', real_metrics)
+                try:
+                    meta = {'stage': 'pre', 'timestamp': real_metrics.get('timestamp', time.time())}
+                    # gpu_usage
+                    if isinstance(real_metrics.get('gpu_util'), (int, float)):
+                        self.metrics_hub.add_metric('gpu_usage', {**meta, 'utilization': float(real_metrics['gpu_util'])})
+                    # temperature
+                    if isinstance(real_metrics.get('temperature'), (int, float)):
+                        self.metrics_hub.add_metric('temperature', {**meta, 'temperature': float(real_metrics['temperature'])})
+                    # power
+                    if isinstance(real_metrics.get('power_draw'), (int, float)):
+                        self.metrics_hub.add_metric('power', {**meta, 'power_draw': float(real_metrics['power_draw'])})
+                    # clocks
+                    clk_payload = {}
+                    if isinstance(real_metrics.get('sm_clock'), (int, float)):
+                        clk_payload['graphics_clock'] = int(real_metrics['sm_clock'])
+                    if isinstance(real_metrics.get('mem_clock'), (int, float)):
+                        clk_payload['memory_clock'] = int(real_metrics['mem_clock'])
+                    if clk_payload:
+                        self.metrics_hub.add_metric('clock_speeds', {**meta, **clk_payload})
+                    # memory (MB)
+                    mem_payload = {}
+                    if isinstance(real_metrics.get('vram_used'), (int, float)):
+                        mem_payload['memory_usage_mb'] = float(real_metrics['vram_used'])
+                    if isinstance(real_metrics.get('vram_total'), (int, float)):
+                        mem_payload['gpu_memory_mb'] = float(real_metrics['vram_total'])
+                    if mem_payload:
+                        self.metrics_hub.add_metric('memory_usage', {**meta, **mem_payload})
+                except Exception as _e:
+                    self.logger.debug(f"[PRE-STATS] Failed to push standardized pre-cloak metrics: {_e}")
             self.logger.debug(f"📊 Stored real metrics (đã lưu số liệu thực – ghi nhận chỉ số) for PID {pid}: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']}W")
             
         except Exception as e:
