@@ -765,177 +765,48 @@ class DirectPIDRegistry:
     
     def _forward_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
         """
-        **Enhanced Forward to ResourceManager** (chuyển tiếp nâng cao đến ResourceManager)
-        
-        Final step trong linear flow với Enhanced Retry Logic + Exponential Backoff.
-        Implements comprehensive retry strategy để eliminate race conditions.
-        
+        **IPC-ONLY Forward to ResourceManager** (chuyển tiếp chỉ qua IPC đến ResourceManager)
+
+        Kênh thống nhất: gửi PID qua **IPC Bridge** với `PID_FORWARD`.
+        Không dùng direct call hoặc file-based fallback.
+
         Args:
             pid: Process ID
             coordinator_metadata: Metadata từ coordinator
             process_info: ProcessInfo object
-            
+
         Returns:
-            bool: True nếu forwarding successful
+            bool: True nếu forwarding qua IPC thành công
         """
-        # **Get retry configuration** (lấy cấu hình thử lại)
-        config = self._get_retry_config()
-        max_retries = config['max_retries']
-        retry_delay = config['initial_delay']
-        backoff_multiplier = config['backoff_multiplier']
-        
-        logger.info(f"🎯 [RM-FORWARD] Enhanced forwarding PID {pid} to ResourceManager (IPC BRIDGE ENABLED)")
-        
-        # **🔥 PRIMARY: Try IPC Bridge first** (ưu tiên IPC Bridge trước)
-        if self._ipc_enabled and self._ipc_client:
-            logger.info(f"🌉 [IPC-PRIMARY] Attempting IPC Bridge forward for PID {pid}")
-            
-            # **Enhanced metadata for IPC** (metadata nâng cao cho IPC)
-            ipc_metadata = {
-                **coordinator_metadata,
-                'ipc_forward_timestamp': time.time(),
-                'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry_ipc'],
-                'process_info': {
-                    'pid': pid,
-                    'process_type': process_info.process_type,
-                    'process_name': process_info.process_name,
-                    'registered_at': process_info.registered_at
-                },
-                'cross_process_communication': True
-            }
-            
-            # **Send via IPC Bridge** (gửi qua IPC Bridge)
-            ipc_success = self._send_pid_via_ipc(pid, ipc_metadata)
-            
-            if ipc_success:
-                logger.info(f"✅ [IPC-PRIMARY] PID {pid} forwarded successfully via IPC Bridge")
-                
-                # **Update process coordination state** (cập nhật trạng thái coordination của process)
-                process_info.coordination_state = "ipc_forwarded"
-                process_info.metadata['ipc_forwarded'] = True
-                process_info.metadata['ipc_timestamp'] = time.time()
-                
-                return True
-            else:
-                logger.warning(f"⚠️ [IPC-PRIMARY] IPC Bridge forward failed for PID {pid}, trying fallback")
-                self._ipc_stats['fallback_used'] += 1
-        else:
-            logger.info(f"🔄 [IPC-FALLBACK] IPC Bridge not available, using legacy methods for PID {pid}")
-        
-        # **FALLBACK: Import ResourceManager for singleton access** (dự phòng: nhập ResourceManager cho singleton access)
-        ResourceManager = self._import_resource_manager()
-        if not ResourceManager:
-            logger.error(f"❌ [RM-FORWARD] Cannot import ResourceManager for PID {pid}")
+        logger.info(f"🎯 [RM-FORWARD] IPC-only forwarding PID {pid} to ResourceManager")
+
+        if not (self._ipc_enabled and self._ipc_client):
+            logger.error(f"❌ [RM-FORWARD] IPC client not available for PID {pid} (ipc_enabled={self._ipc_enabled})")
             return False
-        
-        # **Enhanced Retry Loop với Readiness Signaling Integration** (vòng lặp thử lại nâng cao với tích hợp tín hiệu sẵn sàng)
-        for attempt in range(max_retries):
-            attempt_start_time = time.time()
-            logger.info(f"🔄 [RM-RETRY] Attempt {attempt + 1}/{max_retries} for PID {pid} (PHASE 2 Integration)")
-            
-            try:
-                # **CRITICAL FIX: Prioritize registered ResourceManager for cross-process** (ưu tiên ResourceManager đã đăng ký cho cross-process)
-                rm_instance = None
-                
-                # **Check registered ResourceManager first (cross-process safe)** (kiểm tra ResourceManager đã đăng ký trước - an toàn cross-process)
-                with self._resource_manager_lock:
-                    if self._resource_manager is not None:
-                        logger.info(f"✅ [CROSS-PROCESS] Using registered ResourceManager instance")
-                        rm_instance = self._resource_manager
-                        # **For registered RM, skip readiness checks and execute directly** (với RM đã đăng ký, bỏ qua kiểm tra và thực thi trực tiếp)
-                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                
-                # **Fallback to singleton (only works in same process)** (fallback sang singleton - chỉ hoạt động trong cùng process)
-                rm_instance = ResourceManager._instance
-                
-                # **Enhanced Debug Logging** (ghi log gỡ lỗi nâng cao)
-                access_time = time.time()
-                logger.debug(f"🔍 [RM-ACCESS] Singleton access attempt at {access_time:.3f}")
-                logger.debug(f"🔍 [RM-ACCESS] ResourceManager instance status: {rm_instance is not None}")
-                
-                if rm_instance and ResourceManager.is_ready():
-                    # **SUCCESS PATH: ResourceManager available and ready** (đường dẫn thành công)
-                    logger.info(f"✅ [RM-FORWARD] ResourceManager singleton available and ready on attempt {attempt + 1}")
-                    
-                    # **Execute handoff with comprehensive metadata** (thực thi handoff với metadata toàn diện)
-                    return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                    
-                elif rm_instance and not ResourceManager.is_ready():
-                    # **Instance exists but not ready** (instance tồn tại nhưng chưa sẵn sàng)
-                    logger.info(f"🔄 [RM-FORWARD] ResourceManager instance exists but not ready, waiting...")
-                    
-                    # **Wait for readiness** (chờ sẵn sàng)
-                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
-                    logger.info(f"⏳ [RM-FORWARD] Waiting for readiness with timeout: {wait_timeout:.1f}s")
-                    
-                    ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
-                    
-                    if ready:
-                        # **Skip SharedResourceManager check for singleton (may be cross-process)** (bỏ qua kiểm tra SharedResourceManager cho singleton)
-                        logger.info(f"✅ [RM-FORWARD] ResourceManager ready, executing handoff")
-                        return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                    else:
-                        logger.warning(f"⏰ [RM-FORWARD] ResourceManager readiness timeout after {wait_timeout:.1f}s")
-                        # Continue to exponential backoff section
-                        
-                else:
-                    # **No ResourceManager available** (không có ResourceManager khả dụng)
-                    logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager instance available (attempt {attempt + 1}/{max_retries})")
-                    logger.info(f"🔍 [RM-FORWARD] This is expected in cross-process scenarios without registration")
-                    
-                    # **For cross-process, cannot wait for singleton** (với cross-process, không thể chờ singleton)
-                    logger.info(f"🔄 [RM-FORWARD] Attempting to wait for ResourceManager readiness signal...")
-                    wait_timeout = min(retry_delay * 2, RegistryConfig.DEFAULT_WAIT_TIMEOUT)
-                    
-                    # **Try waiting for ready signal** (thử chờ tín hiệu sẵn sàng)
-                    ready = ResourceManager.wait_for_ready(timeout=wait_timeout)
-                    
-                    if ready:
-                        # **Re-check instance after wait** (kiểm tra lại instance sau khi chờ)
-                        rm_instance = ResourceManager._instance
-                        if rm_instance:
-                            logger.info(f"✅ [RM-FORWARD] ResourceManager available after wait")
-                            return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt + 1)
-                        else:
-                            logger.warning(f"⚠️ [RM-FORWARD] Ready signal but instance still None (cross-process issue)")
-                    else:
-                        logger.warning(f"⏰ [RM-FORWARD] ResourceManager readiness timeout (expected in cross-process)")
-                
-                # **Exponential Backoff Section** (phần backoff theo cấp số nhân)
-                if attempt < max_retries - 1:
-                    # **Exponential Backoff Delay** (độ trễ backoff theo cấp số nhân)
-                    logger.info(f"🔄 [RM-RETRY] Applying exponential backoff: {retry_delay:.1f}s")
-                    time.sleep(retry_delay)
-                    retry_delay *= backoff_multiplier
-                    
-                    # **Progress Logging** (ghi log tiến trình)
-                    attempt_duration = time.time() - attempt_start_time
-                    logger.debug(f"📊 [RM-RETRY] Attempt {attempt + 1} duration: {attempt_duration:.3f}s")
-                else:
-                    # **Final Attempt Failed - Try File-Based Fallback** (lần thử cuối cùng thất bại - thử fallback dựa trên file)
-                    logger.warning(f"⚠️ [RM-FORWARD] ResourceManager unavailable after {max_retries} attempts với readiness signaling")
-                    logger.warning(f"💀 [RM-FORWARD] Final state - Instance: {ResourceManager._instance is not None}, Ready: {ResourceManager.is_ready()}")
-                    logger.info(f"🔄 [FILE-FALLBACK] Attempting file-based fallback for PID {pid}")
-                    
-                    # **FILE-BASED FALLBACK MECHANISM** (cơ chế fallback dựa trên file)
-                    return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
-                        
-            except Exception as attempt_err:
-                logger.error(f"❌ [RM-RETRY] Attempt {attempt + 1} exception: {attempt_err}")
-                
-                if attempt < max_retries - 1:
-                    logger.info(f"🔄 [RM-RETRY] Exception recovery, retrying in {retry_delay:.1f}s")
-                    time.sleep(retry_delay)
-                    retry_delay *= backoff_multiplier
-                else:
-                    logger.error(f"❌ [RM-FORWARD] All attempts failed with exceptions")
-                    logger.info(f"🔄 [FILE-FALLBACK] Attempting file-based fallback after exceptions for PID {pid}")
-                    return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
-        
-        # **Should not reach here - Final Fallback** (không nên đến đây - fallback cuối cùng)
-        logger.error(f"❌ [RM-FORWARD] Unexpected end of retry loop for PID {pid}")
-        logger.info(f"🔄 [FILE-FALLBACK] Final attempt file-based fallback for PID {pid}")
-        return self._try_file_based_fallback(pid, coordinator_metadata, process_info)
+
+        ipc_metadata = {
+            **coordinator_metadata,
+            'ipc_forward_timestamp': time.time(),
+            'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry_ipc'],
+            'process_info': {
+                'pid': pid,
+                'process_type': process_info.process_type,
+                'process_name': process_info.process_name,
+                'registered_at': process_info.registered_at
+            },
+            'cross_process_communication': True
+        }
+
+        success = self._send_pid_via_ipc(pid, ipc_metadata)
+        if success:
+            process_info.coordination_state = "ipc_forwarded"
+            process_info.metadata['ipc_forwarded'] = True
+            process_info.metadata['ipc_timestamp'] = time.time()
+            logger.info(f"✅ [RM-FORWARD] PID {pid} forwarded via IPC successfully")
+            return True
+
+        logger.error(f"❌ [RM-FORWARD] IPC forward failed for PID {pid}")
+        return False
     
     def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
                            process_info: ProcessInfo, attempt_number: int = 1) -> bool:

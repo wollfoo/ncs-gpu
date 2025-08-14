@@ -243,10 +243,7 @@ class ResourceManager(IResourceManager):
             # **File-based scanner deprecated** (scanner dựa trên file đã lỗi thời – bộ quét theo file không dùng nữa)
             # Thay thế bằng **IPC Bridge** (cầu IPC – kết nối liên tiến trình) cho **cross-process communication** (giao tiếp xuyên tiến trình – trao đổi giữa các process)
             
-            # **DirectPIDRegistry Integration** (tích hợp DirectPIDRegistry – kết nối sổ đăng ký PID trực tiếp)
-            self._setup_direct_registry_observer()
-            
-            # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge – kết nối cầu liên tiến trình)
+            # **🔥 IPC BRIDGE INTEGRATION (server-first)** (tích hợp IPC Bridge – ưu tiên khởi tạo server trước)
             self._ipc_server = None
             self._ipc_enabled = True
             self._ipc_stats = {
@@ -256,6 +253,10 @@ class ResourceManager(IResourceManager):
                 'cross_process_requests': 0
             }
             self._setup_ipc_bridge()
+            
+            # **DirectPIDRegistry Integration (IPC-only mode)**
+            # Không đăng ký observer hay RM trực tiếp để tránh kích hoạt cloaking qua đường cũ.
+            self._setup_direct_registry_observer()
             
             # **🚀 GPU OPTIMIZATION ORCHESTRATOR** (khởi tạo bộ điều phối tối ưu GPU)
             self._gpu_orchestrator = None
@@ -361,19 +362,15 @@ class ResourceManager(IResourceManager):
             
             registry = get_direct_registry()
             
-            # **SOLUTION 1: Register ResourceManager instance với DirectPIDRegistry** (đăng ký instance ResourceManager)
+            # **IPC-only mode**: Không đăng ký observer để đảm bảo luồng PID thống nhất qua IPC Bridge
             if hasattr(registry, 'register_resource_manager'):
                 success = registry.register_resource_manager(self)
                 if success:
-                    self.logger.info("✅ [SOLUTION-1] ResourceManager đã đăng ký với DirectPIDRegistry")
+                    self.logger.info("✅ [IPC-ONLY] ResourceManager đã đăng ký (không observer) với DirectPIDRegistry")
                 else:
-                    self.logger.warning("⚠️ [SOLUTION-1] Không thể đăng ký ResourceManager với DirectPIDRegistry")
+                    self.logger.warning("⚠️ [IPC-ONLY] Không thể đăng ký ResourceManager với DirectPIDRegistry")
             else:
-                self.logger.warning("⚠️ [SOLUTION-1] DirectPIDRegistry không hỗ trợ register_resource_manager")
-            
-            # **Original observer registration** (đăng ký observer gốc)
-            registry.register_observer(self._on_process_registered_direct)
-            self.logger.info("✅ DirectPIDRegistry observer đã đăng ký")
+                self.logger.warning("⚠️ [IPC-ONLY] DirectPIDRegistry không hỗ trợ register_resource_manager")
             
         except Exception as e:
             self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")

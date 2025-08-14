@@ -596,6 +596,20 @@ class IPCClient:
         
         self.logger.info(f"🚀 [IPC-CLIENT] Initialized for process: {self.process_id}")
 
+    def _try_connect_to_server(self) -> None:
+        """Attempt a best-effort association with in-process IPC server.
+
+        - If an in-process server exists and is running, log a debug hint.
+        - Do not raise exceptions; IPC file-based fallback will still work.
+        """
+        try:
+            if _GLOBAL_ACTIVE_SERVER and getattr(_GLOBAL_ACTIVE_SERVER, 'is_running', False):
+                self.logger.debug("🔗 [IPC-CLIENT] In-process IPC server detected (server_running=True)")
+            else:
+                self.logger.debug("🔍 [IPC-CLIENT] No in-process IPC server detected (server_running=False)")
+        except Exception as err:
+            logger.debug(f"⚠️ [IPC-CLIENT] _try_connect_to_server noop on error: {err}")
+
     def send_message(self, message_type: IPCMessageType, payload: Dict[str, Any], 
                     priority: IPCPriority = IPCPriority.NORMAL, 
                     timeout: float = IPCBridgeConfig.MESSAGE_TIMEOUT) -> bool:
