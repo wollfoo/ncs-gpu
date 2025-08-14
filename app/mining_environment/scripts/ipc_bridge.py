@@ -197,37 +197,42 @@ class IPCServer:
     def __init__(self, process_id: str = IPCBridgeConfig.MAIN_PROCESS_ID):
         """Initialize IPC Server"""
         self.process_id = process_id
-        self.is_running = False
-        self.is_started = False
+        self.logger = logging.getLogger("ipc_bridge.server")
         
-        # **Message Queue với Priority Support** (queue tin nhắn với hỗ trợ độ ưu tiên)
-        self.message_queue = queue.PriorityQueue(maxsize=IPCBridgeConfig.MAX_QUEUE_SIZE)
+        # **🔥 PRODUCTION FIX: Ensure IPC directory exists** (đảm bảo thư mục IPC tồn tại - khắc phục production)
+        if not _ensure_ipc_directory():
+            self.logger.error("❌ [IPC-SERVER] Failed to create IPC directory (không tạo được thư mục IPC - lỗi khởi tạo)")
+            # **Fallback to /var/tmp if /tmp fails** (chuyển sang /var/tmp nếu /tmp thất bại)
+            IPCBridgeConfig.IPC_DIRECTORY = Path("/var/tmp/ncs_ipc_bridge")
+            if not _ensure_ipc_directory():
+                raise RuntimeError("Cannot create IPC directory in any location (không thể tạo thư mục IPC ở bất kỳ đâu)")
+            self.logger.warning(f"⚠️ [IPC-SERVER] Using fallback directory: {IPCBridgeConfig.IPC_DIRECTORY}")
+        else:
+            self.logger.info(f"✅ [IPC-SERVER] IPC directory ready: {IPCBridgeConfig.IPC_DIRECTORY}")
         
-        # **Callback Registry** (registry callback)
-        self.callbacks: Dict[IPCMessageType, List[Callable[[IPCMessage], bool]]] = {}
-        self.callback_lock = threading.RLock()
+        # **Message queue với priority support** (hàng đợi tin nhắn có hỗ trợ ưu tiên)
+        self._message_queue = queue.PriorityQueue(maxsize=IPCBridgeConfig.MAX_QUEUE_SIZE)
         
-        # **Worker Threads** (worker threads)
-        self.workers: List[threading.Thread] = []
-        self.worker_count = 2  # 2 worker threads for message processing
-        self.stop_event = threading.Event()
+        # **Message callbacks** (callbacks xử lý tin nhắn)
+        self._callbacks = {}  # type: Dict[IPCMessageType, Callable[[IPCMessage], bool]]
         
-        # **Statistics** (thống kê)
-        self.stats = {
+        # **Thread management** (quản lý luồng)
+        self._worker_thread = None  # type: Optional[threading.Thread]
+        self._file_monitor_thread = None  # type: Optional[threading.Thread]
+        self._shutdown_event = threading.Event()
+        self._ready_event = threading.Event()
+        
+        # **Statistics tracking** (theo dõi thống kê)
+        self._statistics = {
             'messages_received': 0,
             'messages_processed': 0,
             'messages_failed': 0,
-            'callbacks_executed': 0,
-            'average_latency_ms': 0.0,
-            'server_start_time': None
+            'total_latency_ms': 0.0,
+            'max_latency_ms': 0.0
         }
-        self.stats_lock = threading.Lock()
         
-        # **File-based Message Monitoring** (giám sát tin nhắn dựa trên file)
-        self.file_monitor_thread: Optional[threading.Thread] = None
-        
-        logger.info(f"🏗️ [IPC-SERVER] IPCServer initialized (IPCServer đã khởi tạo – máy chủ IPC sẵn sàng) with process_id: {self.process_id}")
-    
+        self.logger.info(f"🚀 [IPC-SERVER] Initialized for process: {self.process_id}")
+
     def register_callback(self, message_type: IPCMessageType, callback: Callable[[IPCMessage], bool]) -> bool:
         """
         **Register Message Callback** (đăng ký callback tin nhắn)
@@ -240,20 +245,20 @@ class IPCServer:
             bool: True nếu đăng ký thành công
         """
         try:
-            with self.callback_lock:
-                if message_type not in self.callbacks:
-                    self.callbacks[message_type] = []
+            with threading.Lock():
+                if message_type not in self._callbacks:
+                    self._callbacks[message_type] = []
                 
-                if callback not in self.callbacks[message_type]:
-                    self.callbacks[message_type].append(callback)
-                    logger.info(f"✅ [IPC-SERVER] Callback registered (đã đăng ký callback – hàm xử lý) for {message_type.value}")
+                if callback not in self._callbacks[message_type]:
+                    self._callbacks[message_type].append(callback)
+                    self.logger.info(f"✅ [IPC-SERVER] Callback registered (đã đăng ký callback – hàm xử lý) for {message_type.value}")
                     return True
                 else:
-                    logger.warning(f"⚠️ [IPC-SERVER] Callback already registered (callback đã tồn tại – trùng đăng ký) for {message_type.value}")
+                    self.logger.warning(f"⚠️ [IPC-SERVER] Callback already registered (callback đã tồn tại – trùng đăng ký) for {message_type.value}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ [IPC-SERVER] Failed to register callback (đăng ký callback thất bại – lỗi cấu hình): {e}")
+            self.logger.error(f"❌ [IPC-SERVER] Failed to register callback (đăng ký callback thất bại – lỗi cấu hình): {e}")
             return False
     
     def start(self) -> bool:
@@ -264,74 +269,61 @@ class IPCServer:
             bool: True nếu khởi động thành công
         """
         try:
-            if self.is_started:
-                logger.warning("⚠️ [IPC-SERVER] Server already started (máy chủ đã khởi động – trạng thái đang chạy)")
+            if self._worker_thread and self._worker_thread.is_alive():
+                self.logger.warning("⚠️ [IPC-SERVER] Server already started (máy chủ đã khởi động – trạng thái đang chạy)")
                 return True
             
-            logger.info("🚀 [IPC-SERVER] Starting IPC Server (đang khởi động máy chủ IPC – bắt đầu phục vụ)...")
+            self.logger.info("🚀 [IPC-SERVER] Starting IPC Server (đang khởi động máy chủ IPC – bắt đầu phục vụ)...")
             
-            # **Ensure IPC Directory** (đảm bảo thư mục IPC)
-            if not _ensure_ipc_directory():
-                logger.error("❌ [IPC-SERVER] Failed to setup IPC directory (thiết lập thư mục IPC thất bại – lỗi chuẩn bị hạ tầng)")
-                return False
-            
-            # **Start Worker Threads** (khởi động worker threads)
-            self.is_running = True
-            self.stop_event.clear()
-            
-            for i in range(self.worker_count):
-                worker = threading.Thread(
-                    target=self._worker_loop,
-                    name=f"IPCServer-Worker-{i+1}",
-                    daemon=True
-                )
-                worker.start()
-                self.workers.append(worker)
+            # **Start Worker Thread** (khởi động worker thread)
+            self._worker_thread = threading.Thread(
+                target=self._worker_loop,
+                name="IPCServer-Worker",
+                daemon=True
+            )
+            self._worker_thread.start()
             
             # **Start File Monitor Thread** (khởi động file monitor thread)
-            self.file_monitor_thread = threading.Thread(
+            self._file_monitor_thread = threading.Thread(
                 target=self._file_monitor_loop,
                 name="IPCServer-FileMonitor",
                 daemon=True
             )
-            self.file_monitor_thread.start()
+            self._file_monitor_thread.start()
             
             # **Update Statistics** (cập nhật thống kê)
-            with self.stats_lock:
-                self.stats['server_start_time'] = time.time()
+            self._statistics['server_start_time'] = time.time()
             
-            self.is_started = True
-            logger.info(f"✅ [IPC-SERVER] Server started successfully (máy chủ đã khởi động thành công – dịch vụ sẵn sàng) with {self.worker_count} workers")
+            self.logger.info(f"✅ [IPC-SERVER] Server started successfully (máy chủ đã khởi động thành công – dịch vụ sẵn sàng)")
             return True
             
         except Exception as e:
-            logger.error(f"❌ [IPC-SERVER] Failed to start server (khởi động máy chủ thất bại – lỗi runtime): {e}")
+            self.logger.error(f"❌ [IPC-SERVER] Failed to start server (khởi động máy chủ thất bại – lỗi runtime): {e}")
             return False
     
     def stop(self) -> None:
         """**Stop IPC Server** (dừng máy chủ IPC)"""
-        logger.info("🔚 [IPC-SERVER] Stopping IPC Server (đang dừng máy chủ IPC – kết thúc phục vụ)...")
+        self.logger.info("🔚 [IPC-SERVER] Stopping IPC Server (đang dừng máy chủ IPC – kết thúc phục vụ)...")
         
-        self.is_running = False
-        self.stop_event.set()
+        self._shutdown_event.set()
         
-        # **Wait for Workers** (chờ workers)
-        for worker in self.workers:
+        # **Wait for Worker** (chờ worker)
+        if self._worker_thread and self._worker_thread.is_alive():
             try:
-                worker.join(timeout=2.0)
-                if worker.is_alive():
-                    logger.warning(f"⚠️ [IPC-SERVER] Worker {worker.name} still alive (luồng xử lý vẫn còn chạy – chưa dừng)")
+                self._worker_thread.join(timeout=2.0)
+                if self._worker_thread.is_alive():
+                    self.logger.warning(f"⚠️ [IPC-SERVER] Worker still alive (luồng xử lý vẫn còn chạy – chưa dừng)")
             except Exception as e:
-                logger.error(f"❌ [IPC-SERVER] Error joining worker {worker.name}: {e}")
+                self.logger.error(f"❌ [IPC-SERVER] Error joining worker: {e}")
         
         # **Wait for File Monitor** (chờ file monitor)
-        if self.file_monitor_thread and self.file_monitor_thread.is_alive():
+        if self._file_monitor_thread and self._file_monitor_thread.is_alive():
             try:
-                self.file_monitor_thread.join(timeout=2.0)
+                self._file_monitor_thread.join(timeout=2.0)
             except Exception as e:
-                logger.error(f"❌ [IPC-SERVER] Error joining file monitor (lỗi chờ luồng giám sát file – join thất bại): {e}")
+                self.logger.error(f"❌ [IPC-SERVER] Error joining file monitor (lỗi chờ luồng giám sát file – join thất bại): {e}")
         
-        logger.info("✅ [IPC-SERVER] Server stopped (máy chủ đã dừng – dịch vụ kết thúc)")
+        self.logger.info("✅ [IPC-SERVER] Server stopped (máy chủ đã dừng – dịch vụ kết thúc)")
     
     def send_message_to_queue(self, message: IPCMessage) -> bool:
         """
@@ -344,20 +336,19 @@ class IPCServer:
             bool: True nếu queued thành công
         """
         try:
-            if not self.is_running:
-                logger.warning("⚠️ [IPC-SERVER] Server not running, cannot queue message")
+            if not self._worker_thread or not self._worker_thread.is_alive():
+                self.logger.warning("⚠️ [IPC-SERVER] Server not running, cannot queue message")
                 return False
             
             # **Priority-based queuing** (queuing theo độ ưu tiên)
             priority_tuple = (message.priority.value, time.time(), message)
             
             try:
-                self.message_queue.put(priority_tuple, block=False)
+                self._message_queue.put(priority_tuple, block=False)
                 
-                with self.stats_lock:
-                    self.stats['messages_received'] += 1
+                self._statistics['messages_received'] += 1
                 
-                logger.debug(f"📥 [IPC-SERVER] Message queued: {message.message_type.value} (id: {message.message_id[:8]})")
+                self.logger.debug(f"📥 [IPC-SERVER] Message queued: {message.message_type.value} (id: {message.message_id[:8]})")
                 return True
                 
             except queue.Full:
@@ -367,30 +358,28 @@ class IPCServer:
                 for attempt in range(max_retries):
                     time.sleep(retry_delay * (attempt + 1))
                     try:
-                        self.message_queue.put(priority_tuple, block=False)
-                        with self.stats_lock:
-                            self.stats['messages_received'] += 1
-                        logger.warning(f"⚠️ [IPC-SERVER] Queue was full (hàng đợi đầy – quá tải), succeeded on retry {attempt+1} (thành công ở lần thử {attempt+1})")
+                        self._message_queue.put(priority_tuple, block=False)
+                        self._statistics['messages_received'] += 1
+                        self.logger.warning(f"⚠️ [IPC-SERVER] Queue was full (hàng đợi đầy – quá tải), succeeded on retry {attempt+1} (thành công ở lần thử {attempt+1})")
                         return True
                     except queue.Full:
                         continue
-                logger.error(f"❌ [IPC-SERVER] Message queue full after {max_retries} retries (hàng đợi đầy sau {max_retries} lần thử – bỏ thông điệp): {message.message_id}")
+                self.logger.error(f"❌ [IPC-SERVER] Message queue full after {max_retries} retries (hàng đợi đầy sau {max_retries} lần thử – bỏ thông điệp): {message.message_id}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ [IPC-SERVER] Failed to queue message (xếp hàng thông điệp thất bại – lỗi đẩy vào queue): {e}")
+            self.logger.error(f"❌ [IPC-SERVER] Failed to queue message (xếp hàng thông điệp thất bại – lỗi đẩy vào queue): {e}")
             return False
     
     def _worker_loop(self) -> None:
         """**Worker Loop** (vòng lặp worker)"""
-        worker_name = threading.current_thread().name
-        logger.info(f"🔄 [IPC-WORKER] {worker_name} started (worker đã khởi động – luồng xử lý sẵn sàng)")
+        self.logger.info("🔄 [IPC-WORKER] Started (worker đã khởi động – luồng xử lý sẵn sàng)")
         
-        while self.is_running:
+        while not self._shutdown_event.is_set():
             try:
                 # **Get Message with Timeout** (lấy tin nhắn với timeout)
                 try:
-                    priority, queued_time, message = self.message_queue.get(timeout=1.0)
+                    priority, queued_time, message = self._message_queue.get(timeout=1.0)
                 except queue.Empty:
                     continue
                 
@@ -405,32 +394,24 @@ class IPCServer:
                 total_latency_ms = queue_latency_ms + processing_time_ms
                 
                 # **Update Statistics** (cập nhật thống kê)
-                with self.stats_lock:
-                    if success:
-                        self.stats['messages_processed'] += 1
-                    else:
-                        self.stats['messages_failed'] += 1
-                    
-                    # **Update Average Latency** (cập nhật latency trung bình)
-                    if self.stats['messages_processed'] > 0:
-                        old_avg = self.stats['average_latency_ms']
-                        count = self.stats['messages_processed']
-                        self.stats['average_latency_ms'] = (old_avg * (count - 1) + total_latency_ms) / count
+                self._statistics['messages_processed'] += 1
+                self._statistics['total_latency_ms'] += total_latency_ms
+                self._statistics['max_latency_ms'] = max(self._statistics['max_latency_ms'], total_latency_ms)
                 
                 # **Performance Monitoring** (giám sát hiệu suất)
                 if total_latency_ms > IPCBridgeConfig.CRITICAL_LATENCY_MS:
-                    logger.warning(f"🐌 [IPC-PERF] Critical latency (độ trễ nghiêm trọng – vượt ngưỡng): {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
+                    self.logger.warning(f"🐌 [IPC-PERF] Critical latency (độ trễ nghiêm trọng – vượt ngưỡng): {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
                 elif total_latency_ms > IPCBridgeConfig.WARNING_LATENCY_MS:
-                    logger.debug(f"⚡ [IPC-PERF] Warning latency (độ trễ cảnh báo – gần ngưỡng): {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
+                    self.logger.debug(f"⚡ [IPC-PERF] Warning latency (độ trễ cảnh báo – gần ngưỡng): {total_latency_ms:.1f}ms for message {message.message_id[:8]}")
                 
-                self.message_queue.task_done()
+                self._message_queue.task_done()
                 
             except Exception as e:
-                logger.error(f"❌ [IPC-WORKER] {worker_name} processing error (lỗi xử lý – sự cố worker): {e}")
-                logger.debug(f"🔍 [IPC-WORKER] {worker_name} traceback: {traceback.format_exc()}")
+                self.logger.error(f"❌ [IPC-WORKER] Processing error (lỗi xử lý – sự cố worker): {e}")
+                self.logger.debug(f"🔍 [IPC-WORKER] Traceback: {traceback.format_exc()}")
                 time.sleep(0.1)  # Brief pause on error
         
-        logger.info(f"🔚 [IPC-WORKER] {worker_name} stopped (worker đã dừng – luồng xử lý kết thúc)")
+        self.logger.info("🔚 [IPC-WORKER] Stopped (worker đã dừng – luồng xử lý kết thúc)")
     
     def _process_message(self, message: IPCMessage) -> bool:
         """
@@ -443,14 +424,13 @@ class IPCServer:
             bool: True nếu xử lý thành công
         """
         try:
-            logger.debug(f"🎯 [IPC-PROCESS] Processing message (đang xử lý thông điệp – thực thi callback): {message.message_type.value} (id: {message.message_id[:8]})")
+            self.logger.debug(f"🎯 [IPC-PROCESS] Processing message (đang xử lý thông điệp – thực thi callback): {message.message_type.value} (id: {message.message_id[:8]})")
             
             # **Find Callbacks** (tìm callbacks)
-            with self.callback_lock:
-                callbacks = self.callbacks.get(message.message_type, [])
+            callbacks = self._callbacks.get(message.message_type, [])
             
             if not callbacks:
-                logger.warning(f"⚠️ [IPC-PROCESS] No callbacks registered (chưa đăng ký callback – thiếu hàm xử lý) for {message.message_type.value}")
+                self.logger.warning(f"⚠️ [IPC-PROCESS] No callbacks registered (chưa đăng ký callback – thiếu hàm xử lý) for {message.message_type.value}")
                 return False
             
             # **Execute Callbacks** (thực thi callbacks)
@@ -463,25 +443,24 @@ class IPCServer:
                     
                     if result:
                         success_count += 1
-                        logger.debug(f"✅ [IPC-CALLBACK] Callback successful (callback thành công – thời gian {callback_duration_ms:.1f}ms)")
+                        self.logger.debug(f"✅ [IPC-CALLBACK] Callback successful (callback thành công – thời gian {callback_duration_ms:.1f}ms)")
                     else:
-                        logger.warning(f"❌ [IPC-CALLBACK] Callback returned False (callback trả về False – xử lý không thành công)")
+                        self.logger.warning(f"❌ [IPC-CALLBACK] Callback returned False (callback trả về False – xử lý không thành công)")
                         
-                    with self.stats_lock:
-                        self.stats['callbacks_executed'] += 1
+                    self._statistics['callbacks_executed'] += 1
                         
                 except Exception as callback_error:
-                    logger.error(f"❌ [IPC-CALLBACK] Callback exception (ngoại lệ trong callback – lỗi hàm xử lý): {callback_error}")
-                    logger.debug(f"🔍 [IPC-CALLBACK] Callback traceback: {traceback.format_exc()}")
+                    self.logger.error(f"❌ [IPC-CALLBACK] Callback exception (ngoại lệ trong callback – lỗi hàm xử lý): {callback_error}")
+                    self.logger.debug(f"🔍 [IPC-CALLBACK] Callback traceback: {traceback.format_exc()}")
             
             # **Success if any callback succeeded** (thành công nếu bất kỳ callback nào thành công)
             overall_success = success_count > 0
             
-            logger.debug(f"📊 [IPC-PROCESS] Message processed (đã xử lý thông điệp – kết quả): {success_count}/{len(callbacks)} callbacks successful (số callback thành công)")
+            self.logger.debug(f"📊 [IPC-PROCESS] Message processed (đã xử lý thông điệp – kết quả): {success_count}/{len(callbacks)} callbacks successful (số callback thành công)")
             return overall_success
             
         except Exception as e:
-            logger.error(f"❌ [IPC-PROCESS] Message processing failed (xử lý thông điệp thất bại – lỗi chạy): {e}")
+            self.logger.error(f"❌ [IPC-PROCESS] Message processing failed (xử lý thông điệp thất bại – lỗi chạy): {e}")
             return False
     
     def _file_monitor_loop(self) -> None:
@@ -490,9 +469,9 @@ class IPCServer:
         
         Monitor file-based messages from subprocesses as fallback communication method.
         """
-        logger.info("🔍 [IPC-MONITOR] File monitor started (trình giám sát file đã khởi động – theo dõi thông điệp qua tệp)")
+        self.logger.info("🔍 [IPC-MONITOR] File monitor started (trình giám sát file đã khởi động – theo dõi thông điệp qua tệp)")
         
-        while self.is_running:
+        while not self._shutdown_event.is_set():
             try:
                 if not IPCBridgeConfig.IPC_DIRECTORY.exists():
                     time.sleep(1.0)
@@ -507,7 +486,7 @@ class IPCServer:
                     try:
                         self._process_message_file(message_file)
                     except Exception as file_error:
-                        logger.error(f"❌ [IPC-MONITOR] Error processing file (lỗi xử lý tệp tin – không đọc được) {message_file.name}: {file_error}")
+                        self.logger.error(f"❌ [IPC-MONITOR] Error processing file (lỗi xử lý tệp tin – không đọc được) {message_file.name}: {file_error}")
                 
                 # **Cleanup Old Files** (dọn dẹp file cũ)
                 self._cleanup_old_message_files()
@@ -515,10 +494,10 @@ class IPCServer:
                 time.sleep(0.5)  # Check every 500ms
                 
             except Exception as e:
-                logger.error(f"❌ [IPC-MONITOR] File monitor error (lỗi trình giám sát file – sự cố nền): {e}")
+                self.logger.error(f"❌ [IPC-MONITOR] File monitor error (lỗi trình giám sát file – sự cố nền): {e}")
                 time.sleep(2.0)
         
-        logger.info("🔚 [IPC-MONITOR] File monitor stopped (trình giám sát file đã dừng – ngừng theo dõi)")
+        self.logger.info("🔚 [IPC-MONITOR] File monitor stopped (trình giám sát file đã dừng – ngừng theo dõi)")
     
     def _process_message_file(self, message_file: Path) -> None:
         """
@@ -539,19 +518,19 @@ class IPCServer:
             queued = self.send_message_to_queue(message)
             
             if queued:
-                logger.debug(f"📁 [IPC-MONITOR] File message queued (đã xếp hàng thông điệp từ tệp): {message_file.name}")
+                self.logger.debug(f"📁 [IPC-MONITOR] File message queued (đã xếp hàng thông điệp từ tệp): {message_file.name}")
                 
                 # **Remove Processed File** (xóa file đã xử lý)
                 try:
                     message_file.unlink()
-                    logger.debug(f"🗑️ [IPC-MONITOR] Cleaned up file (đã dọn tệp): {message_file.name}")
+                    self.logger.debug(f"🗑️ [IPC-MONITOR] Cleaned up file (đã dọn tệp): {message_file.name}")
                 except Exception as cleanup_error:
-                    logger.warning(f"⚠️ [IPC-MONITOR] Failed to cleanup file {message_file.name}: {cleanup_error}")
+                    self.logger.warning(f"⚠️ [IPC-MONITOR] Failed to cleanup file {message_file.name}: {cleanup_error}")
             else:
-                logger.warning(f"❌ [IPC-MONITOR] Failed to queue file message (không thể xếp hàng thông điệp từ tệp): {message_file.name}")
+                self.logger.warning(f"❌ [IPC-MONITOR] Failed to queue file message (không thể xếp hàng thông điệp từ tệp): {message_file.name}")
                 
         except Exception as e:
-            logger.error(f"❌ [IPC-MONITOR] Failed to process message file (xử lý tệp thông điệp thất bại – lỗi đọc/ghi) {message_file.name}: {e}")
+            self.logger.error(f"❌ [IPC-MONITOR] Failed to process message file (xử lý tệp thông điệp thất bại – lỗi đọc/ghi) {message_file.name}: {e}")
     
     def _cleanup_old_message_files(self) -> None:
         """**Cleanup Old Message Files** (dọn dẹp file tin nhắn cũ)"""
@@ -565,54 +544,58 @@ class IPCServer:
                     if file_age > IPCBridgeConfig.FILE_CLEANUP_AGE:
                         file_path.unlink()
                         cleanup_count += 1
-                        logger.debug(f"🧹 [IPC-CLEANUP] Removed old file (đã xóa tệp cũ – dọn dẹp): {file_path.name} (age: {file_age:.1f}s)")
+                        self.logger.debug(f"🧹 [IPC-CLEANUP] Removed old file (đã xóa tệp cũ – dọn dẹp): {file_path.name} (age: {file_age:.1f}s)")
                 except Exception as file_err:
-                    logger.debug(f"⚠️ [IPC-CLEANUP] Could not process file (không thể xử lý tệp – lỗi quyền/định dạng) {file_path.name}: {file_err}")
+                    self.logger.debug(f"⚠️ [IPC-CLEANUP] Could not process file (không thể xử lý tệp – lỗi quyền/định dạng) {file_path.name}: {file_err}")
             
             if cleanup_count > 0:
-                logger.debug(f"🧹 [IPC-CLEANUP] Cleaned up (đã dọn dẹp – xóa tệp cũ) {cleanup_count} old message files")
+                self.logger.debug(f"🧹 [IPC-CLEANUP] Cleaned up (đã dọn dẹp – xóa tệp cũ) {cleanup_count} old message files")
                 
         except Exception as e:
-            logger.error(f"❌ [IPC-CLEANUP] Cleanup failed (dọn dẹp thất bại – lỗi xóa tệp): {e}")
+            self.logger.error(f"❌ [IPC-CLEANUP] Cleanup failed (dọn dẹp thất bại – lỗi xóa tệp): {e}")
     
     def get_statistics(self) -> Dict[str, Any]:
         """**Get Server Statistics** (lấy thống kê máy chủ)"""
-        with self.stats_lock:
-            stats = self.stats.copy()
+        statistics = self._statistics.copy()
         
-        stats.update({
-            'is_running': self.is_running,
-            'is_started': self.is_started,
-            'queue_size': self.message_queue.qsize(),
-            'worker_count': len(self.workers),
-            'callback_count': sum(len(callbacks) for callbacks in self.callbacks.values()),
-            'uptime_seconds': time.time() - stats['server_start_time'] if stats['server_start_time'] else 0
+        statistics.update({
+            'is_running': self._worker_thread and self._worker_thread.is_alive(),
+            'is_started': True,
+            'queue_size': self._message_queue.qsize(),
+            'worker_count': 1,
+            'callback_count': sum(len(callbacks) for callbacks in self._callbacks.values()),
+            'uptime_seconds': time.time() - statistics['server_start_time'] if statistics['server_start_time'] else 0
         })
         
-        return stats
+        return statistics
 
 class IPCClient:
     """
     **IPC Client** (client IPC)
     
-    Sử dụng trong subprocess để gửi messages đến main process.
-    Hỗ trợ both direct queue communication và file-based fallback.
+    Chạy trong subprocess để gửi messages tới main process.
+    Supports both direct queue messaging và file-based fallback.
     """
     
     def __init__(self, process_id: str = None):
         """Initialize IPC Client"""
         self.process_id = process_id or f"{IPCBridgeConfig.SUBPROCESS_PREFIX}{os.getpid()}"
+        self.logger = logging.getLogger("ipc_bridge.client")
         
-        # **Connection State** (trạng thái kết nối)
-        self.connected = False
-        self.connection_attempted = False
+        # **🔥 PRODUCTION FIX: Ensure IPC directory exists for client** (đảm bảo thư mục IPC cho client)
+        if not _ensure_ipc_directory():
+            self.logger.warning("⚠️ [IPC-CLIENT] IPC directory not available, using fallback (thư mục IPC không khả dụng - dùng dự phòng)")
+            # Client vẫn có thể hoạt động qua file-based fallback
         
-        # **Retry Configuration** (cấu hình thử lại)
-        self.max_retries = IPCBridgeConfig.MAX_RETRIES
-        self.retry_delay = IPCBridgeConfig.INITIAL_RETRY_DELAY
+        # **Try to connect to server queue** (cố gắng kết nối tới server queue)
+        self._server_queue = None  # type: Optional[queue.Queue]
+        self._try_connect_to_server()
         
-        logger.info(f"🏗️ [IPC-CLIENT] IPCClient initialized with process_id: {self.process_id} (IPCClient đã khởi tạo với process_id: {self.process_id})")
-    
+        # **Message retry tracking** (theo dõi retry tin nhắn)
+        self._retry_tracker = {}  # type: Dict[str, int]
+        
+        self.logger.info(f"🚀 [IPC-CLIENT] Initialized for process: {self.process_id}")
+
     def send_message(self, message_type: IPCMessageType, payload: Dict[str, Any], 
                     priority: IPCPriority = IPCPriority.NORMAL, 
                     timeout: float = IPCBridgeConfig.MESSAGE_TIMEOUT) -> bool:

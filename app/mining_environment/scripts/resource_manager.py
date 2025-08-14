@@ -690,56 +690,81 @@ class ResourceManager(IResourceManager):
                 # **🚀 TRIGGER GPU OPTIMIZATION** (kích hoạt tối ưu GPU – gọi orchestrator)
                 if self._gpu_orchestrator is not None:
                     try:
-                        self.logger.info(f"[RM] 🎯 Triggering GPU Optimization for PID {process.pid}")
+                        self.logger.info(f"[RM] 🎯 **Starting GPU Optimization** (bắt đầu tối ưu GPU – kích hoạt điều chỉnh card đồ họa) for PID {process.pid}")
+                        self.logger.info(f"[RM] 📊 **Process details** (chi tiết tiến trình): name={process.name}, source={source}")
                         
-                        # Xác định GPU index (mặc định 0)
+                        # **Determine GPU index** (xác định chỉ số GPU – chọn card đồ họa)
                         gpu_index = 0
+                        self.logger.debug(f"[RM] 🎮 **Target GPU** (GPU mục tiêu – card đồ họa được chọn): index={gpu_index}")
                         
-                        # Gọi orchestrator để tối ưu ở background để không block luồng
+                        # **Async GPU optimization** (tối ưu GPU bất đồng bộ – điều chỉnh không chặn)
                         def _optimize_async(pid_val: int, gpu_idx: int):
                             try:
-                                # Cooldown window để tránh xung đột ngay sau cloaking
+                                self.logger.info(f"[RM] 🔧 **GPU Optimization thread started** (luồng tối ưu GPU đã khởi động – thread điều chỉnh bắt đầu) for PID {pid_val}")
+                                
+                                # **Cooldown period** (thời gian chờ nguội – độ trễ an toàn)
                                 try:
                                     cooldown_sec = float(os.getenv('GPU_OPT_COOLDOWN_SEC', '2.0'))
                                 except Exception:
                                     cooldown_sec = 2.0
                                 if cooldown_sec > 0:
+                                    self.logger.debug(f"[RM] ⏱️ **Cooldown wait** (chờ nguội – tạm dừng an toàn): {cooldown_sec}s to avoid conflicts")
                                     time.sleep(cooldown_sec)
 
-                                # Thực thi tối ưu hoá và lấy kết quả một lần (tránh double-call)
+                                # **Execute optimization** (thực thi tối ưu – chạy điều chỉnh)
                                 try:
+                                    self.logger.info(f"[RM] 🚀 **Calling GPU Orchestrator** (gọi điều phối GPU – kích hoạt bộ điều khiển) for PID {pid_val}")
+                                    
                                     opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
                                         pid=pid_val,
                                         gpu_index=gpu_idx,
                                         strategies=None
                                     )
+                                    
+                                    self.logger.info(f"[RM] ✅ **GPU Optimization completed** (tối ưu GPU hoàn tất – điều chỉnh xong) for PID {pid_val}")
+                                    
+                                    # **Analyze results** (phân tích kết quả – kiểm tra đầu ra)
                                     hw = opt_result.get('hardware_results', {}) if isinstance(opt_result, dict) else {}
                                     safety = None
                                     if isinstance(hw, dict):
+                                        self.logger.debug(f"[RM] 📈 **Hardware results** (kết quả phần cứng – đầu ra điều chỉnh): success={hw.get('success')}")
                                         pred = hw.get('temperature_prediction', {})
                                         if isinstance(pred, dict):
                                             safety = pred.get('safety_status')
+                                            self.logger.info(f"[RM] 🌡️ **Temperature safety** (an toàn nhiệt độ – trạng thái nhiệt): {safety}")
 
+                                    # **Safety check and rollback** (kiểm tra an toàn và hoàn trả – xác thực và khôi phục)
                                     if (isinstance(hw, dict) and not hw.get('success', False)) or hw.get('error') or safety in ('CRITICAL', 'EMERGENCY'):
-                                        self.logger.warning(f"[RM] ⚠️ Hardware optimization indicates risk or failure for PID {pid_val} (safety={safety}) – attempting rollback")
+                                        self.logger.warning(f"[RM] ⚠️ **Optimization risk detected** (phát hiện rủi ro tối ưu – cảnh báo nguy hiểm) for PID {pid_val} (safety={safety})")
+                                        self.logger.warning(f"[RM] 🔄 **Attempting rollback** (thử hoàn trả – khôi phục cài đặt gốc)...")
                                         try:
                                             hc = getattr(self._gpu_orchestrator, 'hardware_controller', None)
                                             gm = getattr(hc, 'gpu_manager', None) if hc else None
                                             if gm and hasattr(gm, 'restore_gpu_settings_for_pid'):
                                                 restored = gm.restore_gpu_settings_for_pid(pid_val)
-                                                self.logger.info(f"[RM] 🔄 Rollback GPU settings for PID {pid_val}: {restored}")
+                                                self.logger.info(f"[RM] ✅ **Rollback successful** (hoàn trả thành công – khôi phục xong) for PID {pid_val}: {restored}")
+                                            else:
+                                                self.logger.warning(f"[RM] ⚠️ **No rollback method available** (không có phương thức hoàn trả – thiếu hàm khôi phục)")
                                         except Exception as rb_err:
-                                            self.logger.error(f"[RM] ❌ Rollback failed for PID {pid_val}: {rb_err}")
+                                            self.logger.error(f"[RM] ❌ **Rollback failed** (hoàn trả thất bại – khôi phục lỗi) for PID {pid_val}: {rb_err}")
+                                    else:
+                                        self.logger.info(f"[RM] ✅ **GPU Optimization successful** (tối ưu GPU thành công – điều chỉnh hoàn hảo) for PID {pid_val}")
+                                        
                                 except Exception as eval_err:
-                                    self.logger.debug(f"[RM] Skipping optimization result evaluation due to error: {eval_err}")
+                                    self.logger.error(f"[RM] ❌ **Optimization evaluation error** (lỗi đánh giá tối ưu – thất bại phân tích): {eval_err}")
+                                    
                             except Exception as _e:
-                                self.logger.error(f"[RM] ❌ GPU Optimization async exception for PID {pid_val}: {_e}")
+                                self.logger.error(f"[RM] ❌ **GPU Optimization thread failed** (luồng tối ưu GPU thất bại – thread lỗi) for PID {pid_val}: {_e}")
+                                import traceback
+                                self.logger.debug(f"[RM] 🔍 **Traceback** (dấu vết lỗi): {traceback.format_exc()}")
 
+                        # **Start optimization thread** (khởi động luồng tối ưu – chạy thread điều chỉnh)
                         t = threading.Thread(target=_optimize_async, args=(process.pid, gpu_index), name=f"RM-GPU-OPT-{process.pid}", daemon=True)
                         t.start()
+                        self.logger.info(f"[RM] 🏃 **GPU Optimization thread launched** (luồng tối ưu GPU đã phóng – thread chạy nền) for PID {process.pid}")
                                 
                     except Exception as e:
-                        self.logger.error(f"[RM] ❌ GPU Optimization exception for PID {process.pid}: {e}")
+                        self.logger.error(f"[RM] ❌ **GPU Optimization launch failed** (khởi động tối ưu GPU thất bại – không thể bắt đầu) for PID {process.pid}: {e}")
                         import traceback
                         self.logger.debug(f"[RM] Traceback: {traceback.format_exc()}")
                 else:
