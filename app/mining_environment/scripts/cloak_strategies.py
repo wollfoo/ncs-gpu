@@ -44,7 +44,7 @@ try:
 except Exception:
     np = None  # type: ignore
     _NUMPY_AVAILABLE = False
-    cloak_logger.warning("[MetricsHub] [numpy] (thư viện numpy – thư viện tính toán số) not available (không khả dụng) – using pure-Python fallback statistics (sử dụng thống kê thuần Python – cơ chế dự phòng)")
+    cloak_logger.warning("[MHub] [numpy] (thư viện numpy – thư viện tính toán số) not available (không khả dụng) – using pure-Python fallback statistics (sử dụng thống kê thuần Python – cơ chế dự phòng)")
 
 # **GPU-Only Mode** (chế độ chỉ GPU – hoạt động riêng card đồ họa): **CPU ResourceManager removed** (đã xóa trình quản lý tài nguyên CPU) cho **GPU-only operations** (hoạt động chỉ GPU – thao tác riêng card đồ họa)
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ class MetricsCollectionHub:
             try:
                 self.fixed_export_path = Path(fixed_path_str)
                 self.fixed_export_path.parent.mkdir(parents=True, exist_ok=True)
-                self.logger.info(f"[MetricsHub] Single-file export enabled → {self.fixed_export_path}")
+                self.logger.info(f"[MHub] Single-file export enabled → {self.fixed_export_path}")
             except Exception as _e:
                 self.logger.warning(f"[MetricsHub] Cannot prepare fixed export path '{fixed_path_str}': {_e}")
                 self.single_file_export = False
@@ -145,7 +145,7 @@ class MetricsCollectionHub:
         except Exception:
             self._init_time = 0
         
-        self.logger.info(f"[MetricsHub] Initialized with buffer_size={buffer_size}, log_interval={log_interval}s")
+        self.logger.info(f"[MHub] Initialized with buffer_size={buffer_size}, log_interval={log_interval}s")
     
     def add_metric(self, metric_type: str, data: Dict[str, Any]) -> bool:
         """
@@ -155,31 +155,31 @@ class MetricsCollectionHub:
         :param data: Dictionary chứa metric data với timestamp
         :return: True nếu thành công
         """
-        self.logger.debug(f" [MetricsHub.add_metric] Entry - type: {metric_type}, data_keys: {list(data.keys())}")
+        self.logger.debug(f"[MHub.add_metric] Entry - type: {metric_type}, data_keys: {list(data.keys())}")
         
         if metric_type not in self.metrics_buffers:
             # Rate-limit: warn once per unknown type, then downgrade to debug
             if metric_type not in self._unknown_type_warned:
                 self._unknown_type_warned.add(metric_type)
-                self.logger.warning(f" [MetricsHub.add_metric] Unknown metric type: {metric_type}, available: {list(self.metrics_buffers.keys())}")
+                self.logger.warning(f"[MHub.add_metric] Unknown metric type: {metric_type}, available: {list(self.metrics_buffers.keys())}")
             else:
-                self.logger.debug(f" [MetricsHub.add_metric] Unknown metric type (suppressed): {metric_type}")
+                self.logger.debug(f"[MHub.add_metric] Unknown metric type (suppressed): {metric_type}")
             return False
         
         # Add timestamp nếu chưa có
         if 'timestamp' not in data:
             data['timestamp'] = datetime.now().isoformat()
-            self.logger.debug(f" [MetricsHub.add_metric] Added timestamp: {data['timestamp']}")
+            self.logger.debug(f"[MHub.add_metric] Added timestamp: {data['timestamp']}")
         
         try:
             with self.buffer_locks[metric_type]:
                 buffer_len_before = len(self.metrics_buffers[metric_type])
                 self.metrics_buffers[metric_type].append(data)
                 buffer_len_after = len(self.metrics_buffers[metric_type])
-                self.logger.debug(f" [MetricsHub.add_metric] Success - {metric_type} buffer: {buffer_len_before}→{buffer_len_after}")
+                self.logger.debug(f"[MHub.add_metric] Success - {metric_type} buffer: {buffer_len_before}→{buffer_len_after}")
             return True
         except Exception as e:
-            self.logger.error(f" [MetricsHub.add_metric] Failed - type: {metric_type}, error: {e}", exc_info=True)
+            self.logger.error(f"[MHub.add_metric] Failed - type: {metric_type}, error: {e}", exc_info=True)
             return False
     
     def get_metrics(self, metric_type: str, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -190,10 +190,10 @@ class MetricsCollectionHub:
         :param last_n: Số lượng metrics gần nhất cần lấy (None = tất cả)
         :return: List of metric dictionaries
         """
-        self.logger.debug(f"🔍 [MetricsHub.get_metrics] Entry - type: {metric_type}, last_n: {last_n}")
+        self.logger.debug(f"[MHub.get_metrics] Entry - type: {metric_type}, last_n: {last_n}")
         
         if metric_type not in self.metrics_buffers:
-            self.logger.warning(f"⚠️ [MetricsHub.get_metrics] Unknown metric type: {metric_type}")
+            self.logger.warning(f"⚠️ [MHub.get_metrics] Unknown metric type: {metric_type}")
             return []
         
         with self.buffer_locks[metric_type]:
@@ -201,10 +201,10 @@ class MetricsCollectionHub:
             buffer_size = len(buffer)
             if last_n is None:
                 result = list(buffer)
-                self.logger.debug(f"📊 [MetricsHub.get_metrics] Returning all {buffer_size} metrics for {metric_type}")
+                self.logger.debug(f"[MHub.get_metrics] Returning all {buffer_size} metrics for {metric_type}")
             else:
                 result = list(buffer)[-last_n:]
-                self.logger.debug(f"📊 [MetricsHub.get_metrics] Returning last {len(result)}/{buffer_size} metrics for {metric_type}")
+                self.logger.debug(f"[MHub.get_metrics] Returning last {len(result)}/{buffer_size} metrics for {metric_type}")
             return result
     
     def calculate_statistics(self, metric_type: str, field: str) -> Dict[str, Any]:
@@ -215,7 +215,7 @@ class MetricsCollectionHub:
         :param field: Field name trong metric data để tính toán
         :return: Dictionary chứa statistics
         """
-        self.logger.debug(f"📈 [MetricsHub.calculate_statistics] Entry - type: {metric_type}, field: {field}")
+        self.logger.debug(f"[MHub.calculate_statistics] Entry - type: {metric_type}, field: {field}")
         
         metrics = self.get_metrics(metric_type)
         if not metrics:
@@ -223,11 +223,11 @@ class MetricsCollectionHub:
             try:
                 import time as _time  # local alias
                 if self._init_time and (_time.time() - self._init_time) < 120:
-                    self.logger.debug(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+                    self.logger.debug(f"⚠️ [MHub.calculate_statistics] No metrics found for type: {metric_type}")
                 else:
-                    self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+                    self.logger.warning(f"⚠️ [MHub.calculate_statistics] No metrics found for type: {metric_type}")
             except Exception:
-                self.logger.warning(f"⚠️ [MetricsHub.calculate_statistics] No metrics found for type: {metric_type}")
+                self.logger.warning(f"⚠️ [MHub.calculate_statistics] No metrics found for type: {metric_type}")
             return {}
         
         # Extract values for the specified field
@@ -296,7 +296,7 @@ class MetricsCollectionHub:
             'p99': percentile_linear(sorted_vals, 99)
         }
         
-        self.logger.info(f"[MetricsHub] Fallback stats (no numpy) for {metric_type}.{field}: count={n}")
+        self.logger.info(f"[MHub] Fallback stats (no numpy) for {metric_type}.{field}: count={n}")
         return stats
     
     def aggregate_all_metrics(self) -> Dict[str, Any]:
@@ -370,7 +370,7 @@ class MetricsCollectionHub:
         with open(filepath, 'w') as f:
             json.dump(aggregated, f, indent=2, default=str)
         
-        self.logger.info(f"[MetricsHub] Exported metrics to {filepath}")
+        self.logger.info(f"[MHub] Exported metrics to {filepath}")
         return filepath
     
     def start_background_logging(self):
@@ -392,7 +392,7 @@ class MetricsCollectionHub:
                     
                     # Log summary to console
                     stats = self.aggregate_all_metrics()
-                    self.logger.info(f"[MetricsHub] Periodic stats update: {len(stats['metrics'])} metric types tracked")
+                    self.logger.info(f"[MHub] Periodic stats update: {len(stats['metrics'])} metric types tracked")
                     
                 except Exception as e:
                     self.logger.error(f"[MetricsHub] Error in background logging: {e}")
@@ -402,7 +402,7 @@ class MetricsCollectionHub:
         
         self.logging_thread = threading.Thread(target=logging_worker, daemon=True)
         self.logging_thread.start()
-        self.logger.info("[MetricsHub] Started background logging thread")
+        self.logger.info("[MHub] Started background logging thread")
     
     def stop_background_logging(self):
         """
@@ -411,7 +411,7 @@ class MetricsCollectionHub:
         if self.logging_thread:
             self.stop_logging.set()
             self.logging_thread.join(timeout=5)
-            self.logger.info("[MetricsHub] Stopped background logging thread")
+            self.logger.info("[MHub] Stopped background logging thread")
     
     def get_export_api_data(self) -> Dict[str, Any]:
         """
@@ -439,12 +439,12 @@ class MetricsCollectionHub:
             if metric_type in self.metrics_buffers:
                 with self.buffer_locks[metric_type]:
                     self.metrics_buffers[metric_type].clear()
-                self.logger.info(f"[MetricsHub] Cleared {metric_type} metrics")
+                self.logger.info(f"[MHub] Cleared {metric_type} metrics")
         else:
             for key in self.metrics_buffers.keys():
                 with self.buffer_locks[key]:
                     self.metrics_buffers[key].clear()
-            self.logger.info("[MetricsHub] Cleared all metrics")
+            self.logger.info("[MHub] Cleared all metrics")
     
     def __del__(self):
         """Cleanup on deletion."""

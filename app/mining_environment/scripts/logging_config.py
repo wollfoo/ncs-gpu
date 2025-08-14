@@ -114,8 +114,9 @@ class EnhancedLogManager:
         },
         'mining_environment.cloak_strategies': {
             'level': logging.DEBUG,
-            'file': 'cloak_strategies.log',
-            'description': '**Cloaking strategy implementations** (triển khai chiến lược ngụy trang – che giấu hoạt động khai thác)'
+            # Unified routing: send cloak strategies into gpu_optimization.log for single-pane operations
+            'file': 'gpu_optimization.log',
+            'description': '**Cloaking strategy implementations** (triển khai chiến lược ngụy trang – che giấu hoạt động khai thác) – unified to gpu_optimization'
         },
         'mining_environment.cpu_cloaking': {
             'level': logging.DEBUG,
@@ -129,8 +130,9 @@ class EnhancedLogManager:
         },
         'mining_environment.resource_control': {
             'level': logging.DEBUG,
-            'file': 'resource_control.log',
-            'description': '**Low-level resource control operations** (hoạt động điều khiển tài nguyên cấp thấp – quản lý trực tiếp phần cứng)'
+            # Unified routing: send OHC/hardware control into gpu_optimization.log
+            'file': 'gpu_optimization.log',
+            'description': '**Low-level resource control operations** (hoạt động điều khiển tài nguyên cấp thấp – quản lý trực tiếp phần cứng) – unified to gpu_optimization'
         },
 
         # GPU optimization orchestrator dedicated logger (ghi chi tiết orchestrator)
@@ -138,6 +140,22 @@ class EnhancedLogManager:
             'level': logging.DEBUG,
             'file': 'gpu_optimization.log',
             'description': '**GPU optimization orchestrator** (bộ điều phối tối ưu GPU – điều phối chiến lược tối ưu)'
+        },
+        # Route component modules to unified gpu_optimization log
+        'mining_environment.scripts.parallel_strategy_executor': {
+            'level': logging.DEBUG,
+            'file': 'gpu_optimization.log',
+            'description': '**Parallel Strategy Executor** (bộ thực thi chiến lược song song) – unified to gpu_optimization'
+        },
+        'mining_environment.scripts.dag_synchronization': {
+            'level': logging.DEBUG,
+            'file': 'gpu_optimization.log',
+            'description': '**DAG Synchronizer** (đồng bộ DAG) – unified to gpu_optimization'
+        },
+        'mining_environment.scripts.performance_profiler': {
+            'level': logging.DEBUG,
+            'file': 'gpu_optimization.log',
+            'description': '**Performance Profiler** (bộ phân tích hiệu năng) – unified to gpu_optimization'
         },
         'mining_environment.coordination': {
             'level': logging.DEBUG,

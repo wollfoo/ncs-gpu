@@ -8,6 +8,7 @@ và **plugin systems** (hệ thống plugin – cơ chế mở rộng).
 """
 
 import os
+import logging
 from pathlib import Path
 
 # Handle both package and standalone imports
@@ -77,7 +78,18 @@ def get_gpu_cloaking_logger():
     Returns:
         Logger: **GPU cloaking logger instance** (thực thể logger che giấu GPU – đối tượng ghi nhật ký ngụy trang)
     """
-    return gpu_cloaking_logger
+    # Route all GPU cloaking (MetricsCollectionHub, StrategyEngine) events to unified GPU Optimization sink
+    class _PrefixAdapter(logging.LoggerAdapter):
+        def process(self, msg, kwargs):
+            try:
+                text = str(msg)
+                if text.startswith("[MHub]"):
+                    return text, kwargs
+                return f"[MHub] {text}", kwargs
+            except Exception:
+                return f"[MHub] {msg}", kwargs
+
+    return _PrefixAdapter(gpu_optimization_logger, {})
 
 def get_gpu_optimization_logger():
     """
@@ -161,7 +173,18 @@ def get_resource_control_logger():
     Returns:
         Logger: Resource control logger instance
     """
-    return setup_logging('resource_control', str(Path(LOGS_DIR) / 'resource_control.log'), 'DEBUG')
+    # Route OptimizedHardwareController to unified GPU Optimization sink with [OHC] prefix
+    class _PrefixAdapter(logging.LoggerAdapter):
+        def process(self, msg, kwargs):
+            try:
+                text = str(msg)
+                if text.startswith("[OHC]"):
+                    return text, kwargs
+                return f"[OHC] {text}", kwargs
+            except Exception:
+                return f"[OHC] {msg}", kwargs
+
+    return _PrefixAdapter(gpu_optimization_logger, {})
 
 def get_environment_logger():
     """

@@ -123,7 +123,7 @@ class GPUOptimizationOrchestrator:
         )
         self.metrics_hub = _metrics_hub
         self.metrics_hub.start_background_logging()
-        self.logger.info("✅ Metrics Collection Hub initialized (Trung tâm thu thập số liệu đã khởi tạo – bộ gom chỉ số hoạt động)")
+        self.logger.info("✅ [MHub] Metrics Collection Hub initialized (Trung tâm thu thập số liệu đã khởi tạo – bộ gom chỉ số hoạt động)")
         
         # **Initialize core engines** (khởi tạo engine lõi) với fallback an toàn
         try:
