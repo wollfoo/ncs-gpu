@@ -59,7 +59,7 @@ get_dag_synchronizer, DAGState = get_dag_synchronizer_factory()
 
 try:
     from .utils import StrategyType
-from .module_loggers import get_resource_control_logger
+    from .module_loggers import get_resource_control_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 except ImportError:
     # Fallback to absolute imports for standalone testing
