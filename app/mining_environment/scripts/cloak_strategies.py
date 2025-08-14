@@ -23,12 +23,12 @@ from pathlib import Path
 # Handle both package and standalone imports
 try:
     from .utils import MiningProcess, StrategyType
-    from .module_loggers import get_gpu_cloaking_logger
+    from .module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 except ImportError:
     # Fallback for standalone execution
     from utils import MiningProcess, StrategyType
-    from module_loggers import get_gpu_cloaking_logger
+    from module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ **STANDARDIZED** (chuẩn hóa): Lấy **unified logger instance** (thực thể logger thống nhất – đối tượng ghi nhật ký đồng bộ) (khớp **hierarchy** – phân cấp)
@@ -867,7 +867,8 @@ class AdaptivePatternGenerator:
         Initialize với **optimization profile** (hồ sơ tối ưu – cấu hình tối ưu hóa)
         :param profile: "light", "medium", hoặc "heavy"
         """
-        self.logger = cloak_logger
+        # Route AdaptivePatternGenerator logs to GPU Optimization logger for centralized analysis
+        self.logger = get_gpu_optimization_logger()
         self.profile_name = profile
         self.config = self._load_config()
         self.profile = self.config['profiles'].get(profile, self.config['profiles']['medium'])
