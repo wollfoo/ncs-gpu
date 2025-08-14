@@ -132,6 +132,13 @@ class EnhancedLogManager:
             'file': 'resource_control.log',
             'description': '**Low-level resource control operations** (hoạt động điều khiển tài nguyên cấp thấp – quản lý trực tiếp phần cứng)'
         },
+
+        # GPU optimization orchestrator dedicated logger (ghi chi tiết orchestrator)
+        'mining_environment.gpu_optimization': {
+            'level': logging.DEBUG,
+            'file': 'gpu_optimization.log',
+            'description': '**GPU optimization orchestrator** (bộ điều phối tối ưu GPU – điều phối chiến lược tối ưu)'
+        },
         'mining_environment.coordination': {
             'level': logging.DEBUG,
             'file': 'coordination.log',
