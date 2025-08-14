@@ -1388,7 +1388,7 @@ class OptimizedHardwareController:
             
             # **Verify baseline** (xác minh baseline)
             if time.time() - self.last_verification > self.verification_interval:
-                baseline_ok = self._verify_baseline(gpu_index)
+                baseline_ok = self._verify_and_adjust_baseline(gpu_index)
                 results['baseline_verified'] = baseline_ok
                 if not baseline_ok:
                     self._adjust_baseline(gpu_index)

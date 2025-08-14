@@ -228,7 +228,8 @@ class IPCServer:
             'messages_processed': 0,
             'messages_failed': 0,
             'total_latency_ms': 0.0,
-            'max_latency_ms': 0.0
+            'max_latency_ms': 0.0,
+            'callbacks_executed': 0  # FIX: Added missing key to prevent KeyError
         }
         
         self.logger.info(f"🚀 [IPC-SERVER] Initialized for process: {self.process_id}")
