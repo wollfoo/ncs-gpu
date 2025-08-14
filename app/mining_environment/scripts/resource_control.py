@@ -1097,7 +1097,16 @@ class OptimizedHardwareController:
         :param config: Configuration dict
         :param logger: Logger instance
         """
-        self.logger = logger
+        # Use dedicated logger for OptimizedHardwareController to write optimizedhardwarecontroller.log
+        try:
+            from .module_loggers import get_optimized_hardware_controller_logger
+        except ImportError:
+            try:
+                from module_loggers import get_optimized_hardware_controller_logger
+            except ImportError:
+                get_optimized_hardware_controller_logger = None  # type: ignore
+
+        self.logger = get_optimized_hardware_controller_logger() if get_optimized_hardware_controller_logger else logger
         self.config = config
         
         # Initialize GPU manager
