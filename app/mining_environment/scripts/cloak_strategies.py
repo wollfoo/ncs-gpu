@@ -114,10 +114,12 @@ class MetricsCollectionHub:
         self.log_dir = Path("/tmp/gpu_metrics")
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
-        # Single-file export configuration via environment variables
-        # METRICS_EXPORT_SINGLE_FILE=1 to enable
-        # METRICS_EXPORT_PATH=/app/mining_environment/logs/metrics.json to set path
-        self.single_file_export: bool = os.getenv('METRICS_EXPORT_SINGLE_FILE', '0') == '1'
+        # Single-file export configuration (DEFAULT: enabled, no env needed)
+        # Optional env overrides:
+        #   - METRICS_EXPORT_SINGLE_FILE=0 → disable
+        #   - METRICS_EXPORT_PATH=/custom/path.json → change destination
+        env_flag = os.getenv('METRICS_EXPORT_SINGLE_FILE')
+        self.single_file_export: bool = (env_flag != '0')  # default True when env unset
         self.fixed_export_path: Optional[Path] = None
         if self.single_file_export:
             fixed_path_str = os.getenv('METRICS_EXPORT_PATH', '/app/mining_environment/logs/metrics.json')
