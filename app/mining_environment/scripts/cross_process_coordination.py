@@ -40,7 +40,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # **Constants** (hằng số)
-COORDINATION_DIR = Path("/tmp/gpu_coordination")
+COORDINATION_DIR = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'gpu_coordination'
 LOCK_FILE = COORDINATION_DIR / "coordination.lock"
 RESOURCE_DB = COORDINATION_DIR / "resources.json"
 MESSAGE_QUEUE = COORDINATION_DIR / "messages"

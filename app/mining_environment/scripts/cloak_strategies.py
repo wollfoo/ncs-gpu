@@ -132,7 +132,8 @@ class MetricsCollectionHub:
         self.last_stats_update = 0
         
         # JSON log file path (default directory for multi-file mode)
-        self.log_dir = Path("/tmp/gpu_metrics")
+        # Chuyển khỏi /tmp → dùng LOGS_DIR/gpu_metrics để tránh ghi tạm không cần thiết
+        self.log_dir = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'gpu_metrics'
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # Single-file export configuration (DEFAULT: enabled, no env needed)

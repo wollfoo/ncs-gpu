@@ -831,35 +831,7 @@ class GPUOptimizationOrchestrator:
         if 'temperature' in task_map and 'gpu' in task_map:
             task_map['temperature'].dependencies = [task_map['gpu'].name]
     
-    def generate_performance_report(self, 
-                                   output_path: Optional[Path] = None) -> Path:
-        """
-        **Generate performance report** (tạo báo cáo hiệu năng).
-        
-        Args:
-            output_path: Optional output path for report
-            
-        Returns:
-            Path to generated report
-        """
-        # Generate profiler report
-        dashboard = _profiler.generate_dashboard()
-        
-        # Add orchestrator statistics
-        dashboard['orchestrator_stats'] = self.execution_stats
-        
-        # Add metrics summary
-        dashboard['metrics_summary'] = self.metrics_hub.aggregate_all_metrics()
-        
-        # Export report
-        if output_path is None:
-            output_path = Path(f"/tmp/gpu_optimization_report_{datetime.now():%Y%m%d_%H%M%S}.json")
-        
-        with open(output_path, 'w') as f:
-            json.dump(dashboard, f, indent=2, default=str)
-        
-        self.logger.info(f"📊 Performance report generated: {output_path}")
-        return output_path
+    # NOTE: generate_performance_report đã được loại bỏ vì không còn được sử dụng
     
     def shutdown(self):
         """**Shutdown orchestrator** (tắt bộ điều phối) and cleanup resources"""
@@ -883,8 +855,7 @@ class GPUOptimizationOrchestrator:
         # Stop metrics hub
         self.metrics_hub.stop_background_logging()
         
-        # Generate final report
-        self.generate_performance_report()
+        # Final report generation removed (not used)
         
         self.logger.info("✅ Orchestrator shutdown complete")
 

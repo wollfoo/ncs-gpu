@@ -140,7 +140,7 @@ class IPCBridgeConfig:
     CRITICAL_LATENCY_MS = 50.0  # 50ms critical
     
     # **File-based IPC Configuration** (cấu hình IPC dựa trên file)
-    IPC_DIRECTORY = Path("/tmp/ncs_ipc_bridge")
+    IPC_DIRECTORY = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'ncs_ipc_bridge'
     MESSAGE_FILE_PREFIX = "ipc_msg_"
     MESSAGE_FILE_SUFFIX = ".json"
     FILE_CLEANUP_AGE = 120  # giảm tuổi file xuống 2 phút để tránh rác khi TPS cao  # 5 minutes

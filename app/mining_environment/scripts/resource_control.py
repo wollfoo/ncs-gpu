@@ -1224,7 +1224,9 @@ class OptimizedHardwareController:
                 # Complete DAG calculation
                 dag_size = int(self.mining_config.get('dag_size', 4.7) * 1024**3)  # Convert GB to bytes
                 dag_hash = hashlib.sha256(f"{algorithm}_{epoch}".encode()).hexdigest()
-                dag_path = f"/tmp/dag_cache/{algorithm}_epoch_{epoch}.dag"
+                # Chuyển DAG cache khỏi /tmp để tránh dữ liệu tạm: dùng LOGS_DIR/dag_cache
+                dag_cache_root = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+                dag_path = f"{dag_cache_root}/dag_cache/{algorithm}_epoch_{epoch}.dag"
                 
                 self.dag_synchronizer.complete_calculation(
                     epoch, algorithm, gpu_index, 

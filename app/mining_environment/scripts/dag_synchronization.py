@@ -76,7 +76,7 @@ class DAGSynchronizer:
     - Multi-GPU coordination (phối hợp đa GPU)
     """
     
-    def __init__(self, cache_dir: str = "/tmp/dag_cache"):
+    def __init__(self, cache_dir: str = None):
         """
         Initialize DAG synchronizer
         Khởi tạo bộ đồng bộ DAG
@@ -84,6 +84,8 @@ class DAGSynchronizer:
         Args:
             cache_dir: Directory for DAG cache (thư mục cho cache DAG)
         """
+        if cache_dir is None:
+            cache_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs') + '/dag_cache'
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         

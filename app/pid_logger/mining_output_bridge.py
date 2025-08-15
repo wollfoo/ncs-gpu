@@ -36,7 +36,7 @@ def create_mining_output_forwarder(process_type: str, target_pid: int):
     logger.info(f"🔗 **Creating mining output forwarder** (đang tạo bộ chuyển tiếp đầu ra khai thác) cho {process_type} PID {target_pid}")
     
     # **Tạo named pipe** (tạo ống có tên) để **communication** (giao tiếp)
-    pipe_path = f"/tmp/mining_output_{process_type}_{target_pid}.pipe"
+    pipe_path = os.path.join(LOGS_DIR, f"mining_output_{process_type}_{target_pid}.pipe")
     
     try:
         # **Tạo named pipe** (tạo ống có tên)
@@ -121,7 +121,7 @@ import time
 
 def forward_output_to_bridge():
     """**Forward actual mining output** (chuyển tiếp đầu ra khai thác thực) **to bridge pipe** (đến ống cầu nối)"""
-    bridge_pipe = "/tmp/mining_output_{process_type}_{{os.getpid()}}.pipe"
+    bridge_pipe = os.path.join(os.getenv('LOGS_DIR', '/app/mining_environment/logs'), f"mining_output_{process_type}_{os.getpid()}.pipe")
     
     try:
         if os.path.exists(bridge_pipe):
