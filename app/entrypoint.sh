@@ -107,8 +107,8 @@ setup_python_environment() {
     log "$LOG_DEBUG" "Kiểm tra Python path: $PYTHONPATH"
     log "$LOG_DEBUG" "Kiểm tra working directory: $(pwd)"
     
-    # Test import cơ bản (không hard-code người dùng; dùng PYTHONPATH sẵn có)
-    if python3 -c "import app" 2>/dev/null; then
+    # Test import cơ bản
+    if python3 -c "import sys; sys.path.insert(0, '/app'); import app" 2>/dev/null; then
         log "$LOG_INFO" "✅ Module 'app' import thành công"
     else
         log "$LOG_WARN" "⚠️ Module 'app' không thể import, sử dụng fallback mode"

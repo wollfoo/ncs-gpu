@@ -15,8 +15,7 @@ import logging
 from pathlib import Path
 
 # **Thiết lập logging** (cấu hình ghi log)
-from pathlib import Path
-LOGS_DIR = os.getenv('LOGS_DIR') or str(Path(__file__).resolve().parent.parent / 'mining_environment/logs')
+LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 logger = logging.getLogger("mining_output_bridge")

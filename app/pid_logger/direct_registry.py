@@ -52,7 +52,7 @@ class ProcessState(Enum):
 class RegistryConfig:
     """Registry configuration class with centralized settings for all operations"""
     # File-based registry settings
-    FILE_REGISTRY_DIR = Path(os.getenv('PID_REGISTRY_DIR', '/tmp/ncs_pid_registry'))
+    FILE_REGISTRY_DIR = Path("/tmp/ncs_pid_registry")
     REGISTRY_FILE_PREFIX = "pid_"
     REGISTRY_FILE_SUFFIX = ".json"
     REGISTRY_CLEANUP_AGE = 3600  # 1 hour in seconds

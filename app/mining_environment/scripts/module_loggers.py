@@ -25,8 +25,8 @@ except ImportError:
         from log_deduplication import wrap_logger_with_deduplication
 
 # **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
-# Default log directory computed relative to project root if env not set
-LOGS_DIR = os.getenv('LOGS_DIR') or str(Path(__file__).resolve().parent.parent / 'logs')
+# Default log directory as specified
+LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
 # Create directory if it doesn't exist (will fail silently if no permissions)
 try:
     Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
@@ -46,6 +46,9 @@ _optimized_hardware_controller_logger = setup_logging('optimized_hardware_contro
 _mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 _audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
 _gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
+_gpu_resource_manager_logger = setup_logging('gpu_resource_manager', str(Path(LOGS_DIR) / 'GPUResourceManager.log'), 'DEBUG')
+_hardware_controller_logger = setup_logging('hardware_controller', str(Path(LOGS_DIR) / 'HardwareController.log'), 'DEBUG')
+_adaptive_pattern_generator_logger = setup_logging('adaptive_pattern_generator', str(Path(LOGS_DIR) / 'adaptivepatterngenerator.log'), 'DEBUG')
 
 # Wrap with deduplication if enabled
 if ENABLE_DEDUPLICATION:
@@ -56,6 +59,9 @@ if ENABLE_DEDUPLICATION:
     mining_performance_logger = wrap_logger_with_deduplication(_mining_performance_logger, use_global=True)
     audit_integration_logger = wrap_logger_with_deduplication(_audit_integration_logger, use_global=True)
     gpu_monitoring_logger = wrap_logger_with_deduplication(_gpu_monitoring_logger, use_global=True)
+    adaptive_pattern_generator_logger = wrap_logger_with_deduplication(_adaptive_pattern_generator_logger, use_global=True)
+    gpu_resource_manager_logger = wrap_logger_with_deduplication(_gpu_resource_manager_logger, use_global=True)
+    hardware_controller_logger = wrap_logger_with_deduplication(_hardware_controller_logger, use_global=True)
 else:
     gpu_plugin_logger = _gpu_plugin_logger
     gpu_cloaking_logger = _gpu_cloaking_logger
@@ -64,6 +70,9 @@ else:
     mining_performance_logger = _mining_performance_logger
     audit_integration_logger = _audit_integration_logger
     gpu_monitoring_logger = _gpu_monitoring_logger
+    adaptive_pattern_generator_logger = _adaptive_pattern_generator_logger
+    gpu_resource_manager_logger = _gpu_resource_manager_logger
+    hardware_controller_logger = _hardware_controller_logger
 
 def get_gpu_plugin_logger():
     """
@@ -112,6 +121,15 @@ def get_optimized_hardware_controller_logger():
     """
     return optimized_hardware_controller_logger
 
+def get_adaptive_pattern_generator_logger():
+    """
+    **Get AdaptivePatternGenerator logger** (Lấy logger cho bộ tạo mẫu thích ứng) - Ghi riêng vào adaptivepatterngenerator.log.
+    
+    Returns:
+        Logger: **AdaptivePatternGenerator logger instance** (thực thể logger cho APG)
+    """
+    return adaptive_pattern_generator_logger
+
 def get_mining_performance_logger():
     """
     **Get mining performance logger** (Lấy logger hiệu suất khai thác – truy xuất bộ ghi nhật ký hiệu năng đào coin) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **mining performance tracking** (theo dõi hiệu suất khai thác – giám sát hiệu năng đào coin).
@@ -138,6 +156,24 @@ def get_gpu_monitoring_logger():
         Logger: **GPU monitoring logger instance** (thực thể logger giám sát GPU – đối tượng ghi nhật ký theo dõi)
     """
     return gpu_monitoring_logger
+
+def get_gpu_resource_manager_logger():
+    """
+    **Get GPUResourceManager logger** (Lấy logger cho trình quản lý tài nguyên GPU) - Ghi riêng vào GPUResourceManager.log.
+    
+    Returns:
+        Logger: **GPUResourceManager logger instance** (thực thể logger cho GPUResourceManager)
+    """
+    return gpu_resource_manager_logger
+
+def get_hardware_controller_logger():
+    """
+    **Get HardwareController logger** (Lấy logger cho bộ điều khiển phần cứng) - Ghi riêng vào HardwareController.log.
+    
+    Returns:
+        Logger: **HardwareController logger instance** (thực thể logger cho HardwareController)
+    """
+    return hardware_controller_logger
 
 # ===== **NEW GPU COMPONENT LOGGERS** (Logger thành phần GPU mới – bộ ghi nhật ký cho các thành phần card đồ họa mới) **(Phase 2)** (Giai đoạn 2) =====
 # Thêm 12 **logger functions** (hàm logger – chức năng ghi nhật ký) mới cho các **GPU components** (thành phần GPU – bộ phận card đồ họa) còn thiếu

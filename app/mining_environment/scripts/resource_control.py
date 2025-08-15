@@ -59,13 +59,13 @@ get_dag_synchronizer, DAGState = get_dag_synchronizer_factory()
 
 try:
     from .utils import StrategyType
-    from .module_loggers import get_resource_control_logger
+    from .module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger, get_hardware_controller_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
     from .logging_config import setup_logging
 except ImportError:
     # Fallback to absolute imports for standalone testing
     from utils import StrategyType
-    from module_loggers import get_resource_control_logger
+    from module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger, get_hardware_controller_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
     from logging_config import setup_logging
     try:
@@ -78,9 +78,11 @@ except ImportError:
 # ✅ STANDARDIZED: Unified logger for OHC and module-level
 resource_logger = get_resource_control_logger()
 
-# ✅ DEDICATED FILE LOGGER for GPUResourceManager → resource_control.log (relative to project root)
-_RC_LOG_PATH = str(Path(__file__).resolve().parent.parent / "logs/resource_control.log")
-rc_file_logger = setup_logging('resource_control', _RC_LOG_PATH, 'DEBUG')
+# ✅ DEDICATED FILE LOGGERS
+# GPUResourceManager → GPUResourceManager.log
+grm_file_logger = get_gpu_resource_manager_logger()
+# HardwareController → HardwareController.log
+hwc_file_logger = get_hardware_controller_logger()
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
@@ -109,8 +111,8 @@ class GPUResourceManager:
         :param config: Cấu hình GPU Resource Manager (dict).
         :param logger: Đối tượng Logger.
         """
-        # Force GPUResourceManager to use dedicated file logger (resource_control.log)
-        self.logger = rc_file_logger
+        # Use dedicated file logger (GPUResourceManager.log)
+        self.logger = grm_file_logger
         self.config = config
         self.gpu_initialized = False
         self.process_gpu_settings: Dict[int, Dict[int, Dict[str, Any]]] = {}
@@ -991,7 +993,8 @@ class HardwareController:
         :param config: Configuration dictionary
         """
         self.config = config
-        self.logger = resource_logger  # Use existing logger
+        # Use dedicated file logger (HardwareController.log)
+        self.logger = hwc_file_logger
         
         # Initialize GPU manager
         self.gpu_manager = GPUResourceManager(config, self.logger)

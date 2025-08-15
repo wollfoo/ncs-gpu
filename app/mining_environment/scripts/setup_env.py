@@ -658,9 +658,8 @@ def setup():
     Hàm chính để **setup mining environment** (thiết lập môi trường khai thác – setup môi trường mining).
     Thực hiện toàn bộ quy trình **initialization** (khởi tạo – init) và **configuration** (cấu hình – config).
     """
-    default_root = Path(__file__).resolve().parent.parent
-    CONFIG_DIR = os.getenv('CONFIG_DIR', str(default_root / 'config'))
-    LOGS_DIR = os.getenv('LOGS_DIR', str(default_root / 'logs'))
+    CONFIG_DIR = os.getenv('CONFIG_DIR', '/app/mining_environment/config')
+    LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
     os.makedirs(LOGS_DIR, exist_ok=True)
 
     logger = setup_logging('setup_env', Path(LOGS_DIR) / 'setup_env.log', 'INFO')

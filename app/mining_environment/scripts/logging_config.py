@@ -198,9 +198,7 @@ class EnhancedLogManager:
         
         # ✅ **LOG DIRECTORY** (thư mục log – nơi lưu nhật ký): **Centralized log location** (vị trí log tập trung – thư mục nhật ký chung)  
         try:
-            # Prefer env; else resolve relative to project root
-            env_logs = os.getenv('LOGS_DIR')
-            self.log_dir = Path(env_logs) if env_logs else (Path(__file__).resolve().parent.parent / 'logs')
+            self.log_dir = Path('/app/mining_environment/logs')
             self.log_dir.mkdir(parents=True, exist_ok=True)
         except PermissionError:
             # **Fallback** (dự phòng – phương án thay thế) sang **local directory** (thư mục cục bộ) nếu **/app** không **accessible** (truy cập được – có quyền vào)
