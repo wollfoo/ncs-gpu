@@ -33,7 +33,10 @@ try:
 except ImportError as e:
     # Fallback for standalone testing - use absolute imports
     import sys
-    sys.path.insert(0, '/home/azureuser/opus-gpu/app')
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
     from mining_environment.scripts.cloak_strategies import StrategyEngine, MetricsCollectionHub
     from mining_environment.scripts.resource_control import OptimizedHardwareController, GPUResourceManager
     from mining_environment.scripts.cross_process_coordination import CrossProcessCoordinator, ResourceType

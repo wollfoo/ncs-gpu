@@ -33,14 +33,24 @@ module_logger = get_resource_manager_logger()
 
 # **GPU Optimization import** (nhập module tối ưu GPU – khắc phục lỗi import)
 try:
-    import sys
-    sys.path.insert(0, '/home/azureuser/opus-gpu/app')
-    from mining_environment.scripts.gpu_optimization_orchestrator import GPUOptimizationOrchestrator
+    # Prefer relative import (ưu tiên import tương đối)
+    from .gpu_optimization_orchestrator import GPUOptimizationOrchestrator
     GPU_OPT_AVAILABLE = True
-    module_logger.info("✅ [RM] GPU Optimization Orchestrator imported successfully")
-except ImportError as e:
-    GPU_OPT_AVAILABLE = False
-    module_logger.warning(f"⚠️ [RM] GPU Optimization Orchestrator not available: {e}")
+    module_logger.info("✅ [RM] GPU Optimization Orchestrator imported successfully (relative import)")
+except Exception as rel_err:
+    # Fallback: compute project root dynamically without hard-coded absolute path
+    try:
+        import sys
+        from pathlib import Path
+        project_root = Path(__file__).resolve().parents[2]
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        from mining_environment.scripts.gpu_optimization_orchestrator import GPUOptimizationOrchestrator
+        GPU_OPT_AVAILABLE = True
+        module_logger.info("✅ [RM] GPU Optimization Orchestrator imported successfully (dynamic root fallback)")
+    except ImportError as e:
+        GPU_OPT_AVAILABLE = False
+        module_logger.warning(f"⚠️ [RM] GPU Optimization Orchestrator not available: {e}")
 
 class SharedResourceManager:
     """
