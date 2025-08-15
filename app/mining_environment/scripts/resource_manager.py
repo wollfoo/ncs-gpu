@@ -720,6 +720,18 @@ class ResourceManager(IResourceManager):
             self.logger.info("✅ [TIER-1] ResourceManager đã khởi động thành công với SharedResourceManager")
             self.logger.info(f"🔍 [TIER-1] SharedResourceManager status: {self.shared_resource_manager is not None}")
             
+            # 🔗 Ensure DirectPIDRegistry registration (self-register)
+            try:
+                from pid_logger.direct_registry import get_direct_registry
+                registry = get_direct_registry()
+                if hasattr(registry, 'register_resource_manager'):
+                    if registry.register_resource_manager(self):
+                        self.logger.info("✅ [TIER-1] ResourceManager self-registered with DirectPIDRegistry (ready to accept handoffs)")
+                    else:
+                        self.logger.warning("⚠️ [TIER-1] ResourceManager self-register with DirectPIDRegistry returned False")
+            except Exception as reg_err:
+                self.logger.warning(f"⚠️ [TIER-1] ResourceManager self-register failed: {reg_err}")
+            
         except Exception as e:
             self.logger.error(f"❌ [TIER-1] Lỗi khởi động ResourceManager: {e}")
             self.logger.error(f"🔍 [TIER-1] SharedResourceManager status: {getattr(self, 'shared_resource_manager', 'Not initialized')}")
@@ -811,13 +823,23 @@ class ResourceManager(IResourceManager):
                 self.logger.info(f"✅ [CRITICAL] SharedResourceManager is available in receive_from_registry")
             
             # **TIER 2 FIX: Enhanced MiningProcess creation** (tạo đối tượng MiningProcess nâng cao)
-            self.logger.info(f"🔧 [TIER-2] Creating MiningProcess object for PID {pid}")
-            mining_process = MiningProcess(
-                pid=pid,
-                name=registry_metadata.get('name', f'process_{pid}'),
-                cmd=registry_metadata.get('cmd', [])
-            )
-            self.logger.info(f"✅ [TIER-2] MiningProcess created: {mining_process.name}")
+            try:
+                self.logger.info(f"🔧 [TIER-2] Creating MiningProcess object for PID {pid}")
+                mining_process = MiningProcess(
+                    pid=pid,
+                    name=registry_metadata.get('name', f'process_{pid}'),
+                    cmd=registry_metadata.get('cmd', [])
+                )
+                self.logger.info(f"✅ [TIER-2] MiningProcess created: {mining_process.name}")
+            except Exception as mp_err:
+                self.logger.error(f"❌ [TIER-2] MiningProcess creation failed for PID {pid}: {mp_err}")
+                # Fallback: minimal MiningProcess with best-effort fields
+                try:
+                    mining_process = MiningProcess(pid=pid, name=f'process_{pid}', cmd=[])
+                    self.logger.warning(f"⚠️ [TIER-2] Using fallback MiningProcess for PID {pid}")
+                except Exception as mp_fatal:
+                    self.logger.error(f"❌ [TIER-2] FATAL: Cannot create MiningProcess for PID {pid}: {mp_fatal}")
+                    return False
             
             # **TIER 2 FIX: Enhanced PID queue processing** (xử lý queue PID nâng cao)
             pid_data = {

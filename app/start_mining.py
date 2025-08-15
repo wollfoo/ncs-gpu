@@ -367,9 +367,11 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                     
                     # **Real-time terminal display** (hiển thị terminal thời gian thực – cập nhật ngay lập tức)
                     print(terminal_output, flush=True)
-                    
-                    # **FIX: Use proper logger instead of direct file write** (sửa: dùng logger thay vì ghi file trực tiếp)
-                    thread_logger.info(f"[{process_name}][R:{runtime:.0f}s] {line.strip()}")
+
+                    # **Noise control** (khống chế trùng lặp log): tránh nhân bản dòng từ child vào start_mining
+                    # Bật lại bằng RELOG_CHILD_OUTPUT=1 nếu cần soi chi tiết
+                    if os.getenv('RELOG_CHILD_OUTPUT', '0').lower() in ('1', 'true', 'yes'):
+                        thread_logger.info(f"[{process_name}][R:{runtime:.0f}s] {line.strip()}")
                     
                     # **LEGACY: Keep binary file write for compatibility** (cũ: giữ ghi file nhị phân để tương thích)
                     log_file.write(f"{formatted_line}\n".encode('utf-8'))
@@ -1325,7 +1327,7 @@ def start_resource_manager_health_monitor(resource_manager_thread):
     # **🥉 SOLUTION 3: Health Check Configuration** (cấu hình kiểm tra sức khỏe)
     # Cho phép điều chỉnh chu kỳ kiểm tra bằng ENV khi test
     try:
-        check_interval = float(os.getenv('HEALTH_CHECK_INTERVAL_SEC', '30.0'))
+        check_interval = float(os.getenv('HEALTH_CHECK_INTERVAL_SEC', '5'))
     except Exception:
         check_interval = 30.0
     restart_cooldown = 60.0  # Wait 60 seconds between restart attempts  
@@ -1377,7 +1379,7 @@ def start_resource_manager_health_monitor(resource_manager_thread):
                     # 🔎 BỔ SUNG: kiểm tra tắc nghẽn hàng đợi của ResourceManager
                     try:
                         rm_queue_size = rm_instance._pid_queue.qsize() if hasattr(rm_instance, '_pid_queue') else 0
-                        rm_queue_threshold = int(os.getenv('RM_QUEUE_WARN_THRESHOLD', '50'))
+                        rm_queue_threshold = int(os.getenv('RM_QUEUE_WARN_THRESHOLD', '1'))
                         if rm_queue_size > rm_queue_threshold:
                             rm_queue_ok = False
                             monitor_logger.error(f"🚦 [TIER-3] RM queue backlog detected: size={rm_queue_size} > threshold={rm_queue_threshold}")
@@ -1389,7 +1391,7 @@ def start_resource_manager_health_monitor(resource_manager_thread):
                         from pid_logger.direct_registry import get_direct_registry
                         registry = get_direct_registry()
                         pending_size = registry.get_pending_handoffs_size() if hasattr(registry, 'get_pending_handoffs_size') else 0
-                        pending_threshold = int(os.getenv('REGISTRY_PENDING_WARN_THRESHOLD', '10'))
+                        pending_threshold = int(os.getenv('REGISTRY_PENDING_WARN_THRESHOLD', '0'))
                         if pending_size > pending_threshold:
                             registry_pending_ok = False
                             monitor_logger.error(f"🚦 [TIER-3] Registry pending handoffs backlog: size={pending_size} > threshold={pending_threshold}")
