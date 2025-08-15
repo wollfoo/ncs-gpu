@@ -15,6 +15,7 @@ import logging
 import time
 import random
 import json
+import functools
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,60 @@ _parallel_executor: Optional[ParallelStrategyExecutor] = None
 _metrics_hub: Optional[MetricsCollectionHub] = None
 
 
+def _safe_preview(value: Any, maxlen: int = 300) -> str:
+    try:
+        if isinstance(value, (dict, list, tuple)):
+            text = json.dumps(value, default=str)
+        else:
+            text = str(value)
+    except Exception:
+        text = repr(value)
+    if len(text) > maxlen:
+        text = text[:maxlen] + "…"
+    return text
+
+
+def trace_all(func):
+    is_staticmethod = isinstance(func, staticmethod)
+    is_classmethod = isinstance(func, classmethod)
+    original = func.__func__ if (is_staticmethod or is_classmethod) else func
+
+    @functools.wraps(original)
+    def wrapped(*args, **kwargs):
+        active_logger = None
+        try:
+            if args and hasattr(args[0], 'logger'):
+                active_logger = getattr(args[0], 'logger', None)
+        except Exception:
+            active_logger = None
+        if active_logger is None:
+            active_logger = logger
+        try:
+            arg_preview = ", ".join([_safe_preview(a) for a in list(args)[:3]])
+            kw_preview = {k: _safe_preview(v) for k, v in list(kwargs.items())[:5]}
+            active_logger.debug(f"[TRACE] → {original.__name__} args=[{arg_preview}] kwargs={kw_preview}")
+        except Exception:
+            pass
+        try:
+            result = original(*args, **kwargs)
+            try:
+                active_logger.debug(f"[TRACE] ← {original.__name__} result={_safe_preview(result)}")
+            except Exception:
+                pass
+            return result
+        except Exception as e:
+            try:
+                active_logger.exception(f"[TRACE] ✖ {original.__name__} error={e}")
+            except Exception:
+                pass
+            raise
+
+    if is_staticmethod:
+        return staticmethod(wrapped)
+    if is_classmethod:
+        return classmethod(wrapped)
+    return wrapped
+
 class GPUOptimizationOrchestrator:
     """
     **Main Orchestrator** (bộ điều phối chính) for GPU optimization workflow.
@@ -62,6 +117,8 @@ class GPUOptimizationOrchestrator:
     - Performance monitoring and profiling
     """
     
+    @trace_all
+    @trace_all
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize orchestrator with configuration.
@@ -124,6 +181,8 @@ class GPUOptimizationOrchestrator:
         # Load interval choices from ENV (supports per-tier override or full JSON)
         self._interval_choices: List[Optional[Tuple[int, int]]] = self._load_interval_choices_from_env()
     
+    @trace_all
+    @trace_all
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
         return {
@@ -141,6 +200,7 @@ class GPUOptimizationOrchestrator:
 
     # ===== Interval selection helpers (Adaptive interval with hysteresis & jitter) =====
     @staticmethod
+    @trace_all
     def _get_time_bucket() -> str:
         hour = datetime.now().hour
         if 9 <= hour <= 17:
@@ -149,6 +209,7 @@ class GPUOptimizationOrchestrator:
             return 'peak'
         return 'off_peak'
 
+    @trace_all
     def _compute_state_from_metrics(self, pid: int, gpu_index: int, results: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         # Try post metrics from results first
         metrics = None
@@ -174,6 +235,7 @@ class GPUOptimizationOrchestrator:
             'last_tier': self._last_interval_tier,
         }
 
+    @trace_all
     def _load_interval_choices_from_env(self) -> List[Optional[Tuple[int, int]]]:
         """Load interval choices from ENV.
         Supports:
@@ -274,6 +336,7 @@ class GPUOptimizationOrchestrator:
             pass
         return result
 
+    @trace_all
     def _pick_next_interval_sec(self, state: Dict[str, Any]) -> int:
         # Load configured choices (with per-tier disable support)
         interval_choices = self._interval_choices
@@ -317,6 +380,7 @@ class GPUOptimizationOrchestrator:
         next_interval = max(lo, min(hi, base + random.randint(-jitter_span, jitter_span)))
         return int(next_interval)
     
+    @trace_all
     def _init_components(self):
         """Initialize all orchestrator components"""
         global _coordinator, _parallel_executor, _metrics_hub
@@ -364,6 +428,7 @@ class GPUOptimizationOrchestrator:
         self.logger.info("✅ Hardware Controller initialized")
     
     @profile_function(track_memory=True)
+    @trace_all
     def optimize_gpu_for_process(self, 
                                  pid: int, 
                                  gpu_index: int = 0,
@@ -514,6 +579,7 @@ class GPUOptimizationOrchestrator:
 
         return results
     
+    @trace_all
     def start_continuous_optimization(self, 
                                       pid: int, 
                                       gpu_index: int = 0, 
