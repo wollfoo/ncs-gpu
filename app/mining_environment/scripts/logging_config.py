@@ -208,7 +208,7 @@ class EnhancedLogManager:
 
         # ✅ **ENCRYPTION CONFIG** (cấu hình mã hoá – bật/tắt lớp mã hoá logging)
         self.encryption_enabled: bool = str(os.getenv('LOG_ENCRYPTION_ENABLED', '0')).lower() in ('1', 'true', 'yes')
-        self.encryption_max_bytes: int = int(os.getenv('LOG_ENCRYPTION_MAX_MB', '1')) * 1024 * 1024
+        self.encryption_max_bytes: int = int(os.getenv('LOG_ENCRYPTION_MAX_MB', '50')) * 1024 * 1024
         self.fernet = None  # type: ignore
         if self.encryption_enabled:
             try:
