@@ -286,6 +286,34 @@ class GPUOptimizationOrchestrator:
             
             self.logger.info(f"✅ **Optimization completed** (tối ưu hoàn thành – quy trình kết thúc) in {duration:.2f}s")
         
+        # Auto-start continuous loop if enabled and not running (ensures real-time even when caller uses one-shot API)
+        try:
+            if self.config.get('continuous_optimization', False):
+                if not hasattr(self, '_continuous_thread') or self._continuous_thread is None or not self._continuous_thread.is_alive():
+                    # Lazy create loop using current call context
+                    interval = max(1, int(self.config.get('loop_interval_sec', 30)))
+                    stop_event = getattr(self, '_continuous_stop_event', None)
+                    if stop_event is None:
+                        self._continuous_stop_event = threading.Event()
+                        stop_event = self._continuous_stop_event
+                    def _loop() -> None:
+                        self.logger.info(f"🔄 Continuous optimization loop started (interval={interval}s, pid={pid}, gpu={gpu_index})")
+                        while stop_event and not stop_event.is_set():
+                            try:
+                                self.optimize_gpu_for_process(pid=pid, gpu_index=gpu_index, strategies=strategies)
+                            except Exception as e:
+                                self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
+                            finally:
+                                for _ in range(interval):
+                                    if stop_event.is_set():
+                                        break
+                                    time.sleep(1)
+                        self.logger.info("🛑 Continuous optimization loop stopped")
+                    self._continuous_thread = threading.Thread(target=_loop, daemon=True)
+                    self._continuous_thread.start()
+        except Exception as _e:
+            self.logger.warning(f"⚠️ Unable to start continuous optimization loop: {_e}")
+
         return results
     
     def _acquire_gpu_resources(self, pid: int, gpu_index: int) -> bool:
