@@ -25,9 +25,10 @@ def initialize_mining_environment():
     if missing_vars:
         logger.warning(f"**Thiếu biến môi trường** (thiếu tham số hệ thống): {missing_vars}")
     
-    # **Tạo thư mục logs** (tạo thư mục nhật ký) nếu chưa tồn tại
-    logs_dir = os.getenv('LOGS_DIR', '/tmp/mining_logs')
-    Path(logs_dir).mkdir(parents=True, exist_ok=True)
+    # **Tạo thư mục logs** chỉ khi **LOGS_DIR** đã được cấu hình (không dùng fallback)
+    logs_dir = os.getenv('LOGS_DIR')
+    if logs_dir:
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
     
     logger.info("**Môi trường mining** (môi trường khai thác) đã được **khởi tạo** (thiết lập)")
 
