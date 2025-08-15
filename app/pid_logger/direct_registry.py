@@ -868,6 +868,15 @@ class DirectPIDRegistry:
 
         t = threading.Thread(target=pending_worker, daemon=True, name="DirectRegistry-PendingFlush")
         t.start()
+
+    # Public accessor for health monitor
+    def get_pending_handoffs_size(self) -> int:
+        """Return current number of pending handoffs waiting for ResourceManager."""
+        try:
+            with self._pending_lock:
+                return len(self._pending_handoffs)
+        except Exception:
+            return -1
     
     def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
                            process_info: ProcessInfo, attempt_number: int = 1) -> bool:

@@ -371,7 +371,8 @@ class ResourceManager(IResourceManager):
             self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")
 
     # ❌ IPC Bridge removed: no setup needed
-    
+
+    # ❌ IPC removed: legacy handlers deleted for clean code
     def _handle_ipc_pid_forward(self, ipc_message) -> bool:
         """
         **🔥 Handle IPC PID Forward** (xử lý chuyển tiếp PID qua IPC)
@@ -389,9 +390,7 @@ class ResourceManager(IResourceManager):
             start_time = time.time()
             self.logger.info(f"🎯 [IPC-HANDLER] Received cross-process PID forward: {ipc_message.message_id[:8]}")
             
-            # **Update IPC statistics** (cập nhật thống kê IPC)
-            self._ipc_stats['messages_received'] += 1
-            self._ipc_stats['cross_process_requests'] += 1
+            # IPC removed: skip stats updates
             
             # **Extract PID and metadata from message** (trích xuất PID và metadata từ tin nhắn)
             payload = ipc_message.payload
@@ -401,7 +400,6 @@ class ResourceManager(IResourceManager):
             
             if not pid:
                 self.logger.error("❌ [IPC-HANDLER] No PID in message payload")
-                self._ipc_stats['ipc_errors'] += 1
                 return False
                 
             self.logger.info(f"📍 [IPC-HANDLER] Processing cross-process PID {pid}")
@@ -445,9 +443,6 @@ class ResourceManager(IResourceManager):
                 self.logger.info(f"✅ [IPC-HANDLER] PID {pid} queued for processing via IPC")
                 self.logger.debug(f"🧪 [DIAG-RACE] Queue size after IPC put: {self._pid_queue.qsize()} (source=ipc_bridge_forward)")
                 
-                # **Update success statistics** (cập nhật thống kê thành công)
-                self._ipc_stats['pid_forwards_handled'] += 1
-                
                 # **Log performance metrics** (ghi log metrics hiệu suất)
                 processing_time_ms = (time.time() - start_time) * 1000
                 self.logger.debug(f"⚡ [IPC-PERF] PID forward handled in {processing_time_ms:.1f}ms")
@@ -461,76 +456,26 @@ class ResourceManager(IResourceManager):
                 success = self._process_pid_immediately(pid_data)
                 self.logger.info(f"📊 [IPC-HANDLER] Immediate processing result for PID {pid}: {success}")
                 
-                if success:
-                    self._ipc_stats['pid_forwards_handled'] += 1
-                else:
-                    self._ipc_stats['ipc_errors'] += 1
+                # Legacy stats removed
                 
                 return success
                 
         except Exception as e:
             self.logger.error(f"❌ [IPC-HANDLER] Error handling PID forward: {e}")
             self.logger.error(f"🔍 [IPC-HANDLER] Traceback: {traceback.format_exc()}")
-            self._ipc_stats['ipc_errors'] += 1
             return False
     
     def _handle_ipc_heartbeat(self, ipc_message) -> bool:
-        """Handle heartbeat messages: update last seen timestamp."""
-        try:
-            self._last_heartbeat = time.time()
-            self.logger.debug(f"💓 [IPC-HEARTBEAT] Heartbeat received from {ipc_message.source_process}")
-            return True
-        except Exception as e:
-            self.logger.error(f"❌ [IPC-HEARTBEAT] Error handling heartbeat: {e}")
-            return False
+        """(Removed) IPC Heartbeat no-op"""
+        return False
 
     def _handle_ipc_shutdown(self, ipc_message) -> bool:
-        """Handle shutdown messages: trigger graceful shutdown."""
-        try:
-            self.logger.warning("🛑 [IPC-SHUTDOWN] Shutdown request received via IPC – initiating shutdown…")
-            # Set flag to stop processing loops; actual shutdown will be handled by external orchestrator calling shutdown() later
-            self._stop_flag = True
-            # Optionally call shutdown immediately
-            threading.Thread(target=self.shutdown, name="RM-IPC-Shutdown", daemon=True).start()
-            return True
-        except Exception as e:
-            self.logger.error(f"❌ [IPC-SHUTDOWN] Error handling shutdown: {e}")
-            return False
+        """(Removed) IPC Shutdown no-op"""
+        return False
 
     def _handle_ipc_status_check(self, ipc_message) -> bool:
-        """
-        **🔥 Handle IPC Status Check** (xử lý kiểm tra trạng thái IPC)
-        
-        Handle status check requests từ IPC clients.
-        
-        Args:
-            ipc_message: IPCMessage với status check request
-            
-        Returns:
-            bool: True nếu xử lý thành công
-        """
-        try:
-            self.logger.debug(f"📊 [IPC-STATUS] Status check request: {ipc_message.message_id[:8]}")
-            
-            # **Prepare status response** (chuẩn bị phản hồi trạng thái)
-            status_info = {
-                'resource_manager_ready': self.is_ready(),
-                'shared_resource_manager_available': self.shared_resource_manager is not None,
-                'ipc_enabled': self._ipc_enabled,
-                'ipc_stats': self._ipc_stats.copy(),
-                'monitored_processes': len(self._monitored_processes),
-                'queue_size': self._pid_queue.qsize(),
-                'response_timestamp': time.time()
-            }
-            
-            self.logger.debug(f"📈 [IPC-STATUS] Status response: ResourceManager ready={status_info['resource_manager_ready']}")
-            self.logger.debug(f"📈 [IPC-STATUS] IPC stats: {self._ipc_stats}")
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"❌ [IPC-STATUS] Error handling status check: {e}")
-            return False
+        """(Removed) IPC Status Check no-op"""
+        return False
 
     def _on_process_registered_direct(self, process_info) -> None:
         """**Handle Process Registration** (xử lý đăng ký process)"""

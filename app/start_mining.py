@@ -1315,7 +1315,11 @@ def start_resource_manager_health_monitor(resource_manager_thread):
     monitor_logger.info("🏥 [TIER-3] Enhanced ResourceManager health monitoring started")
     
     # **🥉 SOLUTION 3: Health Check Configuration** (cấu hình kiểm tra sức khỏe)
-    check_interval = 30.0  # Check every 30 seconds
+    # Cho phép điều chỉnh chu kỳ kiểm tra bằng ENV khi test
+    try:
+        check_interval = float(os.getenv('HEALTH_CHECK_INTERVAL_SEC', '30.0'))
+    except Exception:
+        check_interval = 30.0
     restart_cooldown = 60.0  # Wait 60 seconds between restart attempts  
     max_restart_attempts = 3  # Maximum restart attempts per session
     restart_attempts = 0
@@ -1344,6 +1348,8 @@ def start_resource_manager_health_monitor(resource_manager_thread):
             rm_instance_healthy = False
             rm_ready = False
             rm_shared_manager_healthy = False
+            rm_queue_ok = True
+            registry_pending_ok = True
             
             try:
                 from mining_environment.scripts.resource_manager import ResourceManager
@@ -1359,12 +1365,36 @@ def start_resource_manager_health_monitor(resource_manager_thread):
                     if not rm_shared_manager_healthy:
                         monitor_logger.error(f"❌ [TIER-3] CRITICAL: ResourceManager exists but SharedResourceManager is None!")
                         monitor_logger.error(f"🔍 [TIER-3] This is the ROOT CAUSE of cloaking failures!")
+
+                    # 🔎 BỔ SUNG: kiểm tra tắc nghẽn hàng đợi của ResourceManager
+                    try:
+                        rm_queue_size = rm_instance._pid_queue.qsize() if hasattr(rm_instance, '_pid_queue') else 0
+                        rm_queue_threshold = int(os.getenv('RM_QUEUE_WARN_THRESHOLD', '50'))
+                        if rm_queue_size > rm_queue_threshold:
+                            rm_queue_ok = False
+                            monitor_logger.error(f"🚦 [TIER-3] RM queue backlog detected: size={rm_queue_size} > threshold={rm_queue_threshold}")
+                    except Exception as qerr:
+                        monitor_logger.debug(f"[TIER-3] RM queue check error: {qerr}")
+                        
+                    # 🔎 BỔ SUNG: kiểm tra tắc nghẽn pending handoffs của DirectPIDRegistry
+                    try:
+                        from pid_logger.direct_registry import get_direct_registry
+                        registry = get_direct_registry()
+                        pending_size = registry.get_pending_handoffs_size() if hasattr(registry, 'get_pending_handoffs_size') else 0
+                        pending_threshold = int(os.getenv('REGISTRY_PENDING_WARN_THRESHOLD', '10'))
+                        if pending_size > pending_threshold:
+                            registry_pending_ok = False
+                            monitor_logger.error(f"🚦 [TIER-3] Registry pending handoffs backlog: size={pending_size} > threshold={pending_threshold}")
+                    except Exception as perr:
+                        monitor_logger.debug(f"[TIER-3] Registry pending check error: {perr}")
                         
             except Exception as rm_check_error:
                 monitor_logger.error(f"❌ [TIER-3] ResourceManager instance check error: {rm_check_error}")
             
             # **TIER 3 FIX: Enhanced Overall Health Assessment** (đánh giá sức khỏe tổng thể nâng cao)
-            overall_healthy = thread_alive and rm_instance_healthy and rm_ready and rm_shared_manager_healthy
+            overall_healthy = (
+                thread_alive and rm_instance_healthy and rm_ready and rm_shared_manager_healthy and rm_queue_ok and registry_pending_ok
+            )
             
             if overall_healthy:
                 health_stats['healthy_checks'] += 1
