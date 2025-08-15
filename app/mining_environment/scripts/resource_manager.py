@@ -250,22 +250,7 @@ class ResourceManager(IResourceManager):
                 'monitoring_cycles': 0
             }
             
-            # **File-based scanner deprecated** (scanner dựa trên file đã lỗi thời – bộ quét theo file không dùng nữa)
-            # Thay thế bằng **IPC Bridge** (cầu IPC – kết nối liên tiến trình) cho **cross-process communication** (giao tiếp xuyên tiến trình – trao đổi giữa các process)
-            
-            # **🔥 IPC BRIDGE INTEGRATION (server-first)** (tích hợp IPC Bridge – ưu tiên khởi tạo server trước)
-            self._ipc_server = None
-            self._ipc_enabled = True
-            self._ipc_stats = {
-                'messages_received': 0,
-                'pid_forwards_handled': 0,
-                'ipc_errors': 0,
-                'cross_process_requests': 0
-            }
-            self._setup_ipc_bridge()
-            
-            # **DirectPIDRegistry Integration (IPC-only mode)**
-            # Không đăng ký observer hay RM trực tiếp để tránh kích hoạt cloaking qua đường cũ.
+            # **DirectPIDRegistry Integration**: dùng handoff trực tiếp, không cần IPC Bridge
             self._setup_direct_registry_observer()
             
             # **🚀 GPU OPTIMIZATION ORCHESTRATOR** (khởi tạo bộ điều phối tối ưu GPU)
@@ -385,70 +370,7 @@ class ResourceManager(IResourceManager):
         except Exception as e:
             self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")
 
-    def _setup_ipc_bridge(self):
-        """
-        **🔥 Setup IPC Bridge Server** (thiết lập máy chủ IPC Bridge)
-        
-        Khởi tạo IPC Server để nhận PID forwards từ cross-process DirectPIDRegistry.
-        Thay thế singleton access patterns bằng reliable message passing.
-        """
-        try:
-            self.logger.info("🌉 [IPC-BRIDGE] Setting up IPC Bridge server...")
-            
-            # **Import IPC Bridge components** (nhập các thành phần IPC Bridge)
-            try:
-                from mining_environment.scripts.ipc_bridge import create_ipc_server, IPCMessageType
-                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge modules imported successfully")
-            except ImportError as ie:
-                self.logger.error(f"❌ [IPC-BRIDGE] Failed to import IPC Bridge: {ie}")
-                self._ipc_enabled = False
-                return False
-                
-            # **Create IPC Server instance** (tạo instance IPC Server)
-            self._ipc_server = create_ipc_server()
-            
-            # **Register PID forward callback** (đăng ký callback chuyển tiếp PID)
-            success = self._ipc_server.register_callback(
-                IPCMessageType.PID_FORWARD, 
-                self._handle_ipc_pid_forward
-            )
-            
-            if not success:
-                self.logger.error("❌ [IPC-BRIDGE] Failed to register PID forward callback")
-                self._ipc_enabled = False
-                return False
-            
-            # **Register additional callbacks**
-            self._ipc_server.register_callback(
-                IPCMessageType.STATUS_CHECK,
-                self._handle_ipc_status_check
-            )
-            self._ipc_server.register_callback(
-                IPCMessageType.HEARTBEAT,
-                self._handle_ipc_heartbeat
-            )
-            self._ipc_server.register_callback(
-                IPCMessageType.SHUTDOWN,
-                self._handle_ipc_shutdown
-            )
-            
-            # **Start IPC Server** (khởi động IPC Server)
-            server_started = self._ipc_server.start()
-            
-            if server_started:
-                self.logger.info("✅ [IPC-BRIDGE] IPC Bridge server started successfully")
-                self.logger.info("🔗 [IPC-BRIDGE] Ready to receive cross-process PID forwards")
-                return True
-            else:
-                self.logger.error("❌ [IPC-BRIDGE] Failed to start IPC Bridge server")
-                self._ipc_enabled = False
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"❌ [IPC-BRIDGE] Error setting up IPC Bridge: {e}")
-            self.logger.error(f"🔍 [IPC-BRIDGE] Traceback: {traceback.format_exc()}")
-            self._ipc_enabled = False
-            return False
+    # ❌ IPC Bridge removed: no setup needed
     
     def _handle_ipc_pid_forward(self, ipc_message) -> bool:
         """
@@ -908,14 +830,7 @@ class ResourceManager(IResourceManager):
             except Exception as e:
                 self.logger.error(f"Lỗi join worker {worker.name}: {e}")
 
-        # **🔥 Shutdown IPC Bridge Server** (tắt máy chủ IPC Bridge)
-        if self._ipc_server and self._ipc_enabled:
-            try:
-                self.logger.info("🌉 [IPC-BRIDGE] Đang tắt **IPC Bridge server** (máy chủ cầu IPC – server kết nối liên tiến trình)...")
-                self._ipc_server.stop()
-                self.logger.info("✅ [IPC-BRIDGE] **IPC Bridge server stopped** (máy chủ cầu IPC đã dừng – server kết nối đã tắt)")
-            except Exception as e:
-                self.logger.error(f"❌ [IPC-BRIDGE] Lỗi tắt **IPC server** (máy chủ IPC – server liên tiến trình): {e}")
+        # ❌ IPC Bridge removed: nothing to shutdown
         
         # **Shutdown NVML** (tắt NVML – đóng thư viện NVIDIA)
         if self.shared_resource_manager:

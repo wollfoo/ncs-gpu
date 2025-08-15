@@ -386,16 +386,15 @@ class DirectPIDRegistry:
         self._resource_manager = None  # Will be set via register_resource_manager()
         self._resource_manager_lock = threading.Lock()
         
-        # **🔥 IPC BRIDGE INTEGRATION** (tích hợp IPC Bridge)
+        # ❌ IPC Bridge disabled: dùng direct handoff thay vì IPC
         self._ipc_client = None
-        self._ipc_enabled = True
+        self._ipc_enabled = False
         self._ipc_stats = {
             'messages_sent': 0,
             'pid_forwards_sent': 0,
             'ipc_errors': 0,
             'fallback_used': 0
         }
-        self._setup_ipc_client()
         
         logger.info("🏗️ DirectPIDRegistry initialized with thread-safe operations")
         self._start_cleanup_thread()
@@ -765,48 +764,25 @@ class DirectPIDRegistry:
     
     def _forward_to_resource_manager(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> bool:
         """
-        **IPC-ONLY Forward to ResourceManager** (chuyển tiếp chỉ qua IPC đến ResourceManager)
-
-        Kênh thống nhất: gửi PID qua **IPC Bridge** với `PID_FORWARD`.
-        Không dùng direct call hoặc file-based fallback.
-
-        Args:
-            pid: Process ID
-            coordinator_metadata: Metadata từ coordinator
-            process_info: ProcessInfo object
-
-        Returns:
-            bool: True nếu forwarding qua IPC thành công
+        Direct forward to ResourceManager (no IPC): gọi trực tiếp handoff.
         """
-        logger.info(f"🎯 [RM-FORWARD] IPC-only forwarding PID {pid} to ResourceManager")
+        try:
+            # Lấy ResourceManager instance đã đăng ký hoặc singleton
+            rm_instance = None
+            with self._resource_manager_lock:
+                if self._resource_manager is not None:
+                    rm_instance = self._resource_manager
+            if rm_instance is None:
+                rm_instance = self._try_get_resource_manager()
+            if rm_instance is None:
+                logger.error(f"❌ [RM-FORWARD] No ResourceManager available for PID {pid}")
+                return False
 
-        if not (self._ipc_enabled and self._ipc_client):
-            logger.error(f"❌ [RM-FORWARD] IPC client not available for PID {pid} (ipc_enabled={self._ipc_enabled})")
+            # Thực thi handoff trực tiếp
+            return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt_number=1)
+        except Exception as e:
+            logger.error(f"❌ [RM-FORWARD] Direct handoff failed for PID {pid}: {e}")
             return False
-
-        ipc_metadata = {
-            **coordinator_metadata,
-            'ipc_forward_timestamp': time.time(),
-            'source_chain': coordinator_metadata.get('source_chain', []) + ['direct_registry_ipc'],
-            'process_info': {
-                'pid': pid,
-                'process_type': process_info.process_type,
-                'process_name': process_info.process_name,
-                'registered_at': process_info.registered_at
-            },
-            'cross_process_communication': True
-        }
-
-        success = self._send_pid_via_ipc(pid, ipc_metadata)
-        if success:
-            process_info.coordination_state = "ipc_forwarded"
-            process_info.metadata['ipc_forwarded'] = True
-            process_info.metadata['ipc_timestamp'] = time.time()
-            logger.info(f"✅ [RM-FORWARD] PID {pid} forwarded via IPC successfully")
-            return True
-
-        logger.error(f"❌ [RM-FORWARD] IPC forward failed for PID {pid}")
-        return False
     
     def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
                            process_info: ProcessInfo, attempt_number: int = 1) -> bool:
@@ -1578,36 +1554,9 @@ class DirectPIDRegistry:
         Khởi tạo IPC Client để gửi PID forwards đến ResourceManager trong main process.
         Thay thế singleton access patterns bằng reliable cross-process messaging.
         """
-        try:
-            logger.info("🌉 [IPC-CLIENT] Setting up IPC Bridge client...")
-            
-            # **Import IPC Bridge components** (nhập các thành phần IPC Bridge)
-            try:
-                # Setup module path for IPC Bridge
-                if not _setup_module_path("mining_environment/scripts", "IPCClient"):
-                    logger.warning("⚠️ [IPC-CLIENT] Failed to setup IPC Bridge import path")
-                
-                from mining_environment.scripts.ipc_bridge import create_ipc_client
-                logger.info("✅ [IPC-CLIENT] IPC Bridge modules imported successfully")
-                
-                # **Create IPC Client instance** (tạo instance IPC Client)
-                process_id = f"direct_registry_{os.getpid()}"
-                self._ipc_client = create_ipc_client(process_id=process_id)
-                
-                logger.info(f"✅ [IPC-CLIENT] IPC Bridge client created with process_id: {process_id}")
-                self._ipc_enabled = True
-                return True
-                
-            except ImportError as ie:
-                logger.warning(f"⚠️ [IPC-CLIENT] Failed to import IPC Bridge: {ie}")
-                logger.info("🔄 [IPC-CLIENT] Falling back to singleton access patterns")
-                self._ipc_enabled = False
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ [IPC-CLIENT] Error setting up IPC client: {e}")
-            self._ipc_enabled = False
-            return False
+        # IPC Bridge disabled: no-op
+        self._ipc_enabled = False
+        return False
     
     def _send_pid_via_ipc(self, pid: int, metadata: Dict[str, Any]) -> bool:
         """

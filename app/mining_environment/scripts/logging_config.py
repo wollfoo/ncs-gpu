@@ -162,21 +162,7 @@ class EnhancedLogManager:
             'file': 'coordination.log',
             'description': '**Hook coordination** (điều phối hook – đồng bộ móc nối) và **PHASE 3++ sequencing operations** (hoạt động tuần tự giai đoạn 3++ – quy trình nâng cao)'
         },
-        'ipc_bridge': {
-            'level': logging.DEBUG,
-            'file': 'ipc_bridge.log',
-            'description': '**IPC Bridge operations** (hoạt động cầu IPC – giao tiếp liên tiến trình) - **🔥 PRODUCTION FIX**'
-        },
-        'ipc_bridge.server': {
-            'level': logging.DEBUG,
-            'file': 'ipc_bridge.log',
-            'description': '**IPC Server** (máy chủ IPC – tiếp nhận tin nhắn liên tiến trình)'
-        },
-        'ipc_bridge.client': {
-            'level': logging.DEBUG,
-            'file': 'ipc_bridge.log',
-            'description': '**IPC Client** (client IPC – gửi tin nhắn liên tiến trình)'
-        },
+        # IPC Bridge removed – no dedicated loggers
     }
     
     def __new__(cls) -> 'EnhancedLogManager':
