@@ -102,6 +102,10 @@ class MetricsCollectionHub:
         """
         # Use dedicated logger for MetricsCollectionHub
         self.logger = get_metrics_collection_hub_logger()
+        try:
+            self.logger.info("💓 [Heartbeat] MetricsCollectionHub initialized (logger active)")
+        except Exception:
+            pass
         self.buffer_size = buffer_size
         self.log_interval = log_interval
         
@@ -489,6 +493,10 @@ class CloakCoordinator:
         self.config = config
         # Use dedicated logger for CloakCoordinator
         self.logger = get_cloak_coordinator_logger()
+        try:
+            self.logger.info("💓 [Heartbeat] CloakCoordinator initialized (logger active)")
+        except Exception:
+            pass
         
         # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
         self.hw_controller = HardwareController(config)
@@ -887,6 +895,10 @@ class AdaptivePatternGenerator:
         """
         # Route AdaptivePatternGenerator logs to dedicated file for centralized analysis
         self.logger = get_adaptive_pattern_generator_logger()
+        try:
+            self.logger.info("💓 [Heartbeat] AdaptivePatternGenerator initialized (logger active)")
+        except Exception:
+            pass
         self.profile_name = profile
         self.config = self._load_config()
         self.profile = self.config['profiles'].get(profile, self.config['profiles']['medium'])
@@ -1042,9 +1054,15 @@ class AdaptivePatternGenerator:
         # Apply safety limits
         safe_params = self._apply_safety_limits(varied_params, current_metrics)
         
-        # Log pattern metrics
+        # Log pattern metrics (metadata)
         self._log_pattern_metrics(params)
-        self.logger.info(f"✅ [APG.generate_control_params] Generated params for PID={pid}: power={params.get('power', 'N/A')}W, sm_clock={params.get('sm_clock', 'N/A')}MHz, temp={params.get('temperature', 'N/A')}°C")
+        # Log actual control values from safe_params
+        _power = safe_params.get('power_limit', 'N/A')
+        _sm = safe_params.get('sm_clock', 'N/A')
+        _temp = safe_params.get('temperature', None)
+        if _temp is None:
+            _temp = safe_params.get('temp_threshold', 'N/A')
+        self.logger.info(f"✅ [APG.generate_control_params] Generated params for PID={pid}: power={_power}W, sm_clock={_sm}MHz, temp={_temp}°C")
         
         return safe_params
     
@@ -1166,6 +1184,10 @@ class GpuCloakStrategy:
         """
         # Use dedicated logger for GpuCloakStrategy
         self.logger = get_gpu_cloak_strategy_logger()
+        try:
+            self.logger.info("💓 [Heartbeat] GpuCloakStrategy initialized (logger active)")
+        except Exception:
+            pass
         self.config = config
         self.hw_controller = hw_controller  # NEW: Store HardwareController reference
         
@@ -1861,6 +1883,10 @@ class StrategyEngine:
         # Dùng cloak_logger làm logger hợp lệ thay cho get_logger (không tồn tại)
         # Use dedicated logger for StrategyEngine
         self.logger = get_strategy_engine_logger()
+        try:
+            self.logger.info("💓 [Heartbeat] StrategyEngine initialized (logger active)")
+        except Exception:
+            pass
         self.cloak_coordinator = CloakCoordinator(self.config)
         # Use shared Metrics Hub if provided, otherwise create one
         self.metrics_hub = metrics_hub if metrics_hub is not None else MetricsCollectionHub()

@@ -116,6 +116,11 @@ class GPUResourceManager:
         self.config = config
         self.gpu_initialized = False
         self.process_gpu_settings: Dict[int, Dict[int, Dict[str, Any]]] = {}
+        # Heartbeat
+        try:
+            self.logger.info("💓 [Heartbeat] GPUResourceManager initialized (logger active)")
+        except Exception:
+            pass
         
         # **INTELLIGENCE LAYER: Temperature Model Parameters** (tham số mô hình nhiệt độ)
         self.temp_history: Dict[int, List[tuple]] = {}  # GPU index -> [(timestamp, temp)]
@@ -996,6 +1001,12 @@ class HardwareController:
         # Use dedicated file logger (HardwareController.log)
         self.logger = hwc_file_logger
         
+        # Heartbeat
+        try:
+            self.logger.info("💓 [Heartbeat] HardwareController initialized (logger active)")
+        except Exception:
+            pass
+
         # Initialize GPU manager
         self.gpu_manager = GPUResourceManager(config, self.logger)
         

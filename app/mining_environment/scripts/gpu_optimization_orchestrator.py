@@ -17,6 +17,7 @@ import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
+import threading
 
 # **Import core modules** (nhập module lõi)
 try:
@@ -83,6 +84,25 @@ class GPUOptimizationOrchestrator:
         
         self.logger.info("🚀 **GPU Optimization Orchestrator initialized** "
                         "(bộ điều phối tối ưu GPU đã khởi tạo)")
+
+        # ===== Continuous optimization configuration =====
+        # Allow ENV overrides for enable/interval
+        env_enabled = os.getenv('CONTINUOUS_OPT_ENABLED')
+        if env_enabled is not None:
+            try:
+                self.config['continuous_optimization'] = str(env_enabled).lower() in ('1', 'true', 'yes')
+            except Exception:
+                pass
+        env_interval = os.getenv('CONTINUOUS_OPT_INTERVAL_SEC')
+        if env_interval is not None:
+            try:
+                self.config['loop_interval_sec'] = max(1, int(env_interval))
+            except Exception:
+                pass
+
+        # Runtime state for continuous loop
+        self._continuous_stop_event: Optional[threading.Event] = threading.Event()
+        self._continuous_thread: Optional[threading.Thread] = None
     
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
@@ -93,7 +113,10 @@ class GPUOptimizationOrchestrator:
             'enable_coordination': True,
             'metrics_buffer_size': 1000,
             # Giảm nhịp để có báo cáo đều đặn hơn; có thể override bằng ENV/Config ngoài
-            'profile_report_interval': 120  # 2 minutes
+            'profile_report_interval': 120,  # 2 minutes
+            # Continuous optimization (tối ưu liên tục – lặp theo chu kỳ)
+            'continuous_optimization': True,
+            'loop_interval_sec': 30
         }
     
     def _init_components(self):
@@ -513,6 +536,14 @@ class GPUOptimizationOrchestrator:
     def shutdown(self):
         """**Shutdown orchestrator** (tắt bộ điều phối) and cleanup resources"""
         self.logger.info("🛑 Shutting down GPU Optimization Orchestrator...")
+        # Stop continuous loop if running
+        try:
+            if hasattr(self, '_continuous_stop_event') and self._continuous_stop_event:
+                self._continuous_stop_event.set()
+            if hasattr(self, '_continuous_thread') and self._continuous_thread and self._continuous_thread.is_alive():
+                self._continuous_thread.join(timeout=5)
+        except Exception as _e:
+            self.logger.warning(f"⚠️ Error while stopping continuous loop: {_e}")
         
         # Stop coordinator
         if self.coordinator:
@@ -551,10 +582,23 @@ def optimize_gpu(pid: int,
     orchestrator = GPUOptimizationOrchestrator(config)
     
     try:
+        # If continuous optimization enabled, start background loop and return immediately
+        if orchestrator.config.get('continuous_optimization', False):
+            orchestrator.start_continuous_optimization(pid=pid, gpu_index=gpu_index, strategies=strategies)
+            return {
+                'success': True,
+                'message': 'Continuous optimization started',
+                'pid': pid,
+                'gpu_index': gpu_index,
+                'interval_sec': orchestrator.config.get('loop_interval_sec', 30)
+            }
+        # One-shot optimization (default)
         results = orchestrator.optimize_gpu_for_process(pid, gpu_index, strategies)
         return results
     finally:
-        orchestrator.shutdown()
+        # Do not shutdown orchestrator immediately if continuous loop is running
+        if not orchestrator.config.get('continuous_optimization', False):
+            orchestrator.shutdown()
 
 
 # **Test function** (hàm kiểm thử)
