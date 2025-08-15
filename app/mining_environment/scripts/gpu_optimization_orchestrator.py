@@ -120,6 +120,9 @@ class GPUOptimizationOrchestrator:
             self.config['interval_jitter_pct'] = float(os.getenv('INTERVAL_JITTER_PCT', '0.15'))
         except Exception:
             self.config['interval_jitter_pct'] = 0.15
+
+        # Load interval choices from ENV (supports per-tier override or full JSON)
+        self._interval_choices: List[Optional[Tuple[int, int]]] = self._load_interval_choices_from_env()
     
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
@@ -171,15 +174,63 @@ class GPUOptimizationOrchestrator:
             'last_tier': self._last_interval_tier,
         }
 
-    def _pick_next_interval_sec(self, state: Dict[str, Any]) -> int:
-        # Default choices; can be overridden in future via ENV parsing
-        interval_choices: List[Tuple[int, int]] = [
+    def _load_interval_choices_from_env(self) -> List[Optional[Tuple[int, int]]]:
+        """Load interval choices from ENV.
+        Supports:
+          - INTERVAL_CHOICES_JSON: full JSON list, e.g. "[[300,600],[600,1200],...]"
+          - INTERVAL_CHOICE_TIER_{i}_LO / _HI per tier override (0..4)
+          - INTERVAL_CHOICE_TIER_{i} to disable tier when set to empty string "" or "[]"
+        Returns list length 5 with (lo, hi) or None to disable that tier.
+        """
+        # Default choices
+        defaults: List[Optional[Tuple[int, int]]] = [
             (300, 600),
             (600, 1200),
             (1200, 1800),
             (1800, 3600),
             (3600, 7200),
         ]
+        try:
+            raw = os.getenv('INTERVAL_CHOICES_JSON')
+            if raw:
+                data = json.loads(raw)
+                parsed: List[Optional[Tuple[int, int]]] = []
+                for item in data:
+                    if not item:
+                        parsed.append(None)
+                    else:
+                        lo, hi = int(item[0]), int(item[1])
+                        parsed.append((min(lo, hi), max(lo, hi)))
+                # Normalize to 5 tiers if possible
+                if len(parsed) < 5:
+                    parsed += defaults[len(parsed):]
+                return parsed[:5]
+        except Exception:
+            pass
+        # Per-tier overrides
+        result: List[Optional[Tuple[int, int]]] = list(defaults)
+        for i in range(5):
+            key_disable = f'INTERVAL_CHOICE_TIER_{i}'
+            key_lo = f'INTERVAL_CHOICE_TIER_{i}_LO'
+            key_hi = f'INTERVAL_CHOICE_TIER_{i}_HI'
+            val_disable = os.getenv(key_disable)
+            if val_disable is not None and val_disable.strip() in ('', '[]', 'none', 'None', 'disable', 'DISABLE'):
+                result[i] = None
+                continue
+            val_lo = os.getenv(key_lo)
+            val_hi = os.getenv(key_hi)
+            if val_lo is not None and val_hi is not None:
+                try:
+                    lo = int(val_lo)
+                    hi = int(val_hi)
+                    result[i] = (min(lo, hi), max(lo, hi))
+                except Exception:
+                    pass
+        return result
+
+    def _pick_next_interval_sec(self, state: Dict[str, Any]) -> int:
+        # Load configured choices (with per-tier disable support)
+        interval_choices = self._interval_choices
         # Base tier by state
         tier = 1
         if state.get('temp_status') == 'CRITICAL' or state.get('recent_errors', 0) > 0:
@@ -203,10 +254,15 @@ class GPUOptimizationOrchestrator:
             tier = max(min_tier, tier)
         if isinstance(max_tier, int):
             tier = min(max_tier, tier)
-        # Clamp to valid range
+        # Clamp to valid range and ensure tier enabled; if disabled, downgrade until found
         tier = max(0, min(tier, len(interval_choices) - 1))
+        while tier >= 0 and (interval_choices[tier] is None):
+            tier -= 1
+        if tier < 0:
+            # If all disabled, fall back to 30s
+            return 30
         self._last_interval_tier = tier
-        lo, hi = interval_choices[tier]
+        lo, hi = interval_choices[tier] or (30, 30)
         # Random selection within tier (natural jitter)
         base = random.randint(lo, hi)
         # Extra jitter pct around selected value
