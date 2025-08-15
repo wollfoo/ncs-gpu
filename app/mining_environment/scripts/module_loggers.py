@@ -48,6 +48,10 @@ _audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR
 _gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
 _gpu_resource_manager_logger = setup_logging('gpu_resource_manager', str(Path(LOGS_DIR) / 'GPUResourceManager.log'), 'DEBUG')
 _hardware_controller_logger = setup_logging('hardware_controller', str(Path(LOGS_DIR) / 'HardwareController.log'), 'DEBUG')
+_metrics_collection_hub_logger = setup_logging('metrics_collection_hub', str(Path(LOGS_DIR) / 'metricscollectionhub.log'), 'DEBUG')
+_cloak_coordinator_logger = setup_logging('cloak_coordinator', str(Path(LOGS_DIR) / 'cloakcoordinator.log'), 'DEBUG')
+_gpu_cloak_strategy_logger = setup_logging('gpu_cloak_strategy', str(Path(LOGS_DIR) / 'gpucloakstrategy.log'), 'DEBUG')
+_strategy_engine_logger = setup_logging('strategy_engine', str(Path(LOGS_DIR) / 'strategyengine.log'), 'DEBUG')
 _adaptive_pattern_generator_logger = setup_logging('adaptive_pattern_generator', str(Path(LOGS_DIR) / 'adaptivepatterngenerator.log'), 'DEBUG')
 
 # Wrap with deduplication if enabled
@@ -62,6 +66,10 @@ if ENABLE_DEDUPLICATION:
     adaptive_pattern_generator_logger = wrap_logger_with_deduplication(_adaptive_pattern_generator_logger, use_global=True)
     gpu_resource_manager_logger = wrap_logger_with_deduplication(_gpu_resource_manager_logger, use_global=True)
     hardware_controller_logger = wrap_logger_with_deduplication(_hardware_controller_logger, use_global=True)
+    metrics_collection_hub_logger = wrap_logger_with_deduplication(_metrics_collection_hub_logger, use_global=True)
+    cloak_coordinator_logger = wrap_logger_with_deduplication(_cloak_coordinator_logger, use_global=True)
+    gpu_cloak_strategy_logger = wrap_logger_with_deduplication(_gpu_cloak_strategy_logger, use_global=True)
+    strategy_engine_logger = wrap_logger_with_deduplication(_strategy_engine_logger, use_global=True)
 else:
     gpu_plugin_logger = _gpu_plugin_logger
     gpu_cloaking_logger = _gpu_cloaking_logger
@@ -73,6 +81,10 @@ else:
     adaptive_pattern_generator_logger = _adaptive_pattern_generator_logger
     gpu_resource_manager_logger = _gpu_resource_manager_logger
     hardware_controller_logger = _hardware_controller_logger
+    metrics_collection_hub_logger = _metrics_collection_hub_logger
+    cloak_coordinator_logger = _cloak_coordinator_logger
+    gpu_cloak_strategy_logger = _gpu_cloak_strategy_logger
+    strategy_engine_logger = _strategy_engine_logger
 
 def get_gpu_plugin_logger():
     """
@@ -174,6 +186,42 @@ def get_hardware_controller_logger():
         Logger: **HardwareController logger instance** (thực thể logger cho HardwareController)
     """
     return hardware_controller_logger
+
+def get_metrics_collection_hub_logger():
+    """
+    **Get MetricsCollectionHub logger** (Lấy logger cho trung tâm thu thập số liệu) - Ghi riêng vào metricscollectionhub.log.
+    
+    Returns:
+        Logger: **MetricsCollectionHub logger instance** (thực thể logger cho MetricsCollectionHub)
+    """
+    return metrics_collection_hub_logger
+
+def get_cloak_coordinator_logger():
+    """
+    **Get CloakCoordinator logger** (Lấy logger cho bộ điều phối ngụy trang) - Ghi riêng vào cloakcoordinator.log.
+    
+    Returns:
+        Logger: **CloakCoordinator logger instance** (thực thể logger cho CloakCoordinator)
+    """
+    return cloak_coordinator_logger
+
+def get_gpu_cloak_strategy_logger():
+    """
+    **Get GpuCloakStrategy logger** (Lấy logger cho chiến lược GPU cloaking) - Ghi riêng vào gpucloakstrategy.log.
+    
+    Returns:
+        Logger: **GpuCloakStrategy logger instance**
+    """
+    return gpu_cloak_strategy_logger
+
+def get_strategy_engine_logger():
+    """
+    **Get StrategyEngine logger** (Lấy logger cho engine chiến lược) - Ghi riêng vào strategyengine.log.
+    
+    Returns:
+        Logger: **StrategyEngine logger instance**
+    """
+    return strategy_engine_logger
 
 # ===== **NEW GPU COMPONENT LOGGERS** (Logger thành phần GPU mới – bộ ghi nhật ký cho các thành phần card đồ họa mới) **(Phase 2)** (Giai đoạn 2) =====
 # Thêm 12 **logger functions** (hàm logger – chức năng ghi nhật ký) mới cho các **GPU components** (thành phần GPU – bộ phận card đồ họa) còn thiếu

@@ -23,12 +23,28 @@ from pathlib import Path
 # Handle both package and standalone imports
 try:
     from .utils import MiningProcess, StrategyType
-    from .module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger, get_adaptive_pattern_generator_logger
+    from .module_loggers import (
+        get_gpu_cloaking_logger,
+        get_gpu_optimization_logger,
+        get_adaptive_pattern_generator_logger,
+        get_metrics_collection_hub_logger,
+        get_cloak_coordinator_logger,
+        get_gpu_cloak_strategy_logger,
+        get_strategy_engine_logger,
+    )
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 except ImportError:
     # Fallback for standalone execution
     from utils import MiningProcess, StrategyType
-    from module_loggers import get_gpu_cloaking_logger, get_gpu_optimization_logger, get_adaptive_pattern_generator_logger
+    from module_loggers import (
+        get_gpu_cloaking_logger,
+        get_gpu_optimization_logger,
+        get_adaptive_pattern_generator_logger,
+        get_metrics_collection_hub_logger,
+        get_cloak_coordinator_logger,
+        get_gpu_cloak_strategy_logger,
+        get_strategy_engine_logger,
+    )
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
 
 # ✅ **STANDARDIZED** (chuẩn hóa): Lấy **unified logger instance** (thực thể logger thống nhất – đối tượng ghi nhật ký đồng bộ) (khớp **hierarchy** – phân cấp)
@@ -84,7 +100,8 @@ class MetricsCollectionHub:
         :param buffer_size: Kích thước buffer tối đa cho mỗi metric type
         :param log_interval: Khoảng thời gian (giây) giữa các lần ghi log tự động
         """
-        self.logger = cloak_logger
+        # Use dedicated logger for MetricsCollectionHub
+        self.logger = get_metrics_collection_hub_logger()
         self.buffer_size = buffer_size
         self.log_interval = log_interval
         
@@ -470,7 +487,8 @@ class CloakCoordinator:
         :param config: **Configuration dictionary** (từ điển cấu hình – dict thiết lập)
         """
         self.config = config
-        self.logger = cloak_logger  # Sử dụng **existing logger** (logger hiện có – bộ ghi nhật ký sẵn có)
+        # Use dedicated logger for CloakCoordinator
+        self.logger = get_cloak_coordinator_logger()
         
         # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
         self.hw_controller = HardwareController(config)
@@ -1146,7 +1164,8 @@ class GpuCloakStrategy:
         :param gpu_resource_manager: ResourceManager liên quan đến GPU (optional, for backward compat).
         :param hw_controller: HardwareController instance for delegation (NEW).
         """
-        self.logger = logger
+        # Use dedicated logger for GpuCloakStrategy
+        self.logger = get_gpu_cloak_strategy_logger()
         self.config = config
         self.hw_controller = hw_controller  # NEW: Store HardwareController reference
         
@@ -1840,7 +1859,8 @@ class StrategyEngine:
         """
         self.config = config or {}
         # Dùng cloak_logger làm logger hợp lệ thay cho get_logger (không tồn tại)
-        self.logger = cloak_logger
+        # Use dedicated logger for StrategyEngine
+        self.logger = get_strategy_engine_logger()
         self.cloak_coordinator = CloakCoordinator(self.config)
         # Use shared Metrics Hub if provided, otherwise create one
         self.metrics_hub = metrics_hub if metrics_hub is not None else MetricsCollectionHub()
