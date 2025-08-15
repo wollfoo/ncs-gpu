@@ -141,7 +141,8 @@ ENV ENABLE_DYNAMIC_BALANCING=true \
     ENABLE_LOG_DEDUP=0 \
     ENABLE_DAG_SYNC=true \
     LOG_ENCRYPTION_ENABLED=1 \
-    LOG_ENCRYPTION_MAX_MB=50
+    LOG_ENCRYPTION_MAX_MB=50 \
+    ENABLE_LOGROTATE=1
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls
