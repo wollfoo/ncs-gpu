@@ -259,9 +259,8 @@ class EnhancedLogManager:
         
         # ✅ **SETUP** (thiết lập – cấu hình): **Initialize logger hierarchy** (khởi tạo phân cấp logger – tạo cấu trúc cây nhật ký)
         self._setup_logger_hierarchy()
-        self._start_aggregation()
-        
-        print(f"✅ [**EnhancedLogging** (ghi log nâng cao)] **Initialized** (đã khởi tạo) {len(self._loggers)} **loggers** (bộ ghi nhật ký) với **event-driven aggregation** (tổng hợp theo sự kiện – gom nhật ký kích hoạt)")
+        # ❌ BỎ unified.log aggregation: không khởi động tổng hợp và không ghi unified.log
+        print(f"✅ [**EnhancedLogging**] Initialized {len(self._loggers)} loggers (unified.log aggregation disabled)")
     
     def _setup_logger_hierarchy(self) -> None:
         """✅ **HIERARCHY** (phân cấp – cấu trúc cây): **Setup complete logger hierarchy** (thiết lập phân cấp logger hoàn chỉnh – tạo cấu trúc nhật ký đầy đủ) với **standardized configuration** (cấu hình chuẩn hóa – thiết lập thống nhất)"""
@@ -350,8 +349,7 @@ class EnhancedLogManager:
             self._handlers[f"{name}_file"] = file_handler
             self._handlers[f"{name}_console"] = console_handler
             
-            # ✅ AGGREGATION TRIGGER: Register logger for aggregation
-            self._register_logger_for_aggregation(log_file)
+            # ❌ BỎ đăng ký aggregation cho unified.log
             
             return logger
             
@@ -435,9 +433,7 @@ class EnhancedLogManager:
             stream_handler.addFilter(CorrelationIdFilter())
             logger.addHandler(stream_handler)
             
-            # ✅ AGGREGATION: Register for real-time aggregation
-            log_filename = Path(log_file).name
-            self._register_logger_for_aggregation(log_filename)
+            # ❌ BỎ đăng ký aggregation cho unified.log
 
         return logger
     
@@ -483,102 +479,24 @@ class EnhancedLogManager:
             return logging.getLogger(name)
     
     def _register_logger_for_aggregation(self, log_file: str):
-        """✅ REGISTER: Register log file for event-driven aggregation"""
-        log_path = self.log_dir / log_file
-        self.last_positions[str(log_path)] = 0
+        """(Disabled) Aggregation registration has been removed"""
+        return
     
     def _start_aggregation(self):
-        """✅ START: Event-driven log aggregation (replace polling)"""
-        if self.aggregation_running:
-            return
-            
-        self.aggregation_running = True
-        self.aggregation_thread = threading.Thread(
-            target=self._aggregation_worker,
-            daemon=True,
-            name="EnhancedLogAggregator"
-        )
-        self.aggregation_thread.start()
-        print(f"✅ [EnhancedLogging] Event-driven aggregation started: {self.unified_log_path}")
+        """(Disabled) Aggregation has been removed"""
+        return
     
     def _aggregation_worker(self):
-        """✅ WORKER: Event-driven aggregation worker thread"""
-        while self.aggregation_running:
-            try:
-                # ✅ EVENT-DRIVEN: Process aggregation requests from queue
-                try:
-                    # Wait for aggregation trigger với timeout
-                    self.aggregation_queue.get(timeout=1.0)
-                    self._aggregate_logs_immediate()
-                except queue.Empty:
-                    # ✅ FALLBACK: Periodic check every 1 second (not 5s polling)
-                    self._aggregate_logs_immediate()
-                    
-            except Exception as e:
-                print(f"❌ [EnhancedLogging] Aggregation worker error: {e}")
-                time.sleep(1)  # Back off on error
+        """(Disabled) Aggregation worker removed"""
+        return
     
     def _aggregate_logs_immediate(self):
-        """✅ IMMEDIATE: Immediate log aggregation (event-driven)"""
-        if not self.log_dir.exists():
-            return
-            
-        # ✅ DISCOVER: Find all log files
-        log_files = list(self.log_dir.glob("*.log"))
-        if not log_files:
-            return
-            
-        # ✅ COLLECT: Gather new entries từ each log file
-        new_entries: List[Tuple[datetime, str, str]] = []
-        
-        for log_file in log_files:
-            if log_file.name == "unified.log":
-                continue  # Skip own file
-                
-            try:
-                entries = self._read_new_entries(log_file)
-                new_entries.extend(entries)
-            except Exception as e:
-                print(f"⚠️ [EnhancedLogging] Error reading {log_file.name}: {e}")
-                
-        # ✅ SORT: Sort by timestamp (chronological merging)
-        new_entries.sort(key=lambda x: x[0])
-        
-        # ✅ WRITE: Append to unified.log
-        if new_entries:
-            self._write_unified_entries(new_entries)
+        """(Disabled) Immediate aggregation removed"""
+        return
     
     def _read_new_entries(self, log_file: Path) -> List[Tuple[datetime, str, str]]:
-        """✅ READ: Extract new entries từ specific log file"""
-        entries = []
-        
-        if not log_file.exists():
-            return entries
-            
-        # ✅ TRACK: Get last read position
-        last_pos = self.last_positions.get(str(log_file), 0)
-        
-        try:
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                f.seek(last_pos)
-                
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                        
-                    # ✅ EXTRACT: Parse timestamp
-                    timestamp = self._extract_timestamp(line)
-                    if timestamp:
-                        entries.append((timestamp, log_file.name, line))
-                        
-                # ✅ UPDATE: Save new position
-                self.last_positions[str(log_file)] = f.tell()
-                
-        except Exception as e:
-            print(f"⚠️ [EnhancedLogging] Error reading {log_file}: {e}")
-            
-        return entries
+        """(Disabled) Read new entries for aggregation removed"""
+        return []
     
     def _extract_timestamp(self, line: str) -> datetime:
         """✅ PARSE: Extract timestamp từ log line"""
@@ -591,23 +509,12 @@ class EnhancedLogManager:
         return datetime.now()  # Fallback to current time
     
     def _write_unified_entries(self, entries: List[Tuple[datetime, str, str]]):
-        """✅ WRITE: Append entries to unified.log với chronological order"""
-        try:
-            with open(self.unified_log_path, 'a', encoding='utf-8') as f:
-                for timestamp, source_file, log_line in entries:
-                    # ✅ FORMAT: Add source file prefix (preserve format)
-                    unified_line = f"[{source_file}] {log_line}\n"
-                    f.write(unified_line)
-                    
-        except Exception as e:
-            print(f"❌ [EnhancedLogging] Error writing unified.log: {e}")
+        """(Disabled) Write to unified.log removed"""
+        return
     
     def trigger_aggregation(self):
-        """✅ TRIGGER: Manual trigger cho immediate aggregation"""
-        try:
-            self.aggregation_queue.put_nowait("aggregate")
-        except queue.Full:
-            pass  # Queue full, aggregation will happen soon anyway
+        """(Disabled) Trigger aggregation removed"""
+        return
     
     def get_logging_status(self) -> Dict[str, Any]:
         """✅ STATUS: Get comprehensive logging system status"""
