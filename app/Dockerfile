@@ -175,9 +175,27 @@ ENV ENABLE_STDDEV_MONITOR=1 \
     LOG_METRICS_INTERVAL=30
 
 
+
+# ===== Continuous Optimization – cấu hình mặc định trong Dockerfile =====
+ENV CONTINUOUS_OPT_ENABLED=1
+ENV CONTINUOUS_OPT_INTERVAL_SEC=30
+ENV CONTINUOUS_OPT_MODE=adaptive
+
+# ===== Dải bậc mặc định (tier mapping) =====
+# 0: 300–600, 1: 600–1200, 2: 1200–1800, 3: 1800–3600, 4: 3600–7200
+ENV INTERVAL_CHOICES_JSON=[[300,600],[600,1200],[1200,1800],[1800,3600],[3600,7200]]
+
+# ===== Giới hạn bậc (kẹp min/max). Để trống = không kẹp =====
+ENV INTERVAL_MIN_TIER=
+ENV INTERVAL_MAX_TIER=
+
+# ===== Random jitter (nhiễu ngẫu nhiên – giảm đồng pha) =====
+ENV INTERVAL_JITTER_PCT=0.15
+
+
+# ========================================
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
-# MUST be BEFORE Python package library paths to take precedence
-# Giữ thư viện CUDA 12.0 mặc định từ base image
+# ========================================
 ENV LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH
 
 # Tạo symlink NVRTC (.so.12.0) nếu base image chỉ có .12.0.140

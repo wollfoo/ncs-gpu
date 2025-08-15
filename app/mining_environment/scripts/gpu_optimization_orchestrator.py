@@ -27,7 +27,7 @@ try:
     from .cross_process_coordination import CrossProcessCoordinator, ResourceType
     from .parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
     from .performance_profiler import get_profiler, profile_function
-    from .module_loggers import get_gpu_optimization_logger
+    from .module_loggers import get_gpu_optimization_orchestrator_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
 except ImportError as e:
     # Fallback for standalone testing - use absolute imports
@@ -38,11 +38,11 @@ except ImportError as e:
     from mining_environment.scripts.cross_process_coordination import CrossProcessCoordinator, ResourceType
     from mining_environment.scripts.parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
     from mining_environment.scripts.performance_profiler import PerformanceProfiler, profile_function
-    from mining_environment.scripts.module_loggers import get_gpu_optimization_logger
+    from mining_environment.scripts.module_loggers import get_gpu_optimization_orchestrator_logger
     from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity
 
 # **Logger setup** (thiết lập logger)
-logger = get_gpu_optimization_logger()
+logger = get_gpu_optimization_orchestrator_logger()
 error_reporter = get_error_reporter()
 
 # **Global instances** (thực thể toàn cục)
@@ -191,20 +191,49 @@ class GPUOptimizationOrchestrator:
             (3600, 7200),
         ]
         try:
+            self.logger.debug("[Orchestrator] _load_interval_choices_from_env: start | defaults=%s | jitter_pct=%s | min_tier=%s | max_tier=%s",
+                              defaults,
+                              self.config.get('interval_jitter_pct'),
+                              self.config.get('interval_min_tier'),
+                              self.config.get('interval_max_tier'))
+        except Exception:
+            pass
+        try:
             raw = os.getenv('INTERVAL_CHOICES_JSON')
             if raw:
+                try:
+                    self.logger.info("[Orchestrator] INTERVAL_CHOICES_JSON detected: %s", raw)
+                except Exception:
+                    pass
                 data = json.loads(raw)
                 parsed: List[Optional[Tuple[int, int]]] = []
                 for item in data:
                     if not item:
+                        try:
+                            self.logger.debug("[Orchestrator] Tier from JSON disabled via empty item: %s", item)
+                        except Exception:
+                            pass
                         parsed.append(None)
                     else:
                         lo, hi = int(item[0]), int(item[1])
                         parsed.append((min(lo, hi), max(lo, hi)))
+                        try:
+                            self.logger.debug("[Orchestrator] Parsed JSON tier -> lo=%s hi=%s", min(lo, hi), max(lo, hi))
+                        except Exception:
+                            pass
                 # Normalize to 5 tiers if possible
                 if len(parsed) < 5:
+                    try:
+                        self.logger.debug("[Orchestrator] Parsed %s tiers; extending with defaults up to 5 tiers", len(parsed))
+                    except Exception:
+                        pass
                     parsed += defaults[len(parsed):]
-                return parsed[:5]
+                final_from_json = parsed[:5]
+                try:
+                    self.logger.info("[Orchestrator] Final interval choices from JSON -> %s", final_from_json)
+                except Exception:
+                    pass
+                return final_from_json
         except Exception:
             pass
         # Per-tier overrides
@@ -215,6 +244,10 @@ class GPUOptimizationOrchestrator:
             key_hi = f'INTERVAL_CHOICE_TIER_{i}_HI'
             val_disable = os.getenv(key_disable)
             if val_disable is not None and val_disable.strip() in ('', '[]', 'none', 'None', 'disable', 'DISABLE'):
+                try:
+                    self.logger.info("[Orchestrator] Tier %s disabled via %s=%s", i, key_disable, val_disable)
+                except Exception:
+                    pass
                 result[i] = None
                 continue
             val_lo = os.getenv(key_lo)
@@ -224,8 +257,21 @@ class GPUOptimizationOrchestrator:
                     lo = int(val_lo)
                     hi = int(val_hi)
                     result[i] = (min(lo, hi), max(lo, hi))
+                    try:
+                        self.logger.info("[Orchestrator] Tier %s override -> lo=%s hi=%s (from %s/%s)", i, min(lo, hi), max(lo, hi), key_lo, key_hi)
+                    except Exception:
+                        pass
                 except Exception:
                     pass
+            else:
+                try:
+                    self.logger.debug("[Orchestrator] Tier %s keeps default (or previously set) -> %s", i, result[i])
+                except Exception:
+                    pass
+        try:
+            self.logger.info("[Orchestrator] Final interval choices from ENV overrides -> %s", result)
+        except Exception:
+            pass
         return result
 
     def _pick_next_interval_sec(self, state: Dict[str, Any]) -> int:
@@ -467,6 +513,58 @@ class GPUOptimizationOrchestrator:
             self.logger.warning(f"⚠️ Unable to start continuous optimization loop: {_e}")
 
         return results
+    
+    def start_continuous_optimization(self, 
+                                      pid: int, 
+                                      gpu_index: int = 0, 
+                                      strategies: Optional[List[str]] = None) -> None:
+        """
+        **Start continuous optimization loop** (khởi động vòng lặp tối ưu liên tục)
+        - Tạo `thread` (luồng nền) chạy lặp; chọn khoảng nghỉ theo `_pick_next_interval_sec` hoặc cấu hình cố định.
+        """
+        try:
+            if self._continuous_thread is not None and self._continuous_thread.is_alive():
+                self.logger.info("[Orchestrator] Continuous optimization loop already running")
+                return
+        except Exception:
+            pass
+
+        stop_event = getattr(self, '_continuous_stop_event', None)
+        if stop_event is None:
+            self._continuous_stop_event = threading.Event()
+            stop_event = self._continuous_stop_event
+
+        def _loop() -> None:
+            mode = self.config.get('interval_mode', 'adaptive')
+            base_interval = int(self.config.get('loop_interval_sec', 30))
+            self.logger.info(f"🔄 Continuous optimization loop started (mode={mode}, base_interval={base_interval}s, pid={pid}, gpu={gpu_index})")
+            while stop_event and not stop_event.is_set():
+                interval = base_interval
+                results: Optional[Dict[str, Any]] = None
+                try:
+                    results = self.optimize_gpu_for_process(pid=pid, gpu_index=gpu_index, strategies=strategies)
+                except Exception as e:
+                    self._recent_error_count = min(999999, self._recent_error_count + 1)
+                    self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
+                try:
+                    state = self._compute_state_from_metrics(pid=pid, gpu_index=gpu_index, results=results)
+                    if self.config.get('interval_mode', 'adaptive') == 'fixed':
+                        interval = max(1, int(self.config.get('loop_interval_sec', base_interval)))
+                    else:
+                        interval = max(1, int(self._pick_next_interval_sec(state)))
+                    self.logger.info(f"[Orchestrator] Next interval selected: {interval}s | state={state} | tier={self._last_interval_tier} | choices={self._interval_choices}")
+                except Exception as _e:
+                    self.logger.warning(f"[Orchestrator] Failed to compute next interval; fallback to base {base_interval}s: {_e}")
+                    interval = base_interval
+                # Sleep with cooperative stop
+                for _ in range(int(interval)):
+                    if stop_event.is_set():
+                        break
+                    time.sleep(1)
+            self.logger.info("🛑 Continuous optimization loop stopped")
+
+        self._continuous_thread = threading.Thread(target=_loop, daemon=True)
+        self._continuous_thread.start()
     
     def _acquire_gpu_resources(self, pid: int, gpu_index: int) -> bool:
         """

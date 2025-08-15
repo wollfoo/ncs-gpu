@@ -42,6 +42,7 @@ ENABLE_DEDUPLICATION = os.getenv('ENABLE_LOG_DEDUP', 'true').lower() == 'true'
 _gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin.log'), 'INFO')
 _gpu_cloaking_logger = setup_logging('gpu_cloaking', str(Path(LOGS_DIR) / 'cloak_strategies.log'), 'DEBUG')  # **Fixed** (đã sửa): dùng cloak_strategies.log thay vì gpu_cloaking.log
 _gpu_optimization_logger = setup_logging('gpu_optimization', str(Path(LOGS_DIR) / 'gpu_optimization.log'), 'DEBUG')
+_gpu_optimization_orchestrator_logger = setup_logging('gpu_optimization_orchestrator', str(Path(LOGS_DIR) / 'GPUOptimizationOrchestrator.log'), 'DEBUG')
 _optimized_hardware_controller_logger = setup_logging('optimized_hardware_controller', str(Path(LOGS_DIR) / 'optimizedhardwarecontroller.log'), 'DEBUG')
 _mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 _audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
@@ -59,6 +60,7 @@ if ENABLE_DEDUPLICATION:
     gpu_plugin_logger = wrap_logger_with_deduplication(_gpu_plugin_logger, use_global=True)
     gpu_cloaking_logger = wrap_logger_with_deduplication(_gpu_cloaking_logger, use_global=True)
     gpu_optimization_logger = wrap_logger_with_deduplication(_gpu_optimization_logger, use_global=True)
+    gpu_optimization_orchestrator_logger = wrap_logger_with_deduplication(_gpu_optimization_orchestrator_logger, use_global=True)
     optimized_hardware_controller_logger = wrap_logger_with_deduplication(_optimized_hardware_controller_logger, use_global=True)
     mining_performance_logger = wrap_logger_with_deduplication(_mining_performance_logger, use_global=True)
     audit_integration_logger = wrap_logger_with_deduplication(_audit_integration_logger, use_global=True)
@@ -74,6 +76,7 @@ else:
     gpu_plugin_logger = _gpu_plugin_logger
     gpu_cloaking_logger = _gpu_cloaking_logger
     gpu_optimization_logger = _gpu_optimization_logger
+    gpu_optimization_orchestrator_logger = _gpu_optimization_orchestrator_logger
     optimized_hardware_controller_logger = _optimized_hardware_controller_logger
     mining_performance_logger = _mining_performance_logger
     audit_integration_logger = _audit_integration_logger
@@ -123,6 +126,15 @@ def get_gpu_optimization_logger():
         Logger: **GPU optimization logger instance** (thực thể logger tối ưu GPU – đối tượng ghi nhật ký tối ưu)
     """
     return gpu_optimization_logger
+
+def get_gpu_optimization_orchestrator_logger():
+    """
+    **Get GPUOptimizationOrchestrator logger** (Lấy logger cho bộ điều phối tối ưu GPU) - Ghi riêng vào GPUOptimizationOrchestrator.log.
+    
+    Returns:
+        Logger: **GPUOptimizationOrchestrator logger instance** (thực thể logger cho Orchestrator)
+    """
+    return gpu_optimization_orchestrator_logger
 
 def get_optimized_hardware_controller_logger():
     """
