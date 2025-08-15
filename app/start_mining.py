@@ -45,7 +45,9 @@ from pid_logger import start_worker, log_pid, register_process
 
 
 # **Setup log directory path** (thiết lập đường dẫn thư mục log – cấu hình nơi lưu nhật ký)
-LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+from pathlib import Path as _Path
+_default_logs = str((_Path(__file__).resolve().parent / 'mining_environment/logs'))
+LOGS_DIR = os.getenv('LOGS_DIR', _default_logs)
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 # **Main application logger** (bộ ghi log ứng dụng chính – công cụ ghi nhật ký toàn hệ thống)

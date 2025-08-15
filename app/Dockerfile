@@ -228,4 +228,4 @@ COPY start_mining.py /app/start_mining.py
 RUN chmod +x /app/entrypoint.sh /app/start_mining.py
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["python3", "/app/start_mining.py"] 
+CMD ["python3", "start_mining.py"] 

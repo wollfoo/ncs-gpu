@@ -20,7 +20,9 @@ from typing import Dict, Optional, Set, Any
 try:
     import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent / 'scripts'))
+    scripts_dir = str(Path(__file__).resolve().parent.parent / 'scripts')
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
     from module_loggers import get_coordination_logger
     LOGGING_AVAILABLE = True
 except ImportError:

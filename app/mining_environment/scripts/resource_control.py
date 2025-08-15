@@ -78,8 +78,8 @@ except ImportError:
 # ✅ STANDARDIZED: Unified logger for OHC and module-level
 resource_logger = get_resource_control_logger()
 
-# ✅ DEDICATED FILE LOGGER for GPUResourceManager → resource_control.log
-_RC_LOG_PATH = "/app/mining_environment/logs/resource_control.log"
+# ✅ DEDICATED FILE LOGGER for GPUResourceManager → resource_control.log (relative to project root)
+_RC_LOG_PATH = str(Path(__file__).resolve().parent.parent / "logs/resource_control.log")
 rc_file_logger = setup_logging('resource_control', _RC_LOG_PATH, 'DEBUG')
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance

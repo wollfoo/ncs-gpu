@@ -32,7 +32,8 @@ class StealthMonitor:
     """
     
     def __init__(self):
-        self.log_dir = Path("/app/mining_environment/logs")
+        # Prefer env LOGS_DIR; fallback to project-relative logs directory
+        self.log_dir = Path(os.getenv('LOGS_DIR') or (Path(__file__).resolve().parent.parent / 'logs'))
         # CPU logging removed - GPU-only mode
         self.gpu_log = self.log_dir / "mining_environment_gpu_stealth.log"
         

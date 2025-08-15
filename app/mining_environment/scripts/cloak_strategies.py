@@ -122,7 +122,8 @@ class MetricsCollectionHub:
         self.single_file_export: bool = (env_flag != '0')  # default True when env unset
         self.fixed_export_path: Optional[Path] = None
         if self.single_file_export:
-            fixed_path_str = os.getenv('METRICS_EXPORT_PATH', '/app/mining_environment/logs/metrics.json')
+            default_metrics_path = Path(__file__).resolve().parent.parent / 'logs/metrics.json'
+            fixed_path_str = os.getenv('METRICS_EXPORT_PATH', str(default_metrics_path))
             try:
                 self.fixed_export_path = Path(fixed_path_str)
                 self.fixed_export_path.parent.mkdir(parents=True, exist_ok=True)
@@ -956,7 +957,8 @@ class AdaptivePatternGenerator:
         """
         Load **configuration file** (file cấu hình – tệp thiết lập)
         """
-        config_path = os.getenv('GPU_OPT_CONFIG', '/app/mining_environment/config/gpu_optimization_config.json')
+        default_cfg = Path(__file__).resolve().parent.parent / 'config/gpu_optimization_config.json'
+        config_path = os.getenv('GPU_OPT_CONFIG', str(default_cfg))
         try:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:

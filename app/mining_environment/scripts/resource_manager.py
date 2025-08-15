@@ -31,11 +31,9 @@ from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheE
 # **Module logger** (logger module – bộ ghi nhật ký thành phần)
 module_logger = get_resource_manager_logger()
 
-# **GPU Optimization import** (nhập module tối ưu GPU – khắc phục lỗi import)
+# **GPU Optimization import** (nhập module tối ưu GPU – không dùng đường dẫn tuyệt đối)
 try:
-    import sys
-    sys.path.insert(0, '/home/azureuser/opus-gpu/app')
-    from mining_environment.scripts.gpu_optimization_orchestrator import GPUOptimizationOrchestrator
+    from .gpu_optimization_orchestrator import GPUOptimizationOrchestrator
     GPU_OPT_AVAILABLE = True
     module_logger.info("✅ [RM] GPU Optimization Orchestrator imported successfully")
 except ImportError as e:

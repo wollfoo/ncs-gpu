@@ -25,8 +25,8 @@ except ImportError:
         from log_deduplication import wrap_logger_with_deduplication
 
 # **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
-# Default log directory as specified
-LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+# Default log directory computed relative to project root if env not set
+LOGS_DIR = os.getenv('LOGS_DIR') or str(Path(__file__).resolve().parent.parent / 'logs')
 # Create directory if it doesn't exist (will fail silently if no permissions)
 try:
     Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)

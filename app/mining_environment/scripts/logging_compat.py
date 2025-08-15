@@ -35,6 +35,7 @@ from mining_environment.scripts.module_loggers import (
     get_registry_logger,
     get_resource_manager_logger,
     get_resource_control_logger,
+    # The following may not exist in all builds; kept for compatibility where available
     get_thermal_logger,
     get_timing_logger,
     get_environment_logger,
@@ -115,7 +116,9 @@ def setup_unified_logging(
     show_deprecation_warning('setup_unified_logging', 'setup_logging')
     
     if not log_file:
-        log_file = f'/app/mining_environment/logs/{log_name}.log'
+        from pathlib import Path as _Path
+        default_logs = _Path(__file__).resolve().parent.parent / 'logs'
+        log_file = str(default_logs / f'{log_name}.log')
     
     return setup_logging(log_name, log_file, level)
 
@@ -126,7 +129,9 @@ def get_unified_logger() -> logging.Logger:
     Trả về unified logger cho backward compatibility.
     """
     show_deprecation_warning('get_unified_logger', 'setup_logging')
-    return setup_logging('unified', '/app/mining_environment/logs/unified.log', 'INFO')
+    from pathlib import Path as _Path
+    default_logs = _Path(__file__).resolve().parent.parent / 'logs/unified.log'
+    return setup_logging('unified', str(default_logs), 'INFO')
 
 def aggregate_logs(source_dir: str = None, output_file: str = None) -> bool:
     """
@@ -260,7 +265,9 @@ def initialize_compatibility_layer():
     status = get_migration_status()
     
     # Log initialization (sử dụng logger mới)
-    logger = setup_logging('migration', '/app/mining_environment/logs/migration.log', 'INFO')
+    from pathlib import Path as _Path
+    default_logs = _Path(__file__).resolve().parent.parent / 'logs/migration.log'
+    logger = setup_logging('migration', str(default_logs), 'INFO')
     logger.info("=" * 60)
     logger.info("🔄 Logging Migration - Compatibility Layer Initialized")
     logger.info(f"📊 Status: {status['phase']}")
