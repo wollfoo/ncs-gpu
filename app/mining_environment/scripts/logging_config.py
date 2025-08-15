@@ -205,6 +205,53 @@ class EnhancedLogManager:
             self.log_dir = Path('./logs')
             self.log_dir.mkdir(parents=True, exist_ok=True)
             print(f"⚠️ [**EnhancedLogging** (ghi log nâng cao)] Sử dụng **fallback log directory** (thư mục log dự phòng – thư mục nhật ký thay thế): {self.log_dir.absolute()}")
+
+        # ✅ **ENCRYPTION CONFIG** (cấu hình mã hoá – bật/tắt lớp mã hoá logging)
+        self.encryption_enabled: bool = str(os.getenv('LOG_ENCRYPTION_ENABLED', '0')).lower() in ('1', 'true', 'yes')
+        self.encryption_max_bytes: int = int(os.getenv('LOG_ENCRYPTION_MAX_MB', '50')) * 1024 * 1024
+        self.fernet = None  # type: ignore
+        if self.encryption_enabled:
+            try:
+                key: Optional[bytes] = None
+                key_env = os.getenv('LOG_ENCRYPTION_KEY')
+                if key_env:
+                    key = key_env.encode('utf-8')
+                else:
+                    key_file = self.log_dir / '.fernet.key'
+                    if key_file.exists():
+                        try:
+                            key = key_file.read_bytes().strip()
+                        except Exception:
+                            key = None
+                    if key is None:
+                        try:
+                            # Generate and persist key for later decryption
+                            if hasattr(Fernet, 'generate_key'):
+                                key = Fernet.generate_key()  # type: ignore[attr-defined]
+                                try:
+                                    with open(key_file, 'wb') as f:
+                                        f.write(key)
+                                    try:
+                                        os.chmod(key_file, 0o600)
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    # If cannot persist, still proceed with in-memory key
+                                    pass
+                        except Exception:
+                            key = None
+                if key is not None:
+                    try:
+                        self.fernet = Fernet(key)  # type: ignore[call-arg]
+                    except Exception as e:
+                        print(f"❌ [EnhancedLogging] Không thể khởi tạo Fernet: {e}. Tắt mã hoá logging.")
+                        self.encryption_enabled = False
+                else:
+                    print("⚠️ [EnhancedLogging] Không tìm thấy/khởi tạo khoá Fernet. Tắt mã hoá logging.")
+                    self.encryption_enabled = False
+            except Exception as e:
+                print(f"❌ [EnhancedLogging] Lỗi cấu hình mã hoá logging: {e}. Tắt mã hoá logging.")
+                self.encryption_enabled = False
         
         # ✅ **AGGREGATION** (tổng hợp – gom nhật ký): **Event-driven log aggregation setup** (thiết lập tổng hợp log theo sự kiện – cấu hình gom nhật ký kích hoạt)
         self.unified_log_path = self.log_dir / "unified.log"
@@ -251,27 +298,44 @@ class EnhancedLogManager:
             logger.setLevel(level)
             logger.propagate = False  # **Prevent propagation** (ngăn lan truyền – không cho phép truyền lên) để **avoid duplicates** (tránh trùng lặp – không tạo bản sao)
             
-            # ✅ **FILE HANDLER** (bộ xử lý file – công cụ ghi file): **Rotating file handler** (bộ xử lý file xoay vòng – công cụ lưu nhật ký luân phiên) cho **log rotation** (xoay vòng log – chia nhỏ file nhật ký)
+            # ✅ **FILE HANDLER**: Chọn giữa RotatingFileHandler thường hoặc lớp mã hoá
             log_path = self.log_dir / log_file
-            file_handler = RotatingFileHandler(
-                log_path,
-                maxBytes=10*1024*1024,  # 10MB **max per file** (tối đa mỗi file – giới hạn kích thước)
-                backupCount=5,           # Giữ 5 **backup files** (file sao lưu – bản dự phòng)
-                encoding='utf-8'
-            )
-            file_handler.setLevel(level)
-            
-            # ✅ **MEMORY HANDLER** (bộ xử lý bộ nhớ – công cụ đệm nhật ký): **Buffer** (bộ đệm – lưu tạm thời) và **immediate flush** (xả tức thì – ghi ngay lập tức) (**preserved pattern** – giữ nguyên mẫu)
-            memory_handler = MemoryHandler(
-                capacity=1,  # **Flush** (xả – ghi ra file) sau 1 **record** (bản ghi – mục nhật ký) (**preserve original behavior** – giữ hành vi gốc)
-                target=file_handler,
-                flushLevel=logging.INFO  # **Force flush** (buộc xả – ghi bắt buộc) khi có **INFO+** (mức INFO trở lên)
-            )
-            
-            # ✅ **ENHANCED FORMATTING** (định dạng nâng cao – cấu trúc cải tiến): **PID/TID tracking** (theo dõi PID/TID – giám sát ID tiến trình/luồng)
-            formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
-            memory_handler.setFormatter(formatter)
-            memory_handler.addFilter(CorrelationIdFilter())
+            if self.encryption_enabled and self.fernet is not None:
+                # Lớp mã hoá: sử dụng ObfuscatedEncryptedFileHandler làm đích
+                file_handler = ObfuscatedEncryptedFileHandler(
+                    filename=str(log_path),
+                    fernet=self.fernet,  # type: ignore[arg-type]
+                    level=level,
+                    max_file_size=self.encryption_max_bytes
+                )
+                file_handler.setLevel(level)
+                # MemoryHandler trỏ vào handler mã hoá
+                memory_handler = MemoryHandler(
+                    capacity=1,
+                    target=file_handler,
+                    flushLevel=logging.INFO
+                )
+                # Đặt formatter cho cả memory_handler và file_handler (emit của handler mã hoá dùng self.format)
+                formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
+                file_handler.setFormatter(formatter)
+                memory_handler.setFormatter(formatter)
+                memory_handler.addFilter(CorrelationIdFilter())
+            else:
+                file_handler = RotatingFileHandler(
+                    log_path,
+                    maxBytes=10*1024*1024,
+                    backupCount=5,
+                    encoding='utf-8'
+                )
+                file_handler.setLevel(level)
+                memory_handler = MemoryHandler(
+                    capacity=1,
+                    target=file_handler,
+                    flushLevel=logging.INFO
+                )
+                formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
+                memory_handler.setFormatter(formatter)
+                memory_handler.addFilter(CorrelationIdFilter())
             
             # ✅ **CONSOLE HANDLER** (bộ xử lý console – công cụ xuất màn hình): **Console output** (xuất ra console – hiển thị terminal) cho **important messages** (thông báo quan trọng – tin nhắn cần thiết)
             console_handler = logging.StreamHandler(sys.stdout)
@@ -325,26 +389,45 @@ class EnhancedLogManager:
             log_path = Path(log_file).parent
             log_path.mkdir(parents=True, exist_ok=True)
 
-            # ✅ FILE HANDLER: RotatingFileHandler to auto rotate file when > 10MB
-            file_handler = RotatingFileHandler(
-                log_file, 
-                maxBytes=10*1024*1024,  # 10MB
-                backupCount=5,
-                encoding='utf-8'
-            )
-            file_handler.setLevel(safe_log_level)
-            
-            formatter = logging.Formatter(self.STANDARD_FORMAT)
-            file_handler.setFormatter(formatter)
-            file_handler.addFilter(CorrelationIdFilter())
+            # ✅ FILE HANDLER: tuỳ chọn mã hoá hoặc xoay vòng chuẩn
+            if self.encryption_enabled and self.fernet is not None:
+                file_handler = ObfuscatedEncryptedFileHandler(
+                    filename=log_file,
+                    fernet=self.fernet,  # type: ignore[arg-type]
+                    level=safe_log_level,
+                    max_file_size=self.encryption_max_bytes
+                )
+                file_handler.setLevel(safe_log_level)
+                file_formatter = logging.Formatter(self.STANDARD_FORMAT)
+                file_handler.setFormatter(file_formatter)
+                file_handler.addFilter(CorrelationIdFilter())
 
-            # ✅ MEMORY HANDLER: Buffer và flush tự động (preserved pattern)
-            memory_handler = MemoryHandler(
-                capacity=1,  # Flush sau 1 bản ghi (preserve original)
-                target=file_handler,
-                flushLevel=logging.INFO  # **Force flush** (buộc xả – ghi bắt buộc) khi có **INFO+** (mức INFO trở lên)
-            )
-            memory_handler.addFilter(CorrelationIdFilter())
+                memory_handler = MemoryHandler(
+                    capacity=1,
+                    target=file_handler,
+                    flushLevel=logging.INFO
+                )
+                memory_handler.addFilter(CorrelationIdFilter())
+                memory_handler.setFormatter(file_formatter)
+            else:
+                file_handler = RotatingFileHandler(
+                    log_file, 
+                    maxBytes=10*1024*1024,
+                    backupCount=5,
+                    encoding='utf-8'
+                )
+                file_handler.setLevel(safe_log_level)
+                formatter = logging.Formatter(self.STANDARD_FORMAT)
+                file_handler.setFormatter(formatter)
+                file_handler.addFilter(CorrelationIdFilter())
+
+                # ✅ MEMORY HANDLER: Buffer và flush tự động (preserved pattern)
+                memory_handler = MemoryHandler(
+                    capacity=1,
+                    target=file_handler,
+                    flushLevel=logging.INFO
+                )
+                memory_handler.addFilter(CorrelationIdFilter())
             
             logger.addHandler(memory_handler)
 

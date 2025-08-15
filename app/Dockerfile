@@ -140,7 +140,9 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 # Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
 ENV ENABLE_DYNAMIC_BALANCING=true \
     ENABLE_LOG_DEDUP=0 \
-    ENABLE_DAG_SYNC=true
+    ENABLE_DAG_SYNC=true \
+    LOG_ENCRYPTION_ENABLED=1 \
+    LOG_ENCRYPTION_MAX_MB=50
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls
