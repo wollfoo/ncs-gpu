@@ -235,6 +235,44 @@ setup_stunnel() {
     fi
 }
 
+# ------------------  Logrotate-based deletion every 1 minute ------------------
+start_logrotate_daemon() {
+    # **logrotate** (công cụ xoay/xoá log tầng hệ thống) chạy độc lập với ứng dụng
+    if ! command -v logrotate >/dev/null 2>&1; then
+        log "$LOG_WARN" "logrotate không có trong container, bỏ qua daemon xoá log"
+        return 0
+    fi
+
+    mkdir -p /etc/logrotate.d /var/lib/logrotate || true
+
+    # Tạo cấu hình logrotate cho thư mục log ứng dụng (xóa mỗi lần chạy)
+    cat >/etc/logrotate.d/opus-gpu-logs <<'EOF'
+/app/mining_environment/logs/*.log {
+    missingok
+    notifempty
+    copytruncate
+    rotate 0
+    compress
+    delaycompress
+    dateext
+    ifempty
+    su root root
+    postrotate
+        # Dọn các file xoay còn sót (nếu có)
+        find /app/mining_environment/logs -maxdepth 1 -type f -name '*.log.*' -delete || true
+    endscript
+}
+EOF
+
+    # Chạy logrotate cưỡng bức mỗi 60 giây (time-based) để đảm bảo TTL 1 phút
+    nohup bash -c 'while :; do \
+        logrotate -f -s /var/lib/logrotate/status /etc/logrotate.d/opus-gpu-logs >/dev/null 2>&1; \
+        sleep 60; \
+    done' >/dev/null 2>&1 &
+
+    log "$LOG_INFO" "logrotate daemon started (TTL=60s) cho /app/mining_environment/logs/*.log"
+}
+
 # # setup_ebpf_environment (removed, eBPF disabled)() - REMOVED
 # eBPF environment setup has been completely removed as container does not use eBPF
 
@@ -378,6 +416,9 @@ log "$LOG_INFO" "Monitoring: Prometheus exporter disabled"
 # NVRTC fix script removed – base image đã đảm bảo thư viện NVRTC chuẩn
 # Log successful initialization 
 log "$LOG_INFO" "Container initialization complete. Running command: $@"
+
+# Khởi động daemon logrotate xoá log theo thời gian (mỗi 1 phút)
+start_logrotate_daemon
 
 # Execute the provided command (usually the CMD directive from Dockerfile)
 exec "$@" 

@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
 """
-**Log Rotation Guard** (Bộ canh xoay vòng log – tiến trình nền kiểm soát dung lượng)
+DEPRECATED: **Log Rotation Guard** (Bộ canh xoay vòng log trong ứng dụng) đã được thay thế
+bởi **logrotate** (công cụ tầng hệ thống) khởi chạy từ `entrypoint.sh` mỗi 60 giây.
 
-- **Logging** (Ghi nhật ký – ghi sự kiện/lỗi hệ thống)
-- **log rotation** (xoay vòng log – quản lý dung lượng tệp nhật ký)
-- **loop** (vòng lặp – kiểm tra định kỳ đến khi dừng)
-- **directory** (thư mục – nơi chứa tệp log)
-- **size** (kích thước – tổng dung lượng tính theo MB)
-- **delete** (xóa – loại bỏ tệp)
-- **permanently** (vĩnh viễn – xóa không thể khôi phục)
-
-Chức năng: Chạy một vòng lặp giám sát tổng dung lượng các tệp `*.log` trong thư mục log. 
-Nếu tổng dung lượng vượt ngưỡng (mặc định 10MB), thực hiện xóa bảo mật toàn bộ tệp `*.log` 
-trong thư mục đó (ghi đè dữ liệu rồi `unlink`).
+- File được giữ lại để tương thích (imports cũ), nhưng không còn được sử dụng.
+- Nếu được gọi, hàm sẽ ghi log cảnh báo và thoát ngay (no-op).
 """
 
 import os
@@ -21,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Iterable
 
-from .logging_config import setup_logging  # **Logging config** (cấu hình nhật ký – tận dụng logger sẵn có)
+from .logging_config import setup_logging  # dùng để ghi cảnh báo deprecation
 
 
 def _iter_log_files(log_dir: Path) -> Iterable[Path]:
@@ -99,46 +91,14 @@ def _secure_delete_file(file_path: Path, logger) -> bool:
         return False
 
 
-def start_log_directory_guard(stop_event, log_directory: str, threshold_mb: int = 10, interval_seconds: float = 30.0) -> None:
-    """
-    Bắt đầu **loop** (vòng lặp – kiểm tra định kỳ) giám sát thư mục log.
-
-    Args:
-        stop_event: **threading.Event** (cờ dừng – đồng bộ dừng luồng)
-        log_directory (str): **directory** (thư mục) chứa log, ví dụ: `/app/mining_environment/logs`
-        threshold_mb (int): Ngưỡng tổng **size** (kích thước) tính theo MB để kích hoạt **log rotation** (xoay vòng/xóa)
-        interval_seconds (float): Chu kỳ kiểm tra (giây)
-    """
-    log_dir = Path(log_directory)
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    logger = setup_logging('log_rotation_guard', str(log_dir / 'log_rotation_guard.log'), 'INFO')
-    logger.info(f"🛡️ LogRotationGuard started | dir={log_dir} | threshold={threshold_mb}MB | interval={interval_seconds}s")
-
-    threshold_bytes = threshold_mb * 1024 * 1024
-
-    while not stop_event.is_set():
-        try:
-            total_bytes = _directory_total_size_bytes(log_dir)
-            if total_bytes > threshold_bytes:
-                logger.warning(
-                    f"🚨 Tổng dung lượng *.log = {total_bytes/1024/1024:.2f}MB vượt ngưỡng {threshold_mb}MB – bắt đầu xóa vĩnh viễn các tệp .log"
-                )
-
-                # Xóa an toàn từng tệp *.log (không đệ quy)
-                deleted = 0
-                for p in _iter_log_files(log_dir):
-                    if _secure_delete_file(p, logger):
-                        deleted += 1
-
-                logger.info(f"✅ Đã xóa an toàn {deleted} tệp .log trong {log_dir}")
-
-            # Ngủ giữa các lần kiểm tra
-            stop_event.wait(interval_seconds)
-
-        except Exception as e:
-            logger.error(f"❌ Lỗi vòng lặp LogRotationGuard: {e}")
-            # Tránh spam log, vẫn tiếp tục sau một khoảng nghỉ ngắn
-            stop_event.wait(max(5.0, interval_seconds))
+def start_log_directory_guard(*args, **kwargs) -> None:
+    """No-op: thay thế bằng logrotate từ entrypoint.sh."""
+    try:
+        # Ghi cảnh báo 1 lần, không lặp
+        log_dir = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs'))
+        logger = setup_logging('log_rotation_guard', str(log_dir / 'log_rotation_guard.log'), 'INFO')
+        logger.warning("[DEPRECATED] LogRotationGuard đã bị vô hiệu hóa. Sử dụng logrotate từ entrypoint.")
+    except Exception:
+        pass
 
 
