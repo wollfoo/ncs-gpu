@@ -385,6 +385,12 @@ class DirectPIDRegistry:
         # **SOLUTION 1: Direct ResourceManager Reference** (tham chiếu ResourceManager trực tiếp)
         self._resource_manager = None  # Will be set via register_resource_manager()
         self._resource_manager_lock = threading.Lock()
+
+        # **ENHANCED: Pending Handoff Queue** (hàng đợi bàn giao chờ RM sẵn sàng)
+        self._pending_handoffs: List[Tuple[int, Dict[str, Any], ProcessInfo]] = []
+        self._pending_lock = threading.Lock()
+        self._stop_pending_flush = threading.Event()
+        self._pending_flush_interval = 1.0  # seconds
         
         # ❌ IPC Bridge disabled: dùng direct handoff thay vì IPC
         self._ipc_client = None
@@ -398,6 +404,7 @@ class DirectPIDRegistry:
         
         logger.info("🏗️ DirectPIDRegistry initialized with thread-safe operations")
         self._start_cleanup_thread()
+        self._start_pending_flush_thread()
     
     def register_observer(self, callback: Callable[[ProcessInfo], None]) -> bool:
         """
@@ -478,6 +485,10 @@ class DirectPIDRegistry:
                     return False
                 
                 logger.info(f"✅ [SOLUTION-1] ResourceManager validated with all required methods")
+                # Flush mọi bàn giao đang chờ khi RM đã sẵn sàng
+                flushed = self._flush_pending_handoffs()
+                if flushed > 0:
+                    logger.info(f"🚚 [PENDING-FLUSH] Flushed {flushed} pending handoff(s) to ResourceManager")
                 return True
                 
         except Exception as e:
@@ -775,7 +786,8 @@ class DirectPIDRegistry:
             if rm_instance is None:
                 rm_instance = self._try_get_resource_manager()
             if rm_instance is None:
-                logger.error(f"❌ [RM-FORWARD] No ResourceManager available for PID {pid}")
+                logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager available for PID {pid} – enqueue pending handoff")
+                self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
                 return False
 
             # Thực thi handoff trực tiếp
@@ -783,6 +795,79 @@ class DirectPIDRegistry:
         except Exception as e:
             logger.error(f"❌ [RM-FORWARD] Direct handoff failed for PID {pid}: {e}")
             return False
+
+    def _enqueue_pending_handoff(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> None:
+        """
+        **Enqueue Pending Handoff** (xếp hàng bàn giao chờ): Lưu lại PID khi chưa có ResourceManager.
+        """
+        try:
+            with self._pending_lock:
+                self._pending_handoffs.append((pid, coordinator_metadata, process_info))
+                logger.info(f"🕒 [PENDING] Enqueued PID {pid} for later handoff (queue_size={len(self._pending_handoffs)})")
+        except Exception as e:
+            logger.error(f"❌ [PENDING] Failed to enqueue PID {pid}: {e}")
+
+    def _flush_pending_handoffs(self) -> int:
+        """
+        **Flush Pending Handoffs** (xả hàng đợi bàn giao): Thử bàn giao tất cả PID đang chờ khi RM sẵn sàng.
+        Returns số lượng đã flush thành công.
+        """
+        flushed_count = 0
+        try:
+            # Kiểm tra RM hiện có
+            rm_instance = self._try_get_resource_manager()
+            if rm_instance is None:
+                return 0
+
+            while True:
+                item = None
+                with self._pending_lock:
+                    if self._pending_handoffs:
+                        item = self._pending_handoffs.pop(0)
+                if item is None:
+                    break
+                pid, metadata, pinfo = item
+                try:
+                    if self._execute_rm_handoff(pid, rm_instance, metadata, pinfo, attempt_number=1):
+                        flushed_count += 1
+                        logger.info(f"✅ [PENDING-FLUSH] Handoff completed for PID {pid}")
+                    else:
+                        logger.warning(f"⚠️ [PENDING-FLUSH] Handoff failed for PID {pid} – requeue")
+                        # Requeue to try later
+                        self._enqueue_pending_handoff(pid, metadata, pinfo)
+                        # Tránh vòng lặp tight nếu RM tạm thời lỗi
+                        time.sleep(0.1)
+                except Exception as ex:
+                    logger.error(f"❌ [PENDING-FLUSH] Exception for PID {pid}: {ex}")
+                    self._enqueue_pending_handoff(pid, metadata, pinfo)
+                    time.sleep(0.1)
+        except Exception as e:
+            logger.error(f"❌ [PENDING-FLUSH] Flush failed: {e}")
+        return flushed_count
+
+    def _start_pending_flush_thread(self) -> None:
+        """
+        **Start Pending Flush Thread** (khởi động luồng xả bàn giao chờ):
+        Luồng nền thử flush hàng đợi mỗi _pending_flush_interval giây.
+        """
+        def pending_worker():
+            logger.info("🕒 Pending-flush thread started")
+            while not self._stop_pending_flush.is_set():
+                try:
+                    flushed = self._flush_pending_handoffs()
+                    if flushed == 0:
+                        # Chờ ngắn nếu không có gì để flush
+                        self._stop_pending_flush.wait(self._pending_flush_interval)
+                    else:
+                        # Nếu vừa flush được, thử nhanh hơn một chút
+                        time.sleep(0.05)
+                except Exception as e:
+                    logger.error(f"❌ Pending-flush thread error: {e}")
+                    time.sleep(0.5)
+            logger.info("🕒 Pending-flush thread stopped")
+
+        t = threading.Thread(target=pending_worker, daemon=True, name="DirectRegistry-PendingFlush")
+        t.start()
     
     def _execute_rm_handoff(self, pid: int, rm_instance, coordinator_metadata: Dict[str, Any], 
                            process_info: ProcessInfo, attempt_number: int = 1) -> bool:
@@ -1671,6 +1756,8 @@ class DirectPIDRegistry:
         self._stop_cleanup.set()
         if self._cleanup_thread and self._cleanup_thread.is_alive():
             self._cleanup_thread.join(timeout=5)
+        # Stop pending flush thread
+        self._stop_pending_flush.set()
         
         # **Clear observers** (xóa observers)
         with self._observer_lock:
