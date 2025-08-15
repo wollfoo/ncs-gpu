@@ -786,15 +786,21 @@ class DirectPIDRegistry:
             if rm_instance is None:
                 rm_instance = self._try_get_resource_manager()
             if rm_instance is None:
-                logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager available for PID {pid} – enqueue pending handoff")
+                logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager available for PID {pid} – enqueue pending handoff and ACK accepted")
                 self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
-                return False
+                # Consider as accepted (async) to prevent upstream retry loops
+                return True
 
             # Thực thi handoff trực tiếp
             return self._execute_rm_handoff(pid, rm_instance, coordinator_metadata, process_info, attempt_number=1)
         except Exception as e:
             logger.error(f"❌ [RM-FORWARD] Direct handoff failed for PID {pid}: {e}")
-            return False
+            # Requeue for later and consider accepted to avoid tight retries upstream
+            try:
+                self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
+            except Exception:
+                pass
+            return True
 
     def _enqueue_pending_handoff(self, pid: int, coordinator_metadata: Dict[str, Any], process_info: ProcessInfo) -> None:
         """
