@@ -13,6 +13,7 @@ This module serves as the main entry point for GPU optimization tasks.
 import os
 import logging
 import time
+import random
 import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
@@ -103,6 +104,22 @@ class GPUOptimizationOrchestrator:
         # Runtime state for continuous loop
         self._continuous_stop_event: Optional[threading.Event] = threading.Event()
         self._continuous_thread: Optional[threading.Thread] = None
+        self._last_interval_tier: Optional[int] = None
+        self._recent_error_count: int = 0
+        # Interval control via ENV (optional)
+        self.config['interval_mode'] = os.getenv('CONTINUOUS_OPT_MODE', 'adaptive').lower()
+        try:
+            self.config['interval_min_tier'] = int(os.getenv('INTERVAL_MIN_TIER')) if os.getenv('INTERVAL_MIN_TIER') else None
+        except Exception:
+            self.config['interval_min_tier'] = None
+        try:
+            self.config['interval_max_tier'] = int(os.getenv('INTERVAL_MAX_TIER')) if os.getenv('INTERVAL_MAX_TIER') else None
+        except Exception:
+            self.config['interval_max_tier'] = None
+        try:
+            self.config['interval_jitter_pct'] = float(os.getenv('INTERVAL_JITTER_PCT', '0.15'))
+        except Exception:
+            self.config['interval_jitter_pct'] = 0.15
     
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
@@ -118,6 +135,85 @@ class GPUOptimizationOrchestrator:
             'continuous_optimization': True,
             'loop_interval_sec': 30
         }
+
+    # ===== Interval selection helpers (Adaptive interval with hysteresis & jitter) =====
+    @staticmethod
+    def _get_time_bucket() -> str:
+        hour = datetime.now().hour
+        if 9 <= hour <= 17:
+            return 'business'
+        if 18 <= hour <= 22:
+            return 'peak'
+        return 'off_peak'
+
+    def _compute_state_from_metrics(self, pid: int, gpu_index: int, results: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Try post metrics from results first
+        metrics = None
+        if results and isinstance(results, dict):
+            metrics = (results.get('metrics') or {}).get('post')
+        if not metrics:
+            metrics = self._collect_gpu_metrics(gpu_index)
+
+        temp = float(metrics.get('temperature', 0)) if isinstance(metrics, dict) else 0.0
+        util = float(metrics.get('utilization', 0)) if isinstance(metrics, dict) else 0.0
+        # Classify temperature status
+        if temp >= 78:
+            temp_status = 'CRITICAL'
+        elif temp >= 72:
+            temp_status = 'WARNING'
+        else:
+            temp_status = 'SAFE'
+        return {
+            'temp_status': temp_status,
+            'gpu_util': util,
+            'recent_errors': max(0, self._recent_error_count),
+            'time_of_day': self._get_time_bucket(),
+            'last_tier': self._last_interval_tier,
+        }
+
+    def _pick_next_interval_sec(self, state: Dict[str, Any]) -> int:
+        # Default choices; can be overridden in future via ENV parsing
+        interval_choices: List[Tuple[int, int]] = [
+            (300, 600),
+            (600, 1200),
+            (1200, 1800),
+            (1800, 3600),
+            (3600, 7200),
+        ]
+        # Base tier by state
+        tier = 1
+        if state.get('temp_status') == 'CRITICAL' or state.get('recent_errors', 0) > 0:
+            tier = 4
+        elif state.get('temp_status') == 'WARNING' or state.get('gpu_util', 0) >= 80:
+            tier = 3
+        elif state.get('gpu_util', 0) >= 50:
+            tier = 2
+        elif state.get('time_of_day') == 'off_peak':
+            tier = 0
+        else:
+            tier = 1
+        # Hysteresis: avoid flapping 1 tier difference
+        last_tier = state.get('last_tier')
+        if last_tier is not None and abs(tier - int(last_tier)) == 1:
+            tier = int(last_tier)
+        # Clamp by env min/max
+        min_tier = self.config.get('interval_min_tier')
+        max_tier = self.config.get('interval_max_tier')
+        if isinstance(min_tier, int):
+            tier = max(min_tier, tier)
+        if isinstance(max_tier, int):
+            tier = min(max_tier, tier)
+        # Clamp to valid range
+        tier = max(0, min(tier, len(interval_choices) - 1))
+        self._last_interval_tier = tier
+        lo, hi = interval_choices[tier]
+        # Random selection within tier (natural jitter)
+        base = random.randint(lo, hi)
+        # Extra jitter pct around selected value
+        jitter_pct = float(self.config.get('interval_jitter_pct', 0.15))
+        jitter_span = int(base * jitter_pct)
+        next_interval = max(lo, min(hi, base + random.randint(-jitter_span, jitter_span)))
+        return int(next_interval)
     
     def _init_components(self):
         """Initialize all orchestrator components"""
