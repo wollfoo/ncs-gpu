@@ -384,7 +384,7 @@ class DirectPIDRegistry:
         
         # **SOLUTION 1: Direct ResourceManager Reference** (tham chiếu ResourceManager trực tiếp)
         self._resource_manager = None  # Will be set via register_resource_manager()
-        self._resource_manager_lock = threading.Lock()
+        self._resource_manager_lock = threading.RLock()
 
         # **ENHANCED: Pending Handoff Queue** (hàng đợi bàn giao chờ RM sẵn sàng)
         self._pending_handoffs: List[Tuple[int, Dict[str, Any], ProcessInfo]] = []
@@ -485,11 +485,11 @@ class DirectPIDRegistry:
                     return False
                 
                 logger.info(f"✅ [SOLUTION-1] ResourceManager validated with all required methods")
-                # Flush mọi bàn giao đang chờ khi RM đã sẵn sàng
-                flushed = self._flush_pending_handoffs()
-                if flushed > 0:
-                    logger.info(f"🚚 [PENDING-FLUSH] Flushed {flushed} pending handoff(s) to ResourceManager")
-                return True
+            # Flush pending handoffs OUTSIDE the RM lock to avoid deadlock
+            flushed = self._flush_pending_handoffs()
+            if flushed > 0:
+                logger.info(f"🚚 [PENDING-FLUSH] Flushed {flushed} pending handoff(s) to ResourceManager")
+            return True
                 
         except Exception as e:
             logger.error(f"❌ [SOLUTION-1] Failed to register ResourceManager: {e}")

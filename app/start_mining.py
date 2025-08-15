@@ -1066,6 +1066,14 @@ def main():
             if ResourceManager._instance and ResourceManager.is_ready():
                 logger.info("✅ [TIER-1] ResourceManager is ready and accepting handoffs")
                 logger.info("🎯 [TIER-1] DirectPIDRegistry can now forward PIDs to ResourceManager")
+                # Đảm bảo đăng ký RM vào DirectPIDRegistry ngay khi sẵn sàng
+                try:
+                    from pid_logger.direct_registry import get_direct_registry
+                    registry = get_direct_registry()
+                    if hasattr(registry, 'register_resource_manager'):
+                        registry.register_resource_manager(ResourceManager._instance)
+                except Exception as _reg_err:
+                    logger.debug(f"[TIER-1] RM registry registration skip: {_reg_err}")
                 break
         except ImportError:
             pass  # ResourceManager not yet importable
