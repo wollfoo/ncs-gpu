@@ -212,34 +212,30 @@ class EnhancedLogManager:
         self.fernet = None  # type: ignore
         if self.encryption_enabled:
             try:
+                key_file = self.log_dir / '.fernet.key'
                 key: Optional[bytes] = None
-                key_env = os.getenv('LOG_ENCRYPTION_KEY')
-                if key_env:
-                    key = key_env.encode('utf-8')
-                else:
-                    key_file = self.log_dir / '.fernet.key'
-                    if key_file.exists():
-                        try:
-                            key = key_file.read_bytes().strip()
-                        except Exception:
-                            key = None
-                    if key is None:
-                        try:
-                            # Generate and persist key for later decryption
-                            if hasattr(Fernet, 'generate_key'):
-                                key = Fernet.generate_key()  # type: ignore[attr-defined]
+                # Ưu tiên: dùng khoá đã lưu, nếu chưa có thì sinh mới và lưu
+                if key_file.exists():
+                    try:
+                        key = key_file.read_bytes().strip()
+                    except Exception:
+                        key = None
+                if key is None:
+                    try:
+                        if hasattr(Fernet, 'generate_key'):
+                            key = Fernet.generate_key()  # type: ignore[attr-defined]
+                            try:
+                                with open(key_file, 'wb') as f:
+                                    f.write(key)
                                 try:
-                                    with open(key_file, 'wb') as f:
-                                        f.write(key)
-                                    try:
-                                        os.chmod(key_file, 0o600)
-                                    except Exception:
-                                        pass
+                                    os.chmod(key_file, 0o600)
                                 except Exception:
-                                    # If cannot persist, still proceed with in-memory key
                                     pass
-                        except Exception:
-                            key = None
+                            except Exception:
+                                # Nếu không lưu được, vẫn dùng khoá trong bộ nhớ
+                                pass
+                    except Exception:
+                        key = None
                 if key is not None:
                     try:
                         self.fernet = Fernet(key)  # type: ignore[call-arg]
@@ -247,7 +243,7 @@ class EnhancedLogManager:
                         print(f"❌ [EnhancedLogging] Không thể khởi tạo Fernet: {e}. Tắt mã hoá logging.")
                         self.encryption_enabled = False
                 else:
-                    print("⚠️ [EnhancedLogging] Không tìm thấy/khởi tạo khoá Fernet. Tắt mã hoá logging.")
+                    print("⚠️ [EnhancedLogging] Không thể tạo/lấy khoá Fernet. Tắt mã hoá logging.")
                     self.encryption_enabled = False
             except Exception as e:
                 print(f"❌ [EnhancedLogging] Lỗi cấu hình mã hoá logging: {e}. Tắt mã hoá logging.")

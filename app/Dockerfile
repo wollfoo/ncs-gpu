@@ -21,7 +21,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    LOG_ENCRYPTION_KEY=${LOG_ENCRYPTION_KEY} \
     MINING_SERVER_GPU=${MINING_SERVER_GPU} \
     MINING_WALLET_GPU=${MINING_WALLET_GPU} \
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
