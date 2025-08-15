@@ -1610,7 +1610,11 @@ class GpuCloakStrategy:
         """
         try:
             # Store trong memory buffer hoặc file
-            metrics_file = '/tmp/gpu_pattern_metrics.json'
+            # Lưu vào thư mục logs chuẩn của ứng dụng
+            import os
+            logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+            os.makedirs(logs_dir, exist_ok=True)
+            metrics_file = os.path.join(logs_dir, 'gpu_pattern_metrics.json')
             
             # Load existing metrics
             existing = []
