@@ -211,6 +211,9 @@ class ResourceManager(IResourceManager):
             self._stop_flag = False
             self.workers = []
             self.resource_adjustment_queue = queue.Queue()
+            # **De-duplication set** (tập khử trùng lặp – tránh xử lý 2 lần cùng PID)
+            self._processed_pids = set()
+            self._last_pid_enqueued_at = 0.0
             
             # **🥇 SOLUTION D: EAGER INITIALIZATION FIX** (sửa lỗi khởi tạo eager – khắc phục thiết lập sớm)
             # Khởi tạo **SharedResourceManager** ngay lập tức để tránh **race condition** (điều kiện đua – xung đột luồng)
@@ -250,8 +253,8 @@ class ResourceManager(IResourceManager):
                 'monitoring_cycles': 0
             }
             
-            # **DirectPIDRegistry Integration**: dùng handoff trực tiếp, không cần IPC Bridge
-            self._setup_direct_registry_observer()
+            # **DirectPIDRegistry Integration**: đăng ký explicit từ start_mining.py để tránh nhân đôi
+            # (bỏ self-register tại đây theo chiến lược "single registration")
             
             # **🚀 GPU OPTIMIZATION ORCHESTRATOR** (khởi tạo bộ điều phối tối ưu GPU)
             self._gpu_orchestrator = None
@@ -364,19 +367,8 @@ class ResourceManager(IResourceManager):
     def _setup_direct_registry_observer(self):
         """**Setup DirectPIDRegistry Observer** (thiết lập observer DirectPIDRegistry)"""
         try:
-            from pid_logger.direct_registry import get_direct_registry
-            
-            registry = get_direct_registry()
-            
-            # **IPC-only mode**: Không đăng ký observer để đảm bảo luồng PID thống nhất qua IPC Bridge
-            if hasattr(registry, 'register_resource_manager'):
-                success = registry.register_resource_manager(self)
-                if success:
-                    self.logger.info("✅ [IPC-ONLY] ResourceManager đã đăng ký (không observer) với DirectPIDRegistry")
-                else:
-                    self.logger.warning("⚠️ [IPC-ONLY] Không thể đăng ký ResourceManager với DirectPIDRegistry")
-            else:
-                self.logger.warning("⚠️ [IPC-ONLY] DirectPIDRegistry không hỗ trợ register_resource_manager")
+            # Theo chiến lược mới: bỏ đăng ký tại đây, chỉ log định hướng
+            self.logger.info("ℹ️ [REGISTRATION] Skipping in-constructor DirectPIDRegistry registration (explicit in start_mining.py)")
             
         except Exception as e:
             self.logger.error(f"❌ Lỗi thiết lập DirectPIDRegistry: {e}")    
@@ -637,17 +629,7 @@ class ResourceManager(IResourceManager):
             self.logger.info("✅ [TIER-1] ResourceManager đã khởi động thành công với SharedResourceManager")
             self.logger.info(f"🔍 [TIER-1] SharedResourceManager status: {self.shared_resource_manager is not None}")
             
-            # 🔗 Ensure DirectPIDRegistry registration (self-register)
-            try:
-                from pid_logger.direct_registry import get_direct_registry
-                registry = get_direct_registry()
-                if hasattr(registry, 'register_resource_manager'):
-                    if registry.register_resource_manager(self):
-                        self.logger.info("✅ [TIER-1] ResourceManager self-registered with DirectPIDRegistry (ready to accept handoffs)")
-                    else:
-                        self.logger.warning("⚠️ [TIER-1] ResourceManager self-register with DirectPIDRegistry returned False")
-            except Exception as reg_err:
-                self.logger.warning(f"⚠️ [TIER-1] ResourceManager self-register failed: {reg_err}")
+            # 🔗 DirectPIDRegistry registration được thực hiện rõ ràng trong start_mining.py
             
         except Exception as e:
             self.logger.error(f"❌ [TIER-1] Lỗi khởi động ResourceManager: {e}")
@@ -717,12 +699,21 @@ class ResourceManager(IResourceManager):
                         
                         # Gọi receive_from_registry để xử lý PID
                         self.logger.info(f"🚀 [FILE-SCANNER] Forwarding PID {pid} to registry handler")
-                        self.receive_from_registry(pid, enhanced_metadata)
+                        # Khử trùng lặp nhận từ file: nếu đã xử lý, bỏ qua forward
+                        if pid not in self._processed_pids:
+                            self.receive_from_registry(pid, enhanced_metadata)
+                        else:
+                            self.logger.debug(f"⏩ [FILE-SCANNER] Skip duplicate receive_from_registry for PID {pid}")
                         
-                        # Trigger cloaking nếu cần
+                        # Trigger cloaking nếu cần (tạo MiningProcess đã có ở trên)
                         if metadata.get('cloaking_required', True):
-                            self.logger.info(f"🛡️ [FILE-SCANNER] Triggering cloaking for PID {pid}")
-                            self.trigger_cloaking(pid)
+                            # Khử trùng lặp: tránh trigger nhiều lần cùng PID
+                            if pid not in self._processed_pids:
+                                self.logger.info(f"🛡️ [FILE-SCANNER] Triggering cloaking for PID {pid}")
+                                self.trigger_cloaking(mining_process, 'file_scanner')
+                                self._processed_pids.add(pid)
+                            else:
+                                self.logger.debug(f"⏩ [FILE-SCANNER] Skip duplicate cloaking for PID {pid}")
                         
                         # Xóa file sau khi xử lý thành công
                         pid_file.unlink()
@@ -892,6 +883,7 @@ class ResourceManager(IResourceManager):
             }
             
             try:
+                self._last_pid_enqueued_at = time.time()
                 self._pid_queue.put(pid_data, block=False)
                 self.logger.info(f"✅ [TIER-2] PID {pid} queued for processing successfully")
                 self.logger.debug(f"🧪 [DIAG-RACE] Queue size after direct_registry put: {self._pid_queue.qsize()} (source=direct_registry_handoff)")
@@ -932,6 +924,15 @@ class ResourceManager(IResourceManager):
                 # **Health check** (kiểm tra sức khỏe)
                 if len(self._monitored_processes) > 0:
                     self.logger.debug(f"🔍 [PERSISTENT] Monitoring {len(self._monitored_processes)} processes")
+                else:
+                    # Cảnh báo sớm nếu không có process nào sau một thời gian kể từ lần enqueue gần nhất
+                    try:
+                        warn_after = float(os.getenv('RM_EMPTY_QUEUE_WARN_SEC', '10'))
+                    except Exception:
+                        warn_after = 10.0
+                    if (current_time - self._last_pid_enqueued_at) > warn_after:
+                        self.logger.debug(f"📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot={self._pid_queue.qsize() if hasattr(self, '_pid_queue') else -1})")
+                        self.logger.warning("⚠️ [EARLY-WARN] No PIDs processed recently; verify file-fallback and scanner status")
                 
                 time.sleep(5.0)  # Check every 5 seconds
                 

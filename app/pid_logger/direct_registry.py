@@ -786,8 +786,16 @@ class DirectPIDRegistry:
             if rm_instance is None:
                 rm_instance = self._try_get_resource_manager()
             if rm_instance is None:
-                logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager available for PID {pid} – enqueue pending handoff and ACK accepted")
-                self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
+                logger.warning(f"⚠️ [RM-FORWARD] No ResourceManager available for PID {pid} – attempting FILE FALLBACK + enqueue pending")
+                # 🔥 Ưu tiên ghi file fallback để RM scanner có thể pick-up cross-process
+                try:
+                    fallback_ok = self._try_file_based_fallback(pid, coordinator_metadata, process_info)
+                    if not fallback_ok:
+                        logger.warning(f"⚠️ [RM-FORWARD] File fallback failed for PID {pid}, enqueuing pending handoff")
+                        self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
+                except Exception as fb_err:
+                    logger.error(f"❌ [RM-FORWARD] Exception during file fallback for PID {pid}: {fb_err}")
+                    self._enqueue_pending_handoff(pid, coordinator_metadata, process_info)
                 # Consider as accepted (async) to prevent upstream retry loops
                 return True
 
