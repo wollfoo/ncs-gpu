@@ -30,6 +30,7 @@ from mining_environment.scripts.module_loggers import (
     get_start_mining_logger,
     log_gpu_plugin_operation
 )
+from mining_environment.scripts.log_rotation_guard import start_log_directory_guard
 from mining_environment.scripts import setup_env
 from mining_environment.scripts.resource_manager import ResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
@@ -967,6 +968,21 @@ def main():
     """**Simplified Sequential Architecture Main Function** (hàm chính kiến trúc tuần tự đơn giản) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""
     logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Simplified Sequential Architecture) =====")
     
+    # ------------------------------------------------------------------
+    # 0️⃣ **LogRotationGuard**: Bắt đầu guard nền xoay/xóa log dựa trên tổng dung lượng thư mục
+    # ------------------------------------------------------------------
+    try:
+        guard_thread = threading.Thread(
+            target=start_log_directory_guard,
+            args=(stop_event, LOGS_DIR, 10, 15.0),  # threshold=10MB, interval=15s
+            daemon=True,
+            name="LogRotationGuard"
+        )
+        guard_thread.start()
+        logger.info("🛡️ LogRotationGuard thread started")
+    except Exception as e:
+        logger.error(f"❌ Không thể khởi động LogRotationGuard: {e}")
+
     # ------------------------------------------------------------------
     # 1️⃣ **SIMPLIFIED**: Thiết lập môi trường tuần tự trực tiếp (DirectPIDRegistry replaces EventBus)
     # ------------------------------------------------------------------
