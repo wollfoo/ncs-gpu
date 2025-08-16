@@ -270,10 +270,11 @@ log "$LOG_INFO" "Monitoring: Prometheus exporter disabled"
 log "$LOG_INFO" "Container initialization complete. Running command: $@"
 
 # Khởi động daemon logrotate xoá log theo thời gian (mỗi 1 phút) nếu được bật
-if [ "${ENABLE_LOGROTATE:-0}" = "true" ]; then
+# Mặc định: BẬT (ENABLE_LOGROTATE=true|1|yes). Đặt false/0/no để tắt.
+if [[ "${ENABLE_LOGROTATE:-true}" =~ ^(true|1|yes|TRUE|YES)$ ]]; then
     start_logrotate_daemon
 else
-    log "$LOG_INFO" "logrotate daemon disabled via ENABLE_LOGROTATE=${ENABLE_LOGROTATE:-0}"
+    log "$LOG_INFO" "logrotate daemon disabled via ENABLE_LOGROTATE=${ENABLE_LOGROTATE:-false}"
 fi
 
 # Execute the provided command (usually the CMD directive from Dockerfile)
