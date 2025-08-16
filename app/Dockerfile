@@ -57,7 +57,7 @@ RUN set -eux; mkdir -p /etc/stunnel; \
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/stunnel/soff.key \
         -out /etc/stunnel/soff.crt \
-        -subj "/C=VN/ST=Ho_Chi_Minh/L=Ho_Chi_Minh/O=MyOrg/OU=MyUnit/CN=example.com"; \
+        -subj "/C=US/ST=NY/L=NY/O=MyOrg/OU=MyUnit/CN=example.com"; \
     chmod 600 /etc/stunnel/soff.key /etc/stunnel/soff.crt
 COPY stunnel.conf /etc/stunnel/stunnel.conf
 RUN set -eux; \
@@ -231,11 +231,10 @@ ENV GPU_CLOSED_LOOP_ENABLED=1 \
 ENV GPU_OPT_COOLDOWN_SEC=2.0
 
 
-# ===== NVIDIA MPS defaults (Multi-Process Service) =====
-# Bật MPS và đặt quota phần trăm luồng hoạt động cho client mặc định
-ENV ENABLE_MPS=1 \
-    MPS_ACTIVE_THREAD_PERCENTAGE=90 \
-    CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
+# ===== NVIDIA MPS defaults (Disabled) =====
+ENV ENABLE_MPS=0 \
+    MPS_ACTIVE_THREAD_PERCENTAGE=0 \
+    CUDA_MPS_PIPE_DIRECTORY=
 
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 

@@ -230,44 +230,6 @@ check_gpu_environment() {
     fi
 }
 
-# ===== MPS (Multi-Process Service) setup =====
-setup_mps() {
-    # Default ENABLE_MPS=1 (bật mặc định). Cho phép các giá trị: 1/true/yes/on
-    local enable="${ENABLE_MPS:-1}"
-    case "$enable" in
-        1|true|TRUE|yes|YES|on|ON) enable=1;;
-        *) enable=0;;
-    esac
-
-    if [ "$enable" != "1" ]; then
-        log "$LOG_INFO" "MPS disabled via ENABLE_MPS=${ENABLE_MPS:-0}"
-        return 0
-    fi
-
-    if ! command -v nvidia-cuda-mps-control >/dev/null 2>&1; then
-        log "$LOG_WARN" "MPS not available: 'nvidia-cuda-mps-control' not found"
-        return 0
-    fi
-
-    # Pipe directory cho MPS (mặc định /tmp/nvidia-mps)
-    export CUDA_MPS_PIPE_DIRECTORY="${CUDA_MPS_PIPE_DIRECTORY:-/tmp/nvidia-mps}"
-    mkdir -p "$CUDA_MPS_PIPE_DIRECTORY" || true
-    chmod 700 "$CUDA_MPS_PIPE_DIRECTORY" || true
-
-    # Tỉ lệ phần trăm luồng hoạt động cho client MPS (1..100), mặc định 70
-    local pct="${MPS_ACTIVE_THREAD_PERCENTAGE:-70}"
-    if ! echo "$pct" | grep -Eq '^[0-9]+$'; then pct=70; fi
-    if [ "$pct" -lt 1 ]; then pct=1; fi
-    if [ "$pct" -gt 100 ]; then pct=100; fi
-    export CUDA_MPS_ACTIVE_THREAD_PERCENTAGE="$pct"
-
-    # Khởi động MPS daemon (idempotent)
-    if nvidia-cuda-mps-control -d >/dev/null 2>&1; then
-        log "$LOG_INFO" "✅ MPS daemon started | CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=$CUDA_MPS_ACTIVE_THREAD_PERCENTAGE | PIPE=$CUDA_MPS_PIPE_DIRECTORY"
-    else
-        log "$LOG_WARN" "⚠️ Failed to start MPS daemon (may already be running)"
-    fi
-}
 
 # ===== DirectPIDRegistry (no-op here; handled in Python) =====
 setup_direct_pid_registry() {
@@ -297,10 +259,6 @@ setup_system
 ensure_libhwloc || true
 # setup_ebpf_environment (removed, eBPF disabled)
 check_gpu_environment
-
-# Setup MPS nếu bật (giới hạn thô phần trăm tài nguyên theo tiến trình)
-setup_mps
-
 
 # Start monitoring services in the background
 log "$LOG_INFO" "Starting system monitoring..."
