@@ -596,6 +596,44 @@ class GPUOptimizationOrchestrator:
                 except Exception as e:
                     self._recent_error_count = min(999999, self._recent_error_count + 1)
                     self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
+                # Closed-loop NVML setpoint: bám mục tiêu utilization định kỳ (tùy chọn qua ENV)
+                try:
+                    target_env = os.getenv('GPU_TARGET_UTIL')
+                    enabled_env = os.getenv('GPU_CLOSED_LOOP_ENABLED', '0').lower() in ('1', 'true', 'yes')
+                    if enabled_env and target_env is not None:
+                        try:
+                            target_util = float(target_env)
+                        except Exception:
+                            target_util = 0.6
+                        # Giới hạn an toàn phạm vi [0,1]
+                        if target_util > 1.0:
+                            target_util = target_util / 100.0
+                        target_util = max(0.0, min(1.0, target_util))
+                        # Thời lượng mỗi phiên closed-loop để không chặn vòng lặp tổng thể
+                        max_dur = float(os.getenv('GPU_CLOSED_LOOP_MAX_SEC', '25.0'))
+                        tol = float(os.getenv('GPU_CLOSED_LOOP_TOL', '0.03'))
+                        mode = os.getenv('GPU_CLOSED_LOOP_MODE', 'auto')
+                        step_w = int(os.getenv('GPU_CLOSED_LOOP_STEP_W', '5'))
+                        step_clk = int(os.getenv('GPU_CLOSED_LOOP_STEP_CLK', '15'))
+                        self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode}")
+                        try:
+                            cl_result = self.hardware_controller.set_target_utilization(
+                                pid=pid,
+                                target_utilization=target_util,
+                                gpu_index=gpu_index,
+                                tolerance=tol,
+                                mode=mode,
+                                max_duration_sec=max_dur,
+                                min_interval_sec=0.75,
+                                step_power_watts=step_w,
+                                step_sm_clock_mhz=step_clk,
+                                window_sec=0
+                            )
+                            self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')}")
+                        except Exception as _cl_err:
+                            self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err}")
+                except Exception as _wrap_err:
+                    self.logger.debug(f"[Orchestrator] Closed-loop wrapper skipped: {_wrap_err}")
                 try:
                     state = self._compute_state_from_metrics(pid=pid, gpu_index=gpu_index, results=results)
                     if self.config.get('interval_mode', 'adaptive') == 'fixed':
