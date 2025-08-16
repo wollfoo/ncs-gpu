@@ -244,7 +244,9 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 # ========================================
  # NVIDIA Container Toolkit runtime defaults
 
-ENV LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH
+# Prefer host NVIDIA driver libs (mounted by NVIDIA Container Toolkit) over toolkit libs
+# This ensures libcuda.so.1 from host is picked first to avoid CUDA Driver API init errors
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/nvidia/lib:/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH
 
 # Tạo symlink NVRTC (.so.12.0) nếu base image chỉ có .12.0.140
 RUN set -eux; \
