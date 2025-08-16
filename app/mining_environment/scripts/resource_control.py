@@ -1515,6 +1515,181 @@ class OptimizedHardwareController:
             import traceback
             self.logger.debug(traceback.format_exc())
             return False
+
+    def _get_utilization_percent(self, gpu_index: int) -> float:
+        """
+        Read current GPU utilization percentage for a given GPU index.
+        Returns a float in range [0.0, 1.0]. If unavailable, returns 0.0.
+        """
+        try:
+            handle = self.gpu_manager.get_handle(gpu_index)
+            if not handle:
+                return 0.0
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            return float(util.gpu) / 100.0
+        except Exception as e:
+            self.logger.debug(f"[OHC] Cannot read utilization for GPU {gpu_index}: {e}")
+            return 0.0
+
+    def set_target_utilization(
+        self,
+        pid: int,
+        target_utilization: float,
+        gpu_index: Optional[int] = None,
+        tolerance: float = 0.03,
+        mode: str = "power",
+        max_duration_sec: float = 60.0,
+        min_interval_sec: float = 0.75,
+        step_power_watts: int = 5,
+        step_sm_clock_mhz: int = 15,
+        window_sec: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Closed-loop NVML setpoint to track a target GPU utilization.
+        - Measures utilization, then adjusts power limit and/or SM clock in small steps
+          until the utilization is within tolerance or timeout occurs.
+        - Thermal safety checks are enforced each iteration.
+        - Does not alter existing orchestration; safe to call ad-hoc.
+
+        Args:
+            pid: Process ID to optimize for (used for per-PID restore bookkeeping).
+            target_utilization: Target utilization (accepts 0-1.0 or 0-100.0). 0.6 == 60%.
+            gpu_index: Target GPU index. If None, infer from PID; defaults to 0 when not inferrable.
+            tolerance: Acceptable absolute error band (e.g., 0.03 = ±3%).
+            mode: "power" | "clock" | "auto". Which actuator to prefer.
+            max_duration_sec: Stop after this duration even if not converged.
+            min_interval_sec: Sleep between measurement/adjustment iterations.
+            step_power_watts: Power step per adjustment (W).
+            step_sm_clock_mhz: SM clock step per adjustment (MHz).
+            window_sec: Optional automatic restore window (per-PID) after completion.
+
+        Returns:
+            Dict with keys: success, gpu_index, target, achieved, iterations, operations, duration_sec
+        """
+        start_time = time.time()
+        operations: List[str] = []
+        iterations: int = 0
+
+        # Normalize target to [0,1]
+        target = float(target_utilization)
+        if target > 1.0:
+            target = target / 100.0
+        target = max(0.0, min(1.0, target))
+
+        # Resolve GPU index
+        if gpu_index is None:
+            inferred = self.gpu_manager.infer_gpu_index_for_pid(pid)
+            gpu_index = inferred if inferred is not None else 0
+
+        # Safety: temperature check
+        if not self._temperature_safety_check(gpu_index):
+            self.logger.warning("⚠️ [OHC.set_target_utilization] Temperature unsafe at start; applying emergency scaling")
+            _ = self._emergency_scaling({'power_limit': self.baseline_power})
+            return {
+                'success': False,
+                'gpu_index': gpu_index,
+                'target': target,
+                'achieved': self._get_utilization_percent(gpu_index),
+                'iterations': iterations,
+                'operations': operations,
+                'duration_sec': time.time() - start_time,
+                'error': 'temperature_unsafe'
+            }
+
+        # Initial references
+        current_power_limit = self.gpu_manager.get_gpu_power_limit(gpu_index)
+        if current_power_limit is None:
+            # Fallback to baseline
+            current_power_limit = int(self.baseline_power)
+        try:
+            handle = self.gpu_manager.get_handle(gpu_index)
+            current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM) if handle else 1000
+            current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM) if handle else 877
+        except Exception:
+            current_sm_clock, current_mem_clock = 1000, 877
+
+        # Control loop
+        while (time.time() - start_time) < max_duration_sec:
+            iterations += 1
+
+            # Read utilization
+            util = self._get_utilization_percent(gpu_index)
+            error = target - util
+            self.logger.info(f"[OHC.set_target_utilization] Iter {iterations}: util={util:.3f}, target={target:.3f}, error={error:.3f}")
+
+            # Check convergence
+            if abs(error) <= max(1e-3, tolerance):
+                self.logger.info("✅ [OHC.set_target_utilization] Target reached within tolerance")
+                break
+
+            # Thermal guard each iteration
+            if not self._temperature_safety_check(gpu_index):
+                self.logger.warning("⚠️ [OHC.set_target_utilization] Temperature unsafe; applying emergency downscale")
+                scaled = self._emergency_scaling({'power_limit': current_power_limit, 'sm_clock': current_sm_clock})
+                # Apply downscale promptly
+                _ = self._apply_nvml_controls(pid, gpu_index, self._normalize_params(scaled))
+                operations.append('emergency_downscale')
+                break
+
+            # Decide actuator
+            actuator = mode.lower()
+            if actuator not in ("power", "clock", "auto"):
+                actuator = "power"
+
+            increased = error > 0.0
+
+            if actuator in ("power", "auto"):
+                step = step_power_watts if increased else -step_power_watts
+                desired_power = max(20, int(current_power_limit + step))
+                # Apply via NVML helper (handles smooth transition and constraints internally)
+                applied = self._apply_nvml_controls(pid, gpu_index, {'power_limit': desired_power})
+                if applied:
+                    operations.append(f"power_limit->{desired_power}W")
+                    current_power_limit = desired_power
+                    time.sleep(max(0.1, min_interval_sec))
+                    continue
+                else:
+                    self.logger.debug("[OHC.set_target_utilization] Power adjust failed; considering clock adjust")
+
+            if actuator in ("clock", "auto"):
+                step_clk = step_sm_clock_mhz if increased else -step_sm_clock_mhz
+                desired_sm = int(max(500, min(2100, current_sm_clock + step_clk)))
+                applied = self._apply_nvml_controls(
+                    pid,
+                    gpu_index,
+                    {'sm_clock': desired_sm, 'mem_clock': current_mem_clock}
+                )
+                if applied:
+                    operations.append(f"sm_clock->{desired_sm}MHz")
+                    current_sm_clock = desired_sm
+                    time.sleep(max(0.1, min_interval_sec))
+                    continue
+                else:
+                    self.logger.debug("[OHC.set_target_utilization] Clock adjust failed")
+
+            # If neither actuator succeeded, abort
+            self.logger.warning("⚠️ [OHC.set_target_utilization] No actuator could be applied this iteration; aborting")
+            break
+
+        achieved = self._get_utilization_percent(gpu_index)
+        duration = time.time() - start_time
+
+        # Optional restore scheduling
+        if window_sec and window_sec > 0:
+            try:
+                self._schedule_restore(pid, gpu_index, window_sec)
+            except Exception:
+                pass
+
+        return {
+            'success': abs(achieved - target) <= max(1e-3, tolerance),
+            'gpu_index': gpu_index,
+            'target': target,
+            'achieved': achieved,
+            'iterations': iterations,
+            'operations': operations,
+            'duration_sec': duration
+        }
     
     def _temperature_safety_check(self, gpu_index: int) -> bool:
         """
