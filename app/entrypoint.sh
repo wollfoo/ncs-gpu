@@ -71,35 +71,47 @@ setup_python_environment() {
  }
 
 setup_nvml_symbols() {
-    log "$LOG_INFO" "Kiểm tra và thiết lập symbols cho NVML..."
+    log "$LOG_INFO" "Setting up NVML library paths..."
     
-    # Đường dẫn phổ biến cho NVML
+    # Common NVML paths
     NVML_PATHS=(
         "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1"
         "/usr/lib/libnvidia-ml.so.1" 
         "/usr/local/cuda/lib64/libnvidia-ml.so.1"
     )
     
-    # Tìm thư viện NVML
+    # Find NVML library
     FOUND_NVML=""
     for path in "${NVML_PATHS[@]}"; do
         if [ -f "$path" ]; then
             FOUND_NVML=$path
-            log "$LOG_INFO" "✅ Tìm thấy NVML library tại: $FOUND_NVML"
+            log "$LOG_INFO" "✅ Found NVML library at: $FOUND_NVML"
             break
         fi
     done
     
     if [ -z "$FOUND_NVML" ]; then
-        log "$LOG_WARN" "⚠️ Không tìm thấy thư viện NVML ở các vị trí tiêu chuẩn"
+        log "$LOG_WARN" "⚠️ NVML library not found at standard locations"
         return 1
     fi
     
-    # Luôn đảm bảo thư mục chứa NVML có trong LD_LIBRARY_PATH
+    # Update LD_LIBRARY_PATH to include NVML directory
     NVML_DIR="$(dirname "$FOUND_NVML")"
     OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}
     export LD_LIBRARY_PATH="$NVML_DIR:/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/cuda/lib64:$OLD_LD_LIBRARY_PATH"
-    log "$LOG_INFO" "Đã cập nhật LD_LIBRARY_PATH (ưu tiên $NVML_DIR) để bao gồm đường dẫn NVML"
+    log "$LOG_INFO" "Updated LD_LIBRARY_PATH to include NVML path"
+
+    # Create symlinks if needed and permissions allow
+    mkdir -p /usr/lib /usr/local/cuda/lib64 2>/dev/null || true
+
+    # Create symlinks for common locations
+    for target_dir in "/usr/lib" "/usr/local/cuda/lib64"; do
+        target_file="$target_dir/libnvidia-ml.so.1"
+        if [ ! -f "$target_file" ] && [ -f "$FOUND_NVML" ] && [ -w "$target_dir" ]; then
+            ln -sf "$FOUND_NVML" "$target_file" || true
+            log "$LOG_DEBUG" "Created symlink: $target_file -> $FOUND_NVML"
+        fi
+    done
 
     return 0
 }
@@ -111,6 +123,36 @@ setup_system() {
 }
 
  
+ensure_libhwloc() {
+    log "$LOG_INFO" "Checking libhwloc library..."
+    
+    if ldconfig -p | grep -q "libhwloc.so.15"; then
+        log "$LOG_INFO" "✅ libhwloc.so.15 available"
+        return 0
+    fi
+
+    log "$LOG_WARN" "⚠️ libhwloc.so.15 not found, attempting installation..."
+    apt-get update -q || true
+    apt-get install -y --no-install-recommends libhwloc15 || true
+
+    # Create symlink to alternative version if needed
+    if ! ldconfig -p | grep -q "libhwloc.so.15"; then
+        local ALT_LIB=$(ldconfig -p | awk '/libhwloc.so/{print $4; exit}')
+        if [ -n "$ALT_LIB" ] && [ -f "$ALT_LIB" ]; then
+            ln -sf "$ALT_LIB" /usr/lib/x86_64-linux-gnu/libhwloc.so.15 || true
+            log "$LOG_INFO" "Created symlink libhwloc.so.15 -> $ALT_LIB"
+        fi
+    fi
+
+    ldconfig 2>/dev/null || true
+    
+    if ldconfig -p | grep -q "libhwloc.so.15"; then
+        log "$LOG_INFO" "✅ libhwloc.so.15 ready"
+    else
+        log "$LOG_WARN" "⚠️ libhwloc.so.15 not available - mining may continue without hardware topology detection"
+    fi
+}
+
 
 # ------------------  Logrotate-based deletion every 1 minute ------------------
 start_logrotate_daemon() {
@@ -249,6 +291,8 @@ setup_nvml_symbols
 
 # Setup steps
 setup_system
+# Ensure libhwloc available (non-fatal)
+ensure_libhwloc || true
 # setup_ebpf_environment (removed, eBPF disabled)
 check_gpu_environment
 
@@ -266,7 +310,7 @@ log "$LOG_INFO" "Monitoring: Prometheus exporter disabled"
 log "$LOG_INFO" "Container initialization complete. Running command: $@"
 
 # Khởi động daemon logrotate xoá log theo thời gian (mỗi 1 phút) nếu được bật
-if [ "${ENABLE_LOGROTATE:-0}" = "1" ]; then
+if [ "${ENABLE_LOGROTATE:-0}" = "true" ]; then
     start_logrotate_daemon
 else
     log "$LOG_INFO" "logrotate daemon disabled via ENABLE_LOGROTATE=${ENABLE_LOGROTATE:-0}"
