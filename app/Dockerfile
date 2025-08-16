@@ -215,6 +215,20 @@ ENV INTERVAL_CHOICE_TIER_4_LO=
 ENV INTERVAL_CHOICE_TIER_4_HI=
 
 
+# ===== Closed-loop NVML setpoint (target utilization) =====
+# Bám mục tiêu utilization theo chu kỳ trong continuous loop (có thể override qua ENV)
+ENV GPU_CLOSED_LOOP_ENABLED=1 \
+    GPU_TARGET_UTIL=0.78 \
+    GPU_CLOSED_LOOP_MAX_SEC=35.0 \
+    GPU_CLOSED_LOOP_TOL=0.02 \
+    GPU_CLOSED_LOOP_MODE=auto \
+    GPU_CLOSED_LOOP_STEP_W=8 \
+    GPU_CLOSED_LOOP_STEP_CLK=20
+
+# One-shot optimization cooldown (ResourceManager._optimize_async)
+ENV GPU_OPT_COOLDOWN_SEC=2.0
+
+
 # ========================================
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
 # ========================================
