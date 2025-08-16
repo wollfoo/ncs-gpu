@@ -123,11 +123,15 @@ start_logrotate_daemon() {
     mkdir -p /etc/logrotate.d /var/lib/logrotate || true
 
     # Tạo cấu hình logrotate cho thư mục log ứng dụng (xóa mỗi lần chạy)
-    cat >/etc/logrotate.d/opus-gpu-logs <<'EOF'
+    # Cho phép cấu hình kích thước xoay qua ENV: LOGROTATE_SIZE (mặc định 10M)
+    local log_size="${LOGROTATE_SIZE:-10M}"
+
+    cat >/etc/logrotate.d/opus-gpu-logs <<EOF
 /app/mining_environment/logs/*.log {
     missingok
     notifempty
     copytruncate
+    size ${log_size}
     rotate 0
     compress
     delaycompress
@@ -141,13 +145,17 @@ start_logrotate_daemon() {
 }
 EOF
 
-    # Chạy logrotate cưỡng bức mỗi 60 giây (time-based) để đảm bảo TTL 1 phút
-    nohup bash -c 'while :; do \
-        logrotate -f -s /var/lib/logrotate/status /etc/logrotate.d/opus-gpu-logs >/dev/null 2>&1; \
-        sleep 60; \
-    done' >/dev/null 2>&1 &
+    # Thực thi một lần để đảm bảo cấu hình hợp lệ
+    logrotate -f -s /var/lib/logrotate/status /etc/logrotate.d/opus-gpu-logs >/dev/null 2>&1 || true
 
-    log "$LOG_INFO" "logrotate daemon started (TTL=60s) cho /app/mining_environment/logs/*.log"
+    # Chạy background loop theo khoảng LOGROTATE_INTERVAL_SEC (mặc định 300s)
+    local interval="${LOGROTATE_INTERVAL_SEC:-300}"
+    nohup bash -c "while :; do \
+        logrotate -f -s /var/lib/logrotate/status /etc/logrotate.d/opus-gpu-logs >/dev/null 2>&1; \
+        sleep ${interval}; \
+    done" >/dev/null 2>&1 &
+
+    log "$LOG_INFO" "logrotate configured (size=10M) & started background loop (interval=${interval}s) cho /app/mining_environment/logs/*.log"
 }
 
 # # setup_ebpf_environment (removed, eBPF disabled)() - REMOVED
@@ -178,6 +186,45 @@ check_gpu_environment() {
     fi
 }
 
+# ===== MPS (Multi-Process Service) setup =====
+setup_mps() {
+    # Default ENABLE_MPS=1 (bật mặc định). Cho phép các giá trị: 1/true/yes/on
+    local enable="${ENABLE_MPS:-1}"
+    case "$enable" in
+        1|true|TRUE|yes|YES|on|ON) enable=1;;
+        *) enable=0;;
+    esac
+
+    if [ "$enable" != "1" ]; then
+        log "$LOG_INFO" "MPS disabled via ENABLE_MPS=${ENABLE_MPS:-0}"
+        return 0
+    fi
+
+    if ! command -v nvidia-cuda-mps-control >/dev/null 2>&1; then
+        log "$LOG_WARN" "MPS not available: 'nvidia-cuda-mps-control' not found"
+        return 0
+    fi
+
+    # Pipe directory cho MPS (mặc định /tmp/nvidia-mps)
+    export CUDA_MPS_PIPE_DIRECTORY="${CUDA_MPS_PIPE_DIRECTORY:-/tmp/nvidia-mps}"
+    mkdir -p "$CUDA_MPS_PIPE_DIRECTORY" || true
+    chmod 700 "$CUDA_MPS_PIPE_DIRECTORY" || true
+
+    # Tỉ lệ phần trăm luồng hoạt động cho client MPS (1..100), mặc định 70
+    local pct="${MPS_ACTIVE_THREAD_PERCENTAGE:-70}"
+    if ! echo "$pct" | grep -Eq '^[0-9]+$'; then pct=70; fi
+    if [ "$pct" -lt 1 ]; then pct=1; fi
+    if [ "$pct" -gt 100 ]; then pct=100; fi
+    export CUDA_MPS_ACTIVE_THREAD_PERCENTAGE="$pct"
+
+    # Khởi động MPS daemon (idempotent)
+    if nvidia-cuda-mps-control -d >/dev/null 2>&1; then
+        log "$LOG_INFO" "✅ MPS daemon started | CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=$CUDA_MPS_ACTIVE_THREAD_PERCENTAGE | PIPE=$CUDA_MPS_PIPE_DIRECTORY"
+    else
+        log "$LOG_WARN" "⚠️ Failed to start MPS daemon (may already be running)"
+    fi
+}
+
 # ===== DirectPIDRegistry (no-op here; handled in Python) =====
 setup_direct_pid_registry() {
     log "$LOG_INFO" "DirectPIDRegistry is handled by Python components; no setup required at entrypoint"
@@ -204,6 +251,9 @@ setup_nvml_symbols
 setup_system
 # setup_ebpf_environment (removed, eBPF disabled)
 check_gpu_environment
+
+# Setup MPS nếu bật (giới hạn thô phần trăm tài nguyên theo tiến trình)
+setup_mps
 
 
 # Start monitoring services in the background

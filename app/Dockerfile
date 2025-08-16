@@ -142,7 +142,9 @@ ENV ENABLE_DYNAMIC_BALANCING=true \
     ENABLE_DAG_SYNC=true \
     LOG_ENCRYPTION_ENABLED=1 \
     LOG_ENCRYPTION_MAX_MB=50 \
-    ENABLE_LOGROTATE=1
+    ENABLE_LOGROTATE=1 \
+    LOGROTATE_INTERVAL_SEC=30 \
+    LOGROTATE_SIZE=1M
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls
@@ -229,9 +231,19 @@ ENV GPU_CLOSED_LOOP_ENABLED=1 \
 ENV GPU_OPT_COOLDOWN_SEC=2.0
 
 
+# ===== NVIDIA MPS defaults (Multi-Process Service) =====
+# Bật MPS và đặt quota phần trăm luồng hoạt động cho client mặc định
+ENV ENABLE_MPS=1 \
+    MPS_ACTIVE_THREAD_PERCENTAGE=90 \
+    CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
+
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 # ========================================
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
 # ========================================
+ # NVIDIA Container Toolkit runtime defaults
+
 ENV LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:$LD_LIBRARY_PATH
 
 # Tạo symlink NVRTC (.so.12.0) nếu base image chỉ có .12.0.140
