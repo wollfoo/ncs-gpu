@@ -231,17 +231,10 @@ ENV GPU_CLOSED_LOOP_ENABLED=1 \
 ENV GPU_OPT_COOLDOWN_SEC=2.0
 
 
-# ===== NVIDIA MPS defaults (Disabled) =====
-ENV ENABLE_MPS=0 \
-    MPS_ACTIVE_THREAD_PERCENTAGE=0 \
-    CUDA_MPS_PIPE_DIRECTORY=
-
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # ========================================
 # ===== CRITICAL: CUDA 12.0 LIBRARY PATH ENFORCEMENT =====
 # ========================================
- # NVIDIA Container Toolkit runtime defaults
 
 # Prefer host NVIDIA driver libs (mounted by NVIDIA Container Toolkit) over toolkit libs
 # This ensures libcuda.so.1 from host is picked first to avoid CUDA Driver API init errors
