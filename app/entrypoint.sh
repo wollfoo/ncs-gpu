@@ -95,11 +95,13 @@ setup_nvml_symbols() {
         return 1
     fi
     
-    # Update LD_LIBRARY_PATH to include NVML directory
+    # Update LD_LIBRARY_PATH ensuring host NVIDIA driver libs take precedence
     NVML_DIR="$(dirname "$FOUND_NVML")"
     OLD_LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}
-    export LD_LIBRARY_PATH="$NVML_DIR:/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/cuda/lib64:$OLD_LD_LIBRARY_PATH"
-    log "$LOG_INFO" "Updated LD_LIBRARY_PATH to include NVML path"
+    PREFERRED_DRIVER_LIBS="/usr/local/nvidia/lib64:/usr/local/nvidia/lib"
+    CUDA_TOOLKIT_LIBS="/usr/local/cuda/targets/x86_64-linux/lib:/usr/local/cuda/lib64"
+    export LD_LIBRARY_PATH="$PREFERRED_DRIVER_LIBS:$NVML_DIR:/usr/lib/x86_64-linux-gnu:/usr/lib:$CUDA_TOOLKIT_LIBS:$OLD_LD_LIBRARY_PATH"
+    log "$LOG_INFO" "Updated LD_LIBRARY_PATH to prefer host NVIDIA driver libs and include NVML path"
 
     # Create symlinks if needed and permissions allow
     mkdir -p /usr/lib /usr/local/cuda/lib64 2>/dev/null || true
