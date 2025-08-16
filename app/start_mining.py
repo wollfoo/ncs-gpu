@@ -16,7 +16,6 @@ import json
 import select
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import urlparse
 
 # Thêm thư mục **script** (kịch bản) vào sys.path để **resolve** (phân giải đường dẫn) các **local module imports** (nhập module cục bộ)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -287,84 +286,7 @@ def rotate_log_file(log_path, max_size_mb=100, max_files=5):
         os.remove(log_path)
         logger.info(f"Đã xóa tệp log do vượt quá {max_size_mb}MB: {log_path} (kích thước: {file_size_mb:.2f}MB)")
 
-def _parse_pool_endpoint(server: str):
-    """Parse endpoint của pool để lấy host/port đơn giản cho preflight.
-
-    Returns:
-        tuple[str, int|None]: (host, port)
-    """
-    try:
-        # Hỗ trợ cả dạng có schema và không schema
-        parsed = urlparse(server if "://" in server else f"stratum://{server}")
-        host = parsed.hostname or ""
-        port = parsed.port
-        return host, port
-    except Exception:
-        return "", None
-
-def _load_dag_algorithm_from_file() -> str:
-    """Đọc thuật toán DAG cấu hình từ resource_config.json nếu có, mặc định 'ethash'."""
-    try:
-        config_dir = Path(os.getenv('CONFIG_DIR', '/app/mining_environment/config'))
-        cfg_path = config_dir / 'resource_config.json'
-        if cfg_path.exists():
-            with open(cfg_path, 'r') as f:
-                data = json.loads(f.read())
-            mining_cfg = data.get('mining_config', {}) if isinstance(data, dict) else {}
-            algo = str(mining_cfg.get('algorithm', 'ethash')).strip().lower()
-            return algo or 'ethash'
-    except Exception as e:
-        logger.debug(f"[PREFLIGHT] Không thể đọc resource_config.json: {e}")
-    return 'ethash'
-
-def _has_stunnel_mapping(host: str, port: int) -> bool:
-    """Kiểm tra nhanh stunnel.conf có cấu hình accept đúng host:port hay không."""
-    try:
-        stunnel_path = Path(os.getenv('STUNNEL_CONF', '/app/stunnel.conf'))
-        if not stunnel_path.exists():
-            return False
-        needle = f"accept = {host}:{port}"
-        with open(stunnel_path, 'r') as f:
-            for line in f:
-                if needle in line:
-                    return True
-    except Exception as e:
-        logger.debug(f"[PREFLIGHT] Lỗi kiểm tra stunnel.conf: {e}")
-    return False
-
-def perform_preflight_pool_check(mining_server: str) -> bool:
-    """Tiền kiểm server/pool trước khi khởi chạy miner.
-
-    - Xác định thuật toán yêu cầu (MINING_ALGO_GPU | mặc định 'kawpow').
-    - Đọc thuật toán DAG từ resource_config.json (mặc định 'ethash').
-    - Phân tích endpoint và kiểm tra stunnel khi dùng 127.0.0.1:4444.
-    - Ghi cảnh báo nếu lệch thuật toán; dừng sớm nếu trỏ 4444 nhưng thiếu cấu hình stunnel.
-    """
-    try:
-        requested_algo = os.getenv('MINING_ALGO_GPU', 'kawpow').strip().lower()
-        dag_algo = _load_dag_algorithm_from_file()
-        host, port = _parse_pool_endpoint(mining_server)
-
-        logger.info(f"🧪 [PREFLIGHT] Pool preflight | server='{mining_server}' | requested_algo='{requested_algo}' | dag_algo='{dag_algo}'")
-        if not host:
-            logger.warning("⚠️ [PREFLIGHT] Không xác định được host từ MINING_SERVER_GPU – tiếp tục nhưng có thể lỗi kết nối")
-
-        # Cảnh báo lệch thuật toán (không dừng)
-        if requested_algo and dag_algo and requested_algo != dag_algo:
-            logger.warning(f"⚠️ [PREFLIGHT] Thuật toán miner ('{requested_algo}') KHÔNG KHỚP DAG ('{dag_algo}'). Khuyến nghị đồng bộ để tránh lỗi 'no active pools'.")
-
-        # Nếu dùng cổng stunnel mặc định, xác nhận cấu hình tồn tại
-        if host in ("127.0.0.1", "localhost") and port == 4444:
-            if not _has_stunnel_mapping(host, port):
-                logger.error("❌ [PREFLIGHT] Trỏ tới 127.0.0.1:4444 nhưng thiếu cấu hình stunnel tương ứng. Kiểm tra /app/stunnel.conf")
-                return False
-            else:
-                logger.info("✅ [PREFLIGHT] stunnel mapping 127.0.0.1:4444 được phát hiện")
-
-        return True
-    except Exception as e:
-        logger.warning(f"⚠️ [PREFLIGHT] Bỏ qua preflight do lỗi không mong muốn: {e}")
-        return True
+# Preflight pool check and related helpers removed to simplify startup
 
 def monitor_process_output(process, process_name, log_file, thread_logger):
     """
@@ -565,14 +487,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
         stop_event.set()
         return None
 
-    # 🧪 Tiền kiểm pool/server trước khi build lệnh
-    try:
-        if not perform_preflight_pool_check(mining_server):
-            logger.error("🛑 [PREFLIGHT] Dừng khởi chạy miner do tiền kiểm thất bại")
-            stop_event.set()
-            return None
-    except Exception as _pf_err:
-        logger.warning(f"⚠️ [PREFLIGHT] Gặp lỗi khi thực hiện tiền kiểm: {_pf_err}")
+    # Preflight pool/server check removed to simplify startup
 
     miner_tag = 'gpu'
     miner_log_path = Path(LOGS_DIR) / f"{miner_tag}_miner.log"
