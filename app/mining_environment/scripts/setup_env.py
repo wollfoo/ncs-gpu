@@ -697,6 +697,25 @@ def setup():
 
     # **Set environment variables from environmental_limits** (đặt biến môi trường từ environmental_limits – set env vars từ limits)
     setup_environment_variables(environmental_limits, logger)
+
+    # ===== Runtime defaults for orchestration & coordination (ENV) =====
+    # Provide sane defaults when not explicitly configured by deployment
+    def _set_default_env(key: str, value):
+        try:
+            if os.getenv(key) in (None, ""):
+                os.environ[key] = str(value)
+                logger.info(f"✅ [SETUP] Default ENV set: {key}={value}")
+        except Exception:
+            pass
+
+    # Coordination robustness
+    _set_default_env('COORD_MAX_RETRIES', 5)        # số lần retry lấy tài nguyên GPU
+    _set_default_env('COORD_INITIAL_DELAY', 0.5)    # độ trễ ban đầu (giây)
+    _set_default_env('COORD_BACKOFF', 1.5)          # hệ số backoff
+    _set_default_env('COORD_OPTIONAL', 'true')      # cho phép tiếp tục tối ưu nếu coordination thất bại
+
+    # Multi-GPU behavior
+    _set_default_env('ENABLE_DYNAMIC_BALANCING', 'true')  # bật cân bằng tải đa GPU
     
     # **Configuration from InferenceConfigService** (cấu hình từ InferenceConfigService – config từ ml-inference service)
     try:

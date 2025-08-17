@@ -1272,7 +1272,21 @@ class OptimizedHardwareController:
         gpu_count = self.gpu_manager.get_gpu_count()
         self.logger.debug(f"🖥️ [OHC.get_gpu_utilization_metrics] Detected {gpu_count} GPU(s)")
         
-        for gpu_idx in range(gpu_count):
+        # Fallback: nếu NVML báo 0, thử suy luận từ log stealth để không bỏ lỡ GPU khác 0
+        indices = list(range(gpu_count))
+        if not indices:
+            try:
+                logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+                path = Path(logs_dir) / 'stealth_inference_cuda.log'
+                if path.exists():
+                    text = path.read_text()[-16384:]
+                    import re
+                    infer = sorted(set(int(m.group(1)) for m in re.finditer(r"#(\d+)\s", text)))
+                    indices = infer or [0]
+            except Exception:
+                indices = [0]
+
+        for gpu_idx in indices:
             try:
                 # Get GPU handle
                 handle = self.gpu_manager.get_handle(gpu_idx)
@@ -1341,11 +1355,11 @@ class OptimizedHardwareController:
         :return: Optimization results
         """
         # **DYNAMIC LOAD BALANCING: Auto-select GPU if not specified** (cân bằng tải động: tự động chọn GPU)
-        if self.dynamic_balancing_enabled and gpu_index == 0:
+        if self.dynamic_balancing_enabled and (gpu_index is None or gpu_index < 0):
             allocation = self.allocate_gpu_workload([pid])
             gpu_index = allocation.get(pid, 0)
             self.logger.info(f"🎯 Dynamic allocation: PID={pid} -> GPU={gpu_index}")
-        elif not self.dynamic_balancing_enabled and gpu_index == 0:
+        elif not self.dynamic_balancing_enabled and (gpu_index is None or gpu_index < 0):
             # Fall back to default GPU 0 when dynamic balancing is disabled (mặc định GPU 0 khi tắt cân bằng tải động)
             self.logger.info("ℹ️ Dynamic balancing disabled via ENABLE_DYNAMIC_BALANCING; defaulting to GPU 0")
             gpu_index = 0

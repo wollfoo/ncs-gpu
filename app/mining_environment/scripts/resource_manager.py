@@ -513,6 +513,12 @@ class ResourceManager(IResourceManager):
                                         optimize_all = True
 
                                     if optimize_all and hasattr(self._gpu_orchestrator, 'optimize_gpu_for_all_available'):
+                                        # Log detected GPU indices before ALL-GPU optimization (NVML or stealth log fallback)
+                                        try:
+                                            indices = self._gpu_orchestrator._get_available_gpu_indices()
+                                            self.logger.info(f"[RM] 🔎 Detected GPU indices: {indices}")
+                                        except Exception:
+                                            pass
                                         opt_result = self._gpu_orchestrator.optimize_gpu_for_all_available(
                                             pid=pid_val,
                                             strategies=None

