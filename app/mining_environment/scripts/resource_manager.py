@@ -450,8 +450,16 @@ class ResourceManager(IResourceManager):
 
             # Lazy-init coordinator
             if not hasattr(self, "cloak_coordinator"):
-                self.cloak_coordinator = CloakCoordinator(self.config)
-                self.logger.info("[RM] Initialized CloakCoordinator")
+                # Try to inject shared Metrics Hub from GPU Orchestrator if available
+                shared_hub = None
+                try:
+                    if getattr(self, "_gpu_orchestrator", None) is not None:
+                        shared_hub = getattr(self._gpu_orchestrator, "metrics_hub", None)
+                except Exception:
+                    shared_hub = None
+
+                self.cloak_coordinator = CloakCoordinator(self.config, metrics_hub=shared_hub)
+                self.logger.info("[RM] Initialized CloakCoordinator (shared metrics hub injected=%s)" % (shared_hub is not None))
 
             # Build minimal request (Stage 1)
             request = CloakRequest(

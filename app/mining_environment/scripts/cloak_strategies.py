@@ -485,13 +485,15 @@ class CloakCoordinator:
     **Pipeline Stage 2** (Giai đoạn 2 của pipeline – bước 2 trong quy trình): Nhận **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) -> Chọn **strategy** (chiến lược) -> Gọi **HardwareController** (bộ điều khiển phần cứng).
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], metrics_hub: Optional["MetricsCollectionHub"] = None):
         """
         **Initialize CloakCoordinator** (khởi tạo CloakCoordinator – thiết lập bộ điều phối ngụy trang) với **config** (cấu hình).
         
         :param config: **Configuration dictionary** (từ điển cấu hình – dict thiết lập)
         """
         self.config = config
+        # Optional shared metrics hub for cross-module metrics aggregation
+        self.metrics_hub = metrics_hub
         # Use dedicated logger for CloakCoordinator
         self.logger = get_cloak_coordinator_logger()
         try:
@@ -509,6 +511,13 @@ class CloakCoordinator:
                 logger=self.logger,
                 hw_controller=self.hw_controller
             )
+            # Inject shared metrics hub into strategy if provided
+            if self.metrics_hub is not None and hasattr(self.gpu_cloak_strategy, '__dict__'):
+                try:
+                    setattr(self.gpu_cloak_strategy, 'metrics_hub', self.metrics_hub)
+                    self.logger.debug("[CS] Injected shared MetricsCollectionHub into GpuCloakStrategy")
+                except Exception:
+                    pass
         except Exception:
             # Không chặn pipeline nếu không khởi tạo được intelligent coordinator
             self.gpu_cloak_strategy = None

@@ -1121,6 +1121,12 @@ class OptimizedHardwareController:
                 get_optimized_hardware_controller_logger = None  # type: ignore
 
         self.logger = get_optimized_hardware_controller_logger() if get_optimized_hardware_controller_logger else logger
+        # Mirror critical OHC events to unified GPU optimization logger for easier tracing
+        try:
+            from .module_loggers import get_gpu_optimization_logger
+            self._mirror_logger = get_gpu_optimization_logger()
+        except Exception:
+            self._mirror_logger = None
         self.config = config
         
         # Initialize GPU manager
@@ -1179,6 +1185,11 @@ class OptimizedHardwareController:
         self.dynamic_balancing_enabled = os.getenv('ENABLE_DYNAMIC_BALANCING', 'true').lower() == 'true'
         self.enable_dag_sync = os.getenv('ENABLE_DAG_SYNC', 'true').lower() == 'true'
         self.logger.info(f"🌐 Env flags -> ENABLE_DYNAMIC_BALANCING={self.dynamic_balancing_enabled}, ENABLE_DAG_SYNC={self.enable_dag_sync}")
+        if self._mirror_logger:
+            try:
+                self._mirror_logger.info(f"[OHC] Env flags -> ENABLE_DYNAMIC_BALANCING={self.dynamic_balancing_enabled}, ENABLE_DAG_SYNC={self.enable_dag_sync}")
+            except Exception:
+                pass
         
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available}, DAG: {self.dag_synchronizer is not None})")
 
@@ -1340,6 +1351,11 @@ class OptimizedHardwareController:
             gpu_index = 0
         
         self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
+        if self._mirror_logger:
+            try:
+                self._mirror_logger.info(f"[OHC] Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
+            except Exception:
+                pass
         
         # Start timing
         start_time = time.time()

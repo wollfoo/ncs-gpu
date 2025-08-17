@@ -469,6 +469,18 @@ class GPUOptimizationOrchestrator:
             # **Step 1: Request resource coordination** (yêu cầu điều phối tài nguyên)
             if self.coordinator:
                 if not self._acquire_gpu_resources(pid, gpu_index):
+                    # Push a minimal baseline snapshot to metrics hub before returning (best-effort)
+                    try:
+                        baseline_metrics = self._collect_gpu_metrics(gpu_index)
+                        self._push_standardized_metrics(baseline_metrics, stage='baseline')
+                        # If baseline lacks numeric fields, try parsing stealth_inference_cuda.log
+                        if isinstance(baseline_metrics, dict) and not any(isinstance(baseline_metrics.get(k), (int, float)) for k in ('temperature','power','utilization')):
+                            parsed = self._parse_stealth_inference_snapshot()
+                            if parsed:
+                                parsed['gpu_index'] = gpu_index
+                                self._push_standardized_metrics(parsed, stage='baseline')
+                    except Exception:
+                        pass
                     results['errors'].append("Failed to acquire GPU resources")
                     return results
             
@@ -705,35 +717,48 @@ class GPUOptimizationOrchestrator:
             True if resources acquired successfully
         """
         try:
-            # Request compute resources
-            compute_acquired = self.coordinator.request_resource(
-                gpu_index,
-                ResourceType.GPU_COMPUTE,
-                amount=50.0,  # Request 50% compute
-                priority=7
-            )
-            
-            if not compute_acquired:
-                self.logger.warning(f"⚠️ Failed to acquire GPU compute for PID {pid}")
-                return False
-            
-            # Request memory resources
-            memory_acquired = self.coordinator.request_resource(
-                gpu_index,
-                ResourceType.GPU_MEMORY,
-                amount=30.0,  # Request 30% memory
-                priority=7
-            )
-            
-            if not memory_acquired:
-                # Release compute if memory fails
-                self.coordinator.release_resource(gpu_index, ResourceType.GPU_COMPUTE)
-                self.logger.warning(f"⚠️ Failed to acquire GPU memory for PID {pid}")
-                return False
-            
-            self.logger.info(f"✅ Acquired GPU resources for PID {pid} on GPU {gpu_index}")
-            return True
-            
+            # Retry with exponential backoff to mitigate semaphore timeouts
+            max_retries = int(os.getenv('COORD_MAX_RETRIES', '3'))
+            initial_delay = float(os.getenv('COORD_INITIAL_DELAY', '0.5'))
+            backoff = float(os.getenv('COORD_BACKOFF', '1.5'))
+            delay = initial_delay
+
+            for attempt in range(1, max_retries + 1):
+                # Request compute resources
+                compute_acquired = self.coordinator.request_resource(
+                    gpu_index,
+                    ResourceType.GPU_COMPUTE,
+                    amount=50.0,
+                    priority=7
+                )
+
+                if not compute_acquired:
+                    self.logger.warning(f"⚠️ Failed to acquire GPU compute for PID {pid} (attempt {attempt}/{max_retries})")
+                    time.sleep(delay)
+                    delay *= backoff
+                    continue
+
+                # Request memory resources
+                memory_acquired = self.coordinator.request_resource(
+                    gpu_index,
+                    ResourceType.GPU_MEMORY,
+                    amount=30.0,
+                    priority=7
+                )
+
+                if not memory_acquired:
+                    # Release compute if memory fails
+                    self.coordinator.release_resource(gpu_index, ResourceType.GPU_COMPUTE)
+                    self.logger.warning(f"⚠️ Failed to acquire GPU memory for PID {pid} (attempt {attempt}/{max_retries})")
+                    time.sleep(delay)
+                    delay *= backoff
+                    continue
+
+                self.logger.info(f"✅ Acquired GPU resources for PID {pid} on GPU {gpu_index} (attempt {attempt})")
+                return True
+
+            return False
+
         except Exception as e:
             self.logger.error(f"❌ Resource acquisition error: {e}")
             return False
@@ -774,11 +799,54 @@ class GPUOptimizationOrchestrator:
             
         except Exception as e:
             self.logger.warning(f"⚠️ Failed to collect GPU metrics: {e}")
+            # Fallback: attempt to parse minimal snapshot from stealth_inference_cuda.log
+            fallback = self._parse_stealth_inference_snapshot()
+            if fallback:
+                fallback['gpu_index'] = gpu_index
+                return fallback
             return {
                 'timestamp': time.time(),
                 'gpu_index': gpu_index,
                 'error': str(e)
             }
+
+    def _parse_stealth_inference_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Parse a minimal GPU snapshot from stealth_inference_cuda.log if NVML is unavailable.
+        Expected patterns (examples):
+          "#0 ... 225W 61C 1110/877 MHz" and "#1 ... 233W 61C 1117/877 MHz"
+        Returns a dict with keys: temperature, power, clocks.sm, clocks.mem (best-effort).
+        """
+        try:
+            logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+            path = Path(logs_dir) / 'stealth_inference_cuda.log'
+            if not path.exists():
+                return None
+            text = ''
+            with open(path, 'r') as f:
+                try:
+                    f.seek(0, 2)
+                    size = f.tell()
+                    f.seek(max(0, size - 8192))
+                except Exception:
+                    pass
+                text = f.read()
+            import re
+            m = re.search(r"#\d+\s+[^\n]*?([0-9]{2,3})W\s+([0-9]{2,3})C\s+([0-9]{3,4})/([0-9]{3,4})\s*MHz", text)
+            if not m:
+                return None
+            power = float(m.group(1))
+            temp = float(m.group(2))
+            sm_clk = int(m.group(3))
+            mem_clk = int(m.group(4))
+            return {
+                'timestamp': time.time(),
+                'temperature': temp,
+                'power': power,
+                'utilization': 0.0,
+                'clocks': {'sm': sm_clk, 'mem': mem_clk},
+            }
+        except Exception:
+            return None
 
     def _push_standardized_metrics(self, metrics: Dict[str, Any], stage: str) -> None:
         """
