@@ -161,9 +161,9 @@ class GPUOptimizationOrchestrator:
             except Exception:
                 pass
 
-        # Runtime state for continuous loop
-        self._continuous_stop_event: Optional[threading.Event] = threading.Event()
-        self._continuous_thread: Optional[threading.Thread] = None
+        # Runtime state for continuous loop (per-GPU threads)
+        self._continuous_stop_events: Dict[int, threading.Event] = {}
+        self._continuous_threads: Dict[int, threading.Thread] = {}
         self._last_interval_tier: Optional[int] = None
         self._recent_error_count: int = 0
         # Interval control via ENV (optional)
@@ -590,27 +590,25 @@ class GPUOptimizationOrchestrator:
         **Start continuous optimization loop** (khởi động vòng lặp tối ưu liên tục)
         - Tạo `thread` (luồng nền) chạy lặp; chọn khoảng nghỉ theo `_pick_next_interval_sec` hoặc cấu hình cố định.
         """
+        # Start a dedicated loop per GPU index
         try:
-            if self._continuous_thread is not None and self._continuous_thread.is_alive():
-                self.logger.info("[Orchestrator] Continuous optimization loop already running")
-                return
+            # Build target indices: if caller passed a specific gpu_index, use it; else all available
+            indices: List[int] = [gpu_index] if gpu_index is not None else self._get_available_gpu_indices()
+            if indices is None or len(indices) == 0:
+                indices = [0]
         except Exception:
-            pass
+            indices = [gpu_index if gpu_index is not None else 0]
 
-        stop_event = getattr(self, '_continuous_stop_event', None)
-        if stop_event is None:
-            self._continuous_stop_event = threading.Event()
-            stop_event = self._continuous_stop_event
-
-        def _loop() -> None:
+        def _make_loop(gidx: int) -> None:
             mode = self.config.get('interval_mode', 'adaptive')
             base_interval = int(self.config.get('loop_interval_sec', 30))
-            self.logger.info(f"🔄 Continuous optimization loop started (mode={mode}, base_interval={base_interval}s, pid={pid}, gpu={gpu_index})")
+            stop_event = self._continuous_stop_events.get(gidx)
+            self.logger.info(f"🔄 Continuous optimization loop started (mode={mode}, base_interval={base_interval}s, pid={pid}, gpu={gidx})")
             while stop_event and not stop_event.is_set():
                 interval = base_interval
                 results: Optional[Dict[str, Any]] = None
                 try:
-                    results = self.optimize_gpu_for_process(pid=pid, gpu_index=gpu_index, strategies=strategies)
+                    results = self.optimize_gpu_for_process(pid=pid, gpu_index=gidx, strategies=strategies)
                 except Exception as e:
                     self._recent_error_count = min(999999, self._recent_error_count + 1)
                     self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
@@ -653,7 +651,7 @@ class GPUOptimizationOrchestrator:
                 except Exception as _wrap_err:
                     self.logger.debug(f"[Orchestrator] Closed-loop wrapper skipped: {_wrap_err}")
                 try:
-                    state = self._compute_state_from_metrics(pid=pid, gpu_index=gpu_index, results=results)
+                    state = self._compute_state_from_metrics(pid=pid, gpu_index=gidx, results=results)
                     if self.config.get('interval_mode', 'adaptive') == 'fixed':
                         interval = max(1, int(self.config.get('loop_interval_sec', base_interval)))
                     else:
@@ -669,8 +667,16 @@ class GPUOptimizationOrchestrator:
                     time.sleep(1)
             self.logger.info("🛑 Continuous optimization loop stopped")
 
-        self._continuous_thread = threading.Thread(target=_loop, daemon=True)
-        self._continuous_thread.start()
+        # Launch per-GPU threads
+        for gidx in indices:
+            if gidx in self._continuous_threads and self._continuous_threads[gidx].is_alive():
+                self.logger.info(f"[Orchestrator] Continuous optimization loop already running for GPU {gidx}")
+                continue
+            ev = threading.Event()
+            self._continuous_stop_events[gidx] = ev
+            t = threading.Thread(target=_make_loop, args=(gidx,), daemon=True)
+            self._continuous_threads[gidx] = t
+            t.start()
     
     @trace_all
     def _get_available_gpu_indices(self) -> List[int]:
@@ -769,7 +775,7 @@ class GPUOptimizationOrchestrator:
                 memory_acquired = self.coordinator.request_resource(
                     gpu_index,
                     ResourceType.GPU_MEMORY,
-                    amount=30.0,
+                    amount=float(os.getenv('COORD_GPU_MEMORY_PCT', '0.15')) * 100.0 if float(os.getenv('COORD_GPU_MEMORY_PCT', '0.15')) <= 1 else float(os.getenv('COORD_GPU_MEMORY_PCT', '15')),  # backward compatible: accepts 0.15 or 15
                     priority=7
                 )
 
@@ -1018,10 +1024,19 @@ class GPUOptimizationOrchestrator:
         self.logger.info("🛑 Shutting down GPU Optimization Orchestrator...")
         # Stop continuous loop if running
         try:
-            if hasattr(self, '_continuous_stop_event') and self._continuous_stop_event:
-                self._continuous_stop_event.set()
-            if hasattr(self, '_continuous_thread') and self._continuous_thread and self._continuous_thread.is_alive():
-                self._continuous_thread.join(timeout=5)
+            if hasattr(self, '_continuous_stop_events') and self._continuous_stop_events:
+                for ev in list(self._continuous_stop_events.values()):
+                    try:
+                        ev.set()
+                    except Exception:
+                        pass
+            if hasattr(self, '_continuous_threads') and self._continuous_threads:
+                for t in list(self._continuous_threads.values()):
+                    try:
+                        if t and t.is_alive():
+                            t.join(timeout=5)
+                    except Exception:
+                        pass
         except Exception as _e:
             self.logger.warning(f"⚠️ Error while stopping continuous loop: {_e}")
         

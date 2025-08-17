@@ -713,6 +713,7 @@ def setup():
     _set_default_env('COORD_INITIAL_DELAY', 0.5)    # độ trễ ban đầu (giây)
     _set_default_env('COORD_BACKOFF', 1.5)          # hệ số backoff
     _set_default_env('COORD_OPTIONAL', 'true')      # cho phép tiếp tục tối ưu nếu coordination thất bại
+    _set_default_env('COORD_GPU_MEMORY_PCT', '0.15')  # xin 15% GPU memory (chấp nhận 0.15 hoặc 15)
 
     # Multi-GPU behavior
     _set_default_env('ENABLE_DYNAMIC_BALANCING', 'true')  # bật cân bằng tải đa GPU
