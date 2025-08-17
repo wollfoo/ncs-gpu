@@ -498,40 +498,65 @@ class ResourceManager(IResourceManager):
                                 try:
                                     self.logger.info(f"[RM] 🚀 **Calling GPU Orchestrator** (gọi điều phối GPU – kích hoạt bộ điều khiển) for PID {pid_val}")
                                     
-                                    opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
-                                        pid=pid_val,
-                                        gpu_index=gpu_idx,
-                                        strategies=None
-                                    )
-                                    
-                                    self.logger.info(f"[RM] ✅ **GPU Optimization completed** (tối ưu GPU hoàn tất – điều chỉnh xong) for PID {pid_val}")
-                                    
-                                    # **Analyze results** (phân tích kết quả – kiểm tra đầu ra)
-                                    hw = opt_result.get('hardware_results', {}) if isinstance(opt_result, dict) else {}
-                                    safety = None
-                                    if isinstance(hw, dict):
-                                        self.logger.debug(f"[RM] 📈 **Hardware results** (kết quả phần cứng – đầu ra điều chỉnh): success={hw.get('success')}")
-                                        pred = hw.get('temperature_prediction', {})
-                                        if isinstance(pred, dict):
-                                            safety = pred.get('safety_status')
-                                            self.logger.info(f"[RM] 🌡️ **Temperature safety** (an toàn nhiệt độ – trạng thái nhiệt): {safety}")
+                                    # Quyết định nhánh tối ưu: tất cả GPU hay một GPU
+                                    try:
+                                        optimize_all = str(os.getenv('OPTIMIZE_ALL_GPUS', 'true')).lower() in ('1', 'true', 'yes', 'all')
+                                    except Exception:
+                                        optimize_all = True
 
-                                    # **Safety check and rollback** (kiểm tra an toàn và hoàn trả – xác thực và khôi phục)
-                                    if (isinstance(hw, dict) and not hw.get('success', False)) or hw.get('error') or safety in ('CRITICAL', 'EMERGENCY'):
-                                        self.logger.warning(f"[RM] ⚠️ **Optimization risk detected** (phát hiện rủi ro tối ưu – cảnh báo nguy hiểm) for PID {pid_val} (safety={safety})")
-                                        self.logger.warning(f"[RM] 🔄 **Attempting rollback** (thử hoàn trả – khôi phục cài đặt gốc)...")
+                                    if optimize_all and hasattr(self._gpu_orchestrator, 'optimize_gpu_for_all_available'):
+                                        opt_result = self._gpu_orchestrator.optimize_gpu_for_all_available(
+                                            pid=pid_val,
+                                            strategies=None
+                                        )
+                                        self.logger.info(f"[RM] ✅ **GPU Optimization (ALL-GPUs) completed** for PID {pid_val} | indices={opt_result.get('gpu_indices')} success={opt_result.get('success')}")
+
+                                        # Ghi log kết quả theo từng GPU
                                         try:
-                                            hc = getattr(self._gpu_orchestrator, 'hardware_controller', None)
-                                            gm = getattr(hc, 'gpu_manager', None) if hc else None
-                                            if gm and hasattr(gm, 'restore_gpu_settings_for_pid'):
-                                                restored = gm.restore_gpu_settings_for_pid(pid_val)
-                                                self.logger.info(f"[RM] ✅ **Rollback successful** (hoàn trả thành công – khôi phục xong) for PID {pid_val}: {restored}")
-                                            else:
-                                                self.logger.warning(f"[RM] ⚠️ **No rollback method available** (không có phương thức hoàn trả – thiếu hàm khôi phục)")
-                                        except Exception as rb_err:
-                                            self.logger.error(f"[RM] ❌ **Rollback failed** (hoàn trả thất bại – khôi phục lỗi) for PID {pid_val}: {rb_err}")
+                                            for _res in (opt_result.get('results') or []):
+                                                try:
+                                                    gi = _res.get('gpu_index')
+                                                    succ = _res.get('success')
+                                                    errs = _res.get('errors')
+                                                    self.logger.info(f"[RM] 📊 Result per GPU → gpu_index={gi} success={succ} errors={errs}")
+                                                except Exception:
+                                                    pass
+                                        except Exception:
+                                            pass
                                     else:
-                                        self.logger.info(f"[RM] ✅ **GPU Optimization successful** (tối ưu GPU thành công – điều chỉnh hoàn hảo) for PID {pid_val}")
+                                        opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
+                                            pid=pid_val,
+                                            gpu_index=gpu_idx,
+                                            strategies=None
+                                        )
+                                        self.logger.info(f"[RM] ✅ **GPU Optimization completed** (tối ưu GPU hoàn tất – điều chỉnh xong) for PID {pid_val}")
+
+                                        # **Analyze results** (phân tích kết quả – kiểm tra đầu ra)
+                                        hw = opt_result.get('hardware_results', {}) if isinstance(opt_result, dict) else {}
+                                        safety = None
+                                        if isinstance(hw, dict):
+                                            self.logger.debug(f"[RM] 📈 **Hardware results** (kết quả phần cứng – đầu ra điều chỉnh): success={hw.get('success')}")
+                                            pred = hw.get('temperature_prediction', {})
+                                            if isinstance(pred, dict):
+                                                safety = pred.get('safety_status')
+                                                self.logger.info(f"[RM] 🌡️ **Temperature safety** (an toàn nhiệt độ – trạng thái nhiệt): {safety}")
+
+                                        # **Safety check and rollback** (kiểm tra an toàn và hoàn trả – xác thực và khôi phục)
+                                        if (isinstance(hw, dict) and not hw.get('success', False)) or hw.get('error') or safety in ('CRITICAL', 'EMERGENCY'):
+                                            self.logger.warning(f"[RM] ⚠️ **Optimization risk detected** (phát hiện rủi ro tối ưu – cảnh báo nguy hiểm) for PID {pid_val} (safety={safety})")
+                                            self.logger.warning(f"[RM] 🔄 **Attempting rollback** (thử hoàn trả – khôi phục cài đặt gốc)...")
+                                            try:
+                                                hc = getattr(self._gpu_orchestrator, 'hardware_controller', None)
+                                                gm = getattr(hc, 'gpu_manager', None) if hc else None
+                                                if gm and hasattr(gm, 'restore_gpu_settings_for_pid'):
+                                                    restored = gm.restore_gpu_settings_for_pid(pid_val)
+                                                    self.logger.info(f"[RM] ✅ **Rollback successful** (hoàn trả thành công – khôi phục xong) for PID {pid_val}: {restored}")
+                                                else:
+                                                    self.logger.warning(f"[RM] ⚠️ **No rollback method available** (không có phương thức hoàn trả – thiếu hàm khôi phục)")
+                                            except Exception as rb_err:
+                                                self.logger.error(f"[RM] ❌ **Rollback failed** (hoàn trả thất bại – khôi phục lỗi) for PID {pid_val}: {rb_err}")
+                                        else:
+                                            self.logger.info(f"[RM] ✅ **GPU Optimization successful** (tối ưu GPU thành công – điều chỉnh hoàn hảo) for PID {pid_val}")
                                         
                                 except Exception as eval_err:
                                     self.logger.error(f"[RM] ❌ **Optimization evaluation error** (lỗi đánh giá tối ưu – thất bại phân tích): {eval_err}")
