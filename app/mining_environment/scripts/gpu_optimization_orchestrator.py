@@ -607,6 +607,11 @@ class GPUOptimizationOrchestrator:
             while stop_event and not stop_event.is_set():
                 interval = base_interval
                 results: Optional[Dict[str, Any]] = None
+                # Tick start marker for per-GPU closed-loop
+                try:
+                    self.logger.debug(f"[C-LOOP] tick start | gpu={gidx}")
+                except Exception:
+                    pass
                 try:
                     results = self.optimize_gpu_for_process(pid=pid, gpu_index=gidx, strategies=strategies)
                 except Exception as e:
@@ -631,12 +636,12 @@ class GPUOptimizationOrchestrator:
                         mode = os.getenv('GPU_CLOSED_LOOP_MODE', 'auto')
                         step_w = int(os.getenv('GPU_CLOSED_LOOP_STEP_W', '5'))
                         step_clk = int(os.getenv('GPU_CLOSED_LOOP_STEP_CLK', '15'))
-                        self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode}")
+                        self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode} | gpu={gidx}")
                         try:
                             cl_result = self.hardware_controller.set_target_utilization(
                                 pid=pid,
                                 target_utilization=target_util,
-                                gpu_index=gpu_index,
+                                gpu_index=gidx,
                                 tolerance=tol,
                                 mode=mode,
                                 max_duration_sec=max_dur,
@@ -645,27 +650,40 @@ class GPUOptimizationOrchestrator:
                                 step_sm_clock_mhz=step_clk,
                                 window_sec=0
                             )
-                            self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')}")
+                            self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
                         except Exception as _cl_err:
-                            self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err}")
+                            self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err} | gpu={gidx}")
+                    else:
+                        try:
+                            self.logger.debug(f"[Orchestrator] Closed-loop disabled or missing GPU_TARGET_UTIL | gpu={gidx} | enabled={enabled_env} target_env={target_env}")
+                        except Exception:
+                            pass
                 except Exception as _wrap_err:
-                    self.logger.debug(f"[Orchestrator] Closed-loop wrapper skipped: {_wrap_err}")
+                    self.logger.debug(f"[Orchestrator] Closed-loop wrapper skipped: {_wrap_err} | gpu={gidx}")
+                # Tick end marker
+                try:
+                    succ = None
+                    if isinstance(results, dict):
+                        succ = results.get('success')
+                    self.logger.debug(f"[C-LOOP] tick end | gpu={gidx} | success={succ}")
+                except Exception:
+                    pass
                 try:
                     state = self._compute_state_from_metrics(pid=pid, gpu_index=gidx, results=results)
                     if self.config.get('interval_mode', 'adaptive') == 'fixed':
                         interval = max(1, int(self.config.get('loop_interval_sec', base_interval)))
                     else:
                         interval = max(1, int(self._pick_next_interval_sec(state)))
-                    self.logger.info(f"[Orchestrator] Next interval selected: {interval}s | state={state} | tier={self._last_interval_tier} | choices={self._interval_choices}")
+                    self.logger.info(f"[Orchestrator] Next interval selected: {interval}s | state={state} | tier={self._last_interval_tier} | choices={self._interval_choices} | gpu={gidx}")
                 except Exception as _e:
-                    self.logger.warning(f"[Orchestrator] Failed to compute next interval; fallback to base {base_interval}s: {_e}")
+                    self.logger.warning(f"[Orchestrator] Failed to compute next interval; fallback to base {base_interval}s: {_e} | gpu={gidx}")
                     interval = base_interval
                 # Sleep with cooperative stop
                 for _ in range(int(interval)):
                     if stop_event.is_set():
                         break
                     time.sleep(1)
-            self.logger.info("🛑 Continuous optimization loop stopped")
+            self.logger.info(f"🛑 Continuous optimization loop stopped | gpu={gidx}")
 
         # Launch per-GPU threads
         for gidx in indices:
@@ -674,8 +692,12 @@ class GPUOptimizationOrchestrator:
                 continue
             ev = threading.Event()
             self._continuous_stop_events[gidx] = ev
-            t = threading.Thread(target=_make_loop, args=(gidx,), daemon=True)
+            t = threading.Thread(target=_make_loop, args=(gidx,), daemon=True, name=f"Orchestrator-CL-{gidx}")
             self._continuous_threads[gidx] = t
+            try:
+                self.logger.info(f"[Orchestrator] Launching closed-loop thread for GPU {gidx} (thread={t.name})")
+            except Exception:
+                pass
             t.start()
     
     @trace_all
