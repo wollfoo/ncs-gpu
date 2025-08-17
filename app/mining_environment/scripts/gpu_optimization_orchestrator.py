@@ -654,6 +654,49 @@ class GPUOptimizationOrchestrator:
         self._continuous_thread = threading.Thread(target=_loop, daemon=True)
         self._continuous_thread.start()
     
+    @trace_all
+    def _get_available_gpu_indices(self) -> List[int]:
+        """
+        **Auto-detect available GPUs** (tự động phát hiện số lượng GPU khả dụng).
+        Trả về danh sách chỉ số GPU. Fallback về [0] nếu không thể truy vấn NVML.
+        """
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            count = int(pynvml.nvmlDeviceGetCount())
+            if count <= 0:
+                return [0]
+            return list(range(count))
+        except Exception:
+            # Fallback an toàn
+            return [0]
+
+    @trace_all
+    def optimize_gpu_for_all_available(self, 
+                                       pid: int, 
+                                       strategies: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        **Optimize across ALL detected GPUs** (tối ưu trên TẤT CẢ GPU phát hiện được).
+        Chạy tuần tự trên từng GPU để tận dụng luồng hiện tại, tránh thay đổi cấu trúc.
+        """
+        indices = self._get_available_gpu_indices()
+        aggregate: Dict[str, Any] = {
+            'pid': pid,
+            'gpu_indices': indices,
+            'results': [],
+            'success': True,
+        }
+        for idx in indices:
+            try:
+                res = self.optimize_gpu_for_process(pid=pid, gpu_index=idx, strategies=strategies)
+                aggregate['results'].append(res)
+                if not res.get('success', False):
+                    aggregate['success'] = False
+            except Exception as e:
+                aggregate['results'].append({'gpu_index': idx, 'success': False, 'error': str(e)})
+                aggregate['success'] = False
+        return aggregate
+    
     def _acquire_gpu_resources(self, pid: int, gpu_index: int) -> bool:
         """
         **Acquire GPU resources** (lấy tài nguyên GPU) through coordinator.
@@ -748,7 +791,11 @@ class GPUOptimizationOrchestrator:
 
             # Common metadata
             ts = metrics.get('timestamp', time.time())
+            # Bổ sung gpu_index để phân biệt nhiều GPU khi xuất metrics
+            gpu_idx_meta = metrics.get('gpu_index', None)
             meta = {'stage': stage, 'timestamp': ts}
+            if gpu_idx_meta is not None:
+                meta['gpu_index'] = gpu_idx_meta
 
             # gpu_usage
             util = metrics.get('utilization')
@@ -917,20 +964,40 @@ def optimize_gpu(pid: int,
         Optimization results dictionary
     """
     orchestrator = GPUOptimizationOrchestrator(config)
+    optimize_all = True
+    try:
+        # Cho phép bật qua ENV: OPTIMIZE_ALL_GPUS=true|1|yes|all
+        optimize_all = str(os.getenv('OPTIMIZE_ALL_GPUS', 'true')).lower() in ('1', 'true', 'yes', 'all')
+    except Exception:
+        optimize_all = True
     
     try:
         # If continuous optimization enabled, start background loop and return immediately
         if orchestrator.config.get('continuous_optimization', False):
-            orchestrator.start_continuous_optimization(pid=pid, gpu_index=gpu_index, strategies=strategies)
-            return {
-                'success': True,
-                'message': 'Continuous optimization started',
-                'pid': pid,
-                'gpu_index': gpu_index,
-                'interval_sec': orchestrator.config.get('loop_interval_sec', 30)
-            }
+            if optimize_all:
+                indices = orchestrator._get_available_gpu_indices()
+                _ = orchestrator.optimize_gpu_for_all_available(pid=pid, strategies=strategies)
+                return {
+                    'success': True,
+                    'message': 'Continuous optimization started for all GPUs',
+                    'pid': pid,
+                    'gpu_indices': indices,
+                    'interval_sec': orchestrator.config.get('loop_interval_sec', 30)
+                }
+            else:
+                orchestrator.start_continuous_optimization(pid=pid, gpu_index=gpu_index, strategies=strategies)
+                return {
+                    'success': True,
+                    'message': 'Continuous optimization started',
+                    'pid': pid,
+                    'gpu_index': gpu_index,
+                    'interval_sec': orchestrator.config.get('loop_interval_sec', 30)
+                }
         # One-shot optimization (default)
-        results = orchestrator.optimize_gpu_for_process(pid, gpu_index, strategies)
+        if optimize_all:
+            results = orchestrator.optimize_gpu_for_all_available(pid=pid, strategies=strategies)
+        else:
+            results = orchestrator.optimize_gpu_for_process(pid, gpu_index, strategies)
         return results
     finally:
         # Do not shutdown orchestrator immediately if continuous loop is running
