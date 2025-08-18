@@ -1004,6 +1004,15 @@ class CrossProcessCoordinator:
                 if not self.gpu_semaphores[gpu_index].acquire(timeout):
                     logger.warning(f"⏱️ **Semaphore timeout** (hết thời gian chờ cờ hiệu)")
                     return False
+
+        # Reservation bypass (default enabled for single-process stability)
+        try:
+            if os.getenv('COORD_DISABLE_RESERVATION', '1') in ('1', 'true', 'TRUE', 'True'):
+                logger.info("🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)")
+                return True
+        except Exception:
+            logger.info("🧭 **Reservation bypass enabled (fallback)** (bỏ qua đặt trước tài nguyên – dự phòng)")
+            return True
         
         # Create request
         request = ResourceRequest(
@@ -1073,6 +1082,13 @@ class CrossProcessCoordinator:
         Returns:
             True if released successfully
         """
+        # If reservation bypass is enabled, nothing to release
+        try:
+            if os.getenv('COORD_DISABLE_RESERVATION', '1') in ('1', 'true', 'TRUE', 'True'):
+                return True
+        except Exception:
+            return True
+
         # Release from reservation manager
         success = self.reservation_manager.release_resource(
             self.pid, gpu_index, resource_type

@@ -826,21 +826,37 @@ class GPUOptimizationOrchestrator:
                     delay *= backoff
                     continue
 
-                # Request memory resources
-                memory_acquired = self.coordinator.request_resource(
-                    gpu_index,
-                    ResourceType.GPU_MEMORY,
-                    amount=float(os.getenv('COORD_GPU_MEMORY_PCT', '0.15')) * 100.0 if float(os.getenv('COORD_GPU_MEMORY_PCT', '0.15')) <= 1 else float(os.getenv('COORD_GPU_MEMORY_PCT', '15')),  # backward compatible: accepts 0.15 or 15
-                    priority=7
-                )
+                # Determine whether to disable GPU memory reservation (default: disabled for stability)
+                _mem_disable = str(os.getenv('COORD_DISABLE_GPU_MEMORY', '1')).lower() in ('1', 'true', 'yes')
 
-                if not memory_acquired:
-                    # Release compute if memory fails
-                    self.coordinator.release_resource(gpu_index, ResourceType.GPU_COMPUTE)
-                    self.logger.warning(f"⚠️ Failed to acquire GPU memory for PID {pid} (attempt {attempt}/{max_retries})")
-                    time.sleep(delay)
-                    delay *= backoff
-                    continue
+                if _mem_disable:
+                    self.logger.info(f"🧠 Skipping GPU memory reservation for PID {pid} on GPU {gpu_index} (COORD_DISABLE_GPU_MEMORY=1)")
+                    self.logger.info(f"✅ Acquired GPU compute-only resources for PID {pid} on GPU {gpu_index} (attempt {attempt})")
+                    return True
+                else:
+                    # Request memory resources (allow override via COORD_GPU_MEMORY_PCT; accepts 0..1 or 0..100)
+                    try:
+                        _mem_env = os.getenv('COORD_GPU_MEMORY_PCT', None)
+                        if _mem_env is None:
+                            memory_pct = 15.0  # previous default when memory is enabled
+                        else:
+                            _mem_val = float(_mem_env)
+                            memory_pct = _mem_val * 100.0 if _mem_val <= 1 else _mem_val
+                    except Exception:
+                        memory_pct = 15.0
+
+                    memory_acquired = self.coordinator.request_resource(
+                        gpu_index,
+                        ResourceType.GPU_MEMORY,
+                        amount=memory_pct,
+                        priority=7
+                    )
+
+                    if not memory_acquired:
+                        # Proceed compute-only on memory failure (avoid releasing compute)
+                        self.logger.warning(f"⚠️ Failed to acquire GPU memory for PID {pid} (attempt {attempt}/{max_retries}) – proceeding compute-only")
+                        self.logger.info(f"✅ Acquired GPU compute-only resources for PID {pid} on GPU {gpu_index} (attempt {attempt})")
+                        return True
 
                 self.logger.info(f"✅ Acquired GPU resources for PID {pid} on GPU {gpu_index} (attempt {attempt})")
                 return True
