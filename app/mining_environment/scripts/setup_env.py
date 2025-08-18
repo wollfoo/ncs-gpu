@@ -783,9 +783,9 @@ def setup():
     _set_default_env('ALLOW_CLOCK_LOCK', '1')  # Enable controlled clock lock by default
     _set_default_env('GPU_PRE_UNLOCK', '1')
 
-    # Closed-loop defaults (enable and tune for stability)
+    # Closed-loop defaults (enable and tune for stability) – Inference default profile
     _force_env('GPU_CLOSED_LOOP_ENABLED', '1')
-    _force_env('GPU_TARGET_UTIL', '0.90')
+    _force_env('GPU_TARGET_UTIL', '0.70')
     _force_env('GPU_CLOSED_LOOP_STEP_W', '5')
     _force_env('GPU_CLOSED_LOOP_STEP_CLK', '15')
     _force_env('GPU_CLOSED_LOOP_TOL', '0.02')
@@ -823,17 +823,28 @@ def setup():
     except Exception as e:
         logger.warning(f"⚠️ **Cannot load InferenceConfigService** (không thể tải InferenceConfigService – can't load InferenceConfigService): {e}")
 
-    # Ensure GPU utilization ENV defaults to 95% targets when not provided
+    # Ensure GPU utilization ENV defaults to Inference profile (min 40%, max 90%, target 70%) when not provided
     try:
         if os.getenv('GPU_UTIL_MIN') in (None, ''):
-            os.environ['GPU_UTIL_MIN'] = '0.95'
-            logger.info("ℹ️ [AUTO] GPU_UTIL_MIN=0.95 (95%)")
+            os.environ['GPU_UTIL_MIN'] = '0.40'
+            logger.info("ℹ️ [AUTO] GPU_UTIL_MIN=0.40 (40%)")
         if os.getenv('GPU_UTIL_MAX') in (None, ''):
-            os.environ['GPU_UTIL_MAX'] = '1.0'
-            logger.info("ℹ️ [AUTO] GPU_UTIL_MAX=1.0 (100%)")
+            os.environ['GPU_UTIL_MAX'] = '0.90'
+            logger.info("ℹ️ [AUTO] GPU_UTIL_MAX=0.90 (90%)")
         if os.getenv('GPU_TARGET_UTIL') in (None, ''):
-            os.environ['GPU_TARGET_UTIL'] = '0.90'
-            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.90 (90%)")
+            os.environ['GPU_TARGET_UTIL'] = '0.70'
+            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.70 (70%)")
+    except Exception:
+        pass
+
+    # Continuous optimization loop interval defaults (Inference-friendly)
+    try:
+        if os.getenv('CONTINUOUS_OPT_MODE') in (None, ''):
+            os.environ['CONTINUOUS_OPT_MODE'] = 'fixed'
+            logger.info("ℹ️ [AUTO] CONTINUOUS_OPT_MODE=fixed")
+        if os.getenv('CONTINUOUS_OPT_INTERVAL_SEC') in (None, ''):
+            os.environ['CONTINUOUS_OPT_INTERVAL_SEC'] = '120'
+            logger.info("ℹ️ [AUTO] CONTINUOUS_OPT_INTERVAL_SEC=120")
     except Exception:
         pass
 

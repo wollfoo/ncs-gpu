@@ -1221,7 +1221,7 @@ class OptimizedHardwareController:
         self.power_max = config.get('power_max', 200)            # Max power
         
         # **HASHRATE FIX: Profile settings with GPU_TARGET_UTIL-based allocation** (cài đặt profile với phân bổ dựa trên GPU_TARGET_UTIL)
-        gpu_target_util = float(os.environ.get('GPU_TARGET_UTIL', '0.95'))  # Default 95% from ENV
+        gpu_target_util = float(os.environ.get('GPU_TARGET_UTIL', '0.70'))  # Default 70% (Inference profile) from ENV
         self.profile = config.get('optimization_profile', {
             'vram_allocation': gpu_target_util,    # Use GPU_TARGET_UTIL instead of fixed 50%
             'compute_allocation': gpu_target_util,  # New: compute resource allocation

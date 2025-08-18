@@ -198,7 +198,7 @@ class GPUOptimizationOrchestrator:
             'profile_report_interval': 120,  # 2 minutes
             # Continuous optimization (tối ưu liên tục – lặp theo chu kỳ)
             'continuous_optimization': True,
-            'loop_interval_sec': 30
+            'loop_interval_sec': 120
         }
 
     # ===== Interval selection helpers (Adaptive interval with hysteresis & jitter) =====
@@ -657,8 +657,17 @@ class GPUOptimizationOrchestrator:
                         allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
                         if allow_under_80:
                             min_util = 0.0
-                        # Clamp target utilization
-                        target_util = max(min_util, min(1.0, max(0.0, target_util)))
+                        # Determine enforced maximum utilization (use GPU_UTIL_MAX; default 0.90 for inference-like cap)
+                        try:
+                            max_util_env = os.getenv('GPU_UTIL_MAX', '0.90')
+                            max_util = float(max_util_env)
+                        except Exception:
+                            max_util = 0.90
+                        if max_util > 1.0:
+                            max_util = max_util / 100.0
+                        max_util = max(0.0, min(1.0, max_util))
+                        # Clamp target utilization to [min_util, max_util]
+                        target_util = max(min_util, min(max_util, max(0.0, target_util)))
                         try:
                             self.logger.info(f"[Orchestrator] Enforced min utilization={min_util:.2f} → target_util={target_util:.2f} | allow_under_80={allow_under_80} | gpu={gidx}")
                             # Skip closed-loop this tick if utilization metrics invalid (marked -1.0)

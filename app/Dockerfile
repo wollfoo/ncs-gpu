@@ -228,13 +228,16 @@ ENV INTERVAL_CHOICE_TIER_4_HI=
 # ===== Closed-loop NVML setpoint (target utilization) =====
 # Bám mục tiêu utilization theo chu kỳ trong continuous loop (có thể override qua ENV)
 ENV GPU_CLOSED_LOOP_ENABLED=1 \
-    GPU_TARGET_UTIL=0.95 \
-    GPU_UTIL_MIN=0.80 \
+    GPU_TARGET_UTIL=0.70 \
+    GPU_UTIL_MIN=0.40 \
+    GPU_UTIL_MAX=0.90 \
     GPU_CLOSED_LOOP_MAX_SEC=35.0 \
     GPU_CLOSED_LOOP_TOL=0.02 \
     GPU_CLOSED_LOOP_MODE=auto \
     GPU_CLOSED_LOOP_STEP_W=8 \
-    GPU_CLOSED_LOOP_STEP_CLK=20
+    GPU_CLOSED_LOOP_STEP_CLK=20 \
+    CONTINUOUS_OPT_MODE=fixed \
+    CONTINUOUS_OPT_INTERVAL_SEC=120
 
 # One-shot optimization cooldown (ResourceManager._optimize_async)
 ENV GPU_OPT_COOLDOWN_SEC=2.0
