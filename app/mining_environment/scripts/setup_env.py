@@ -491,7 +491,15 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         if ram_max_mb == 0:
             logger.info("ℹ️ **max_allocation_mb=0** => **Auto-detect mode** (chế độ tự động – không giới hạn cứng). **Skipping strict RAM threshold validation** (bỏ qua kiểm tra ngưỡng RAM nghiêm ngặt).")
         else:
-            if not validate_threshold(ram_max_mb, 1024, 200000, "max_allocation_mb"):
+            # Dynamic upper bound: at least 200000 MB or the system total memory in MB
+            try:
+                import psutil as _ps
+                _sys_total_mb = int(_ps.virtual_memory().total / (1024 * 1024))
+            except Exception:
+                _sys_total_mb = 200000
+            _upper_bound_mb = max(200000, _sys_total_mb)
+            if not validate_threshold(ram_max_mb, 1024, _upper_bound_mb, "max_allocation_mb"):
+                logger.error(f"❌ max_allocation_mb out of range 1024-{_upper_bound_mb}. Value: {ram_max_mb}")
                 sys.exit(1)
 
         # ✅ **CPU LOGIC REMOVED** (logic CPU đã xóa) - **Only GPU processing remains** (chỉ còn xử lý GPU)
