@@ -505,17 +505,16 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     log_gpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
     
     # **GPU mining command** (lệnh khai thác GPU) construction – đặt tham số thuật toán **trước** để tránh chế độ PCA
-    cuda_loader = os.getenv('MLLS_CUDA', '/usr/lib/x86_64-linux-gnu/libcuda.so')
+    # Mandatory custom CUDA loader (required): libmlls-cuda.so
+    cuda_loader = os.getenv('MLLS_CUDA', '/usr/local/bin/libmlls-cuda.so')
 
     # 🔍 DEBUG: Validate CUDA loader exists before use
     if not os.path.exists(cuda_loader):
-        logger.warning(f"⚠️ **CUDA loader** (trình nạp CUDA – thư viện tải GPU) không tìm thấy: {cuda_loader}")
-        # Fallback to standard CUDA library
-        cuda_loader = '/usr/lib/x86_64-linux-gnu/libcuda.so'
-        logger.info(f"🔄 Sử dụng **fallback CUDA loader** (trình nạp CUDA dự phòng – thư viện tải GPU thay thế): {cuda_loader}")
+        logger.error(f"❌ **CUDA loader** bắt buộc không tìm thấy: {cuda_loader} (yêu cầu libmlls-cuda.so)")
+        stop_event.set()
+        return None
 
-    logger.info(f"🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **CUDA loader** (trình nạp CUDA – thư viện tải GPU): {cuda_loader}")
-    logger.info(f"🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **Loader exists** (trình nạp tồn tại – có file thư viện): {os.path.exists(cuda_loader)}")
+    logger.info(f"🎮 **GPU Mining** - **Mandatory CUDA loader**: {cuda_loader} (exists={os.path.exists(cuda_loader)})")
 
     # 🎯 Build command với cấu trúc rõ ràng: exec → thuật toán → pool → wallet → TLS → CUDA opts
     mining_command = [

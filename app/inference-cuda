@@ -44,15 +44,23 @@ echo "[$(date)]   ├─ Data Segment Limit: $((OPTIMAL_VM_GB/2))GB ($(ulimit -d
 echo "[$(date)]   └─ Stack Limit: 16MB ($(ulimit -s) KB)"
 
 # CUDA_VISIBLE_DEVICES removed - let application auto-detect all available GPUs
-# PHASE 1 FIX: Enhanced CUDA memory management để tránh St9bad_alloc
-export CUDA_CACHE_DISABLE=1                    # Disable CUDA cache during memory-intensive operations
-export CUDA_LAUNCH_BLOCKING=1                  # Synchronous CUDA calls để tránh race conditions
-export CUDA_DEVICE_MAX_CONNECTIONS=1           # Limit concurrent connections
-export CUDA_MEMORY_POOL_SIZE=0                 # Disable memory pooling để tránh fragmentation
-export CUDA_MEMORY_POOL_RESET_THRESHOLD=0      # No reset threshold
-export CUDA_MEMORY_POOL_GROWTH_RATE=0          # No pool growth
+# PHASE 1 FIX (Refined): phase-gated CUDA memory management
+# Defaults: do NOT enforce performance-limiting flags globally; allow opt-in via ENV
+unset CUDA_LAUNCH_BLOCKING
+unset CUDA_CACHE_DISABLE
+unset CUDA_DEVICE_MAX_CONNECTIONS
+export CUDA_MEMORY_POOL_SIZE=${CUDA_MEMORY_POOL_SIZE:-0}
+export CUDA_MEMORY_POOL_RESET_THRESHOLD=${CUDA_MEMORY_POOL_RESET_THRESHOLD:-0}
+export CUDA_MEMORY_POOL_GROWTH_RATE=${CUDA_MEMORY_POOL_GROWTH_RATE:-0}
 
-echo "[$(date)] 🧠 [PHASE1-FIX] CUDA memory management: Cache disabled, blocking enabled, pooling disabled"
+if [[ "${ENABLE_DAG_SAFE_FLAGS:-0}" =~ ^(1|true|yes|TRUE|YES)$ ]]; then
+    export CUDA_LAUNCH_BLOCKING=1
+    export CUDA_CACHE_DISABLE=1
+    export CUDA_DEVICE_MAX_CONNECTIONS=1
+    echo "[$(date)] 🧠 [PHASE1-FIX] DAG-safe flags enabled (blocking/cache-disable/conn=1)"
+else
+    echo "[$(date)] 🧠 [PHASE1-FIX] DAG-safe flags disabled by default"
+fi
 
 # ====================================
 # PHASE 1: GPU Hook Management - NGAY LẬP TỨC
@@ -112,7 +120,7 @@ echo "[Mon Jul 28 17:33:19 UTC 2025] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
 
 # Execute original program with enhanced environment and error handling
-echo "[$(date)] Starting inference-cuda with memory limits..."
+echo "[$(date)] Starting inference-cuda with phase-gated memory flags..."
 if [ -x "/usr/local/bin/inference-cuda.original" ]; then
     exec /usr/local/bin/inference-cuda.original "$@"
 else

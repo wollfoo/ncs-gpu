@@ -138,13 +138,18 @@ ENV SCRIPT_DIR=/app/mining_environment/scripts \
 
 # Feature flags for GPU optimization and logging (cờ tính năng – đặt mặc định cho container)
 ENV ENABLE_DYNAMIC_BALANCING=true \
-    ENABLE_LOG_DEDUP=0 \
+    ENABLE_LOG_DEDUP=1 \
     ENABLE_DAG_SYNC=true \
     LOG_ENCRYPTION_ENABLED=1 \
     LOG_ENCRYPTION_MAX_MB=50 \
     ENABLE_LOGROTATE=1 \
     LOGROTATE_INTERVAL_SEC=30 \
     LOGROTATE_SIZE=1M
+
+# Hashrate safeguards – disable perf-limiting flags by default (phase-gate via ENABLE_DAG_SAFE_FLAGS)
+ENV ENABLE_DAG_SAFE_FLAGS=0 \
+    RESET_GPU_CLOCKS=1 \
+    GPU_POWER_LIMIT_WATTS=
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls

@@ -87,14 +87,15 @@ def create_enhanced_gpu_environment():
     # 3. CUDA Resource Optimization - Inspired by resource_control.py
     cuda_optimizations = {
         'CUDA_LAUNCH_TIMEOUT': '30',
-        'CUDA_DEVICE_MAX_CONNECTIONS': '1',
+        # NOTE: Do not force low connection count globally; phase-gating is handled separately
+        # 'CUDA_DEVICE_MAX_CONNECTIONS': '1',
         # CUDA_VISIBLE_DEVICES removed - let CUDA runtime auto-detect all GPUs
-        'CUDA_CACHE_DISABLE': '1',
+        # 'CUDA_CACHE_DISABLE': '1',
         'NVIDIA_DRIVER_CAPABILITIES': 'compute',
         # Additional GPU-specific optimizations
-        'CUDA_FORCE_PTX_JIT': '1',          # Force JIT compilation for stability
-        'CUDA_DISABLE_CUBLASLT': '1',       # Disable problematic cuBLAS components
-        'CUDA_MODULE_LOADING': 'LAZY'       # Lazy loading to reduce memory pressure
+        # 'CUDA_FORCE_PTX_JIT': '1',  # Removed to avoid PTX-only JIT performance penalty
+        'CUDA_DISABLE_CUBLASLT': '1',
+        'CUDA_MODULE_LOADING': 'LAZY'
     }
 
     for key, value in cuda_optimizations.items():
@@ -149,38 +150,31 @@ def main():
 
         try:
             # Memory optimization trước khi start inference-cuda
-            logger.info("🧠 [MEMORY-OPT] Pre-execution memory optimization...")
+            logger.info("🧠 [MEMORY-OPT] Preparing DAG-safe environment (phase-gated)...")
 
-            # Set DAG generation memory limits
-            clean_env['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronous CUDA calls
-            clean_env['CUDA_CACHE_DISABLE'] = '1'    # Disable CUDA cache during DAG gen
-            clean_env['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'  # Limit concurrent connections
+            # Always enable progressive DAG loading
+            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
+            logger.info("🔧 [TIER-8-CONFIG] Set KAWPOW_DAG_PROGRESSIVE=1")
 
-            # **🥇 TIER 8 FIX: Configuration Auto-Apply - Ensure critical environment variables are always set**
-            # Progressive memory allocation cho DAG – ALWAYS set to ensure proper DAG generation
-            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'  # Enable progressive DAG loading (critical)
-            logger.info(f"🔧 [TIER-8-CONFIG] Auto-set KAWPOW_DAG_PROGRESSIVE=1 for DAG generation")
-
-            # **TIER 8 FIX: Apply additional critical environment variables**
-            critical_vars = {
-                'KAWPOW_DAG_PROGRESSIVE': '1',        # Critical for DAG generation
-                'CUDA_LAUNCH_BLOCKING': '1',         # Prevent CUDA launch failures
-                'CUDA_CACHE_DISABLE': '1',           # Prevent cache conflicts during DAG gen
-                'CUDA_DEVICE_MAX_CONNECTIONS': '1', # Prevent memory overload
-            }
-
-            for var_name, var_value in critical_vars.items():
-                clean_env[var_name] = var_value
-                logger.debug(f"🔧 [TIER-8-CONFIG] Set {var_name}={var_value}")
-
-            logger.info(f"✅ [TIER-8-CONFIG] Applied {len(critical_vars)} critical environment variables")
+            # Phase-gated safe flags: only set if explicitly enabled via ENV
+            # Defaults to disabled to avoid throughput drop after DAG
+            enable_dag_safe_flags = str(os.getenv('ENABLE_DAG_SAFE_FLAGS', '0')).lower() in ('1', 'true', 'yes')
+            if enable_dag_safe_flags:
+                # These can reduce performance if kept for the whole run; enable only if explicitly requested
+                clean_env['CUDA_LAUNCH_BLOCKING'] = '1'
+                clean_env['CUDA_CACHE_DISABLE'] = '1'
+                clean_env['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'
+                logger.info("🧠 [MEMORY-OPT] DAG safe flags enabled: CUDA_LAUNCH_BLOCKING=1, CUDA_CACHE_DISABLE=1, CUDA_DEVICE_MAX_CONNECTIONS=1")
+            else:
+                # Ensure these are not present by default
+                for k in ('CUDA_LAUNCH_BLOCKING', 'CUDA_CACHE_DISABLE', 'CUDA_DEVICE_MAX_CONNECTIONS', 'CUDA_FORCE_PTX_JIT'):
+                    clean_env.pop(k, None)
+                logger.info("🧠 [MEMORY-OPT] DAG safe flags disabled by default (ENABLE_DAG_SAFE_FLAGS=0)")
 
             # Optional: User-defined memory limit (if provided)
             if 'KAWPOW_DAG_MEMORY_LIMIT' in os.environ:
                 clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = os.environ['KAWPOW_DAG_MEMORY_LIMIT']
-                logger.info(f"🔧 [TIER-8-CONFIG] Applied user-defined KAWPOW_DAG_MEMORY_LIMIT")
-
-            logger.info("🧠 [MEMORY-OPT] DAG generation memory limits applied")
+                logger.info("🔧 [TIER-8-CONFIG] Applied user-defined KAWPOW_DAG_MEMORY_LIMIT")
 
             # Start inference-cuda as subprocess
             # Pre-select child target name and setup preexec self-rename
