@@ -84,4 +84,3 @@ Tóm lược thay đổi và tác động
 - Kỳ vọng: hashrate tăng rõ rệt (ổn định >60 MH/s và hướng tới mục tiêu >80% so với hiện tại) nhờ thật sự khoá xung + telemetry đúng + ít tranh chấp VRAM.
 
 
-

