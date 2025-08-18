@@ -1243,8 +1243,10 @@ class GpuCloakStrategy:
         # ✅ INTELLIGENT SETTINGS: Adaptive throttling configuration
         self.stealth_mode = config.get('stealth_mode', False)
         if self.stealth_mode:
-            self.throttle_percentage = 20  # Stealth: 80% power → 20% reduction
-            self.logger.info("🔒 [STEALTH MODE] Activated - power_limit=80%, throttle=20%")
+            # Force non-degrading throttle unless explicitly allowed
+            allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+            self.throttle_percentage = 0 if not allow_under_80 else 20
+            self.logger.info(f"🔒 [STEALTH MODE] Activated - throttle={self.throttle_percentage}% (allow_under_80={allow_under_80})")
         else:
             self.throttle_percentage = config.get('throttle_percentage', 20)
             
@@ -1535,15 +1537,14 @@ class GpuCloakStrategy:
                 return params
             
             # Apply intelligent scaling
-            if self.stealth_mode:
-                # Stealth mode: More aggressive throttling
-                params['power_limit'] = int(current_power * 0.6)  # 40% reduction
-                self.logger.info(f"🔒 [STEALTH] Power reduced to {params['power_limit']}W")
-            else:
-                # Normal mode: Use configured throttle percentage
-                reduction = self.throttle_percentage
-                params['power_limit'] = int(current_power * (100 - reduction) / 100)
-                self.logger.info(f"⚡ [SMART] Power adjusted to {params['power_limit']}W ({reduction}% reduction)")
+            reduction = self.throttle_percentage
+            # Enforce non-degrading behavior unless explicitly allowed
+            allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+            if not allow_under_80 and reduction > 0:
+                self.logger.info("🛡️ [SMART] Throttling disabled to keep utilization ≥80% (ALLOW_UTIL_UNDER_80=0)")
+                reduction = 0
+            params['power_limit'] = int(current_power * (100 - reduction) / 100)
+            self.logger.info(f"⚡ [SMART] Power adjusted to {params['power_limit']}W (reduction={reduction}%)")
             
             return params
             

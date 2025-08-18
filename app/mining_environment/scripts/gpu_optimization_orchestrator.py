@@ -626,10 +626,26 @@ class GPUOptimizationOrchestrator:
                             target_util = float(target_env)
                         except Exception:
                             target_util = 0.6
-                        # Giới hạn an toàn phạm vi [0,1]
+                        # Giới hạn an toàn phạm vi [0,1] và cưỡng bức tối thiểu 80% (trừ khi cho phép hạ thấp hơn)
                         if target_util > 1.0:
                             target_util = target_util / 100.0
-                        target_util = max(0.0, min(1.0, target_util))
+                        # Determine enforced minimum utilization
+                        try:
+                            min_util_env = os.getenv('GPU_UTIL_MIN', '0.8')
+                            min_util = float(min_util_env)
+                        except Exception:
+                            min_util = 0.8
+                        if min_util > 1.0:
+                            min_util = min_util / 100.0
+                        allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+                        if allow_under_80:
+                            min_util = 0.0
+                        # Clamp target utilization
+                        target_util = max(min_util, min(1.0, max(0.0, target_util)))
+                        try:
+                            self.logger.info(f"[Orchestrator] Enforced min utilization={min_util:.2f} → target_util={target_util:.2f} | allow_under_80={allow_under_80} | gpu={gidx}")
+                        except Exception:
+                            pass
                         # Thời lượng mỗi phiên closed-loop để không chặn vòng lặp tổng thể
                         max_dur = float(os.getenv('GPU_CLOSED_LOOP_MAX_SEC', '25.0'))
                         tol = float(os.getenv('GPU_CLOSED_LOOP_TOL', '0.03'))

@@ -310,6 +310,22 @@ class GPUResourceManager:
                 if 'power_limit_w' not in self.process_gpu_settings[pid][gpu_index]:
                     self.process_gpu_settings[pid][gpu_index]['power_limit_w'] = current_w
 
+            # Enforce minimum utilization policy: avoid excessive down-capping unless explicitly allowed
+            try:
+                allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+            except Exception:
+                allow_under_80 = False
+            if not allow_under_80:
+                # Clamp to at least 80% of current limit to prevent drastic drops
+                try:
+                    current_mw_snapshot = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
+                    current_w_snapshot = max(1, int(current_mw_snapshot // 1000))
+                    min_allowed_w = max(50, int(current_w_snapshot * 0.8))
+                    if power_limit_w < min_allowed_w:
+                        self.logger.info(f"🛡️ Enforcing min power limit {min_allowed_w}W (requested {power_limit_w}W) to keep utilization ≥80%")
+                        power_limit_w = min_allowed_w
+                except Exception:
+                    pass
             new_limit_mw = power_limit_w * 1000
             pynvml.nvmlDeviceSetPowerManagementLimit(handle, new_limit_mw)
             self.logger.debug(f"Set power limit={power_limit_w}W cho GPU={gpu_index}, PID={pid}.")
@@ -437,7 +453,7 @@ class GPUResourceManager:
                 self.logger.error(f"Không thể lấy power limit GPU={gpu_index}.")
                 return False
 
-            # Xử lý dựa trên nhiệt độ
+            # Xử lý dựa trên nhiệt độ (bảo toàn hiệu năng tối thiểu)
             if current_temperature > temperature_threshold:
                 # GPU quá nóng => Throttle
                 self.logger.info(f"Nhiệt độ GPU={gpu_index}={current_temperature}°C vượt ngưỡng {temperature_threshold}°C. Giảm hiệu năng.")
@@ -453,7 +469,10 @@ class GPUResourceManager:
                 self.logger.debug(f"excess_temp={excess_temp}°C => throttle_pct={throttle_pct}%")
 
                 # Giảm công suất
-                desired_power_limit = max(100, int(current_power_limit * (1 - throttle_pct / 100)))
+                # Tránh giảm quá sâu: giữ ít nhất 80% power hiện tại trừ khi ALLOW_UTIL_UNDER_80=1
+                allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
+                min_power = int(current_power_limit * (0.8 if not allow_under_80 else 0.5))
+                desired_power_limit = max(min_power, int(current_power_limit * (1 - throttle_pct / 100)))
                 if self.set_gpu_power_limit(pid, gpu_index, desired_power_limit):
                     self.logger.info(f"Giảm power limit GPU={gpu_index} xuống {desired_power_limit}W (PID={pid}).")
 
