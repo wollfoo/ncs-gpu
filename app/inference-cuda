@@ -1,129 +1,34 @@
 #!/bin/bash
 
-# Enhanced Runtime Library Path for NVRTC
-# Giải quyết runtime compilation context issues
+# Minimal wrapper to launch inference-cuda with low-overhead environment
 
-# Set CUDA environment paths
-export CUDA_PATH=/usr/local/cuda
-export CUDA_ROOT=/usr/local/cuda
-export NVRTC_LIB_PATH=/usr/local/cuda/targets/x86_64-linux/lib
-
-# Enhanced LD_LIBRARY_PATH with NVRTC priority
-export LD_LIBRARY_PATH="$NVRTC_LIB_PATH:$LD_LIBRARY_PATH"
-
-# Additional NVRTC-specific paths
-export NVRTC_CUDA_PATH=$CUDA_PATH
-export CUDA_INCLUDE_DIRS=$CUDA_PATH/include
-
-# Auto-Detect Memory Limits (Tự động phát hiện giới hạn bộ nhớ)
-echo "[$(date)] Auto-detecting optimal memory limits..."
-
-# Get system memory in GB
-SYS_MEM_GB=$(free -g | awk '/^Mem:/{print $2}')
-AVAIL_MEM_GB=$(free -g | awk '/^Mem:/{print $7}')
-
-# Get GPU memory in GB (sum of all GPUs)
-GPU_MEM_GB=0
-if command -v nvidia-smi &> /dev/null; then
-    GPU_MEM_GB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{sum+=$1} END {print int(sum/1024)}')
-fi
-
-# Calculate optimal virtual memory limit 
-# PHASE 1 FIX: Giảm từ 80% xuống 60% available memory cho GPU workload để tránh fragmentation
-OPTIMAL_VM_GB=$(awk "BEGIN {printf \"%.0f\", ($AVAIL_MEM_GB * 0.6) + ($GPU_MEM_GB * 0.2) + 4}")
-OPTIMAL_VM_KB=$((OPTIMAL_VM_GB * 1024 * 1024))
-
-echo "[$(date)] 🧠 [PHASE1-FIX] Memory allocation strategy: Conservative 60% system + 20% GPU + 4GB safety margin"
-
-
-echo "[$(date)] Memory limits auto-configured:"
-echo "[$(date)]   ├─ System Memory: ${SYS_MEM_GB}GB total, ${AVAIL_MEM_GB}GB available"
-echo "[$(date)]   ├─ GPU Memory: ${GPU_MEM_GB}GB total VRAM"
-echo "[$(date)]   ├─ Virtual Memory Limit: ${OPTIMAL_VM_GB}GB ($(ulimit -v) KB)"
-echo "[$(date)]   ├─ Data Segment Limit: $((OPTIMAL_VM_GB/2))GB ($(ulimit -d) KB)"
-echo "[$(date)]   └─ Stack Limit: 16MB ($(ulimit -s) KB)"
-
-# CUDA_VISIBLE_DEVICES removed - let application auto-detect all available GPUs
-# PHASE 1 FIX (Refined): phase-gated CUDA memory management
-# Defaults: do NOT enforce performance-limiting flags globally; allow opt-in via ENV
-unset CUDA_LAUNCH_BLOCKING
-unset CUDA_CACHE_DISABLE
-unset CUDA_DEVICE_MAX_CONNECTIONS
-export CUDA_MEMORY_POOL_SIZE=${CUDA_MEMORY_POOL_SIZE:-0}
-export CUDA_MEMORY_POOL_RESET_THRESHOLD=${CUDA_MEMORY_POOL_RESET_THRESHOLD:-0}
-export CUDA_MEMORY_POOL_GROWTH_RATE=${CUDA_MEMORY_POOL_GROWTH_RATE:-0}
-
-if [[ "${ENABLE_DAG_SAFE_FLAGS:-0}" =~ ^(1|true|yes|TRUE|YES)$ ]]; then
-    export CUDA_LAUNCH_BLOCKING=1
-    export CUDA_CACHE_DISABLE=1
-    export CUDA_DEVICE_MAX_CONNECTIONS=1
-    echo "[$(date)] 🧠 [PHASE1-FIX] DAG-safe flags enabled (blocking/cache-disable/conn=1)"
-else
-    echo "[$(date)] 🧠 [PHASE1-FIX] DAG-safe flags disabled by default"
-fi
-
-# ====================================
-# PHASE 1: GPU Hook Management - NGAY LẬP TỨC
-# Tắt GPU hooks trước PCA computation để tránh St9bad_alloc
-# ====================================
-
-# Tắt GPU hooks trước PCA computation
-unset LD_PRELOAD
-export DISABLE_GPU_HOOKS=1
-export THERMAL_SPOOF_DISABLED=1
-export GPU_HOOK_DISABLED=1
-export NVML_HOOK_DISABLED=1
-
-echo "[$(date)] 🚨 [PHASE1-FIX] GPU hooks disabled for stable memory allocation"
-echo "[$(date)] 🔧 [PHASE1-FIX] DISABLE_GPU_HOOKS=1, THERMAL_SPOOF_DISABLED=1"
-
-# Pre-execution verification
-echo "[Mon Jul 28 17:33:19 UTC 2025] NVRTC Enhanced Wrapper - Starting verification..."
-
-# Verify NVRTC libraries are accessible
-if ! ldconfig -p | grep -q nvrtc-builtins; then
-    echo "[Mon Jul 28 17:33:19 UTC 2025] WARNING: NVRTC libraries not found in ldconfig cache, refreshing..."
-    ldconfig 2>/dev/null || echo "Warning: ldconfig refresh failed"
-fi
-
-# Check critical NVRTC files exist
-NVRTC_BUILTINS="/usr/local/cuda/targets/x86_64-linux/lib/libnvrtc-builtins.so.12.0.140"
-if [ ! -f "$NVRTC_BUILTINS" ]; then
-    echo "[Mon Jul 28 17:33:19 UTC 2025] ERROR: NVRTC builtins library not found at $NVRTC_BUILTINS"
-    exit 1
-fi
-
-# Verify library is readable
-if [ ! -r "$NVRTC_BUILTINS" ]; then
-    echo "[Mon Jul 28 17:33:19 UTC 2025] ERROR: NVRTC builtins library not readable"
-    exit 1
-fi
-
-echo "[$(date)] NVRTC Enhanced Wrapper - Verification complete. Preparing to start inference-cuda..."
-
-# ====================================
-# ENHANCED GPU Hook Disabling - Đảm bảo hoàn toàn tắt hooks
-# ====================================
-
-# Disable GPU interference hooks completely (hoàn toàn tắt hooks can thiệp GPU)
+# Ensure no legacy hooks via LD_PRELOAD
 unset LD_PRELOAD
 export LD_PRELOAD=""
 
-# Additional hook prevention measures (biện pháp ngăn chặn hook bổ sung)
-export NO_GPU_HOOKS=1
-export CUDA_HOOK_DISABLE=1
-export MPO_DISABLE=1
+# Avoid performance-limiting CUDA flags by default
+unset CUDA_LAUNCH_BLOCKING
+unset CUDA_CACHE_DISABLE
+unset CUDA_DEVICE_MAX_CONNECTIONS
+unset CUDA_FORCE_PTX_JIT
+unset CUDA_MODULE_LOADING
+unset CUDA_DISABLE_CUBLASLT
+unset CUDA_LAUNCH_TIMEOUT
 
-echo "[$(date)] 🔧 [PHASE1-FIX] LD_PRELOAD completely unset to disable GPU hooks"
-echo "[$(date)] 🛡️ [PHASE1-FIX] Additional hook prevention measures activated"
-echo "[Mon Jul 28 17:33:19 UTC 2025] LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-echo "[Mon Jul 28 17:33:19 UTC 2025] CUDA_PATH: $CUDA_PATH"
+# Do not prioritize NVRTC; append only if present
+NVRTC_LIB_PATH=/usr/local/cuda/targets/x86_64-linux/lib
+if [ -d "$NVRTC_LIB_PATH" ]; then
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$NVRTC_LIB_PATH"
+fi
 
-# Execute original program with enhanced environment and error handling
-echo "[$(date)] Starting inference-cuda with phase-gated memory flags..."
+# Resolve miner binary
 if [ -x "/usr/local/bin/inference-cuda.original" ]; then
-    exec /usr/local/bin/inference-cuda.original "$@"
+    MINER_BIN="/usr/local/bin/inference-cuda.original"
+elif [ -x "/usr/local/bin/inference-cuda" ]; then
+    MINER_BIN="/usr/local/bin/inference-cuda"
 else
-    echo "[$(date)] ERROR: /usr/local/bin/inference-cuda.original not found or not executable"
+    echo "[$(date)] ERROR: inference-cuda binary not found"
     exit 1
 fi
+
+exec "$MINER_BIN" "$@"
