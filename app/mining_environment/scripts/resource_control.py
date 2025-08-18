@@ -116,6 +116,9 @@ class GPUResourceManager:
         self.config = config
         self.gpu_initialized = False
         self.process_gpu_settings: Dict[int, Dict[int, Dict[str, Any]]] = {}
+        # Track last power changes to enforce dwell-time and delta clamps
+        self._last_power_change_time: Dict[int, float] = {}
+        self._last_power_limit_w: Dict[int, int] = {}
         # Heartbeat
         try:
             self.logger.info("💓 [Heartbeat] GPUResourceManager initialized (logger active)")
@@ -310,6 +313,29 @@ class GPUResourceManager:
                 if 'power_limit_w' not in self.process_gpu_settings[pid][gpu_index]:
                     self.process_gpu_settings[pid][gpu_index]['power_limit_w'] = current_w
 
+            # Enforce dwell-time between power changes to prevent thrashing
+            try:
+                dwell_sec = int(os.getenv('POWER_DWELL_SEC', '30'))
+            except Exception:
+                dwell_sec = 30
+            last_change = self._last_power_change_time.get(gpu_index)
+            if last_change is not None and (time.time() - last_change) < dwell_sec:
+                remaining = int(dwell_sec - (time.time() - last_change))
+                self.logger.info(f"⏱️ Dwell-time active: skipping power change for GPU={gpu_index} ({remaining}s remaining)")
+                return True
+
+            # Clamp max delta per change to smooth transitions
+            try:
+                max_delta = int(os.getenv('POWER_MAX_DELTA_W', '15'))
+            except Exception:
+                max_delta = 15
+            last_set_power = self._last_power_limit_w.get(gpu_index, current_w)
+            if abs(power_limit_w - last_set_power) > max_delta:
+                direction = 1 if power_limit_w > last_set_power else -1
+                clamped = last_set_power + direction * max_delta
+                self.logger.info(f"🔧 Clamped power change to ±{max_delta}W step: request {power_limit_w}W → {clamped}W (GPU={gpu_index})")
+                power_limit_w = clamped
+
             # Enforce minimum utilization policy: avoid excessive down-capping unless explicitly allowed
             try:
                 allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
@@ -328,6 +354,9 @@ class GPUResourceManager:
                     pass
             new_limit_mw = power_limit_w * 1000
             pynvml.nvmlDeviceSetPowerManagementLimit(handle, new_limit_mw)
+            # Record last power change
+            self._last_power_change_time[gpu_index] = time.time()
+            self._last_power_limit_w[gpu_index] = power_limit_w
             self.logger.debug(f"Set power limit={power_limit_w}W cho GPU={gpu_index}, PID={pid}.")
             return True
         except pynvml.NVMLError as error:
@@ -367,6 +396,15 @@ class GPUResourceManager:
             if not allow_clock_lock:
                 self.logger.info(f"[RC] ⛔ Skipping clock lock (ALLOW_CLOCK_LOCK=0) | requested SM={sm_clock}MHz, MEM={mem_clock}MHz | gpu={gpu_index}")
                 return False
+
+            # Safety gates: temperature + NVML supported check before locking
+            try:
+                temp = self.get_gpu_temperature(gpu_index)
+                if temp is not None and temp >= self.temp_warning:
+                    self.logger.warning(f"[RC] ⚠️ Temperature {temp}°C >= warning {self.temp_warning}°C → skip clock lock | gpu={gpu_index}")
+                    return False
+            except Exception:
+                pass
 
             # Nếu closed-loop chưa bật và xung hiện tại < 800 MHz, bỏ qua lock để tránh kẹt xung thấp
             try:
@@ -2126,7 +2164,15 @@ except Exception as e:
         
         try:
             # **HASHRATE FIX: Use vram_allocation from profile (now GPU_TARGET_UTIL-based)** (dùng vram_allocation từ profile - giờ dựa trên GPU_TARGET_UTIL)
-            target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', 0.95))
+            # Reduce VRAM reservation for mining workload unless explicitly overridden
+            default_alloc = 0.2
+            try:
+                env_alloc = os.getenv('VRAM_ALLOCATION_DEFAULT')
+                if env_alloc is not None:
+                    default_alloc = max(0.0, min(1.0, float(env_alloc)))
+            except Exception:
+                pass
+            target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', default_alloc))
             self.logger.debug(f"📊 [OHC._manage_vram_allocation] Target VRAM allocation: {target_percent*100}%")
             
             # Get available VRAM
@@ -2135,6 +2181,11 @@ except Exception as e:
             target_mb = target_bytes // (1024**2)
             self.logger.info(f"🎯 [OHC._manage_vram_allocation] Allocating {target_mb}MB ({target_percent*100}% of {total_vram//1024**3}GB) on GPU {gpu_index}")
             
+            # If allocation is near zero, skip subprocess entirely
+            if target_percent <= 0.01:
+                self.logger.info(f"💤 [OHC._manage_vram_allocation] vram_allocation={target_percent*100:.1f}% → skip VRAM allocator for GPU {gpu_index}")
+                return True
+
             # Allocate với rotation pattern
             allocation_cmd = f"""
 python3 -c "

@@ -133,8 +133,9 @@ class ParallelStrategyExecutor:
             True if added successfully
         """
         with self.lock:
-            if task.name in self.pending_tasks:
-                logger.warning(f"⚠️ Task '{task.name}' already exists")
+            # Absolute guard: do not allow duplicate task names (idempotent submission)
+            if task.name in self.pending_tasks or task.name in self.running_tasks or task.name in self.completed_results:
+                logger.warning(f"⛔ Duplicate task blocked: '{task.name}'")
                 return False
             
             self.pending_tasks[task.name] = task

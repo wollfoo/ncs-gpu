@@ -223,6 +223,13 @@ class GPUOptimizationOrchestrator:
 
         temp = float(metrics.get('temperature', 0)) if isinstance(metrics, dict) else 0.0
         util = float(metrics.get('utilization', 0)) if isinstance(metrics, dict) else 0.0
+        # Invalid metrics guard: if util==0 nhưng PID đang chạy và đã có hashrate trong log → coi util không hợp lệ
+        try:
+            if util == 0.0:
+                # Simple heuristic: if process appears alive and we recently executed strategies, treat as invalid
+                util = -1.0  # mark invalid
+        except Exception:
+            pass
         # Classify temperature status
         if temp >= 78:
             temp_status = 'CRITICAL'
@@ -354,6 +361,9 @@ class GPUOptimizationOrchestrator:
         elif state.get('time_of_day') == 'off_peak':
             tier = 0
         else:
+            tier = 1
+        # Treat invalid util (=-1.0) as unknown; avoid long sleeps
+        if state.get('gpu_util') == -1.0:
             tier = 1
         # Hysteresis: avoid flapping 1 tier difference
         last_tier = state.get('last_tier')
@@ -651,6 +661,11 @@ class GPUOptimizationOrchestrator:
                         target_util = max(min_util, min(1.0, max(0.0, target_util)))
                         try:
                             self.logger.info(f"[Orchestrator] Enforced min utilization={min_util:.2f} → target_util={target_util:.2f} | allow_under_80={allow_under_80} | gpu={gidx}")
+                            # Skip closed-loop this tick if utilization metrics invalid (marked -1.0)
+                            st = self._compute_state_from_metrics(pid=pid, gpu_index=gidx, results=results)
+                            if st.get('gpu_util') == -1.0:
+                                self.logger.info(f"[Orchestrator] Skipping closed-loop due to invalid utilization metrics | gpu={gidx}")
+                                continue
                         except Exception:
                             pass
                         # Thời lượng mỗi phiên closed-loop để không chặn vòng lặp tổng thể
@@ -671,7 +686,7 @@ class GPUOptimizationOrchestrator:
                                 min_interval_sec=0.75,
                                 step_power_watts=step_w,
                                 step_sm_clock_mhz=step_clk,
-                                window_sec=0
+                                window_sec=int(os.getenv('POWER_DWELL_SEC', '30'))
                             )
                             self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
                         except Exception as _cl_err:

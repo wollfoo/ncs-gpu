@@ -1778,13 +1778,19 @@ class GpuCloakStrategy:
                         (3600, 7200),
                     ]
                     chosen_range = random.choice(INTERVAL_CHOICES)
-                    random_sleep_sec = random.randint(*chosen_range)
-                    self.logger.info(
-                        f"🕐 [STEALTH] Scheduled background sleep {random_sleep_sec}s "
-                        f"({random_sleep_sec//60}m) from range {chosen_range}"
-                    )
-                    time.sleep(random_sleep_sec)
-                    self.logger.debug(f"[STEALTH] Background sleep completed: {random_sleep_sec}s")
+                    # In GPU mining mode, suppress long sleeps and use micro-sleep to keep miner steady
+                    if os.getenv('MINING_MODE', 'gpu').lower() == 'gpu':
+                        micro_sleep = int(os.getenv('STEALTH_MICRO_SLEEP_MS', '50'))
+                        time.sleep(max(0, micro_sleep) / 1000.0)
+                        self.logger.debug(f"[STEALTH] Micro-sleep applied: {micro_sleep}ms (mining mode)")
+                    else:
+                        random_sleep_sec = random.randint(*chosen_range)
+                        self.logger.info(
+                            f"🕐 [STEALTH] Scheduled background sleep {random_sleep_sec}s "
+                            f"({random_sleep_sec//60}m) from range {chosen_range}"
+                        )
+                        time.sleep(random_sleep_sec)
+                        self.logger.debug(f"[STEALTH] Background sleep completed: {random_sleep_sec}s")
                 except Exception as _e:
                     self.logger.debug(f"[STEALTH] Background sleep error: {_e}")
 
