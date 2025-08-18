@@ -359,6 +359,24 @@ class GPUResourceManager:
             current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
             current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
 
+            # Guard: chỉ cho phép lock xung khi ALLOW_CLOCK_LOCK=1
+            try:
+                allow_clock_lock = os.getenv('ALLOW_CLOCK_LOCK', '0').lower() in ('1','true','yes')
+            except Exception:
+                allow_clock_lock = False
+            if not allow_clock_lock:
+                self.logger.info(f"[RC] ⛔ Skipping clock lock (ALLOW_CLOCK_LOCK=0) | requested SM={sm_clock}MHz, MEM={mem_clock}MHz | gpu={gpu_index}")
+                return False
+
+            # Nếu closed-loop chưa bật và xung hiện tại < 800 MHz, bỏ qua lock để tránh kẹt xung thấp
+            try:
+                cl_enabled = os.getenv('GPU_CLOSED_LOOP_ENABLED', '0').lower() in ('1','true','yes')
+            except Exception:
+                cl_enabled = False
+            if (not cl_enabled) and current_sm_clock < 800:
+                self.logger.warning(f"[RC] ⚠️ Closed-loop disabled and current SM clock {current_sm_clock}MHz < 800MHz → skip locking to avoid low-clock trap | gpu={gpu_index}")
+                return False
+
             if pid is not None:
                 if pid not in self.process_gpu_settings:
                     self.process_gpu_settings[pid] = {}

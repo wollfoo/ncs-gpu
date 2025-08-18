@@ -267,19 +267,7 @@ log "$LOG_INFO" "Monitoring: Prometheus exporter disabled"
 
 # NVRTC fix script removed – base image đã đảm bảo thư viện NVRTC chuẩn
 
-# Optional: reset application clocks/power before test if requested
-if [[ "${RESET_GPU_CLOCKS:-1}" =~ ^(1|true|yes|TRUE|YES)$ ]]; then
-    if command -v nvidia-smi >/dev/null 2>&1; then
-        log "$LOG_INFO" "Resetting application clocks (nvidia-smi -rac)"
-        nvidia-smi -rac >/dev/null 2>&1 || true
-        if [[ -n "${GPU_POWER_LIMIT_WATTS:-}" ]]; then
-            log "$LOG_INFO" "Setting power limit to ${GPU_POWER_LIMIT_WATTS}W"
-            nvidia-smi -pl "${GPU_POWER_LIMIT_WATTS}" >/dev/null 2>&1 || true
-        fi
-    else
-        log "$LOG_WARN" "nvidia-smi not found; skipping clock/power reset"
-    fi
-fi
+# Removed: any clocks/power/memory/thermal operations (entrypoint stays minimal)
 
 # Log successful initialization 
 log "$LOG_INFO" "Container initialization complete. Running command: $@"

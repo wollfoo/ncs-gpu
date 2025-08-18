@@ -339,6 +339,46 @@ def setup_environment_variables(environmental_limits, logger):
         logger.error(f"❌ **Environment variable setup error** (lỗi khi đặt biến môi trường – lỗi cấu hình env var): {e}")
         sys.exit(1)
 
+def reset_gpu_state(logger):
+    """
+    **Reset GPU state to normal** (đặt lại trạng thái GPU về bình thường – mở khóa xung/điện nếu có)
+    - Gọi NVML để reset Application Clocks
+    - Gọi nvidia-smi để bỏ lock graphics/memory clocks
+    Thực thi best-effort, bỏ qua lỗi nếu không hỗ trợ.
+    """
+    try:
+        import subprocess
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            count = int(pynvml.nvmlDeviceGetCount())
+        except Exception as e:
+            count = 0
+            logger.warning(f"⚠️ [GPU-RESET] NVML init failed or unavailable: {e}. Falling back to nvidia-smi only")
+        # NVML: reset application clocks
+        for idx in range(max(1, count)):
+            try:
+                if count > 0:
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+                    try:
+                        pynvml.nvmlDeviceResetApplicationsClocks(handle)
+                        logger.info(f"[GPU-RESET] Reset application clocks via NVML for GPU {idx}")
+                    except Exception as nvml_e:
+                        logger.debug(f"[GPU-RESET] NVML reset apps clocks not supported for GPU {idx}: {nvml_e}")
+                # nvidia-smi: unlock graphics/memory clocks
+                subprocess.run(['nvidia-smi','-i',str(idx),'-rgc'], check=False)
+                subprocess.run(['nvidia-smi','-i',str(idx),'--reset-memory-clocks'], check=False)
+                logger.info(f"[GPU-RESET] Unlocked clocks via nvidia-smi for GPU {idx}")
+            except Exception as smi_e:
+                logger.debug(f"[GPU-RESET] nvidia-smi unlock failed for GPU {idx}: {smi_e}")
+        try:
+            if count > 0:
+                pynvml.nvmlShutdown()
+        except Exception:
+            pass
+    except Exception as e:
+        logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
+
 def configure_security(logger):
     """
     **Configure Security Components** (cấu hình thành phần bảo mật – thiết lập security)
@@ -725,6 +765,10 @@ def setup():
 
     # Multi-GPU behavior
     _set_default_env('ENABLE_DYNAMIC_BALANCING', 'true')  # bật cân bằng tải đa GPU
+    # Safety defaults for power/utilization/clock behavior
+    _set_default_env('ALLOW_UTIL_UNDER_80', '0')
+    _set_default_env('ALLOW_CLOCK_LOCK', '0')
+    _set_default_env('GPU_PRE_UNLOCK', '1')
     
     # **Configuration from InferenceConfigService** (cấu hình từ InferenceConfigService – config từ ml-inference service)
     try:
@@ -756,6 +800,15 @@ def setup():
             logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.95 (95%)")
     except Exception:
         pass
+
+    # ===== Pre-unlock GPU state before any optimization kicks in =====
+    try:
+        pre_unlock = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
+        if pre_unlock:
+            logger.info("🔓 [SETUP] Pre-unlocking GPU clocks/memory clocks before optimization")
+            reset_gpu_state(logger)
+    except Exception as _e:
+        logger.debug(f"[SETUP] Pre-unlock skipped: {_e}")
 
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)

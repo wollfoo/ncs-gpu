@@ -299,11 +299,10 @@ def main():
                     from mining_environment.coordination.coordinator import get_hook_coordinator
 
                     process_metadata = {
-                        'stealth_name': new_name,
                         'role': 'real',
                         'timestamp': time.time(),
                         'wrapper_pid': os.getpid(),
-                        'stealth_enabled': True,
+                        'stealth_enabled': False,
                         'registration_source': 'stealth_inference_cuda'
                     }
 
@@ -325,7 +324,7 @@ def main():
                     logger.critical(f"🚨 [HANDOFF-CRITICAL] Could not perform handoff to HookCoordinator: {handoff_err}")
                     logger.warning(f"⚠️ [HANDOFF-CRITICAL] This is a critical architecture failure. Cloaking is non-functional.")
             except Exception as rename_err:
-                logger.error(f"❌ [GPU-POST-EXEC-STEALTH] Failed to rename child PID: {rename_err}")
+                logger.error(f"❌ [GPU-POST-EXEC] Post-exec sequencing error: {rename_err}")
 
             # 🔒 PHASE 2: Enhanced GPU Resource Monitoring + Stealth - (đã loại bỏ logic pidfd_send_signal theo yêu cầu làm sạch mã)
 
@@ -349,7 +348,7 @@ def main():
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    preexec_fn=None if disable_rename else _child_preexec,
+                    preexec_fn=None,
                     env=clean_env  # Use clean environment for fallback subprocess too
                 )
 

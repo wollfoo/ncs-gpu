@@ -612,6 +612,49 @@ class HookCoordinator:
                 if self.logger:
                     self.logger.info(f"✅ **[LINEAR-FLOW] PID {pid} registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID {pid} đã đăng ký với HookCoordinator)")
             
+            # ===== PRE-UNLOCK: Ensure any prior clock locks are cleared before optimization =====
+            try:
+                pre_unlock_env = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
+            except Exception:
+                pre_unlock_env = True
+            if pre_unlock_env:
+                try:
+                    import subprocess as _subp
+                    try:
+                        import pynvml as _nv
+                        _nv.nvmlInit()
+                        _cnt = int(_nv.nvmlDeviceGetCount())
+                    except Exception as _e:
+                        _cnt = 0
+                        if self.logger:
+                            self.logger.debug(f"[HOOK] NVML init failed or unavailable: {_e}")
+                    for _idx in range(max(1, _cnt)):
+                        try:
+                            if _cnt > 0:
+                                _hdl = _nv.nvmlDeviceGetHandleByIndex(_idx)
+                                try:
+                                    _nv.nvmlDeviceResetApplicationsClocks(_hdl)
+                                    if self.logger:
+                                        self.logger.info(f"[HOOK] Reset application clocks via NVML for GPU {_idx}")
+                                except Exception as _nv_e:
+                                    if self.logger:
+                                        self.logger.debug(f"[HOOK] NVML reset apps clocks not supported on GPU {_idx}: {_nv_e}")
+                            _subp.run(['nvidia-smi','-i',str(_idx),'-rgc'], check=False)
+                            _subp.run(['nvidia-smi','-i',str(_idx),'--reset-memory-clocks'], check=False)
+                            if self.logger:
+                                self.logger.info(f"[HOOK] Unlocked clocks via nvidia-smi for GPU {_idx}")
+                        except Exception as _smi_e:
+                            if self.logger:
+                                self.logger.debug(f"[HOOK] nvidia-smi unlock failed for GPU {_idx}: {_smi_e}")
+                    try:
+                        if _cnt > 0:
+                            _nv.nvmlShutdown()
+                    except Exception:
+                        pass
+                except Exception as _pre_unlock_err:
+                    if self.logger:
+                        self.logger.debug(f"[HOOK] Pre-unlock skipped: {_pre_unlock_err}")
+
             # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (bước 2: kiểm tra sẵn sàng nâng cao với cơ chế bỏ qua)
             if self.logger:
                 self.logger.info(f"🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID {pid} trước khi chuyển tiếp registry...)")

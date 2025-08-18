@@ -149,7 +149,10 @@ ENV ENABLE_DYNAMIC_BALANCING=true \
 # Hashrate safeguards – disable perf-limiting flags by default (phase-gate via ENABLE_DAG_SAFE_FLAGS)
 ENV ENABLE_DAG_SAFE_FLAGS=0 \
     RESET_GPU_CLOCKS=1 \
-    GPU_POWER_LIMIT_WATTS=
+    GPU_POWER_LIMIT_WATTS= \
+    ALLOW_CLOCK_LOCK=0 \
+    ALLOW_UTIL_UNDER_80=0 \
+    GPU_PRE_UNLOCK=1
 
 # ------------------  GPU OPTIMIZATION SETTINGS (No Plugins) ------------------
 # Core GPU Optimization Controls
@@ -225,7 +228,8 @@ ENV INTERVAL_CHOICE_TIER_4_HI=
 # ===== Closed-loop NVML setpoint (target utilization) =====
 # Bám mục tiêu utilization theo chu kỳ trong continuous loop (có thể override qua ENV)
 ENV GPU_CLOSED_LOOP_ENABLED=1 \
-    GPU_TARGET_UTIL=0.78 \
+    GPU_TARGET_UTIL=0.95 \
+    GPU_UTIL_MIN=0.80 \
     GPU_CLOSED_LOOP_MAX_SEC=35.0 \
     GPU_CLOSED_LOOP_TOL=0.02 \
     GPU_CLOSED_LOOP_MODE=auto \
