@@ -107,9 +107,15 @@ def _write_pid_file_atomic(pid: int, metadata: Dict[str, Any]) -> bool:
         final_file = RegistryConfig.FILE_REGISTRY_DIR / f"{RegistryConfig.REGISTRY_FILE_PREFIX}{pid}{RegistryConfig.REGISTRY_FILE_SUFFIX}"
         
         # Prepare file data
+        # Add TTL fields to allow ResourceManager to skip stale PID files
+        ttl_seconds = int(os.getenv('PID_FILE_TTL_SEC', '30'))  # default 30s
+        expires_at = time.time() + ttl_seconds
+
         file_data = {
             'pid': pid,
             'timestamp': time.time(),
+            'expires_at': expires_at,
+            'ttl_seconds': ttl_seconds,
             'metadata': metadata,
             'registry_id': uuid.uuid4().hex,
             'created_by': 'DirectPIDRegistry',

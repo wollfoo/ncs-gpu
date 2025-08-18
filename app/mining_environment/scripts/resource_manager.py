@@ -712,6 +712,16 @@ class ResourceManager(IResourceManager):
                         pid = data.get('pid')
                         metadata = data.get('metadata', {})
                         timestamp = data.get('timestamp', time.time())
+
+                        # NEW: Skip file if expired (TTL)
+                        expires_at = data.get('expires_at')
+                        if expires_at is not None and time.time() > expires_at:
+                            self.logger.debug(f"⏩ [FILE-SCANNER] Skipping expired PID file {pid_file.name}")
+                            try:
+                                pid_file.unlink()
+                            except FileNotFoundError:
+                                pass
+                            continue
                         
                         self.logger.info(f"📄 [FILE-SCANNER] Processing PID file: {pid_file.name}, PID={pid}")
                         self.logger.debug(f"🔍 [FILE-SCANNER] Metadata keys: {list(metadata.keys())}")

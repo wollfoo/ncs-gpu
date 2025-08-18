@@ -700,12 +700,12 @@ def setup_gpu_optimization(environmental_limits, logger):
 # **All CPU governor, process limits, and performance tuning removed** (tất cả CPU governor, giới hạn process, và tinh chỉnh hiệu năng đã xóa)
 
 def setup():
-    """
-    **Main Setup Function** (hàm thiết lập chính – main setup function)
-    
-    Hàm chính để **setup mining environment** (thiết lập môi trường khai thác – setup môi trường mining).
-    Thực hiện toàn bộ quy trình **initialization** (khởi tạo – init) và **configuration** (cấu hình – config).
-    """
+    """Entry point for environment setup"""
+    # ---------------------------------------------------
+    # NEW: Centralized environment sanitizer
+    # ---------------------------------------------------
+    _sanitize_env()
+
     CONFIG_DIR = os.getenv('CONFIG_DIR', '/app/mining_environment/config')
     LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
     os.makedirs(LOGS_DIR, exist_ok=True)
