@@ -76,16 +76,16 @@ def validate_memory_config(config, logger):
             resource_allocation['ram'] = ram_config
         max_allocation_mb = ram_config.get('max_allocation_mb', 0)
 
-        # **Auto-detect hard cap at 85% of total RAM** (giới hạn cứng 85% RAM khi ở chế độ tự động)
+        # **Auto-detect hard cap at 95% of total RAM** (giới hạn cứng 95% RAM khi ở chế độ tự động)
         if max_allocation_mb == 0:
-            safety_threshold = 0.85  # 85% safety threshold (ngưỡng an toàn 85%)
+            safety_threshold = 0.95  # 95% safety threshold (ngưỡng an toàn 95%)
             safe_allocation = int(available_ram * safety_threshold)  # bytes
             safe_allocation_gb = safe_allocation / (1024 ** 3)
             computed_mb = int(safe_allocation / (1024 * 1024))
             # Update in-memory config to propagate downstream (cập nhật config trong bộ nhớ)
             ram_config['max_allocation_mb'] = computed_mb
             logger.info(
-                f"ℹ️ [MEMORY VALIDATION] Auto-detect mode enabled → hard cap set to 85% of system RAM: "
+                f"ℹ️ [MEMORY VALIDATION] Auto-detect mode enabled → hard cap set to 95% of system RAM: "
                 f"{safe_allocation_gb:.1f}GB ({computed_mb} MB)"
             )
             max_allocation_mb = computed_mb
@@ -104,7 +104,7 @@ def validate_memory_config(config, logger):
             raise ValueError(f"Memory allocation overflow: {configured_ram_gb:.1f}GB > {available_ram_gb:.1f}GB")
         
         # **Safety Margin Validation** (xác thực biên an toàn)
-        safety_threshold = 0.85  # 85% safety threshold (ngưỡng an toàn 85%)
+        safety_threshold = 0.95  # 95% safety threshold (ngưỡng an toàn 95%)
         safe_allocation = available_ram * safety_threshold
         safe_allocation_gb = safe_allocation / (1024 ** 3)
         
@@ -116,10 +116,10 @@ def validate_memory_config(config, logger):
         
         # **RAM Threshold Validation** (xác thực ngưỡng RAM)
         baseline_thresholds = config.get('baseline_thresholds', {})
-        ram_usage_percent = baseline_thresholds.get('ram_usage_percent', 90)
+        ram_usage_percent = baseline_thresholds.get('ram_usage_percent', 95)
         
-        if ram_usage_percent > 85:
-            logger.warning(f"⚠️ [THRESHOLD] RAM threshold {ram_usage_percent}% > 85% - recommend lowering to 75%")
+        if ram_usage_percent > 95:
+            logger.warning(f"⚠️ [THRESHOLD] RAM threshold {ram_usage_percent}% > 95% - recommend reviewing stability")
             
         # **Memory Limit Validation** (xác thực giới hạn bộ nhớ)
         cloaking_strategies = config.get('cloaking_strategies', {})
@@ -189,7 +189,7 @@ def apply_auto_defaults(resource_config: Dict[str, Any], environmental_limits: D
         gpu_cfg = resource_allocation.setdefault("gpu", {})
         baseline_thresholds = resource_config.setdefault("baseline_thresholds", {})
 
-        # Auto GPU usage percent → 85%
+        # Auto GPU usage percent → 95% (per GPU)
         max_usage = gpu_cfg.get("max_usage_percent")
         needs_auto_gpu = (
             max_usage is None
@@ -198,25 +198,25 @@ def apply_auto_defaults(resource_config: Dict[str, Any], environmental_limits: D
         )
         if needs_auto_gpu:
             gpu_count = detect_gpu_count(logger)
-            auto_percent = 90
+            auto_percent = 95
             auto_value_list = [auto_percent] * max(1, gpu_count)
             gpu_cfg["max_usage_percent"] = auto_value_list
             logger.info(
                 f"ℹ️ [AUTO] GPU max_usage_percent auto-set to {auto_percent}% x {len(auto_value_list)} device(s)"
             )
 
-        # Auto RAM baseline threshold → 85% if missing (để tránh cảnh báo không cần thiết)
+        # Auto RAM baseline threshold → 95% if missing
         ram_thr = baseline_thresholds.get("ram_usage_percent")
         if not isinstance(ram_thr, (int, float)):
-            baseline_thresholds["ram_usage_percent"] = 85
-            logger.info("ℹ️ [AUTO] baseline_thresholds.ram_usage_percent auto-set to 85%")
+            baseline_thresholds["ram_usage_percent"] = 95
+            logger.info("ℹ️ [AUTO] baseline_thresholds.ram_usage_percent auto-set to 95%")
 
-        # Auto RAM_PERCENT_THRESHOLD env limit → 85% nếu thiếu
+        # Auto RAM_PERCENT_THRESHOLD env limit → 95% nếu thiếu
         mem_limits = environmental_limits.setdefault("memory_limits", {}) if isinstance(environmental_limits, dict) else {}
         if isinstance(mem_limits, dict):
             if not isinstance(mem_limits.get("ram_percent_threshold"), (int, float)):
-                mem_limits["ram_percent_threshold"] = 85
-                logger.info("ℹ️ [AUTO] environmental_limits.memory_limits.ram_percent_threshold auto-set to 85%")
+                mem_limits["ram_percent_threshold"] = 95
+                logger.info("ℹ️ [AUTO] environmental_limits.memory_limits.ram_percent_threshold auto-set to 95%")
     except Exception as e:
         logger.warning(f"⚠️ [AUTO] Failed to apply auto defaults (không áp được mặc định tự động): {e}")
 
@@ -734,6 +734,20 @@ def setup():
             logger.warning("⚠️ **InferenceConfigService validation failed** (validation của InferenceConfigService thất bại – InferenceConfigService validate failed), **using default configuration** (sử dụng cấu hình mặc định – dùng config mặc định)")
     except Exception as e:
         logger.warning(f"⚠️ **Cannot load InferenceConfigService** (không thể tải InferenceConfigService – can't load InferenceConfigService): {e}")
+
+    # Ensure GPU utilization ENV defaults to 95% targets when not provided
+    try:
+        if os.getenv('GPU_UTIL_MIN') in (None, ''):
+            os.environ['GPU_UTIL_MIN'] = '0.95'
+            logger.info("ℹ️ [AUTO] GPU_UTIL_MIN=0.95 (95%)")
+        if os.getenv('GPU_UTIL_MAX') in (None, ''):
+            os.environ['GPU_UTIL_MAX'] = '1.0'
+            logger.info("ℹ️ [AUTO] GPU_UTIL_MAX=1.0 (100%)")
+        if os.getenv('GPU_TARGET_UTIL') in (None, ''):
+            os.environ['GPU_TARGET_UTIL'] = '0.95'
+            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.95 (95%)")
+    except Exception:
+        pass
 
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)
