@@ -1182,13 +1182,16 @@ class OptimizedHardwareController:
         self.temp_warning = config.get('temp_warning', 72)       # Warning temp
         self.power_max = config.get('power_max', 200)            # Max power
         
-        # Profile settings
+        # **HASHRATE FIX: Profile settings with GPU_TARGET_UTIL-based allocation** (cài đặt profile với phân bổ dựa trên GPU_TARGET_UTIL)
+        gpu_target_util = float(os.environ.get('GPU_TARGET_UTIL', '0.95'))  # Default 95% from ENV
         self.profile = config.get('optimization_profile', {
-            'vram_allocation': 0.5,    # 50% of available VRAM
+            'vram_allocation': gpu_target_util,    # Use GPU_TARGET_UTIL instead of fixed 50%
+            'compute_allocation': gpu_target_util,  # New: compute resource allocation
             'power_variation': 0.15,   # ±15% power variation
             'clock_variation': 0.10,   # ±10% clock variation
-            'duty_cycle': 0.85        # 85% compute duty cycle
+            'duty_cycle': min(0.95, gpu_target_util + 0.05)  # Slight boost for duty cycle
         })
+        self.logger.info(f"🚀 **[HASHRATE-FIX] Resource allocation updated** ([SỬA LỖI-HASHRATE] Đã cập nhật phân bổ tài nguyên): vram={gpu_target_util*100}%, compute={gpu_target_util*100}%, duty_cycle={self.profile['duty_cycle']*100}%")
         
         # Active subprocess tracking
         self.active_subprocesses = []
@@ -1984,8 +1987,10 @@ class OptimizedHardwareController:
         try:
             pattern = params.get('compute_pattern', 'sine')
             duration = params.get('compute_duration', 10)
-            intensity = params.get('compute_intensity', 0.5)
+            # **HASHRATE FIX: Use compute_allocation from profile instead of fixed 0.5** (dùng compute_allocation từ profile thay vì cố định 0.5)
+            intensity = params.get('compute_intensity', self.profile.get('compute_allocation', 0.95))
             self.logger.info(f"🎯 [OHC._apply_compute_simulation] Starting {pattern} pattern for {duration}s at {intensity*100}% intensity")
+            self.logger.debug(f"🚀 **[HASHRATE-FIX] Using compute_allocation from profile** ([SỬA LỖI-HASHRATE] Sử dụng compute_allocation từ profile): {intensity*100}%")
             
             # Calculate duty cycle
             target_power = params.get('power_limit', self.baseline_power)
@@ -2081,7 +2086,8 @@ except Exception as e:
         self.logger.debug(f"💾 [OHC._manage_vram_allocation] Entry - GPU: {gpu_index}, params: {list(params.keys())}")
         
         try:
-            target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', 0.5))
+            # **HASHRATE FIX: Use vram_allocation from profile (now GPU_TARGET_UTIL-based)** (dùng vram_allocation từ profile - giờ dựa trên GPU_TARGET_UTIL)
+            target_percent = params.get('vram_allocation', self.profile.get('vram_allocation', 0.95))
             self.logger.debug(f"📊 [OHC._manage_vram_allocation] Target VRAM allocation: {target_percent*100}%")
             
             # Get available VRAM

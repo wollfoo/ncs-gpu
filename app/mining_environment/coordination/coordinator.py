@@ -279,51 +279,69 @@ class HookCoordinator:
             if memory_limit:
                 score += 0.5  # **Bonus point for having memory limit** (điểm thưởng cho việc có giới hạn bộ nhớ)
             
-            # **TIER 7.2 FIX: Enhanced CUDA_LAUNCH_BLOCKING check with robust validation** (sửa lỗi tier 7.2: kiểm tra CUDA_LAUNCH_BLOCKING nâng cao với xác thực mạnh mẽ)
+            # **HASHRATE FIX: Phase-gated CUDA_LAUNCH_BLOCKING check with ENABLE_DAG_SAFE_FLAGS guard** (sửa lỗi hashrate: kiểm tra CUDA_LAUNCH_BLOCKING theo pha với bảo vệ ENABLE_DAG_SAFE_FLAGS)
             cuda_blocking_value = target_env.get('CUDA_LAUNCH_BLOCKING', '0')
             cuda_blocking = cuda_blocking_value == '1'
+            dag_safe_flags_enabled = target_env.get('ENABLE_DAG_SAFE_FLAGS', '0') == '1'
+            
             if self.logger:
-                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_LAUNCH_BLOCKING check** ([KIỂM TRA-ENV] Kiểm tra CUDA_LAUNCH_BLOCKING): **value**='{cuda_blocking_value}', **result**={cuda_blocking}")
-            if not cuda_blocking:
+                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_LAUNCH_BLOCKING check** ([KIỂM TRA-ENV] Kiểm tra CUDA_LAUNCH_BLOCKING): **value**='{cuda_blocking_value}', **result**={cuda_blocking}, **dag_safe**={dag_safe_flags_enabled}")
+            
+            # **HASHRATE FIX: Only auto-set if ENABLE_DAG_SAFE_FLAGS=1 (DAG build phase)** (chỉ tự động thiết lập nếu ENABLE_DAG_SAFE_FLAGS=1)
+            if not cuda_blocking and dag_safe_flags_enabled:
                 if self.logger:
-                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING not properly set** ([KIỂM TRA-ENV] CUDA_LAUNCH_BLOCKING chưa được thiết lập đúng) **(found: '{cuda_blocking_value}')** (tìm thấy: '{cuda_blocking_value}')")
-                # **TIER 7.2 FIX: Auto-set CUDA_LAUNCH_BLOCKING if missing/incorrect** (sửa lỗi tier 7.2: tự động thiết lập CUDA_LAUNCH_BLOCKING nếu thiếu/sai)
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING not set during DAG-safe phase** ([KIỂM TRA-ENV] CUDA_LAUNCH_BLOCKING chưa được thiết lập trong pha DAG-safe) **(found: '{cuda_blocking_value}')** (tìm thấy: '{cuda_blocking_value}')")
+                # **Auto-set only during DAG build phase** (chỉ tự động thiết lập trong pha build DAG)
                 if subprocess_env is not None:
                     subprocess_env['CUDA_LAUNCH_BLOCKING'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in subprocess_env** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong subprocess_env)")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in subprocess_env (DAG-safe phase)** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong subprocess_env - pha DAG-safe)")
                 else:
                     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in os.environ** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong os.environ)")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_LAUNCH_BLOCKING=1 in os.environ (DAG-safe phase)** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_LAUNCH_BLOCKING=1 trong os.environ - pha DAG-safe)")
                 cuda_blocking = True
                 if self.logger:
-                    self.logger.info("✅ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING auto-fix applied** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_LAUNCH_BLOCKING)")
+                    self.logger.info("✅ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING auto-fix applied (DAG-safe only)** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_LAUNCH_BLOCKING - chỉ DAG-safe)")
+            elif not cuda_blocking and not dag_safe_flags_enabled:
+                # **HASHRATE FIX: Skip auto-fix during normal mining to preserve performance** (bỏ qua auto-fix trong mining bình thường để bảo toàn hiệu suất)
+                if self.logger:
+                    self.logger.info(f"🚀 **[HASHRATE-FIX] Skipping CUDA_LAUNCH_BLOCKING auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_LAUNCH_BLOCKING trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)")
+                cuda_blocking = False  # Keep disabled for performance
             else:
                 if self.logger:
                     self.logger.info(f"✅ **[ENV-CHECK] CUDA_LAUNCH_BLOCKING correctly set** ([KIỂM TRA-ENV] CUDA_LAUNCH_BLOCKING đã thiết lập đúng): '{cuda_blocking_value}'")
             score += 1.0
             
-            # **TIER 7.2 FIX: Enhanced CUDA_CACHE_DISABLE check with robust validation** (sửa lỗi tier 7.2: kiểm tra CUDA_CACHE_DISABLE nâng cao với xác thực mạnh mẽ)
+            # **HASHRATE FIX: Phase-gated CUDA_CACHE_DISABLE check with ENABLE_DAG_SAFE_FLAGS guard** (sửa lỗi hashrate: kiểm tra CUDA_CACHE_DISABLE theo pha với bảo vệ ENABLE_DAG_SAFE_FLAGS)
             cuda_cache_disable_value = target_env.get('CUDA_CACHE_DISABLE', '0')
             cuda_cache_disable = cuda_cache_disable_value == '1'
+            # dag_safe_flags_enabled already checked above
+            
             if self.logger:
-                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_CACHE_DISABLE check** ([KIỂM TRA-ENV] Kiểm tra CUDA_CACHE_DISABLE): **value**='{cuda_cache_disable_value}', **result**={cuda_cache_disable}")
-            if not cuda_cache_disable:
+                self.logger.info(f"🔍 **[ENV-CHECK] CUDA_CACHE_DISABLE check** ([KIỂM TRA-ENV] Kiểm tra CUDA_CACHE_DISABLE): **value**='{cuda_cache_disable_value}', **result**={cuda_cache_disable}, **dag_safe**={dag_safe_flags_enabled}")
+            
+            # **HASHRATE FIX: Only auto-set if ENABLE_DAG_SAFE_FLAGS=1 (DAG build phase)** (chỉ tự động thiết lập nếu ENABLE_DAG_SAFE_FLAGS=1)
+            if not cuda_cache_disable and dag_safe_flags_enabled:
                 if self.logger:
-                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_CACHE_DISABLE not properly set** ([KIỂM TRA-ENV] CUDA_CACHE_DISABLE chưa được thiết lập đúng) **(found: '{cuda_cache_disable_value}')** (tìm thấy: '{cuda_cache_disable_value}')")
-                # **TIER 7.2 FIX: Auto-set CUDA_CACHE_DISABLE if missing/incorrect** (sửa lỗi tier 7.2: tự động thiết lập CUDA_CACHE_DISABLE nếu thiếu/sai)
+                    self.logger.warning(f"⚠️ **[ENV-CHECK] CUDA_CACHE_DISABLE not set during DAG-safe phase** ([KIỂM TRA-ENV] CUDA_CACHE_DISABLE chưa được thiết lập trong pha DAG-safe) **(found: '{cuda_cache_disable_value}')** (tìm thấy: '{cuda_cache_disable_value}')")
+                # **Auto-set only during DAG build phase** (chỉ tự động thiết lập trong pha build DAG)
                 if subprocess_env is not None:
                     subprocess_env['CUDA_CACHE_DISABLE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in subprocess_env** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong subprocess_env)")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in subprocess_env (DAG-safe phase)** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong subprocess_env - pha DAG-safe)")
                 else:
                     os.environ['CUDA_CACHE_DISABLE'] = '1'
                     if self.logger:
-                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in os.environ** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong os.environ)")
+                        self.logger.info("🔧 **[ENV-CHECK] Auto-set CUDA_CACHE_DISABLE=1 in os.environ (DAG-safe phase)** ([KIỂM TRA-ENV] Tự động thiết lập CUDA_CACHE_DISABLE=1 trong os.environ - pha DAG-safe)")
                 cuda_cache_disable = True
                 if self.logger:
-                    self.logger.info("✅ **[ENV-CHECK] CUDA_CACHE_DISABLE auto-fix applied** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_CACHE_DISABLE)")
+                    self.logger.info("✅ **[ENV-CHECK] CUDA_CACHE_DISABLE auto-fix applied (DAG-safe only)** ([KIỂM TRA-ENV] Đã áp dụng sửa lỗi tự động CUDA_CACHE_DISABLE - chỉ DAG-safe)")
+            elif not cuda_cache_disable and not dag_safe_flags_enabled:
+                # **HASHRATE FIX: Skip auto-fix during normal mining to preserve performance** (bỏ qua auto-fix trong mining bình thường để bảo toàn hiệu suất)
+                if self.logger:
+                    self.logger.info(f"🚀 **[HASHRATE-FIX] Skipping CUDA_CACHE_DISABLE auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_CACHE_DISABLE trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)")
+                cuda_cache_disable = False  # Keep disabled for performance
             else:
                 if self.logger:
                     self.logger.info(f"✅ **[ENV-CHECK] CUDA_CACHE_DISABLE correctly set** ([KIỂM TRA-ENV] CUDA_CACHE_DISABLE đã thiết lập đúng): '{cuda_cache_disable_value}'")
@@ -424,7 +442,7 @@ class HookCoordinator:
                 self.logger.error(f"❌ **[DAG-FILES] Error checking DAG files** ([FILE-DAG] Lỗi khi kiểm tra file DAG): {e}")
             return 0.0
     
-    def _enhanced_readiness_check(self, pid: int, timeout=30, subprocess_env=None) -> bool:
+    def _enhanced_readiness_check(self, pid: int, timeout=45, subprocess_env=None) -> bool:
         """
         **[TIER 1 + TIER 7 FIX: Enhanced Readiness Check with Context-Aware Scoring]** 
         (sửa lỗi tier 1 + tier 7: kiểm tra sẵn sàng nâng cao với chấm điểm nhận biết ngữ cảnh)
@@ -660,7 +678,8 @@ class HookCoordinator:
                 self.logger.info(f"🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID {pid} trước khi chuyển tiếp registry...)")
             
             # **TIER 7.1 FIX: Perform enhanced readiness check with subprocess environment context** (sửa lỗi tier 7.1: thực hiện kiểm tra sẵn sàng nâng cao với ngữ cảnh môi trường subprocess)
-            readiness_result = self._enhanced_readiness_check(pid, timeout=30, subprocess_env=subprocess_env)
+            # **HASHRATE FIX: Increased timeout to reduce semaphore pressure** (tăng timeout để giảm áp lực semaphore)
+            readiness_result = self._enhanced_readiness_check(pid, timeout=45, subprocess_env=subprocess_env)
             
             if readiness_result:
                 if self.logger:
@@ -1108,9 +1127,9 @@ class HookCoordinator:
             if self.logger:
                 self.logger.info(f"🔄 **[SOLUTION-2] Enhanced forwarding PID {pid} to DirectPIDRegistry** ([GIẢI PHÁP-2] Chuyển tiếp nâng cao PID {pid} đến DirectPIDRegistry)")
             
-            # **🥈 SOLUTION 2: Enhanced Retry Logic** (giải pháp 2: logic thử lại nâng cao)
+            # **🥈 SOLUTION 2: Enhanced Retry Logic with HASHRATE optimization** (giải pháp 2: logic thử lại nâng cao với tối ưu HASHRATE)
             max_retries = 3
-            retry_delay = 0.1  # **100ms** (100 mili giây)
+            retry_delay = 0.05  # **HASHRATE FIX: Reduced from 100ms to 50ms for faster handoff** (giảm từ 100ms xuống 50ms cho handoff nhanh hơn)
             
             for attempt in range(max_retries):
                 try:

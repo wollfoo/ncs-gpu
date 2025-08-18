@@ -757,8 +757,11 @@ def setup():
             pass
 
     # Coordination robustness
-    _set_default_env('COORD_MAX_RETRIES', 5)        # số lần retry lấy tài nguyên GPU
-    _set_default_env('COORD_INITIAL_DELAY', 0.5)    # độ trễ ban đầu (giây)
+    _set_default_env('COORD_MAX_RETRIES', 3)        # số lần retry lấy tài nguyên GPU
+    # **HASHRATE FIX: Optimized coordination delays** (tối ưu độ trễ coordination)
+    _set_default_env('COORD_INITIAL_DELAY', 0.25)   # Reduced from 0.5s to 0.25s for faster startup
+    _set_default_env('COORD_SEMAPHORE_TIMEOUT', 60) # Increased semaphore timeout to reduce bottlenecks
+    _set_default_env('COORD_RETRY_DELAY', 0.05)     # Fast retry for handoff operations
     _set_default_env('COORD_BACKOFF', 1.5)          # hệ số backoff
     _set_default_env('COORD_OPTIONAL', 'true')      # cho phép tiếp tục tối ưu nếu coordination thất bại
     _set_default_env('COORD_GPU_MEMORY_PCT', '0.15')  # xin 15% GPU memory (chấp nhận 0.15 hoặc 15)
