@@ -573,9 +573,16 @@ class GPUOptimizationOrchestrator:
         # Auto-start continuous loop if enabled and not running (delegate to dynamic loop)
         try:
             if self.config.get('continuous_optimization', False):
+                # If optimize_all_gpus flag is set (or ENV), start loops for all GPUs
+                optimize_all = bool(self.config.get('optimize_all_gpus', False)) or (str(os.getenv('OPTIMIZE_ALL_GPUS', '0')).lower() in ('1','true','yes'))
+                if optimize_all:
+                    target_gpu_index = None  # signal to iterate all GPUs
+                else:
+                    target_gpu_index = gpu_index
+
                 if not hasattr(self, '_continuous_thread') or self._continuous_thread is None or not self._continuous_thread.is_alive():
                     # Delegate to dynamic-loop implementation (supports tiers/hysteresis/jitter)
-                    self.start_continuous_optimization(pid=pid, gpu_index=gpu_index, strategies=strategies)
+                    self.start_continuous_optimization(pid=pid, gpu_index=target_gpu_index, strategies=strategies)
         except Exception as _e:
             self.logger.warning(f"⚠️ Unable to start continuous optimization loop: {_e}")
 

@@ -1504,7 +1504,7 @@ class OptimizedHardwareController:
                 self.logger.error("❌ [OHC.optimize_for_pid] Missing method _get_strategy_params. Please implement strategy parameter mapper.")
                 results['error'] = "Missing _get_strategy_params"
                 return results
-            strategy_params = self._get_strategy_params(strategy)
+            strategy_params = self._get_strategy_params(strategy, gpu_index)
             self.logger.debug(f"🧩 [OHC.optimize_for_pid] Strategy params (pre-normalize): {list(strategy_params.keys())}")
             strategy_params['gpu_index'] = gpu_index
             
@@ -1852,16 +1852,55 @@ class OptimizedHardwareController:
                     else:
                         self.logger.info(f"✅ [OHC._apply_nvml_controls] Power limit set to {power_w}W")
             
-            # Clock speeds
+            # Clock speeds (graceful handling)
             if 'sm_clock' in params and 'mem_clock' in params:
-                sm_mhz = params['sm_clock']
-                mem_mhz = params['mem_clock']
-                self.logger.debug(f"⏱️ [OHC._apply_nvml_controls] Setting clocks - SM: {sm_mhz}MHz, Mem: {mem_mhz}MHz...")
-                if not self.gpu_manager.set_gpu_clocks(pid, gpu_index, sm_mhz, mem_mhz):
-                    self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set clocks")
-                    success = False
-                else:
-                    self.logger.info(f"✅ [OHC._apply_nvml_controls] Clocks set - SM: {sm_mhz}MHz, Mem: {mem_mhz}MHz")
+                try:
+                    # Allow disabling clock tuning via environment
+                    disable_clk = str(os.getenv('DISABLE_CLOCK_TUNING', '0')).lower() in ('1', 'true', 'yes')
+                    if disable_clk:
+                        self.logger.info("⏭️ [OHC._apply_nvml_controls] Clock tuning disabled via DISABLE_CLOCK_TUNING; skipping clocks")
+                    else:
+                        requested_sm = int(params['sm_clock'])
+                        requested_mem = int(params['mem_clock'])
+                        self.logger.debug(f"⏱️ [OHC._apply_nvml_controls] Setting clocks (requested) - SM: {requested_sm}MHz, Mem: {requested_mem}MHz...")
+
+                        handle = self.gpu_manager.get_handle(gpu_index)
+                        if not handle:
+                            self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] No GPU handle for index {gpu_index}; skipping clock tuning")
+                        else:
+                            # Query supported memory clocks
+                            try:
+                                supported_mems = list(pynvml.nvmlDeviceGetSupportedMemoryClocks(handle))
+                            except Exception as e_mem:
+                                supported_mems = []
+                                self.logger.debug(f"[OHC._apply_nvml_controls] Could not read supported memory clocks: {e_mem}")
+
+                            if not supported_mems:
+                                self.logger.info("ℹ️ [OHC._apply_nvml_controls] Supported memory clocks unavailable; skipping clock tuning")
+                            else:
+                                # Pick nearest supported memory clock
+                                chosen_mem = min(supported_mems, key=lambda v: abs(int(v) - requested_mem))
+                                # For the chosen memory clock, query supported SM clocks
+                                try:
+                                    supported_sms = list(pynvml.nvmlDeviceGetSupportedGraphicsClocks(handle, int(chosen_mem)))
+                                except Exception as e_sm:
+                                    supported_sms = []
+                                    self.logger.debug(f"[OHC._apply_nvml_controls] Could not read supported SM clocks for mem {chosen_mem}: {e_sm}")
+
+                                if not supported_sms:
+                                    self.logger.info(f"ℹ️ [OHC._apply_nvml_controls] Supported SM clocks unavailable for mem {chosen_mem}; skipping clock tuning")
+                                else:
+                                    chosen_sm = min(supported_sms, key=lambda v: abs(int(v) - requested_sm))
+                                    if int(chosen_mem) != requested_mem or int(chosen_sm) != requested_sm:
+                                        self.logger.info(f"🔧 [OHC._apply_nvml_controls] Adjusting to supported clocks: SM {requested_sm}→{chosen_sm} MHz, Mem {requested_mem}→{chosen_mem} MHz")
+
+                                    if not self.gpu_manager.set_gpu_clocks(pid, gpu_index, int(chosen_sm), int(chosen_mem)):
+                                        self.logger.warning("⚠️ [OHC._apply_nvml_controls] Failed to set clocks (supported-adjusted); continuing without clocks")
+                                    else:
+                                        self.logger.info(f"✅ [OHC._apply_nvml_controls] Clocks set - SM: {int(chosen_sm)}MHz, Mem: {int(chosen_mem)}MHz")
+                except Exception as e:
+                    # Do not fail the whole optimization due to clock issues
+                    self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Clock tuning skipped due to error: {e}")
             
             # Temperature control
             if 'temperature' in params:
@@ -1934,7 +1973,7 @@ class OptimizedHardwareController:
         except Exception:
             return params
 
-    def _get_strategy_params(self, strategy: Any) -> Dict[str, Any]:
+    def _get_strategy_params(self, strategy: Any, gpu_index: int) -> Dict[str, Any]:
         """
         **Strategy Parameter Builder** (hàm dựng tham số chiến lược)
         Trả về dict tham số theo chiến lược, dùng profile và baseline.
@@ -1954,7 +1993,7 @@ class OptimizedHardwareController:
             params['power_limit'] = target_power
             # Clocks: tăng nhẹ theo biến thể profile
             try:
-                handle = self.gpu_manager.get_handle(0)  # chỉ để tham chiếu clock hiện tại
+                handle = self.gpu_manager.get_handle(gpu_index)  # dùng đúng GPU đích để tham chiếu clock hiện tại
                 if handle:
                     current_sm = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
                     params['sm_clock'] = int(min(1245, current_sm * (1.0 + clock_var * 0.2)))
