@@ -795,11 +795,21 @@ class GPUOptimizationOrchestrator:
             delay = initial_delay
 
             for attempt in range(1, max_retries + 1):
-                # Request compute resources
+                # Request compute resources (allow override via COORD_GPU_COMPUTE_PCT; accepts 0..1 or 0..100)
+                try:
+                    _compute_env = os.getenv('COORD_GPU_COMPUTE_PCT')
+                    if _compute_env is not None:
+                        _compute_val = float(_compute_env)
+                        compute_amount_pct = _compute_val * 100.0 if _compute_val <= 1 else _compute_val
+                    else:
+                        compute_amount_pct = 100.0  # default: full compute for single-process stability
+                except Exception:
+                    compute_amount_pct = 100.0
+
                 compute_acquired = self.coordinator.request_resource(
                     gpu_index,
                     ResourceType.GPU_COMPUTE,
-                    amount=50.0,
+                    amount=compute_amount_pct,
                     priority=7
                 )
 

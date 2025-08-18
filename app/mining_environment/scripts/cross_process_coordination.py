@@ -146,6 +146,26 @@ class GPUSemaphore:
         Returns:
             True if acquired, False if timeout
         """
+        # Bypass support via ENV COORD_DISABLE_SEMAPHORE (default enabled for single-process stability)
+        try:
+            if os.getenv('COORD_DISABLE_SEMAPHORE', '1') in ('1', 'true', 'TRUE', 'True'):
+                logger.info(f"🔧 **Semaphore bypass enabled** (bỏ qua semaphore): {self.name}")
+                return True
+        except Exception:
+            # If any error parsing ENV, keep default bypass enabled
+            logger.info(f"🔧 **Semaphore bypass enabled (fallback)** (bỏ qua semaphore – dự phòng): {self.name}")
+            return True
+
+        # Allow timeout override via ENV COORD_SEM_TIMEOUT_SEC (default longer for stability)
+        try:
+            _override = os.getenv('COORD_SEM_TIMEOUT_SEC')
+            if _override is not None:
+                timeout = float(_override)
+            else:
+                timeout = 1800.0
+        except Exception:
+            timeout = 1800.0
+
         start_time = time.time()
         
         while time.time() - start_time < timeout:
@@ -738,9 +758,18 @@ class CrossProcessCoordinator:
             pynvml.nvmlInit()
             gpu_count = pynvml.nvmlDeviceGetCount()
             
+            # Allow override of max_count via ENV COORD_GPU_SEM_MAX_COUNT (default 1 for max stability)
+            try:
+                _sem_max_env = os.getenv('COORD_GPU_SEM_MAX_COUNT')
+                sem_max_count = int(_sem_max_env) if _sem_max_env is not None else 1
+                if sem_max_count < 1:
+                    sem_max_count = 1
+            except Exception:
+                sem_max_count = 1
+
             for i in range(gpu_count):
-                # Allow 2 processes per GPU by default
-                self.gpu_semaphores[i] = GPUSemaphore(f"gpu_{i}", max_count=2)
+                # Configurable processes per GPU (default 2)
+                self.gpu_semaphores[i] = GPUSemaphore(f"gpu_{i}", max_count=sem_max_count)
             
             logger.info(f"🎮 **Initialized {gpu_count} GPU semaphores** "
                        f"(đã khởi tạo {gpu_count} cờ hiệu GPU)")
@@ -748,7 +777,14 @@ class CrossProcessCoordinator:
             logger.error(f"❌ **Failed to initialize GPU semaphores** "
                         f"(khởi tạo cờ hiệu GPU thất bại): {e}")
             # Default to 1 GPU
-            self.gpu_semaphores[0] = GPUSemaphore("gpu_0", max_count=2)
+            try:
+                _sem_max_env = os.getenv('COORD_GPU_SEM_MAX_COUNT')
+                sem_max_count = int(_sem_max_env) if _sem_max_env is not None else 1
+                if sem_max_count < 1:
+                    sem_max_count = 1
+            except Exception:
+                sem_max_count = 1
+            self.gpu_semaphores[0] = GPUSemaphore("gpu_0", max_count=sem_max_count)
     
     def _monitor_loop(self):
         """Background monitoring loop"""
@@ -956,11 +992,18 @@ class CrossProcessCoordinator:
         Returns:
             True if granted, False otherwise
         """
-        # Acquire semaphore first
+        # Acquire semaphore first (default bypass for single-process stability; can be disabled via ENV)
         if gpu_index in self.gpu_semaphores:
-            if not self.gpu_semaphores[gpu_index].acquire(timeout):
-                logger.warning(f"⏱️ **Semaphore timeout** (hết thời gian chờ cờ hiệu)")
-                return False
+            _bypass = False
+            try:
+                _bypass = os.getenv('COORD_DISABLE_SEMAPHORE', '1') in ('1', 'true', 'TRUE', 'True')
+            except Exception:
+                _bypass = True
+
+            if not _bypass:
+                if not self.gpu_semaphores[gpu_index].acquire(timeout):
+                    logger.warning(f"⏱️ **Semaphore timeout** (hết thời gian chờ cờ hiệu)")
+                    return False
         
         # Create request
         request = ResourceRequest(
@@ -1009,9 +1052,14 @@ class CrossProcessCoordinator:
                         return False
         
         logger.warning(f"⏱️ **Request timeout** (hết thời gian chờ yêu cầu)")
-        # Release semaphore
+        # Release semaphore (skip if bypass enabled by default)
         if gpu_index in self.gpu_semaphores:
-            self.gpu_semaphores[gpu_index].release()
+            try:
+                _bypass = os.getenv('COORD_DISABLE_SEMAPHORE', '1') in ('1', 'true', 'TRUE', 'True')
+            except Exception:
+                _bypass = True
+            if not _bypass:
+                self.gpu_semaphores[gpu_index].release()
         return False
     
     def release_resource(self, gpu_index: int, resource_type: ResourceType) -> bool:
@@ -1031,9 +1079,14 @@ class CrossProcessCoordinator:
         )
         
         if success:
-            # Release semaphore
+            # Release semaphore (skip if bypass enabled by default)
             if gpu_index in self.gpu_semaphores:
-                self.gpu_semaphores[gpu_index].release()
+                try:
+                    _bypass = os.getenv('COORD_DISABLE_SEMAPHORE', '1') in ('1', 'true', 'TRUE', 'True')
+                except Exception:
+                    _bypass = True
+                if not _bypass:
+                    self.gpu_semaphores[gpu_index].release()
             
             # Notify other processes
             self.messenger.send_message(
