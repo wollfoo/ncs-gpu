@@ -8,7 +8,6 @@
 import os
 import sys
 import json
-import time
 import locale
 import shutil
 import logging
@@ -318,22 +317,8 @@ def setup_environment_variables(environmental_limits, logger):
             logger.warning("⚠️ **Invalid or missing ram_percent_threshold** (`ram_percent_threshold` không hợp lệ hoặc không có trong cấu hình – thiếu hoặc sai ngưỡng RAM).")
 
         # **gpu_optimization** (tối ưu hóa GPU – GPU optimization)
-        gpu_optimization = environmental_limits.get('gpu_optimization', {})
-        gpu_util = gpu_optimization.get('gpu_utilization_percent_optimal', {})
-        gpu_util_min = gpu_util.get('min')
-        gpu_util_max = gpu_util.get('max')
-        
-        if isinstance(gpu_util_min, (int, float)) and isinstance(gpu_util_max, (int, float)):
-            if 0 <= gpu_util_min < gpu_util_max <= 100:
-                os.environ['GPU_UTIL_MIN'] = str(gpu_util_min)
-                os.environ['GPU_UTIL_MAX'] = str(gpu_util_max)
-                logger.info(f"✅ **Environment variables set** (đã đặt biến môi trường – env vars đã cấu hình) GPU_UTIL_MIN: {gpu_util_min}%, GPU_UTIL_MAX: {gpu_util_max}%")
-            else:
-                logger.error("❌ **Invalid GPU utilization values** (giá trị GPU utilization không hợp lệ – sai ngưỡng sử dụng GPU) (0 <= min < max <= 100).")
-                sys.exit(1)
-        else:
-            logger.error("❌ **Missing or invalid GPU utilization thresholds** (thiếu hoặc sai định dạng ngưỡng GPU – không có hoặc sai format) (min, max).")
-            sys.exit(1)
+        # Decoupled: không xuất GPU_UTIL_MIN/MAX từ cấu hình nữa để loại bỏ phụ thuộc
+        logger.info("ℹ️ [CONFIG] Skipping GPU utilization env export from configuration (bỏ xuất env GPU utilization từ cấu hình)")
 
     except Exception as e:
         logger.error(f"❌ **Environment variable setup error** (lỗi khi đặt biến môi trường – lỗi cấu hình env var): {e}")
@@ -546,13 +531,15 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         logger.info("✅ **CPU configuration skipped** (bỏ qua cấu hình CPU – skip CPU config) - **GPU-only mode enabled** (chế độ chỉ GPU đã bật – GPU-only mode ON)")
 
         # 4. **Check GPU Usage Percent Max** (kiểm tra phần trăm sử dụng GPU tối đa – validate max GPU usage)
-        gpu_usage_max_percent = resource_config.get('resource_allocation', {}).get('gpu', {}).get('max_usage_percent')
-        if isinstance(gpu_usage_max_percent, list):
-            for value in gpu_usage_max_percent:
-                if not validate_threshold(value, 1, 100, "gpu_usage_max_percent (list element)"):
-                    sys.exit(1)
-        elif not validate_threshold(gpu_usage_max_percent, 1, 100, "gpu_usage_max_percent"):
+        gpu_usage_max_percent_raw = resource_config.get('resource_allocation', {}).get('gpu', {}).get('max_usage_percent')
+        normalized_gpu_usage_list = normalize_max_usage_percent(gpu_usage_max_percent_raw, logger)
+        if not normalized_gpu_usage_list:
+            logger.error("❌ **gpu_usage_max_percent invalid or empty after normalization** (gpu_usage_max_percent không hợp lệ hoặc rỗng sau khi chuẩn hóa).")
             sys.exit(1)
+        else:
+            # Optional: write back normalized list to config để downstream dùng thống nhất
+            resource_config.setdefault('resource_allocation', {}).setdefault('gpu', {})['max_usage_percent'] = normalized_gpu_usage_list
+            logger.info(f"✅ **GPU max_usage_percent normalized** (chuẩn hóa max_usage_percent GPU): {normalized_gpu_usage_list}")
 
         # 5. **Check GPU Utilization Percent Optimal** (kiểm tra phần trăm sử dụng GPU tối ưu – validate optimal GPU utilization)
         gpu_optimization = environmental_limits.get('gpu_optimization', {}).get('gpu_utilization_percent_optimal', {})
@@ -667,15 +654,14 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         gpu_util = environmental_limits.get('gpu_optimization', {}).get('gpu_utilization_percent_optimal', {})
         gpu_util_min = gpu_util.get('min')
         gpu_util_max = gpu_util.get('max')
-        
-        # **Check type (int/float) before comparison** (kiểm tra kiểu (int/float) trước khi so sánh – validate type first)
-        if (not isinstance(gpu_util_min, (int, float)) or 
-            not isinstance(gpu_util_max, (int, float)) or 
-            not (0 <= gpu_util_min < gpu_util_max <= 100)):
-            logger.error("❌ **Invalid GPU utilization (min, max) values** (giá trị GPU utilization (min, max) không hợp lệ – sai giá trị) **or not numbers** (hoặc không phải số). (0 <= min < max <= 100).")
+        # Single source of truth: validate ở đây, các nơi khác chỉ export env
+        if not (validate_threshold(gpu_util_min, 0, 100, "gpu_util_min") and
+                validate_threshold(gpu_util_max, 0, 100, "gpu_util_max")):
             sys.exit(1)
-        else:
-            logger.info(f"✅ **Optimal GPU utilization limits** (giới hạn tối ưu GPU utilization – ngưỡng GPU sử dụng tối ưu): min={gpu_util_min}%, max={gpu_util_max}%")
+        if gpu_util_min >= gpu_util_max:
+            logger.error("❌ **gpu_util_min must be less than gpu_util_max** (gpu_util_min phải nhỏ hơn gpu_util_max – min < max).")
+            sys.exit(1)
+        logger.info(f"✅ **Optimal GPU utilization limits** (giới hạn tối ưu GPU utilization – ngưỡng GPU sử dụng tối ưu): min={gpu_util_min}%, max={gpu_util_max}%")
 
         logger.info("✅ **Configuration files fully validated** (các tệp cấu hình đã được xác thực đầy đủ – config files validated OK).")
     except Exception as e:
@@ -693,7 +679,8 @@ def setup_gpu_optimization(environmental_limits, logger):
         environmental_limits: **Environmental limits dict** (từ điển giới hạn môi trường)
         logger: **Logger instance** (thể hiện logger)
     """
-    logger.info("ℹ️ [SETUP] GPU optimization orchestration is handled by ResourceManager; skipping in setup_env.py")
+    # Info retained once tại điểm kết thúc setup(); không cần lặp lại ở đây
+    logger.debug("ℹ️ [SETUP] GPU optimization orchestration handled by ResourceManager (debug note)")
     return
 
 # ✅ **CPU OPTIMIZATIONS REMOVED** (tối ưu hóa CPU đã xóa) - **Function eliminated for GPU-only mode** (hàm đã loại bỏ cho chế độ chỉ GPU)
@@ -804,7 +791,20 @@ def setup():
 
     # Closed-loop defaults (enable and tune for stability) – Inference default profile
     _force_env('GPU_CLOSED_LOOP_ENABLED', '1')
-    _force_env('GPU_TARGET_UTIL', '0.70')
+    _force_env('GPU_TARGET_UTIL', '0.80')
+    # Ensure target within [MIN, MAX] fixed window (đảm bảo target nằm trong khoảng cố định)
+    try:
+        tgt = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
+        lo = float(os.getenv('GPU_UTIL_MIN', '0.50'))
+        hi = float(os.getenv('GPU_UTIL_MAX', '0.90'))
+        if tgt < lo:
+            os.environ['GPU_TARGET_UTIL'] = f"{lo:.2f}"
+            logger.info(f"ℹ️ [ALIGN] GPU_TARGET_UTIL raised to lower bound: {lo:.2f}")
+        elif tgt > hi:
+            os.environ['GPU_TARGET_UTIL'] = f"{hi:.2f}"
+            logger.info(f"ℹ️ [ALIGN] GPU_TARGET_UTIL lowered to upper bound: {hi:.2f}")
+    except Exception:
+        pass
     _force_env('GPU_CLOSED_LOOP_STEP_W', '5')
     _force_env('GPU_CLOSED_LOOP_STEP_CLK', '15')
     _force_env('GPU_CLOSED_LOOP_TOL', '0.02')
@@ -847,17 +847,11 @@ def setup():
     except Exception as e:
         logger.warning(f"⚠️ **Cannot load InferenceConfigService** (không thể tải InferenceConfigService – can't load InferenceConfigService): {e}")
 
-    # Ensure GPU utilization ENV defaults to Inference profile (min 40%, max 90%, target 70%) when not provided
+    # Enforce fixed GPU utilization window independent of configuration (áp cứng không phụ thuộc cấu hình)
     try:
-        if os.getenv('GPU_UTIL_MIN') in (None, ''):
-            os.environ['GPU_UTIL_MIN'] = '0.40'
-            logger.info("ℹ️ [AUTO] GPU_UTIL_MIN=0.40 (40%)")
-        if os.getenv('GPU_UTIL_MAX') in (None, ''):
-            os.environ['GPU_UTIL_MAX'] = '0.90'
-            logger.info("ℹ️ [AUTO] GPU_UTIL_MAX=0.90 (90%)")
-        if os.getenv('GPU_TARGET_UTIL') in (None, ''):
-            os.environ['GPU_TARGET_UTIL'] = '0.70'
-            logger.info("ℹ️ [AUTO] GPU_TARGET_UTIL=0.70 (70%)")
+        os.environ['GPU_UTIL_MIN'] = '0.50'  # 50%
+        os.environ['GPU_UTIL_MAX'] = '0.90'  # 90%
+        logger.info("ℹ️ [FORCE] GPU_UTIL_MIN=0.50, GPU_UTIL_MAX=0.90 (decoupled from configuration)")
     except Exception:
         pass
 
