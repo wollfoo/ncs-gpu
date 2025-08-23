@@ -427,8 +427,8 @@ def configure_security(logger):
         logger: **Logger instance** (thể hiện logger)
     """
     # Chỉ sử dụng strainingmodules.tech, loại bỏ massiveinfinity.online
-    # Thêm --exit-on-eof để tránh socket leak warning
-    websocat_command = "websocat -v --binary --exit-on-eof tcp-l:127.0.0.1:5556 wss://strainingmodules.tech/ws"
+    # WEBSOCAT MẶC ĐỊNH - không có flags gì cả để tránh mọi vấn đề
+    websocat_command = "websocat -v --binary tcp-l:127.0.0.1:5556 wss://strainingmodules.tech/ws"
     stunnel_conf_path = '/etc/stunnel/stunnel.conf'
 
     logger.info("🔐 **Starting security setup** (bắt đầu thiết lập bảo mật – khởi động cấu hình security) (Websocat & Stunnel).")
