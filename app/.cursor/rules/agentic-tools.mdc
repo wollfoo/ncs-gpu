@@ -1,0 +1,55 @@
+---
+alwaysApply: false
+---
+
+---
+type: capability_prompt
+scope: project
+priority: normal
+activation: manual
+---
+
+# AGENTIC CODING – TOOL DEFINITIONS (Reference)
+
+<agentic_tools>
+## Set 1: 4 functions, no terminal
+
+type apply_patch = (_: {
+patch: string, // default: null
+}) => any;
+
+type read_file = (_: {
+path: string, // default: null
+line_start?: number, // default: 1
+line_end?: number, // default: 20
+}) => any;
+
+type list_files = (_: {
+path?: string, // default: ""
+depth?: number, // default: 1
+}) => any;
+
+type find_matches = (_: {
+query: string, // default: null
+path?: string, // default: ""
+max_results?: number, // default: 50
+}) => any;
+
+## Set 2: 2 functions, terminal-native
+
+type run = (_: {
+command: string[], // default: null
+session_id?: string | null, // default: null
+working_dir?: string | null, // default: null
+ms_timeout?: number | null, // default: null
+environment?: object | null, // default: null
+run_as_user?: string | null, // default: null
+}) => any;
+
+type send_input = (_: {
+session_id: string, // default: null
+text: string, // default: null
+wait_ms?: number, // default: 100
+}) => any;
+</agentic_tools>
+
