@@ -1,0 +1,62 @@
+{
+  "real_metrics": {
+    "timestamp": 1756023065.2161415,
+    "cpu_percent": 19.0,
+    "memory_percent": 4.4,
+    "total_processes": 2162,
+    "zombie_count": 1884,
+    "zombie_ratio": 0.8714153561517114,
+    "python_processes": 1889,
+    "python_ratio": 0.8737280296022202,
+    "network_connections": 224
+  },
+  "real_anomalies": {
+    "excessive_zombies": {
+      "value": 0.8714153561517114,
+      "severity": "high",
+      "description": "Excessive zombie processes: 87.1%"
+    },
+    "excessive_python": {
+      "value": 0.8737280296022202,
+      "severity": "medium",
+      "description": "High Python process ratio: 87.4%"
+    }
+  },
+  "simulated_metrics": {
+    "timestamp": 1756023065.2163203,
+    "cpu_percent": 85.0,
+    "memory_percent": 60.0,
+    "total_processes": 250,
+    "zombie_count": 45,
+    "zombie_ratio": 0.18,
+    "python_processes": 75,
+    "python_ratio": 0.3,
+    "network_connections": 15
+  },
+  "simulated_anomalies": {
+    "high_cpu": {
+      "value": 85.0,
+      "severity": "high",
+      "description": "High CPU utilization detected"
+    },
+    "excessive_zombies": {
+      "value": 0.18,
+      "severity": "high",
+      "description": "Excessive zombie processes: 18.0%"
+    },
+    "mining_signature": {
+      "confidence": 0.85,
+      "severity": "critical",
+      "description": "Combined patterns suggest mining activity"
+    }
+  },
+  "stealth_techniques": {
+    "techniques": [
+      "Process Mimicry",
+      "Resource Masking",
+      "Log Obfuscation",
+      "Network Stealth"
+    ],
+    "stealth_level": 1.0
+  }
+}
