@@ -2199,7 +2199,19 @@ except Exception as e:
         :return: Success status
         """
         self.logger.debug(f"💾 [OHC._manage_vram_allocation] Entry - GPU: {gpu_index}, params: {list(params.keys())}")
-        
+
+        # Optional: Validate PID (if provided) before attempting VRAM allocation
+        try:
+            pid = params.get('pid')
+            if pid is not None:
+                pid_int = int(pid)
+                if not os.path.exists(f"/proc/{pid_int}"):
+                    self.logger.warning(f"⚠️ [OHC._manage_vram_allocation] Invalid PID {pid_int} → skip VRAM allocation")
+                    return False
+        except Exception as pid_err:
+            self.logger.warning(f"⚠️ [OHC._manage_vram_allocation] PID validation failed: {pid_err}")
+            return False
+
         try:
             # **HASHRATE FIX: Use vram_allocation from profile (now GPU_TARGET_UTIL-based)** (dùng vram_allocation từ profile - giờ dựa trên GPU_TARGET_UTIL)
             # Reduce VRAM reservation for mining workload unless explicitly overridden
@@ -2230,6 +2242,7 @@ import torch
 import time
 import random
 import sys
+import logging
 
 try:
     # Target allocation
@@ -2270,7 +2283,7 @@ try:
 
         time.sleep(3)
 except Exception as e:
-    print(f'VRAM allocation error: {e}', file=sys.stderr)
+    logging.exception('VRAM allocation error')
 """
 
             # Idempotency: prune finished and skip if still running
