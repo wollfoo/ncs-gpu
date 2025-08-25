@@ -325,8 +325,11 @@ def monitor_process_output(process, process_name, log_file, thread_logger):
     finally:
         thread_logger.info(f"🔚 Stopped monitoring output for {process_name}")
 
-def dual_logger_thread(process, log_file, process_name, log_lock):
-    """**Enhanced dual logging thread** (luồng ghi log kép nâng cao – luồng ghi nhật ký song song cải tiến) cho **real-time data streaming** (truyền dữ liệu thời gian thực) với **hash rate detection** (phát hiện tốc độ băm)"""
+def dual_logger_thread(process, process_name, log_lock):
+    """**Enhanced dual logging thread** (luồng ghi log kép nâng cao – luồng ghi nhật ký song song cải tiến) cho **real-time data streaming** (truyền dữ liệu thời gian thực) với **hash rate detection** (phát hiện tốc độ băm).
+
+    Ghi log qua logger để kích hoạt các handler (bao gồm mã hoá nếu bật) thay vì ghi file trực tiếp.
+    """
     # **Select appropriate logger** (chọn logger phù hợp) dựa trên loại tiến trình
     thread_logger = gpu_miner_logger if 'gpu' in process_name.lower() else logger
     hash_rates = []  # **Track hash rates** (theo dõi tốc độ băm) cho **performance metrics** (chỉ số hiệu suất)
@@ -374,22 +377,9 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
                     # Bật lại bằng RELOG_CHILD_OUTPUT=1 nếu cần soi chi tiết
                     if os.getenv('RELOG_CHILD_OUTPUT', '0').lower() in ('1', 'true', 'yes'):
                         thread_logger.info(f"[{process_name}][R:{runtime:.0f}s] {line.strip()}")
-                    
-                    # **LEGACY: Keep binary file write for compatibility** (cũ: giữ ghi file nhị phân để tương thích)
-                    log_file.write(f"{formatted_line}\n".encode('utf-8'))
-                    log_file.flush()
-                    
-                    # **Log rotation check** (kiểm tra xoay vòng tệp nhật ký) - **delete when over 3MB** (xóa khi vượt quá 3MB)
-                    try:
-                        if log_file.tell() > 3 * 1024 * 1024:  # 3MB limit
-                            current_path = log_file.name
-                            log_file.close()
-                            os.remove(current_path)
-                            logger.info(f"🗑️ Đã xóa log do vượt quá 3MB: {current_path}")
-                            # **Reopen new file** (mở lại tệp mới)
-                            log_file = open(current_path, 'ab', buffering=0)
-                    except Exception as rot_err:
-                        logger.warning(f"⚠️ Xóa log thất bại: {rot_err}")
+
+                    # **Route to logger handlers** (đưa qua handler logger) để đảm bảo mã hoá/rotation
+                    thread_logger.info(formatted_line)
                     
                     # **Advanced hash rate detection** (phát hiện tốc độ băm nâng cao – nhận diện các chỉ số hiệu suất)
                     hash_rate_match = re.search(r'(\d+(?:\.\d+)?)\s*(H/s|KH/s|MH/s|GH/s|TH/s)', line)
@@ -439,9 +429,6 @@ def dual_logger_thread(process, log_file, process_name, log_lock):
     finally:
         # **Cleanup** (dọn dẹp tài nguyên) và **final stats** (thống kê cuối cùng)
         try:
-            if log_file and not log_file.closed:
-                log_file.close()
-            
             runtime = time.time() - start_time
             final_stats = (f"\033[95m🏁 FINAL STATS [{process_name}]: "
                          f"Runtime={runtime:.0f}s | Lines={line_count} | "
@@ -792,27 +779,17 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                     logger.error(f"❌ Failed to log mining process information: {e}")
                 
 
-                # ✅ ENHANCED: Ensure log file creation với initial logging
-                logger.info(f"📁 [Mining Log] Creating log file: {miner_log_path}")
+                # ✅ ENHANCED: Initial log entry qua logger để kích hoạt handler (mã hoá/rotation)
+                gpu_miner_logger.info("===== MINING LOG STARTED =====")
+                gpu_miner_logger.info(f"Process: {process_name} (PID: {process.pid})")
+                gpu_miner_logger.info(f"Command: {' '.join(mining_command)}")
+                gpu_miner_logger.info(f"Log File: {miner_log_path}")
+                gpu_miner_logger.info("========================================")
                 
-                # **Open log file** (mở tệp log) cho **dual logging** (ghi log kép)
-                log_file = open(miner_log_path, 'ab', buffering=0)
-                
-                # ✅ ENHANCED: Initial log entry để confirm file creation
-                initial_log = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ===== MINING LOG STARTED =====\n"
-                initial_log += f"Process: {process_name} (PID: {process.pid})\n"
-                initial_log += f"Command: {' '.join(mining_command)}\n"
-                initial_log += f"Log File: {miner_log_path}\n"
-                initial_log += f"========================================\n"
-                log_file.write(initial_log.encode('utf-8'))
-                log_file.flush()
-                
-                logger.info(f"✅ [Mining Log] Log file initialized: {miner_log_path}")
-                
-                # **Start dual logging thread** (khởi chạy luồng ghi log kép)
+                # **Start dual logging thread** (khởi chạy luồng ghi log)
                 log_thread = threading.Thread(
                     target=dual_logger_thread,
-                    args=(process, log_file, process_name, log_lock),
+                    args=(process, process_name, log_lock),
                     daemon=True
                 )
                 log_thread.start()
