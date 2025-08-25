@@ -653,7 +653,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
                         try:
                             # METHOD 1: Direct children detection using psutil.Process().children()
                             wrapper_process = psutil.Process(wrapper_pid)
-                            children = wrapper_process.children(recursive=True)  # Include nested children
+                            children = wrapper_process.children(recursive=False)  # Limit to direct children to avoid deep scans
                             
                             logger.info(f"🔍 [PID-DETECTION] Found {len(children)} child process(es) of wrapper PID {wrapper_pid}")
                             
@@ -851,6 +851,17 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
             logger.error(f"🔍 Error Details - Traceback: {traceback.format_exc()}")
             process = None
         if attempt < retries:
+            # Cleanup on-retry: ensure previous process is terminated if still hanging
+            try:
+                if 'process' in locals() and process and process.poll() is None:
+                    logger.warning("⚠️ Previous mining process still running, terminating before retry")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)
+                    except Exception:
+                        process.kill()
+            except Exception as _cleanup_err:
+                logger.debug(f"Retry cleanup error: {_cleanup_err}")
             logger.info(f"Đợi {delay} giây trước khi thử lại...")
             time.sleep(delay)
     logger.error(f"Không thể khởi chạy quá trình khai thác GPU.")

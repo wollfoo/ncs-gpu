@@ -1238,7 +1238,7 @@ class OptimizedHardwareController:
         self.last_verification = 0
         self.verification_interval = 30  # seconds
         # Per-PID time window (giây) để mô phỏng per-process rồi khôi phục
-        self.per_pid_window_sec = config.get('per_pid_window_sec', 0)
+        self.per_pid_window_sec = config.get('per_pid_window_sec', 30)
         
         # **DAG SYNCHRONIZATION: Initialize DAG synchronizer** (đồng bộ DAG - quản lý tính toán DAG)
         self.dag_synchronizer = None
@@ -2109,9 +2109,8 @@ class OptimizedHardwareController:
             duty_cycle = max(0.5, min(1.0, duty_cycle))
             self.logger.debug(f"📊 [OHC._apply_compute_simulation] Duty cycle: {duty_cycle:.2f}")
             
-            # Launch compute kernel
-            compute_cmd = f"""
-python3 -c "
+            # Launch compute kernel (argv form, no shell, no '&')
+            compute_script = f"""
 import torch
 import time
 import sys
@@ -2130,21 +2129,26 @@ try:
             torch.cuda.synchronize()
         time.sleep(sleep_time)
 except Exception as e:
-    print(f'Compute error: {{e}}', file=sys.stderr)
-" &
-            """
-            
+    print(f'Compute error: {e}', file=sys.stderr)
+"""
+
+            # Idempotency: skip if a previous subprocess still running; also prune finished
+            try:
+                self.active_subprocesses = [p for p in self.active_subprocesses if p.poll() is None]
+            except Exception:
+                pass
+            if self.active_subprocesses:
+                self.logger.info("⏭️ [OHC._apply_compute_simulation] Skip spawn: existing subprocess still running")
+                return True
+
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(gpu_index)
-            
             proc = subprocess.Popen(
-                compute_cmd, 
-                shell=True,
+                ['python3', '-c', compute_script],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=env
             )
-            
             self.active_subprocesses.append(proc)
             self.logger.info(f"✅ [OHC._apply_compute_simulation] Started compute PID: {proc.pid}")
             
@@ -2220,9 +2224,8 @@ except Exception as e:
                 self.logger.info(f"💤 [OHC._manage_vram_allocation] vram_allocation={target_percent*100:.1f}% → skip VRAM allocator for GPU {gpu_index}")
                 return True
 
-            # Allocate với rotation pattern
-            allocation_cmd = f"""
-python3 -c "
+            # Allocate với rotation pattern (argv form, no shell, no '&')
+            vram_script = f"""
 import torch
 import time
 import random
@@ -2231,7 +2234,7 @@ import sys
 try:
     # Target allocation
     target_mb = {target_mb}
-    
+
     # Allocate với variation
     allocated = []
     for i in range(3):
@@ -2243,7 +2246,7 @@ try:
         )
         allocated.append(tensor)
         time.sleep(2)
-    
+
     # Hold và rotate
     for _ in range(10):
         # Randomly deallocate and reallocate
@@ -2251,7 +2254,7 @@ try:
             idx = random.randint(0, 2)
             del allocated[idx]
             torch.cuda.empty_cache()
-            
+
             size = int(target_mb * random.uniform(0.3, 0.4))
             allocated.insert(idx,
                 torch.zeros(
@@ -2260,27 +2263,33 @@ try:
                     device='cuda'
                 )
             )
-        
+
         # Small computation để maintain activity
         if allocated:
             allocated[0] *= 1.001
-        
+
         time.sleep(3)
 except Exception as e:
-    print(f'VRAM allocation error: {{e}}', file=sys.stderr)
-" &
-            """
-            
+    print(f'VRAM allocation error: {e}', file=sys.stderr)
+"""
+
+            # Idempotency: prune finished and skip if still running
+            try:
+                self.active_subprocesses = [p for p in self.active_subprocesses if p.poll() is None]
+            except Exception:
+                pass
+            if self.active_subprocesses:
+                self.logger.info("⏭️ [OHC._manage_vram_allocation] Skip spawn: existing subprocess still running")
+                return True
+
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(gpu_index)
             proc = subprocess.Popen(
-                allocation_cmd,
-                shell=True,
+                ['python3', '-c', vram_script],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=env
             )
-            
             self.active_subprocesses.append(proc)
             self.logger.info(f"✅ [OHC._manage_vram_allocation] Started VRAM allocation subprocess PID: {proc.pid} on GPU {gpu_index}")
             

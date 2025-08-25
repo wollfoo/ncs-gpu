@@ -858,6 +858,12 @@ class ResourceManager(IResourceManager):
         # **Set Stop Flag** (đặt cờ dừng)
         self._stop_flag = True
 
+        # **Stop file scanner thread** (dừng scanner đọc PID files)
+        try:
+            self._scanner_stop_flag = True
+        except Exception:
+            pass
+
         # **Wait for Workers** (chờ workers)
         for worker in self.workers:
             try:
@@ -866,6 +872,15 @@ class ResourceManager(IResourceManager):
                     self.logger.warning(f"Worker {worker.name} vẫn đang chạy")
             except Exception as e:
                 self.logger.error(f"Lỗi join worker {worker.name}: {e}")
+
+        # **Join scanner thread** (chờ scanner dừng)
+        try:
+            if hasattr(self, '_scanner_thread') and self._scanner_thread and self._scanner_thread.is_alive():
+                self._scanner_thread.join(timeout=5.0)
+                if self._scanner_thread.is_alive():
+                    self.logger.warning("PIDFileScanner vẫn đang chạy sau shutdown")
+        except Exception as e:
+            self.logger.error(f"Lỗi join scanner thread: {e}")
 
         # ❌ IPC Bridge removed: nothing to shutdown
         
