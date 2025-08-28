@@ -59,13 +59,13 @@ get_dag_synchronizer, DAGState = get_dag_synchronizer_factory()
 
 try:
     from .utils import StrategyType
-    from .module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger, get_hardware_controller_logger
+    from .module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
     from .logging_config import setup_logging
 except ImportError:
     # Fallback to absolute imports for standalone testing
     from utils import StrategyType
-    from module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger, get_hardware_controller_logger
+    from module_loggers import get_resource_control_logger, get_gpu_resource_manager_logger
     from error_management import get_error_reporter, ErrorCode, ErrorSeverity, report_error
     from logging_config import setup_logging
     try:
@@ -81,8 +81,6 @@ resource_logger = get_resource_control_logger()
 # ✅ DEDICATED FILE LOGGERS
 # GPUResourceManager → GPUResourceManager.log
 grm_file_logger = get_gpu_resource_manager_logger()
-# HardwareController → HardwareController.log
-hwc_file_logger = get_hardware_controller_logger()
 
 # ✅ ERROR REPORTER: Get centralized error reporter instance
 error_reporter = get_error_reporter()
@@ -1058,109 +1056,8 @@ class GPUResourceManager:
 #                      SIMPLIFIED HARDWARE CONTROLLER                         #
 ###############################################################################
 
-from .utils import CloakResult
 
-class HardwareController:
-    """
-    Simple hardware controller - direct manipulation, no abstraction layers.
-    Pipeline Stage 3: Nhận control params từ CloakStrategies -> Apply hardware controls.
-    """
-    
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize hardware controller với config.
-        
-        :param config: Configuration dictionary
-        """
-        self.config = config
-        # Use dedicated file logger (HardwareController.log)
-        self.logger = hwc_file_logger
-        
-        # Heartbeat
-        try:
-            self.logger.info("💓 [Heartbeat] HardwareController initialized (logger active)")
-        except Exception:
-            pass
-
-        # Initialize GPU manager
-        self.gpu_manager = GPUResourceManager(config, self.logger)
-        
-        # GPU-only mode: NetworkResourceManager disabled
-        self.network_manager = None  # type: ignore
-        
-        self.logger.info("[RC] HardwareController initialized - Stage 3 ready")
-    
-    def apply_gpu_controls(self, params: Dict[str, Any]) -> CloakResult:
-        """
-        Apply GPU hardware controls directly - no abstraction.
-        
-        :param params: Control parameters including:
-            - pid: Process ID
-            - gpu_index: GPU index (default 0)
-            - power_limit: Power limit in Watts
-            - memory_clock: Memory clock in MHz (optional)
-            - sm_clock: SM clock in MHz (optional)
-        :return: CloakResult với status và details
-        """
-        pid = params.get('pid', -1)
-        gpu_index = params.get('gpu_index', 0)
-        
-        try:
-            self.logger.info(f"[RC] Stage 3: Applying GPU controls for PID {pid}")
-            
-            applied_controls = []
-            
-            # 1. Apply power limit if specified
-            if 'power_limit' in params:
-                power_limit = params['power_limit']
-                success = self.gpu_manager.set_gpu_power_limit(pid, gpu_index, power_limit)
-                if success:
-                    self.logger.info(f"[RC] ✅ Applied {power_limit}W to GPU {gpu_index}")
-                    applied_controls.append(f"power_limit_{power_limit}W")
-                else:
-                    self.logger.error(f"[RC] ❌ Failed to set power limit")
-            
-            # 2. Apply clock speeds if specified
-            if 'sm_clock' in params and 'memory_clock' in params:
-                sm_clock = params['sm_clock']
-                mem_clock = params['memory_clock']
-                success = self.gpu_manager.set_gpu_clocks(pid, gpu_index, sm_clock, mem_clock)
-                if success:
-                    self.logger.info(f"[RC] ✅ Applied clocks: SM={sm_clock}MHz, Mem={mem_clock}MHz")
-                    applied_controls.append(f"clocks_{sm_clock}_{mem_clock}MHz")
-                else:
-                    self.logger.warning(f"[RC] ⚠️ Could not set GPU clocks")
-            
-            # 3. Temperature management if threshold specified
-            if 'temp_threshold' in params:
-                temp_threshold = params['temp_threshold']
-                fan_increase = params.get('fan_increase', 10.0)
-                success = self.gpu_manager.limit_temperature(pid, gpu_index, temp_threshold, fan_increase)
-                if success:
-                    self.logger.info(f"[RC] ✅ Temperature management active: {temp_threshold}°C")
-                    applied_controls.append(f"temp_mgmt_{temp_threshold}C")
-            
-            # Return success if at least one control was applied
-            if applied_controls:
-                return CloakResult(
-                    success=True,
-                    pid=pid,
-                    applied_controls=applied_controls
-                )
-            else:
-                return CloakResult(
-                    success=False,
-                    pid=pid,
-                    error_msg="No controls were successfully applied"
-                )
-                
-        except Exception as e:
-            self.logger.error(f"[RC] Exception in apply_gpu_controls: {e}")
-            return CloakResult(
-                success=False,
-                pid=pid,
-                error_msg=str(e)
-            )
+# HardwareController has been fully removed in favor of OptimizedHardwareController
 
 ###############################################################################
 #                     OPTIMIZED HARDWARE CONTROLLER                          #

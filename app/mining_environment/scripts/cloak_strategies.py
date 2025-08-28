@@ -477,12 +477,12 @@ class MetricsCollectionHub:
 ###############################################################################
 
 from .utils import CloakRequest, CloakResult
-from .resource_control import HardwareController
+from .resource_control import OptimizedHardwareController
 
 class CloakCoordinator:
     """
     **Simple coordinator** (bộ điều phối đơn giản – trình phối hợp cơ bản) - không có **complex factory** (factory phức tạp – nhà máy tạo đối tượng) hoặc **abstract strategies** (chiến lược trừu tượng – phương pháp tổng quát).
-    **Pipeline Stage 2** (Giai đoạn 2 của pipeline – bước 2 trong quy trình): Nhận **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) -> Chọn **strategy** (chiến lược) -> Gọi **HardwareController** (bộ điều khiển phần cứng).
+    **Pipeline Stage 2** (Giai đoạn 2 của pipeline – bước 2 trong quy trình): Nhận **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) -> Chọn **strategy** (chiến lược) -> Gọi **OptimizedHardwareController** (bộ điều khiển phần cứng tối ưu).
     """
     
     def __init__(self, config: Dict[str, Any], metrics_hub: Optional["MetricsCollectionHub"] = None):
@@ -501,8 +501,8 @@ class CloakCoordinator:
         except Exception:
             pass
         
-        # **Initialize hardware controller** (khởi tạo bộ điều khiển phần cứng) cho **Stage 3** (giai đoạn 3)
-        self.hw_controller = HardwareController(config)
+        # **Initialize optimized hardware controller** (khởi tạo bộ điều khiển phần cứng tối ưu) cho **Stage 3** (giai đoạn 3)
+        self.hw_controller = OptimizedHardwareController(config, self.logger)
 
         # ✅ Initialize intelligent GPU coordinator by default (non-blocking if unavailable)
         try:
@@ -742,7 +742,7 @@ class CloakCoordinator:
         3. **Forward** (chuyển tiếp) đến **hardware controller** (bộ điều khiển phần cứng)
         
         :param request: **CloakRequest** (yêu cầu ngụy trang) từ **ResourceManager** (trình quản lý tài nguyên) (chỉ có **PID** & **metadata** – mã tiến trình & siêu dữ liệu)
-        :return: **CloakResult** (kết quả ngụy trang) từ **HardwareController** (bộ điều khiển phần cứng)
+        :return: **CloakResult** (kết quả ngụy trang) từ **OptimizedHardwareController** (bộ điều khiển phần cứng tối ưu)
         """
         try:
             # **Stage 2** quyết định **strategy** (chiến lược) (không phải **Stage 1**!)
@@ -809,10 +809,10 @@ class CloakCoordinator:
         """**Stage 2: Route GPU strategy** (Giai đoạn 2: Định tuyến chiến lược GPU) với **INTELLIGENT COORDINATOR** (bộ điều phối thông minh – trình phối hợp tự động)
         
         ✅ **ENHANCED** (nâng cao): Sử dụng **GpuCloakStrategy** làm **intelligent coordinator** (bộ điều phối thông minh)
-        để thêm các **logic điều chỉnh động** (logic tự động điều chỉnh – thuật toán thích ứng) trước khi **forward** (chuyển tiếp) xuống **HardwareController** (bộ điều khiển phần cứng)
+        để thêm các **logic điều chỉnh động** (logic tự động điều chỉnh – thuật toán thích ứng) trước khi **forward** (chuyển tiếp) xuống **OptimizedHardwareController** (bộ điều khiển phần cứng tối ưu)
         
         :param request: **CloakRequest** (yêu cầu ngụy trang) với **GPU params** (tham số GPU) đã được **prepare** (chuẩn bị) ở **Stage 1** (giai đoạn 1)
-        :return: **CloakResult** (kết quả ngụy trang) từ **HardwareController** (qua **intelligent coordinator** – bộ điều phối thông minh)
+        :return: **CloakResult** (kết quả ngụy trang) từ **OptimizedHardwareController** (qua **intelligent coordinator** – bộ điều phối thông minh)
         """
         self.logger.info(f"[CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** {request.pid}")
 
@@ -857,22 +857,27 @@ class CloakCoordinator:
 
             else:
                 # No intelligent coordinator available, use direct routing
-                self.logger.info("[CS] 📡 Direct routing to hardware controller (định tuyến trực tiếp tới bộ điều khiển phần cứng – không có [intelligent coordinator] (bộ điều phối thông minh))")
+                self.logger.info("[CS] 📡 Direct routing to optimized hardware controller (định tuyến trực tiếp tới bộ điều khiển phần cứng tối ưu – không có [intelligent coordinator] (bộ điều phối thông minh))")
 
-            # FALLBACK: Direct forward to hardware controller
+            # FALLBACK: Direct forward to optimized hardware controller
             control_params = {
                 'pid': request.pid,
                 **request.params  # Forward ALL params as-is from Stage 1
             }
 
-            result = self.hw_controller.apply_gpu_controls(control_params)
+            # Use OptimizedHardwareController to apply optimization and convert to CloakResult
+            try:
+                success = self.hw_controller.apply_optimization(request.pid, control_params)
+            except Exception as _ohc_err:
+                self.logger.error(f"[CS] ❌ Optimized hardware control failed: {_ohc_err}")
+                success = False
 
-            if result.success:
+            if success:
                 self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
             else:
-                self.logger.error(f"[CS] ❌ GPU strategy routing failed: {result.error_msg}")
+                self.logger.error(f"[CS] ❌ GPU strategy routing failed for PID {request.pid}")
 
-            return result
+            return CloakResult(success=bool(success), pid=request.pid, applied_controls=[])
 
         except Exception as e:
             self.logger.error(f"[CS] ❌ GPU strategy exception (ngoại lệ chiến lược GPU – lỗi áp dụng GPU): {e}")
@@ -1182,15 +1187,15 @@ class GpuCloakStrategy:
         config: Dict[str, Any],
         logger: logging.Logger,
         gpu_resource_manager: GPUResourceManager = None,
-        hw_controller: Any = None  # NEW: Accept HardwareController for intelligent coordination
+        hw_controller: Any = None  # Accept OptimizedHardwareController for intelligent coordination
     ):
         """
         ✅ ENHANCED: Intelligent Coordinator Constructor
-        Khôi phục vai trò intelligent coordinator giữa CloakCoordinator và HardwareController
+        Khôi phục vai trò intelligent coordinator giữa CloakCoordinator và OptimizedHardwareController
         :param config: Cấu hình cloaking GPU (dict).
         :param logger: Logger.
         :param gpu_resource_manager: ResourceManager liên quan đến GPU (optional, for backward compat).
-        :param hw_controller: HardwareController instance for delegation (NEW).
+        :param hw_controller: OptimizedHardwareController instance for delegation.
         """
         # Use dedicated logger for GpuCloakStrategy
         self.logger = get_gpu_cloak_strategy_logger()
@@ -1199,7 +1204,7 @@ class GpuCloakStrategy:
         except Exception:
             pass
         self.config = config
-        self.hw_controller = hw_controller  # NEW: Store HardwareController reference
+        self.hw_controller = hw_controller  # Store OptimizedHardwareController reference
         
         # ✅ GPU OPTIMIZATION: Initialize AdaptivePatternGenerator (default ON; có thể tắt qua env)
         gpu_opt_enabled = os.getenv('GPU_OPT_ENABLED', '1') == '1'
@@ -1223,9 +1228,9 @@ class GpuCloakStrategy:
                 gpu_resource_manager, config, logger
             )
         else:
-            # If no GPU manager provided, we'll rely on HardwareController
+            # If no GPU manager provided, we'll rely on OptimizedHardwareController (delegation mode)
             self.gpu_resource_manager = None
-            self.logger.info("🎯 [INTELLIGENT COORDINATOR] Operating in delegation mode via HardwareController")
+            self.logger.info("🎯 [INTELLIGENT COORDINATOR] Operating in delegation mode via OptimizedHardwareController")
         
         # ✅ CRITICAL VALIDATION: Skip if operating in delegation mode
         if self.gpu_resource_manager and not self._validate_gpu_manager_functionality():
@@ -1386,7 +1391,7 @@ class GpuCloakStrategy:
     
     def intelligent_apply(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
-        ✅ INTELLIGENT COORDINATOR: Điều phối thông minh giữa CloakCoordinator và HardwareController
+        ✅ INTELLIGENT COORDINATOR: Điều phối thông minh giữa CloakCoordinator và OptimizedHardwareController
         """
         pid = request.get('pid')
         params = request.get('params', {})
@@ -1471,7 +1476,7 @@ class GpuCloakStrategy:
             if self.hw_controller:
                 result = self._delegate_with_fallback(enhanced_params)
             else:
-                # Fallback to direct GPU manager if no HardwareController
+                # Fallback to direct GPU manager if no OptimizedHardwareController
                 result = self._direct_gpu_apply(enhanced_params)
 
             # ✅ STEALTH: Random sleep sau khi áp dụng thành công
@@ -1660,30 +1665,20 @@ class GpuCloakStrategy:
         Ủy quyền với cơ chế fallback đa tầng
         """
         try:
-            # Try primary delegation to HardwareController
-            self.logger.debug(f"🎯 [DELEGATE] Forwarding to HardwareController with params: {params}")
+            # Try primary delegation to OptimizedHardwareController
+            self.logger.debug(f"🎯 [DELEGATE] Forwarding to OptimizedHardwareController with params: {params}")
             
             if self.hw_controller:
-                # Import CloakResult to handle response
-                from .resource_control import CloakResult
-                
-                # Call HardwareController's apply_gpu_controls
-                result = self.hw_controller.apply_gpu_controls(params)
-                
-                # Process result
-                if hasattr(result, 'success'):
-                    return {
-                        'success': result.success,
-                        'message': getattr(result, 'message', 'GPU controls applied via HardwareController'),
-                        'applied_params': params,
-                        'applied_controls': getattr(result, 'applied_controls', []),
-                        'method': 'hardware_controller'
-                    }
-                
-                # If result doesn't have success attribute, assume success
-                return {'success': True, 'applied_params': params, 'method': 'hardware_controller'}
+                pid = params.get('pid')
+                success = self.hw_controller.apply_optimization(pid, params)
+                return {
+                    'success': bool(success),
+                    'applied_params': params,
+                    'applied_controls': [],
+                    'method': 'optimized_hardware_controller'
+                }
             
-            # If no HardwareController, try GPU manager
+            # If no OptimizedHardwareController, try GPU manager
             if self.gpu_resource_manager:
                 self.logger.info("🔄 [FALLBACK] Using direct GPU manager")
                 return self._direct_gpu_apply(params)

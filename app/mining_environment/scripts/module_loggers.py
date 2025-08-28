@@ -48,7 +48,6 @@ _mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_D
 _audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
 _gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
 _gpu_resource_manager_logger = setup_logging('gpu_resource_manager', str(Path(LOGS_DIR) / 'GPUResourceManager.log'), 'DEBUG')
-_hardware_controller_logger = setup_logging('hardware_controller', str(Path(LOGS_DIR) / 'HardwareController.log'), 'DEBUG')
 _metrics_collection_hub_logger = setup_logging('metrics_collection_hub', str(Path(LOGS_DIR) / 'metricscollectionhub.log'), 'DEBUG')
 _cloak_coordinator_logger = setup_logging('cloak_coordinator', str(Path(LOGS_DIR) / 'cloakcoordinator.log'), 'DEBUG')
 _gpu_cloak_strategy_logger = setup_logging('gpu_cloak_strategy', str(Path(LOGS_DIR) / 'gpucloakstrategy.log'), 'DEBUG')
@@ -67,7 +66,6 @@ if ENABLE_DEDUPLICATION:
     gpu_monitoring_logger = wrap_logger_with_deduplication(_gpu_monitoring_logger, use_global=True)
     adaptive_pattern_generator_logger = wrap_logger_with_deduplication(_adaptive_pattern_generator_logger, use_global=True)
     gpu_resource_manager_logger = wrap_logger_with_deduplication(_gpu_resource_manager_logger, use_global=True)
-    hardware_controller_logger = wrap_logger_with_deduplication(_hardware_controller_logger, use_global=True)
     metrics_collection_hub_logger = wrap_logger_with_deduplication(_metrics_collection_hub_logger, use_global=True)
     cloak_coordinator_logger = wrap_logger_with_deduplication(_cloak_coordinator_logger, use_global=True)
     gpu_cloak_strategy_logger = wrap_logger_with_deduplication(_gpu_cloak_strategy_logger, use_global=True)
@@ -83,7 +81,6 @@ else:
     gpu_monitoring_logger = _gpu_monitoring_logger
     adaptive_pattern_generator_logger = _adaptive_pattern_generator_logger
     gpu_resource_manager_logger = _gpu_resource_manager_logger
-    hardware_controller_logger = _hardware_controller_logger
     metrics_collection_hub_logger = _metrics_collection_hub_logger
     cloak_coordinator_logger = _cloak_coordinator_logger
     gpu_cloak_strategy_logger = _gpu_cloak_strategy_logger
@@ -190,14 +187,7 @@ def get_gpu_resource_manager_logger():
     """
     return gpu_resource_manager_logger
 
-def get_hardware_controller_logger():
-    """
-    **Get HardwareController logger** (Lấy logger cho bộ điều khiển phần cứng) - Ghi riêng vào HardwareController.log.
-    
-    Returns:
-        Logger: **HardwareController logger instance** (thực thể logger cho HardwareController)
-    """
-    return hardware_controller_logger
+    # HardwareController logger removed (class deprecated)
 
 def get_metrics_collection_hub_logger():
     """
