@@ -21,7 +21,8 @@ import re
 import glob
 import pynvml
 import hashlib
-from typing import Dict, Any, List, Optional, Set, Union
+from typing import Dict, Any, List, Optional, Set, Union, Protocol
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 import signal
 import json
@@ -88,6 +89,34 @@ error_reporter = get_error_reporter()
 from threading import RLock
 
 
+# ========================= Metrics Interfaces (giao diện số liệu) =========================
+@dataclass
+class GpuMetricsSnapshot:
+    """
+    **GpuMetricsSnapshot** (ảnh chụp số liệu GPU – gói các metric tại một thời điểm)
+    - timestamp (mốc thời gian – epoch giây)
+    - temperature_c (nhiệt độ °C)
+    - power_watts (công suất W)
+    - utilization (mức sử dụng – tỷ lệ 0..1)
+    - mem_used_bytes/mem_total_bytes (bộ nhớ dùng/tổng – byte)
+    """
+    timestamp: float
+    gpu_indices: List[int]
+    temperature_c: Dict[int, Optional[float]]
+    power_watts: Dict[int, Optional[float]]
+    utilization: Dict[int, Optional[float]]
+    mem_used_bytes: Dict[int, Optional[int]]
+    mem_total_bytes: Dict[int, Optional[int]]
+
+
+class IGpuMetricsProvider(Protocol):
+    """
+    **IGpuMetricsProvider** (giao diện nhà cung cấp số liệu GPU – thống nhất truy cập metrics)
+    """
+    def get_metrics_snapshot(self, ttl_sec: Optional[float] = None) -> GpuMetricsSnapshot:
+        ...
+
+
 ###############################################################################
 #                           GPU RESOURCE MANAGER                              #
 ###############################################################################
@@ -140,6 +169,24 @@ class GPUResourceManager:
         self.temp_warning = config.get('temp_warning', 72)  # Warning threshold
         self.temp_critical = config.get('temp_critical', 78)  # Critical threshold
         self.temp_emergency = config.get('temp_emergency', 82)  # Emergency shutdown
+
+        # ------- Caching (bộ nhớ đệm) & đồng bộ hóa -------
+        self._lock: RLock = RLock()
+        # NVML handles cache (bộ đệm tay cầm NVML)
+        self._handle_cache: Dict[int, Any] = {}
+        self._handle_cache_time: Dict[int, float] = {}
+        # Metrics snapshot cache (bộ đệm ảnh chụp số liệu)
+        self._metrics_cache: Optional[GpuMetricsSnapshot] = None
+        self._metrics_cache_time: float = 0.0
+        # TTL cấu hình (giây) – có thể override bằng biến môi trường
+        try:
+            self.handle_cache_ttl_sec: float = float(os.getenv('HANDLE_CACHE_TTL_SEC', str(self.config.get('handle_cache_ttl_sec', 60.0))))
+        except Exception:
+            self.handle_cache_ttl_sec = 60.0
+        try:
+            self.metrics_cache_ttl_sec: float = float(os.getenv('METRICS_CACHE_TTL_SEC', str(self.config.get('metrics_cache_ttl_sec', 0.5))))
+        except Exception:
+            self.metrics_cache_ttl_sec = 0.5
 
         # Tự động khởi tạo NVML
         self.initialize_nvml()
@@ -197,7 +244,7 @@ class GPUResourceManager:
 
     def get_handle(self, gpu_index: int):
         """
-        Lấy handle của GPU theo chỉ số (đồng bộ).
+        Lấy handle của GPU theo chỉ số (đồng bộ) với cache TTL.
 
         :param gpu_index: Chỉ số GPU.
         :return: Handle thiết bị GPU, hoặc None nếu lỗi.
@@ -206,9 +253,17 @@ class GPUResourceManager:
             self.logger.error("[GPUResourceManager] (trình quản lý tài nguyên GPU) chưa init (chưa khởi tạo). Không thể lấy [GPU handle] (tay cầm thiết bị GPU – định danh thiết bị).")
             return None
         try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            self.logger.debug(f"Đã lấy handle cho GPU={gpu_index}")
-            return handle
+            now = time.time()
+            with self._lock:
+                h = self._handle_cache.get(gpu_index)
+                ts = self._handle_cache_time.get(gpu_index, 0.0)
+                if h is not None and (now - ts) < self.handle_cache_ttl_sec:
+                    return h
+                handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+                self._handle_cache[gpu_index] = handle
+                self._handle_cache_time[gpu_index] = now
+                self.logger.debug(f"Đã lấy (refresh) handle cho GPU={gpu_index}")
+                return handle
         except pynvml.NVMLError as e:
             self.logger.error(f"Lỗi khi lấy handle GPU={gpu_index}: {e}")
             return None
@@ -260,6 +315,84 @@ class GPUResourceManager:
 
     # Backward-compat alias (bí danh tương thích ngược)
     get_current_power_usage = get_gpu_power_usage
+
+    def get_metrics_snapshot(self, ttl_sec: Optional[float] = None) -> GpuMetricsSnapshot:
+        """
+        Trả về ảnh chụp số liệu GPU hiện thời với cache TTL để giảm NVML calls.
+
+        :param ttl_sec: TTL yêu cầu (giây). Nếu None dùng cấu hình mặc định.
+        :return: GpuMetricsSnapshot
+        """
+        if not self.gpu_initialized:
+            # Trả snapshot rỗng nếu NVML chưa sẵn sàng
+            ts = time.time()
+            return GpuMetricsSnapshot(
+                timestamp=ts,
+                gpu_indices=[],
+                temperature_c={}, power_watts={}, utilization={},
+                mem_used_bytes={}, mem_total_bytes={}
+            )
+
+        ttl = self.metrics_cache_ttl_sec if ttl_sec is None else float(ttl_sec)
+        now = time.time()
+        with self._lock:
+            if self._metrics_cache and (now - self._metrics_cache_time) < ttl:
+                return self._metrics_cache
+
+        # Thu thập số liệu mới
+        gpu_count = self.get_gpu_count()
+        indices = list(range(gpu_count))
+        temps: Dict[int, Optional[float]] = {}
+        powers: Dict[int, Optional[float]] = {}
+        utils: Dict[int, Optional[float]] = {}
+        mem_used: Dict[int, Optional[int]] = {}
+        mem_total: Dict[int, Optional[int]] = {}
+
+        for i in indices:
+            try:
+                handle = self.get_handle(i)
+                if not handle:
+                    temps[i] = None; powers[i] = None; utils[i] = None
+                    mem_used[i] = None; mem_total[i] = None
+                    continue
+                try:
+                    temps[i] = float(pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU))
+                except Exception:
+                    temps[i] = None
+                try:
+                    powers[i] = float(pynvml.nvmlDeviceGetPowerUsage(handle)) / 1000.0
+                except Exception:
+                    powers[i] = None
+                try:
+                    util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                    utils[i] = float(util.gpu) / 100.0
+                except Exception:
+                    utils[i] = None
+                try:
+                    m = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    mem_used[i] = int(m.used)
+                    mem_total[i] = int(m.total)
+                except Exception:
+                    mem_used[i] = None
+                    mem_total[i] = None
+            except Exception as e:
+                self.logger.debug(f"[GPUResourceManager] Snapshot error on GPU {i}: {e}")
+                temps[i] = None; powers[i] = None; utils[i] = None
+                mem_used[i] = None; mem_total[i] = None
+
+        snapshot = GpuMetricsSnapshot(
+            timestamp=time.time(),
+            gpu_indices=indices,
+            temperature_c=temps,
+            power_watts=powers,
+            utilization=utils,
+            mem_used_bytes=mem_used,
+            mem_total_bytes=mem_total
+        )
+        with self._lock:
+            self._metrics_cache = snapshot
+            self._metrics_cache_time = snapshot.timestamp
+        return snapshot
 
     def set_gpu_power_limit(self, pid: Optional[int], gpu_index: int, power_limit_w: int) -> bool:
         """
@@ -594,11 +727,17 @@ class GPUResourceManager:
             return float(temp)
         except Exception as e:
             self.logger.error(f"Lỗi get_gpu_temperature GPU={gpu_index}: {e}")
-            # Fallback using nvidia-smi
+            # Fallback using nvidia-smi (argv-list, không dùng shell=True)
             try:
-                cmd = f"nvidia-smi -i {gpu_index} -q -d TEMPERATURE | grep 'GPU Current Temp' | awk '{{print $5}}'"
-                output = subprocess.check_output(cmd, shell=True).decode().strip()
-                temp = float(output)
+                cmd = [
+                    'nvidia-smi', '-i', str(gpu_index),
+                    '--query-gpu=temperature.gpu',
+                    '--format=csv,noheader,nounits'
+                ]
+                output = subprocess.check_output(cmd).decode().strip()
+                # Lấy dòng đầu tiên
+                line = output.splitlines()[0] if output else ''
+                temp = float(line)
                 self.logger.debug(f"Nhiệt độ GPU={gpu_index} từ fallback: {temp}°C")
                 return temp
             except Exception as fallback_e:
@@ -1056,12 +1195,33 @@ class GPUResourceManager:
 #                      SIMPLIFIED HARDWARE CONTROLLER                         #
 ###############################################################################
 
-
 # HardwareController has been fully removed in favor of OptimizedHardwareController
 
 ###############################################################################
 #                     OPTIMIZED HARDWARE CONTROLLER                          #
 ###############################################################################
+
+def apply_gpu_controls(
+    pid: int,
+    params: Dict[str, Any],
+    config: Optional[Dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+) -> bool:
+    """
+    Backward-compatible alias (bí danh tương thích ngược – giữ API cũ) cho điều khiển GPU.
+    Ủy quyền (delegate) sang OptimizedHardwareController.apply_optimization().
+    """
+    try:
+        cfg = config or {}
+        log = logger or resource_logger
+        controller = OptimizedHardwareController(cfg, log)
+        return controller.apply_optimization(pid, params)
+    except Exception as e:
+        try:
+            (logger or resource_logger).error(f"[apply_gpu_controls] Alias error: {e}", exc_info=True)
+        except Exception:
+            pass
+        return False
 
 class OptimizedHardwareController:
     """
