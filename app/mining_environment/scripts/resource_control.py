@@ -316,6 +316,128 @@ class GPUResourceManager:
     # Backward-compat alias (bí danh tương thích ngược)
     get_current_power_usage = get_gpu_power_usage
 
+    # ========================= Internal helpers =========================
+    def _compute_dynamic_ttl(self, base_ttl: float) -> float:
+        """
+        **Dynamic TTL** (TTL động – điều chỉnh theo mức sử dụng GPU hiện tại)
+        - Khi tải cao (util ≥ 80%): TTL ngắn (lấy mẫu thường xuyên hơn)
+        - Khi tải thấp: TTL dài hơn để giảm NVML calls
+        Env/cấu hình:
+        - DYNAMIC_METRICS_TTL (bật/tắt – mặc định bật)
+        - METRICS_CACHE_MIN_TTL_SEC (mặc định 0.2s)
+        - METRICS_CACHE_MAX_TTL_SEC (mặc định 2.0s)
+        """
+        try:
+            enabled = os.getenv('DYNAMIC_METRICS_TTL', '1').lower() in ('1', 'true', 'yes')
+        except Exception:
+            enabled = True
+        if not enabled:
+            return base_ttl
+
+        try:
+            min_ttl = float(os.getenv('METRICS_CACHE_MIN_TTL_SEC', str(self.config.get('metrics_cache_min_ttl_sec', 0.2))))
+        except Exception:
+            min_ttl = 0.2
+        try:
+            max_ttl = float(os.getenv('METRICS_CACHE_MAX_TTL_SEC', str(self.config.get('metrics_cache_max_ttl_sec', 2.0))))
+        except Exception:
+            max_ttl = 2.0
+
+        # Lấy utilization tối đa từ snapshot trước (nếu có)
+        max_util = 0.0
+        try:
+            if self._metrics_cache and self._metrics_cache.utilization:
+                vals = [v for v in self._metrics_cache.utilization.values() if isinstance(v, (int, float)) and v is not None]
+                if vals:
+                    max_util = max(vals)
+        except Exception:
+            pass
+
+        # Mapping đơn giản: util cao → TTL ngắn; util thấp → TTL dài
+        if max_util >= 0.8:
+            ttl = min_ttl
+        elif max_util >= 0.5:
+            ttl = base_ttl
+        elif max_util >= 0.2:
+            ttl = min(max_ttl, max(min_ttl, base_ttl * 1.5))
+        else:
+            ttl = max_ttl
+
+        return max(min_ttl, min(max_ttl, ttl))
+
+    def _collect_metrics_with_nvidia_smi(self, indices: Optional[List[int]] = None):
+        """
+        **nvidia-smi Fallback** (phương án dự phòng – khi thiếu pynvml)
+        Thu thập: index, temperature (°C), power (W), utilization (%), memory.used/total (MiB)
+        Trả về tuple: (indices, temps, powers, utils, mem_used_bytes, mem_total_bytes) hoặc None nếu lỗi.
+        """
+        try:
+            query = 'index,temperature.gpu,power.draw,utilization.gpu,memory.used,memory.total'
+            cmd = ['nvidia-smi', f'--query-gpu={query}', '--format=csv,noheader,nounits']
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
+            temps: Dict[int, Optional[float]] = {}
+            powers: Dict[int, Optional[float]] = {}
+            utils: Dict[int, Optional[float]] = {}
+            mem_used: Dict[int, Optional[int]] = {}
+            mem_total: Dict[int, Optional[int]] = {}
+            idx_list: List[int] = []
+
+            for line in output.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) < 6:
+                    continue
+                try:
+                    idx = int(parts[0])
+                except Exception:
+                    continue
+                if indices is not None and idx not in indices:
+                    continue
+
+                def _safe_float(s: str) -> Optional[float]:
+                    try:
+                        if s is None:
+                            return None
+                        t = str(s).strip().lower()
+                        if t in ('', 'n/a', 'na', 'nan', 'inf', '-inf'):
+                            return None
+                        return float(t)
+                    except Exception:
+                        return None
+
+                t = _safe_float(parts[1])
+                p = _safe_float(parts[2])
+                u = _safe_float(parts[3])
+                mu = _safe_float(parts[4])
+                mt = _safe_float(parts[5])
+
+                temps[idx] = t if t is not None else None
+                powers[idx] = p if p is not None else None
+                utils[idx] = (u / 100.0) if u is not None else None
+                # memory MiB → bytes
+                mem_used[idx] = int(mu * 1024 * 1024) if mu is not None else None
+                mem_total[idx] = int(mt * 1024 * 1024) if mt is not None else None
+                idx_list.append(idx)
+
+            if not idx_list:
+                return None
+            # Duy nhất hoá và giữ thứ tự xuất hiện
+            seen: Set[int] = set()
+            uniq_indices: List[int] = []
+            for i in idx_list:
+                if i not in seen:
+                    seen.add(i)
+                    uniq_indices.append(i)
+            return uniq_indices, temps, powers, utils, mem_used, mem_total
+        except Exception as e:
+            try:
+                self.logger.warning(f"[GPUResourceManager] nvidia-smi fallback failed: {e}")
+            except Exception:
+                pass
+            return None
+
     def get_metrics_snapshot(self, ttl_sec: Optional[float] = None) -> GpuMetricsSnapshot:
         """
         Trả về ảnh chụp số liệu GPU hiện thời với cache TTL để giảm NVML calls.
@@ -324,7 +446,24 @@ class GPUResourceManager:
         :return: GpuMetricsSnapshot
         """
         if not self.gpu_initialized:
-            # Trả snapshot rỗng nếu NVML chưa sẵn sàng
+            # Fallback khi NVML chưa sẵn sàng
+            fb = self._collect_metrics_with_nvidia_smi()
+            if fb is not None:
+                fb_indices, temps, powers, utils, mem_used, mem_total = fb
+                snapshot = GpuMetricsSnapshot(
+                    timestamp=time.time(),
+                    gpu_indices=fb_indices,
+                    temperature_c=temps,
+                    power_watts=powers,
+                    utilization=utils,
+                    mem_used_bytes=mem_used,
+                    mem_total_bytes=mem_total
+                )
+                with self._lock:
+                    self._metrics_cache = snapshot
+                    self._metrics_cache_time = snapshot.timestamp
+                return snapshot
+            # Nếu fallback cũng thất bại → trả snapshot rỗng
             ts = time.time()
             return GpuMetricsSnapshot(
                 timestamp=ts,
@@ -333,14 +472,40 @@ class GPUResourceManager:
                 mem_used_bytes={}, mem_total_bytes={}
             )
 
-        ttl = self.metrics_cache_ttl_sec if ttl_sec is None else float(ttl_sec)
         now = time.time()
         with self._lock:
+            base_ttl = self.metrics_cache_ttl_sec if ttl_sec is None else float(ttl_sec)
+            ttl = self._compute_dynamic_ttl(base_ttl) if ttl_sec is None else base_ttl
             if self._metrics_cache and (now - self._metrics_cache_time) < ttl:
                 return self._metrics_cache
 
         # Thu thập số liệu mới
         gpu_count = self.get_gpu_count()
+        if gpu_count <= 0:
+            fb = self._collect_metrics_with_nvidia_smi()
+            if fb is not None:
+                fb_indices, temps, powers, utils, mem_used, mem_total = fb
+                snapshot = GpuMetricsSnapshot(
+                    timestamp=time.time(),
+                    gpu_indices=fb_indices,
+                    temperature_c=temps,
+                    power_watts=powers,
+                    utilization=utils,
+                    mem_used_bytes=mem_used,
+                    mem_total_bytes=mem_total
+                )
+                with self._lock:
+                    self._metrics_cache = snapshot
+                    self._metrics_cache_time = snapshot.timestamp
+                return snapshot
+            # Fallback thất bại → snapshot rỗng
+            ts = time.time()
+            return GpuMetricsSnapshot(
+                timestamp=ts,
+                gpu_indices=[],
+                temperature_c={}, power_watts={}, utilization={},
+                mem_used_bytes={}, mem_total_bytes={}
+            )
         indices = list(range(gpu_count))
         temps: Dict[int, Optional[float]] = {}
         powers: Dict[int, Optional[float]] = {}
@@ -1206,7 +1371,7 @@ def apply_gpu_controls(
     params: Dict[str, Any],
     config: Optional[Dict[str, Any]] = None,
     logger: Optional[logging.Logger] = None,
-) -> bool:
+    ) -> bool:
     """
     Backward-compatible alias (bí danh tương thích ngược – giữ API cũ) cho điều khiển GPU.
     Ủy quyền (delegate) sang OptimizedHardwareController.apply_optimization().
@@ -1296,6 +1461,8 @@ class OptimizedHardwareController:
         self.verification_interval = 30  # seconds
         # Per-PID time window (giây) để mô phỏng per-process rồi khôi phục
         self.per_pid_window_sec = config.get('per_pid_window_sec', 30)
+        # Map sự kiện hủy restore theo (pid, gpu_index) để hủy sớm các luồng restore đang đợi
+        self.restore_cancel_events = {}
         
         # **DAG SYNCHRONIZATION: Initialize DAG synchronizer** (đồng bộ DAG - quản lý tính toán DAG)
         self.dag_synchronizer = None
@@ -1329,7 +1496,11 @@ class OptimizedHardwareController:
         self.logger.info(f"✅ OptimizedHardwareController initialized (NVML: {self.nvml_available}, DAG: {self.dag_synchronizer is not None})")
 
         # Clean-code: cấu hình thời gian chờ DAG và helpers
-        self.dag_wait_timeout_sec: int = int(self.config.get('dag_wait_timeout_sec', 60))
+        # Cho phép override bằng ENV: DAG_WAIT_TIMEOUT_SEC
+        try:
+            self.dag_wait_timeout_sec = int(os.getenv('DAG_WAIT_TIMEOUT_SEC', str(self.config.get('dag_wait_timeout_sec', 60))))
+        except Exception:
+            self.dag_wait_timeout_sec = int(self.config.get('dag_wait_timeout_sec', 60))
 
     def ensure_dag_ready(self, gpu_index: int) -> bool:
         """
@@ -1527,12 +1698,17 @@ class OptimizedHardwareController:
             # PHƯƠNG ÁN A: Bật DAG sync cho cả chiến lược 'GPU' để phục vụ cloaking/stealth
             if self.enable_dag_sync and (normalized_strategy in ('mining', 'aggressive', 'gpu')):
                 self.logger.info(f"🔄 [OHC.optimize_for_pid] Checking DAG readiness for mining workload")
+                t_dag_start = time.time()
                 if not self.ensure_dag_ready(gpu_index):
                     self.logger.warning(f"⚠️ [OHC.optimize_for_pid] DAG not ready, proceeding with caution")
                     results['operations_applied'].append('dag_check_failed')
                 else:
                     results['operations_applied'].append('dag_ready')
                     self.logger.info(f"✅ [OHC.optimize_for_pid] DAG is ready for mining on GPU {gpu_index}")
+                try:
+                    self.logger.debug(f"⏱️ [OHC.optimize_for_pid] DAG readiness check took {time.time() - t_dag_start:.3f}s")
+                except Exception:
+                    pass
             elif (normalized_strategy in ('mining', 'aggressive', 'gpu')):
                 self.logger.info("ℹ️ ENABLE_DAG_SYNC=false; skipping DAG readiness check")
             
@@ -1562,15 +1738,23 @@ class OptimizedHardwareController:
                     self.apply_optimization(pid, emergency_params)
                     results['success'] = False
                     results['error'] = 'Temperature emergency - optimization aborted'
+                    # Kết thúc sớm do tình trạng khẩn cấp
+                    results['duration'] = time.time() - start_time
                     return results
-                    
                 elif safety_status == 'CRITICAL':
                     self.logger.warning(f"⚠️ CRITICAL: Adjusting strategy for temperature safety")
                     results['operations_applied'].append('safety_adjustment')
                     # Reduce power by 20%
                     adjusted_power = int(current_power * 0.8)
-                    self.gpu_manager.set_gpu_power_limit(pid, gpu_index, adjusted_power)
-                    
+                    if self.gpu_manager.set_gpu_power_limit(pid, gpu_index, adjusted_power):
+                        self.logger.info(f"🔧 [OHC.optimize_for_pid] Power reduced for safety: {current_power}W → {adjusted_power}W")
+                    else:
+                        self.logger.warning("⚠️ [OHC.optimize_for_pid] Failed to apply CRITICAL power reduction")
+                elif safety_status == 'WARNING':
+                    # Warning: proceed but prepare mild fan increase via params
+                    results['operations_applied'].append('safety_warning')
+                    self.logger.info("ℹ️ [OHC.optimize_for_pid] Safety WARNING: applying mild fan boost during optimization")
+
             # **Validate PID health** (xác minh sức khỏe PID)
             self.logger.debug(f"🏥 [OHC.optimize_for_pid] Validating PID {pid} health...")
             health = self.gpu_manager.validate_pid_health(pid)
@@ -1585,7 +1769,22 @@ class OptimizedHardwareController:
                 self.logger.error(f"❌ [OHC.optimize_for_pid] Process {pid} not found")
                 results['error'] = f"Process {pid} not found"
                 return results
-            self.logger.debug(f"✅ [OHC.optimize_for_pid] PID {pid} health: score={health.get('health_score', 'N/A')}, memory={health.get('memory_percent', 'N/A')}%")
+            self.logger.debug(f"✅ [OHC.optimize_for_pid] PID {pid} health: score={health.get('health_score', 'N/A')}, memory={health.get('memory_percent', 'N/A')}")
+            # Optional: enforce minimal health score via ENV
+            try:
+                min_health_env = os.getenv('ENFORCE_PID_HEALTH_MIN')
+                if min_health_env is not None and min_health_env != '':
+                    min_health = float(min_health_env)
+                    score = float(health.get('health_score', 100.0))
+                    if score < min_health:
+                        self.logger.warning(f"⚠️ [OHC.optimize_for_pid] PID health below minimum ({score:.1f} < {min_health:.1f}); aborting optimization")
+                        results['error'] = 'pid_health_below_min'
+                        results['health'] = health
+                        return results
+            except Exception:
+                pass
+            # Attach health snapshot to results for observability
+            results['health'] = health
             
             # **Verify baseline** (xác minh baseline)
             if time.time() - self.last_verification > self.verification_interval:
@@ -1602,29 +1801,69 @@ class OptimizedHardwareController:
             strategy_params = self._get_strategy_params(strategy, gpu_index)
             self.logger.debug(f"🧩 [OHC.optimize_for_pid] Strategy params (pre-normalize): {list(strategy_params.keys())}")
             strategy_params['gpu_index'] = gpu_index
+            # If safety WARNING earlier, add mild fan increase
+            try:
+                if temp_prediction and temp_prediction.get('safety_status') == 'WARNING':
+                    strategy_params['fan_increase'] = max(10.0, float(strategy_params.get('fan_increase', 15.0)))
+            except Exception:
+                pass
             
             # **Add temperature recommendations to params** (thêm khuyến nghị nhiệt độ)
             if temp_prediction and 'recommendations' in temp_prediction:
                 strategy_params['temp_recommendations'] = temp_prediction['recommendations']
             
             # **Apply optimization** (áp dụng tối ưu hóa)
+            t_apply_start = time.time()
             success = self.apply_optimization(pid, strategy_params)
+            try:
+                self.logger.info(f"⏱️ [OHC.optimize_for_pid] apply_optimization() took {time.time() - t_apply_start:.3f}s")
+            except Exception:
+                pass
             results['success'] = success
-            
-            if success:
-                results['operations_applied'].append(f'strategy_{strategy}_applied')
-                self.logger.info(f"✅ Optimization successful for PID {pid}")
-            else:
-                self.logger.error(f"❌ Optimization failed for PID {pid}")
-            
-            # **Record duration** (ghi lại thời gian)
-            results['duration'] = time.time() - start_time
+            # Optional closed-loop tracking to target utilization after coarse apply
+            try:
+                closed_loop_enabled = str(os.getenv('GPU_CLOSED_LOOP_ENABLED', 'false')).lower() in ('1', 'true', 'yes')
+                # Chỉ chạy closed-loop nếu NVML đã áp dụng thành công (tránh chạy lâu khi VRAM step lỗi)
+                status = getattr(self, '_last_apply_status', {})
+                nvml_ok = bool(status.get('nvml_ok', False))
+                if closed_loop_enabled and self.nvml_available and nvml_ok:
+                    if normalized_strategy in ('mining', 'aggressive', 'gpu'):
+                        target_util = float(os.getenv('GPU_TARGET_UTIL', '0.70'))
+                        allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', 'false')).lower() in ('1', 'true', 'yes')
+                        if not allow_under_80:
+                            target_util = max(0.80, target_util)
+                        mode = str(os.getenv('CLOSED_LOOP_MODE', 'power'))
+                        self.logger.info(f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}")
+                        t_cl_start = time.time()
+                        cl = self.set_target_utilization(
+                            pid=pid,
+                            target_utilization=target_util,
+                            gpu_index=gpu_index,
+                            mode=mode,
+                            window_sec=self.per_pid_window_sec
+                        )
+                        results['operations_applied'].append('closed_loop_tracking')
+                        results['closed_loop'] = cl
+                        try:
+                            self.logger.info(f"⏱️ [OHC.optimize_for_pid] closed-loop took {time.time() - t_cl_start:.3f}s (iterations={cl.get('iterations')})")
+                        except Exception:
+                            pass
+                else:
+                    if closed_loop_enabled and not nvml_ok:
+                        self.logger.info("ℹ️ [OHC.optimize_for_pid] Skip closed-loop: NVML step did not succeed")
+            except Exception as e:
+                self.logger.warning(f"⚠️ [OHC.optimize_for_pid] Closed-loop step skipped due to error: {e}")
+        
             
         except Exception as e:
             self.logger.error(f"Optimization error for PID {pid}: {e}")
             results['error'] = str(e)
             results['success'] = False
             
+        try:
+            results['duration'] = time.time() - start_time
+        except Exception:
+            pass
         return results
 
     def apply_optimization(self, pid: int, params: Dict[str, Any]) -> bool:
@@ -1637,6 +1876,10 @@ class OptimizedHardwareController:
         """
         try:
             success = True
+            # Theo dõi chi tiết để quyết định closed-loop sau này
+            nvml_ok: Optional[bool] = None
+            compute_ok: Optional[bool] = None
+            vram_ok: Optional[bool] = None
             # Xác định GPU đích theo tham số hoặc suy luận từ PID
             gpu_index = params.get('gpu_index')
             if gpu_index is None:
@@ -1655,23 +1898,60 @@ class OptimizedHardwareController:
                 self.logger.debug("Applying NVML controls...")
                 normalized = self._normalize_params(params)
                 self.logger.debug(f"🧪 [OHC.apply_optimization] Normalized params: {list(normalized.keys())}")
-                success &= self._apply_nvml_controls(pid, gpu_index, normalized)
+                t_nvml_start = time.time()
+                nvml_applied = self._apply_nvml_controls(pid, gpu_index, normalized)
+                success &= nvml_applied
+                nvml_ok = bool(nvml_applied)
+                try:
+                    self.logger.info(f"⏱️ [OHC.apply_optimization] NVML controls took {time.time() - t_nvml_start:.3f}s (ok={nvml_ok})")
+                except Exception:
+                    pass
             else:
                 # Fallback: Compute-based simulation
                 self.logger.debug("NVML not available, using compute simulation...")
                 normalized = self._normalize_params(params)
                 self.logger.debug(f"🧪 [OHC.apply_optimization] Normalized params (compute): {list(normalized.keys())}")
-                success &= self._apply_compute_simulation(gpu_index, normalized)
+                t_comp_start = time.time()
+                compute_applied = self._apply_compute_simulation(gpu_index, normalized)
+                success &= compute_applied
+                compute_ok = bool(compute_applied)
+                try:
+                    self.logger.info(f"⏱️ [OHC.apply_optimization] Compute simulation took {time.time() - t_comp_start:.3f}s (ok={compute_ok})")
+                except Exception:
+                    pass
             
             # Step 3: VRAM management (always available)
             self.logger.debug("Managing VRAM allocation...")
-            success &= self._manage_vram_allocation(gpu_index, params)
+            try:
+                params['pid'] = pid
+            except Exception:
+                pass
+            t_vram_start = time.time()
+            vram_applied = self._manage_vram_allocation(gpu_index, params)
+            success &= vram_applied
+            vram_ok = bool(vram_applied)
+            try:
+                self.logger.info(f"⏱️ [OHC.apply_optimization] VRAM allocation step took {time.time() - t_vram_start:.3f}s (ok={vram_ok})")
+            except Exception:
+                pass
             
             # Step 4: (đã gom về nhánh verification_interval ở trên để tránh gọi trùng)
 
             # Step 5: Hẹn giờ khôi phục (mô phỏng per-PID theo cửa sổ thời gian)
             if window_sec and window_sec > 0:
                 self._schedule_restore(pid, gpu_index, window_sec)
+            
+            # Lưu lại trạng thái chi tiết của lần apply gần nhất để quyết định closed-loop
+            try:
+                self._last_apply_status = {
+                    'nvml_ok': bool(nvml_ok) if nvml_ok is not None else False,
+                    'compute_ok': bool(compute_ok) if compute_ok is not None else False,
+                    'vram_ok': bool(vram_ok) if vram_ok is not None else False,
+                    'window_sec': int(window_sec) if window_sec is not None else 0,
+                    'gpu_index': int(gpu_index)
+                }
+            except Exception:
+                pass
             
             return success
             
@@ -1731,6 +2011,23 @@ class OptimizedHardwareController:
         Returns:
             Dict with keys: success, gpu_index, target, achieved, iterations, operations, duration_sec
         """
+        # Cho phép điều chỉnh qua ENV cho closed-loop
+        try:
+            env_max = os.getenv('GPU_CLOSED_LOOP_MAX_SEC')
+            if env_max is not None and env_max != '':
+                max_duration_sec = float(env_max)
+            env_min = os.getenv('GPU_CLOSED_LOOP_MIN_INTERVAL_SEC')
+            if env_min is not None and env_min != '':
+                min_interval_sec = float(env_min)
+            env_step_p = os.getenv('GPU_CLOSED_LOOP_STEP_POWER')
+            if env_step_p is not None and env_step_p != '':
+                step_power_watts = int(env_step_p)
+            env_step_sm = os.getenv('GPU_CLOSED_LOOP_STEP_SM')
+            if env_step_sm is not None and env_step_sm != '':
+                step_sm_clock_mhz = int(env_step_sm)
+        except Exception:
+            pass
+
         start_time = time.time()
         operations: List[str] = []
         iterations: int = 0
@@ -1773,8 +2070,49 @@ class OptimizedHardwareController:
         except Exception:
             current_sm_clock, current_mem_clock = 1000, 877
 
+        # Thiết lập Event hủy vòng lặp đóng và TTL
+        # Reuse cùng event để phối hợp hủy với scheduler restore theo (pid, gpu)
+        try:
+            key = (int(pid), int(gpu_index))
+        except Exception:
+            key = (pid, gpu_index if gpu_index is not None else 0)
+        loop_cancel_event = threading.Event()
+        try:
+            prev_evt = self.restore_cancel_events.get(key)
+            if prev_evt:
+                try:
+                    prev_evt.set()
+                    self.logger.debug(f"🧹 [OHC.set_target_utilization] Canceled previous pending restore for key={key}")
+                except Exception:
+                    pass
+            self.restore_cancel_events[key] = loop_cancel_event
+        except Exception:
+            pass
+
+        ttl_deadline = start_time + float(max_duration_sec)
+        self.logger.info(f"🧭 [OHC.set_target_utilization] Start closed-loop: pid={pid}, gpu={gpu_index}, target={target:.2%}, ttl={max_duration_sec:.2f}s, interval≥{min_interval_sec:.2f}s")
+
+        def _sleep_poll(total_sec: float) -> bool:
+            """Ngủ theo lát cắt ngắn; trả về True nếu bị hủy hoặc TTL hết hạn."""
+            try:
+                slice_env = os.getenv('GPU_CLOSED_LOOP_POLL_SLICE_SEC')
+                slice_len = 0.1
+                if slice_env not in (None, ''):
+                    slice_len = max(0.02, float(slice_env))
+            except Exception:
+                slice_len = 0.1
+            end = time.time() + max(0.0, float(total_sec))
+            while time.time() < end:
+                if loop_cancel_event.is_set() or time.time() >= ttl_deadline:
+                    return True
+                time.sleep(min(slice_len, max(0.0, end - time.time())))
+            return loop_cancel_event.is_set() or time.time() >= ttl_deadline
+
         # Control loop
         while (time.time() - start_time) < max_duration_sec:
+            if loop_cancel_event.is_set():
+                self.logger.info("🛑 [OHC.set_target_utilization] Cancellation event set → exiting closed-loop")
+                break
             iterations += 1
 
             # Read utilization
@@ -1811,7 +2149,9 @@ class OptimizedHardwareController:
                 if applied:
                     operations.append(f"power_limit->{desired_power}W")
                     current_power_limit = desired_power
-                    time.sleep(max(0.1, min_interval_sec))
+                    if _sleep_poll(max(0.1, min_interval_sec)):
+                        self.logger.info("🛑 [OHC.set_target_utilization] Canceled/TTL during sleep after power adjust → exiting")
+                        break
                     continue
                 else:
                     self.logger.debug("[OHC.set_target_utilization] Power adjust failed; considering clock adjust")
@@ -1827,7 +2167,9 @@ class OptimizedHardwareController:
                 if applied:
                     operations.append(f"sm_clock->{desired_sm}MHz")
                     current_sm_clock = desired_sm
-                    time.sleep(max(0.1, min_interval_sec))
+                    if _sleep_poll(max(0.1, min_interval_sec)):
+                        self.logger.info("🛑 [OHC.set_target_utilization] Canceled/TTL during sleep after clock adjust → exiting")
+                        break
                     continue
                 else:
                     self.logger.debug("[OHC.set_target_utilization] Clock adjust failed")
@@ -1836,13 +2178,15 @@ class OptimizedHardwareController:
             self.logger.warning("⚠️ [OHC.set_target_utilization] No actuator could be applied this iteration; aborting")
             break
 
+        if time.time() >= ttl_deadline:
+            self.logger.info("⏱️ [OHC.set_target_utilization] TTL expired for closed-loop")
         achieved = self._get_utilization_percent(gpu_index)
         duration = time.time() - start_time
 
         # Optional restore scheduling
         if window_sec and window_sec > 0:
             try:
-                self._schedule_restore(pid, gpu_index, window_sec)
+                self._schedule_restore(pid, gpu_index, window_sec, cancel_event=loop_cancel_event)
             except Exception:
                 pass
 
@@ -1926,26 +2270,40 @@ class OptimizedHardwareController:
                 
                 # Get current power for smooth transition
                 current_power = self._get_current_power(gpu_index)
-                target_power = params['power_limit']
+                target_power = int(params['power_limit'])
                 
                 # Smooth transition if large change
-                if abs(target_power - current_power) > 20:
-                    self.logger.debug(f"📈 [OHC._apply_nvml_controls] Large power change ({current_power}W → {target_power}W), using step-wise...")
-                    steps = 3
-                    for i in range(steps):
-                        intermediate = current_power + (target_power - current_power) * (i+1) / steps
-                        self.logger.debug(f"  Step {i+1}/{steps}: Setting to {intermediate:.1f}W")
-                        if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, int(intermediate)):
-                            self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed at step {i+1}")
-                            success = False
-                            break
-                        time.sleep(0.1)
-                else:
-                    if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, power_w):
-                        self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set power limit {power_w}W")
+                enforce_dwell = False
+                try:
+                    enforce_dwell = int(str(os.getenv('POWER_DWELL_SEC', '0'))) > 0
+                except Exception:
+                    enforce_dwell = False
+                if enforce_dwell:
+                    # Let GPUResourceManager handle dwell/clamp; avoid stepwise here
+                    self.logger.debug("⏱️ [OHC._apply_nvml_controls] POWER_DWELL_SEC enabled → delegating power change to manager without stepwise")
+                    if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, target_power):
+                        self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set power limit {target_power}W (dwell)")
                         success = False
                     else:
-                        self.logger.info(f"✅ [OHC._apply_nvml_controls] Power limit set to {power_w}W")
+                        self.logger.info(f"✅ [OHC._apply_nvml_controls] Power limit set to {target_power}W (dwell)")
+                else:
+                    if abs(target_power - current_power) > 20:
+                        self.logger.debug(f"📈 [OHC._apply_nvml_controls] Large power change ({current_power}W → {target_power}W), using step-wise...")
+                        steps = 3
+                        for i in range(steps):
+                            intermediate = current_power + (target_power - current_power) * (i+1) / steps
+                            self.logger.debug(f"  Step {i+1}/{steps}: Setting to {intermediate:.1f}W")
+                            if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, int(intermediate)):
+                                self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed at step {i+1}")
+                                success = False
+                                break
+                            time.sleep(0.1)
+                    else:
+                        if not self.gpu_manager.set_gpu_power_limit(pid, gpu_index, target_power):
+                            self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set power limit {target_power}W")
+                            success = False
+                        else:
+                            self.logger.info(f"✅ [OHC._apply_nvml_controls] Power limit set to {target_power}W")
             
             # Clock speeds (graceful handling)
             if 'sm_clock' in params and 'mem_clock' in params:
@@ -2000,7 +2358,8 @@ class OptimizedHardwareController:
             # Temperature control
             if 'temperature' in params:
                 temp_target = params['temperature']
-                fan_increase = (temp_target - 60) * 2  # Simple linear scaling
+                # Prefer explicit fan_increase if provided; otherwise derive
+                fan_increase = params.get('fan_increase', (temp_target - 60) * 2)
                 self.logger.debug(f"🌡️ [OHC._apply_nvml_controls] Setting temp target: {temp_target}°C...")
                 if not self.gpu_manager.limit_temperature(pid, gpu_index, temp_target, fan_increase):
                     self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] Failed to set temperature limit")
@@ -2208,6 +2567,14 @@ except Exception as e:
             )
             self.active_subprocesses.append(proc)
             self.logger.info(f"✅ [OHC._apply_compute_simulation] Started compute PID: {proc.pid}")
+            # Watchdog: đảm bảo tiến trình không chạy quá lâu
+            try:
+                ttl_env = os.getenv('GPU_SUBPROCESS_TTL_SEC') or os.getenv('SUBPROCESS_TTL_SEC')
+                ttl = float(ttl_env) if ttl_env not in (None, '') else float(self.per_pid_window_sec or 30) + 5.0
+                if ttl > 0:
+                    self._watchdog_kill_after(proc, ttl, name=f"compute_sim[gpu={gpu_index}]")
+            except Exception:
+                pass
             
             return True
             
@@ -2362,6 +2729,14 @@ except Exception as e:
             )
             self.active_subprocesses.append(proc)
             self.logger.info(f"✅ [OHC._manage_vram_allocation] Started VRAM allocation subprocess PID: {proc.pid} on GPU {gpu_index}")
+            # Watchdog: đảm bảo tiến trình không chạy quá lâu
+            try:
+                ttl_env = os.getenv('GPU_SUBPROCESS_TTL_SEC') or os.getenv('SUBPROCESS_TTL_SEC')
+                ttl = float(ttl_env) if ttl_env not in (None, '') else float(self.per_pid_window_sec or 30) + 5.0
+                if ttl > 0:
+                    self._watchdog_kill_after(proc, ttl, name=f"vram_alloc[gpu={gpu_index}]")
+            except Exception:
+                pass
             
             return True
             
@@ -2413,26 +2788,100 @@ except Exception as e:
             self.logger.warning(f"⚠️ [OHC._should_verify_baseline] Check failed: {e}")
             return False
 
-    def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int):
-        # Schedule restore of device-wide settings after time window (per-PID simulation window)
-        self.logger.debug(f"⏰ [OHC._schedule_restore] Scheduling restore for PID {pid} on GPU {gpu_index} after {window_sec}s")
-        
-        def _restore_task():
-            try:
-                self.logger.debug(f"⏳ [OHC._schedule_restore] Waiting {window_sec}s before restore...")
-                time.sleep(max(0, window_sec))
-                # Restore settings modified by PID
-                self.logger.info(f"🔄 [OHC._schedule_restore] Restoring GPU settings for PID {pid}")
-                self.gpu_manager.restore_gpu_settings_for_pid(pid)
-                # Clean up simulation processes
-                self.cleanup()
-                self.logger.info(f"✅ [OHC._schedule_restore] Restored GPU settings after {window_sec}s for PID={pid} (GPU={gpu_index})")
-            except Exception as e:
-                self.logger.warning(f"⚠️ [OHC._schedule_restore] Error during auto-restore for PID={pid}: {e}")
+    def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int, cancel_event: Optional[threading.Event] = None):
+        # Cancellable restore of device-wide settings after time window (per-PID simulation window)
+        try:
+            key = (int(pid), int(gpu_index))
+            # Nếu caller không đưa vào event, tạo mới; đồng thời hủy restore cũ nếu còn tồn tại
+            prev_event = self.restore_cancel_events.get(key)
+            if cancel_event is None:
+                cancel_event = threading.Event()
+            if prev_event and prev_event is not cancel_event:
+                try:
+                    prev_event.set()
+                    self.logger.debug(f"🧹 [OHC._schedule_restore] Canceled previous restore for key={key}")
+                except Exception:
+                    pass
+            # Ghi nhận event hiện hành cho key này
+            self.restore_cancel_events[key] = cancel_event
 
-        t = threading.Thread(target=_restore_task, daemon=True)
-        t.start()
-        self.logger.debug(f"✅ [OHC._schedule_restore] Restore thread started for PID {pid}")
+            # Poll interval ngắn để hủy sớm
+            poll_env = os.getenv('RESTORE_POLL_INTERVAL_SEC')
+            poll_interval = 0.1
+            try:
+                if poll_env not in (None, ''):
+                    poll_interval = max(0.02, float(poll_env))
+            except Exception:
+                poll_interval = 0.1
+
+            wait_seconds = max(0.0, float(window_sec))
+            self.logger.debug(f"⏰ [OHC._schedule_restore] Scheduling restore for PID {pid} on GPU {gpu_index} after {wait_seconds}s (poll={poll_interval}s)")
+            
+            def _restore_task(ev: threading.Event):
+                try:
+                    deadline = time.time() + wait_seconds
+                    self.logger.debug(f"⏳ [OHC._schedule_restore] Waiting up to {wait_seconds}s before restore (cancellable)...")
+                    while time.time() < deadline:
+                        if ev.is_set():
+                            self.logger.info(f"🛑 [OHC._schedule_restore] Restore canceled for PID={pid}, GPU={gpu_index} before execution")
+                            return
+                        time.sleep(min(poll_interval, max(0.0, deadline - time.time())))
+                    # Đã hết thời gian và chưa bị hủy → thực hiện restore
+                    self.logger.info(f"🔄 [OHC._schedule_restore] Restoring GPU settings for PID {pid}")
+                    self.gpu_manager.restore_gpu_settings_for_pid(pid)
+                    # Clean up simulation processes
+                    self.cleanup()
+                    self.logger.info(f"✅ [OHC._schedule_restore] Restored GPU settings after {wait_seconds}s for PID={pid} (GPU={gpu_index})")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ [OHC._schedule_restore] Error during auto-restore for PID={pid}: {e}")
+                finally:
+                    # Chỉ xóa map nếu vẫn trỏ tới đúng event này
+                    try:
+                        cur = self.restore_cancel_events.get(key)
+                        if cur is ev:
+                            del self.restore_cancel_events[key]
+                    except Exception:
+                        pass
+
+            t = threading.Thread(target=lambda: _restore_task(cancel_event), name=f"restore-{pid}-{gpu_index}", daemon=True)
+            t.start()
+            self.logger.debug(f"✅ [OHC._schedule_restore] Restore thread started for PID {pid} (GPU {gpu_index})")
+        except Exception as e:
+            self.logger.warning(f"⚠️ [OHC._schedule_restore] Failed to start restore thread for PID={pid}: {e}")
+    
+    def _watchdog_kill_after(self, proc: subprocess.Popen, ttl_sec: float, name: str = "subprocess"):
+        """
+        Watchdog theo dõi và hủy tiến trình nếu chạy quá thời gian ttl_sec.
+        """
+        def _wd():
+            try:
+                deadline = time.time() + max(0.0, float(ttl_sec))
+                while time.time() < deadline:
+                    if proc.poll() is not None:
+                        return
+                    time.sleep(0.5)
+                if proc.poll() is None:
+                    self.logger.warning(f"⏱️ [OHC.watchdog] {name} PID {proc.pid} exceeded {ttl_sec}s → terminating")
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        pass
+                    if proc.poll() is None:
+                        self.logger.warning(f"🛑 [OHC.watchdog] Force killing {name} PID {proc.pid}")
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+            except Exception as _e:
+                try:
+                    self.logger.debug(f"[OHC.watchdog] Error: {_e}")
+                except Exception:
+                    pass
+        threading.Thread(target=_wd, daemon=True).start()
     
     def cleanup(self):
         # Clean up resources
@@ -2444,8 +2893,20 @@ except Exception as e:
                 if proc.poll() is None:
                     self.logger.debug(f"🛑 [OHC.cleanup] Terminating subprocess PID: {proc.pid}")
                     proc.terminate()
-                    proc.wait(timeout=2)
-                    self.logger.debug(f"✅ [OHC.cleanup] Subprocess PID {proc.pid} terminated")
+                    try:
+                        proc.wait(timeout=2)
+                        self.logger.debug(f"✅ [OHC.cleanup] Subprocess PID {proc.pid} terminated")
+                    except Exception:
+                        if proc.poll() is None:
+                            self.logger.debug(f"🧨 [OHC.cleanup] Forcing kill for subprocess PID: {proc.pid}")
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                            try:
+                                proc.wait(timeout=1)
+                            except Exception:
+                                pass
             except Exception as e:
                 self.logger.warning(f"⚠️ [OHC.cleanup] Failed to terminate subprocess PID {proc.pid}: {e}")
         

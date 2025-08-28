@@ -1,300 +1,109 @@
-# 📊 **BÁO CÁO TỔNG HỢP VÀ ĐÁNH GIÁ GIẢI PHÁP TỐI ƯU GPU**
-## **GPU Optimization Solution Synthesis Report** (Báo cáo tổng hợp giải pháp tối ưu GPU – kết hợp từ 3 phân tích agents)
-
----
-
-## 1️⃣ **PHÂN TÍCH CHI TIẾT 3 BÁO CÁO AGENTS**
-
-### 📄 **Agent 01** - Phương Pháp Thực Dụng
-**Điểm mạnh:**
-- **Evidence-based approach** (tiếp cận dựa bằng chứng – trích dẫn file:line cụ thể)
-- **Incremental refactoring** (tái cấu trúc từng bước – không thay đổi lớn)
-- Tập trung vào **quick wins** (chiến thắng nhanh – cải thiện dễ thực hiện)
-- Chi tiết **implementation steps** (bước thực thi – 6 bước rõ ràng)
-
-**Điểm yếu:**
-- Thiếu **vision tổng thể** (tầm nhìn dài hạn)
-- Không có **metrics định lượng** cụ thể
-- **Conservative approach** (tiếp cận bảo thủ – ít đột phá)
-
-### 📄 **Agent 02** - Phương Pháp Kiến Trúc
-**Điểm mạnh:**
-- **Comprehensive analysis** (phân tích toàn diện – 4 module GPU chính)
-- **Quantified metrics** (chỉ số định lượng – giảm 70% code trùng, 80% NVML calls)
-- **Architectural vision** (tầm nhìn kiến trúc – UnifiedGPUManager)
-- **Phased implementation** (triển khai theo giai đoạn – 3 phases)
-
-**Điểm yếu:**
-- **Disruptive changes** (thay đổi lớn – risk cao)
-- Yêu cầu **major refactoring** (tái cấu trúc lớn)
-- **Implementation complexity** (độ phức tạp cao)
-
-### 📄 **Agent 03** - Phương Pháp Cân Bằng
-**Điểm mạnh:**
-- **Balanced approach** (tiếp cận cân bằng – giữa thực dụng và kiến trúc)
-- **Edge cases coverage** (xử lý trường hợp biên – GPU=0, NVML fail)
-- **Feature flags** (cờ tính năng – ENV gates cho flexibility)
-- **Measurement plan** (kế hoạch đo lường – cProfile/tracemalloc)
-
-**Điểm yếu:**
-- Ít **innovation** (sáng tạo) so với Agent 02
-- **Documentation** (tài liệu) chưa chi tiết bằng Agent 01
-
----
-
-## 2️⃣ **ĐÁNH GIÁ ĐỊNH LƯỢNG 4 YẾU TỐ CHÍNH**
-
-### 📊 **Bảng Điểm Đánh Giá** (Score Matrix – ma trận điểm số)
-
-| **Yếu Tố** | **Agent 01** | **Agent 02** | **Agent 03** | **Trọng Số** |
-|------------|--------------|--------------|--------------|--------------|
-| **Tính Khả Thi** (Feasibility – khả năng thực hiện) | 9/10 | 6/10 | 8/10 | 30% |
-| **Tính Bền Vững** (Sustainability – duy trì lâu dài) | 7/10 | 9/10 | 8/10 | 25% |
-| **Tính Sáng Tạo** (Innovation – đột phá mới) | 5/10 | 9/10 | 7/10 | 20% |
-| **Tính Phù Hợp** (Alignment – phù hợp mục tiêu) | 8/10 | 7/10 | 9/10 | 25% |
-| **Tổng Điểm Gia Quyền** | **7.5** | **7.55** | **8.05** | 100% |
-
-### 🔍 **Phân Tích Chi Tiết:**
-
-**Tính Khả Thi:**
-- Agent 01 (9/10): **Minimal changes** (thay đổi tối thiểu), dễ triển khai ngay
-- Agent 02 (6/10): **Major refactor** cần nhiều effort và risk
-- Agent 03 (8/10): **Balanced** với ENV gates và fallback plans
-
-**Tính Bền Vững:**
-- Agent 01 (7/10): Giải quyết trực tiếp nhưng thiếu **long-term vision**
-- Agent 02 (9/10): **UnifiedGPUManager** tạo foundation vững chắc
-- Agent 03 (8/10): **Feature flags** và **adapter pattern** dễ maintain
-
-**Tính Sáng Tạo:**
-- Agent 01 (5/10): **Conservative** nhưng practical
-- Agent 02 (9/10): **Architectural innovation** với unified design
-- Agent 03 (7/10): **Smart caching** và **metrics hub** concept
-
-**Tính Phù Hợp:**
-- Agent 01 (8/10): Đáp ứng yêu cầu **không đổi cấu trúc**
-- Agent 02 (7/10): Vision tốt nhưng **disruptive**
-- Agent 03 (9/10): **Perfect fit** với codebase hiện tại
-
----
-
-## 3️⃣ **GIẢI PHÁP TỐI ƯU TỔNG HỢP**
-
-### 🎯 **Hybrid Optimization Strategy** (Chiến lược tối ưu lai – kết hợp điểm mạnh)
-
-Dựa trên phân tích, tôi tổng hợp **giải pháp tối ưu** kết hợp điểm mạnh từ cả 3 agents:
-
-#### **🏗️ Kiến Trúc Tổng Thể:**
-
-```
-┌─────────────────────────────────────────┐
-│   GPUResourceManager (Single Source)    │ ← Agent 02 concept
-│         [NVML Adapter Core]             │
-├─────────────────────────────────────────┤
-│         GPU Metrics Cache               │ ← Agent 03 feature
-│     [TTL: 2s power/temp, 1s util]      │
-├─────────────────────────────────────────┤
-│      Backward Compatibility Layer       │ ← Agent 01 approach  
-│    [GPUManager as thin facade]         │
-├─────────────────────────────────────────┤
-│       MetricsCollectionHub              │ ← Agent 02 + 03
-│    [Central publish/subscribe]          │
-└─────────────────────────────────────────┘
-```
-
-#### **✅ Các Thành Phần Chính:**
-
-1. **NVML Unification** (Hợp nhất NVML – một điểm truy cập)
-   - Giữ `GPUResourceManager` làm **primary adapter** (From Agent 01)
-   - Thêm **handle caching** với TTL 60s (From Agent 03)
-   - **Facade pattern** cho backward compatibility (From Agent 01)
-
-2. **Smart Metrics System** (Hệ thống metrics thông minh)
-   - **MetricsCache** với different TTL (From Agent 03)
-   - **Batch NVML operations** (From Agent 02)
-   - **Moving average smoothing** 5-10 samples (From Agent 01)
-
-3. **Progressive Migration** (Di chuyển tiến bộ)
-   - **Feature flags** cho rollback (From Agent 03)
-   - **Incremental steps** không breaking changes (From Agent 01)
-   - **Performance monitoring** built-in (From Agent 02)
-
----
-
-## 4️⃣ **KẾ HOẠCH THỰC THI CHI TIẾT**
-
-### 📅 **Implementation Roadmap** (Lộ trình triển khai – kế hoạch theo giai đoạn)
-
-#### **Phase 1: Foundation Setup** (Giai đoạn 1: Thiết lập nền tảng) - **5 ngày**
-
-**🎯 Mục tiêu:** Chuẩn hóa NVML và tạo caching layer
-
-| **Ngày** | **Công việc** | **File tác động** | **Success Metrics** |
-|----------|---------------|-------------------|-------------------|
-| **Ngày 1-2** | **NVML Unification** (Hợp nhất NVML) | `resource_control.py`, `utils.py` | NVML calls giảm 40% |
-| | - Route tất cả về `GPUResourceManager` | | |
-| | - Tạo facade pattern cho `GPUManager` | | |
-| **Ngày 3-4** | **Handle Cache Implementation** | `resource_manager.py` | Cache hit rate >80% |
-| | - Cache với TTL 60s | | |
-| | - Invalidation mechanism | | |
-| **Ngày 5** | **Metrics Cache Layer** | New: cache module | Response time <50ms |
-| | - Power/temp: TTL 2s | | |
-| | - Utilization: TTL 1s | | |
-
-#### **Phase 2: Optimization** (Giai đoạn 2: Tối ưu hóa) - **4 ngày**
-
-| **Ngày** | **Công việc** | **File tác động** | **Success Metrics** |
-|----------|---------------|-------------------|-------------------|
-| **Ngày 6-7** | **MetricsCollectionHub** | `gpu_optimization_orchestrator.py` | Single source truth |
-| | - Central publish/subscribe | | |
-| | - Moving average smoothing | | |
-| **Ngày 8** | **ENV Gates & Feature Flags** | All GPU modules | Configurable runtime |
-| | - `GPU_NVML_FALLBACK` | | |
-| | - `ENABLE_COMPUTE_SIM` | | |
-| **Ngày 9** | **Debug Throttling** | `resource_control.py` | Log volume -60% |
-| | - Rate limit DEBUG logs | | |
-| | - Hysteresis for stability | | |
-
-#### **Phase 3: Validation** (Giai đoạn 3: Kiểm thử) - **3 ngày**
-
-| **Ngày** | **Công việc** | **Công cụ** | **Target** |
-|----------|---------------|-------------|------------|
-| **Ngày 10** | **Performance Testing** | `cProfile`, `tracemalloc` | Baseline metrics |
-| **Ngày 11** | **Edge Cases Testing** | Unit tests | 100% coverage |
-| | - 0 GPU scenario | | |
-| | - NVML failure | | |
-| **Ngày 12** | **Integration Testing** | Full system | No regression |
-
-### 📊 **Success Metrics** (Chỉ số thành công – KPIs đo lường)
-
-#### **Quantitative Metrics** (Chỉ số định lượng):
-
-| **Metric** | **Current** | **Target** | **Method** |
-|------------|-------------|------------|------------|
-| **NVML API calls/sec** | 50+ | <10 | NVML counter |
-| **Duplicate code lines** | ~3000 | <900 | Code analysis |
-| **GPU metrics latency** | 200ms | <50ms | `perf_counter()` |
-| **Memory overhead** | 150MB | <50MB | `tracemalloc` |
-| **CPU usage (monitoring)** | 8-10% | <3% | `psutil` |
-| **Log volume/hour** | 50MB | <20MB | Log size monitor |
+Mục tiêu: đọc kỹ tài liệu `docs/bao-cao-phan-tich-gpu.md`, rút ra các vấn đề hiện tại và đề xuất phương án tối ưu GPU cuối cùng, bao gồm loại bỏ trùng lặp chức năng.
+
+Kế hoạch:
+1) Mở và đọc toàn bộ nội dung tài liệu để nắm các nhận định/khuyến nghị hiện có.
+2) Tổng hợp vấn đề theo nhóm: kiến trúc, metrics, tối ưu hiệu năng, cloaking, giám sát, cấu hình.
+3) Đề xuất phương án tối ưu “cuối cùng” phù hợp quyết định giữ [OptimizedHardwareController](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1225:0-2452:90) và hợp nhất API GPU.
+4) Liệt kê bước triển khai theo pha và rủi ro/biện pháp giảm thiểu.
+
+Tôi sẽ mở file tài liệu để phân tích.
+
+Mục tiêu: rà soát trùng lặp NVML/clock/power theo tài liệu và kiểm tra mức độ hiện thực của [IGpuMetricsProvider.get_metrics_snapshot()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:318:4-394:23) và alias [apply_gpu_controls()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1203:0-1223:20) trong code hiện tại, để đề xuất phương án tối ưu cuối cùng.
+
+Kế hoạch:
+1) Tìm [get_metrics_snapshot](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:318:4-394:23)/[apply_gpu_controls](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1203:0-1223:20) trong [resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0) để xác nhận hiện trạng.
+2) Tìm callsites trùng NVML/clock/power trong [utils.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/utils.py:0:0-0:0), [privileged_operations.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/privileged_operations.py:0:0-0:0), và [gpu_resource_monitor.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_resource_monitor.py:0:0-0:0) để liệt kê điểm cần gộp về [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33).
+3) Tổng hợp phát hiện và đưa ra phương án tối ưu/cleanup.
+
+Tôi sẽ chạy tìm kiếm song song trên các file liên quan.
+
+Tôi sẽ cập nhật kế hoạch công việc (TODO) để phản ánh đề xuất tối ưu và loại bỏ trùng lặp, giúp bạn theo dõi tiến độ rõ ràng. Tôi sẽ thêm/cập nhật các mục: hợp nhất NVML về [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33), refactor chiến lược và monitor sang [IGpuMetricsProvider](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:111:0-116:11), chuẩn hóa TTL/sampling, toggle rollback, tests, logging, ENV, và sửa các edge cases.
+
+Tôi sẽ lưu lại “phương án tối ưu GPU cuối cùng” vào bộ nhớ dùng chung để đảm bảo nhất quán trong các bước triển khai tiếp theo và tránh quên các quyết định kiến trúc quan trọng.
+Tóm tắt nhanh:
+- [docs/bao-cao-phan-tich-gpu.md](cci:7://file:///home/azureuser/opus-gpu/docs/bao-cao-phan-tich-gpu.md:0:0-0:0) chỉ ra trùng lặp NVML/clock/power ở nhiều lớp, TTL/monitor chưa đồng bộ, bug pre‑unlock, thiếu `pynvml` fallback.
+- Phương án cuối: lấy [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33) làm “single source of truth” và triển khai [IGpuMetricsProvider](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:111:0-116:11) + [GpuMetricsSnapshot](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:92:0-108:45); [MetricsCollectionHub](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:83:0-472:38) chỉ làm time‑series aggregator. Xoá mọi NVML trực tiếp khỏi strategy/monitor/utils, ủy quyền về một chỗ. Giữ [OptimizedHardwareController](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1225:0-2452:90), thêm alias tương thích.
+- Có toggle rollback, TTL động, fallback `nvidia-smi`, chuẩn hóa ENV/logging/tests.
+
+Tôi bám theo quyết định trong memory “Giữ OptimizedHardwareController… hợp nhất API GPU” (quyết định ưu tiên – định hướng hợp nhất).
+
+# Findings (từ tài liệu)
+- __Điểm trùng NVML/điều khiển__  
+  - Theo tài liệu: NVML và thao tác clock/power xuất hiện ở nhiều lớp: `utils.GPUManager` (NVML cơ bản), [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33) (NVML + policy), `PrivilegedOperationManager` (đụng clock).  
+  - Đặt clock/power lặp lại ở [utils.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/utils.py:0:0-0:0), [resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0), [privileged_operations.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/privileged_operations.py:0:0-0:0).  
+  - Khuyến nghị của tài liệu: chọn 1 API trung tâm là [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33) để thống nhất policy (dwell/clamp/min-util).  
+  - Trích dẫn: [docs/bao-cao-phan-tich-gpu.md](cci:7://file:///home/azureuser/opus-gpu/docs/bao-cao-phan-tich-gpu.md:0:0-0:0) mục 3 và 6 (dẫn chứng chi tiết các file).
+
+- __Vấn đề vận hành__  
+  - `CUDA_COMMAND` chưa khớp thực tế (env → `/usr/local/bin/inference-cuda` → fallback [/app/inference-cuda](cci:7://file:///home/azureuser/opus-gpu/app/home/azureuser/opus-gpu/app/inference-cuda:0:0-0:0)).  
+  - Vòng pre‑unlock chạy khi không có GPU (bug `range(max(1,_cnt))`).  
+  - Thiếu `pynvml` trong môi trường Python → cần fallback `nvidia-smi`.  
+  - Trích dẫn: mục 5 (edge cases) và mục 6 (đề xuất).
+
+- __Vai trò class hiện có__  
+  - [GpuMetricsSnapshot](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:92:0-108:45) (ảnh chụp số liệu – gói số liệu tức thời, đa‑GPU).  
+  - [IGpuMetricsProvider](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:111:0-116:11) (giao diện cung cấp số liệu – API đọc snapshot có TTL).  
+  - Cả hai đã hiện diện tại [app/mining_environment/scripts/resource_control.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:0:0-0:0) (đoạn 86–120).  
+  - [MetricsCollectionHub](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:83:0-472:38) (trung tâm thu thập – time‑series, circular buffer, thống kê) hiện được [GpuCloakStrategy](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:1162:0-1794:114) đẩy số liệu “pre/warmup”, nhưng chưa có “post‑apply” để đóng vòng phản hồi.
+
+# Kết luận về trùng lặp
+- __Không trùng nếu phân vai đúng__:  
+  - [IGpuMetricsProvider](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:111:0-116:11) (nguồn sự thật phần cứng – đọc NVML/cached, đưa [GpuMetricsSnapshot](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:92:0-108:45)).  
+  - [MetricsCollectionHub](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:83:0-472:38) (bus/event time‑series – nhận sự kiện từ snapshot, aggregate, export).  
+- __Trùng lặp hiện hữu__ là do: strategy/monitor/utils/privileged ops đều tự đọc NVML hoặc tự đặt clock/power. Cần dồn về [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33).
+
+# Phương án tối ưu GPU cuối cùng
+- __Trục lõi__  
+  - [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33) (quản lý NVML – nguồn sự thật): triển khai đầy đủ [IGpuMetricsProvider.get_metrics_snapshot(ttl_sec)](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:318:4-394:23) trả [GpuMetricsSnapshot](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:92:0-108:45).  
+    - TTL động: Idle (util thấp, T ổn) → TTL ~1.5–2.0s; Busy (util cao, T ≥72°C) → TTL ~0.5s.  
+    - Cache handle NVML theo GPU, khóa RLock per‑GPU; thống nhất xử lý lỗi NVML.  
+    - Fallback `nvidia-smi` (lệnh hệ thống – truy vấn NVML gián tiếp) khi thiếu `pynvml` với tần suất thấp.
+  - [OptimizedHardwareController](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1225:0-2452:90) (bộ điều khiển phần cứng tối ưu – áp dụng an toàn clock/power/VRAM/compute): giữ nguyên làm nơi thực thi cuối.  
+    - Thêm alias [apply_gpu_controls()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1203:0-1223:20) (bí danh – tương thích ngược) trỏ tới thực thi hiện tại (ví dụ [apply_optimization()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1629:4-1681:24)).
+- __Luồng metrics thống nhất__  
+  - Strategy/monitor chỉ gọi [IGpuMetricsProvider.get_metrics_snapshot()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:318:4-394:23) → ánh xạ snapshot → [MetricsCollectionHub.add_metric()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:171:4-204:24) theo từng type.  
+  - Chuẩn hóa mapping:  
+    - utilization (0..1) → `gpu_usage.utilization` (%).  
+    - power_watts → `power.power_draw` (W).  
+    - temperature_c → `temperature.temperature` (°C).  
+    - mem_used/total bytes → `memory_usage.memory_usage_mb/gpu_memory_mb` (MB).  
+  - Bổ sung “post‑apply metrics” (sau khi OHC áp dụng) để đánh giá hiệu quả vòng sau.
+- __Xoá trùng lặp điều khiển__  
+  - Mọi thao tác [set_gpu_power_limit](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:396:4-497:24), [set_gpu_clocks](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:499:4-596:24) chỉ được thực hiện bởi [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33) theo policy thống nhất (dwell/clamp/safety).  
+  - `utils.GPUManager` trở thành thin‑proxy (hoặc deprecate), gọi sang [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33).  
+  - `PrivilegedOperationManager` chỉ làm phần đặc quyền; khi cần clock/power → ủy quyền sang [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/cloak_strategies.py:66:4-66:33).
+- __Đồng bộ cấu hình__  
+  - Sampling interval/TTL đặt tại cấu hình trung tâm (ENV/const), `monitor` và `strategy` dùng chung.  
+  - ENV chuẩn hóa: `CUDA_COMMAND` theo thứ tự: ENV → `/usr/local/bin/inference-cuda` → [/app/inference-cuda](cci:7://file:///home/azureuser/opus-gpu/app/home/azureuser/opus-gpu/app/inference-cuda:0:0-0:0).  
+  - Toggle rollback: `USE_UNIFIED_GPU_PROVIDER=0/1`; hỗ trợ log song song để so sánh số liệu (A/B) trước khi bật mặc định.
+- __Logging/Hardening__  
+  - Chuẩn hóa tên logger/level, áp dụng log deduplication tại vòng lặp nhanh.  
+  - Thread‑safety: khóa theo GPU cho cả snapshot cache và điều khiển; thời gian “dwell” giữa hai lần set clock/power.  
+  - Thống nhất xử lý lỗi NVML (retry/backoff, degrade sang `nvidia-smi`).
+
+# Lộ trình triển khai (ngắn gọn, ít rủi ro)
+
+- __Pha 1 – Hạ tầng provider__  
+  - Hoàn thiện `get_metrics_snapshot()` trong `GPUResourceManager` + TTL động + fallback `nvidia-smi`.  
+  - Thêm alias `apply_gpu_controls()` trong OHC.  
+  - Bật toggle `USE_UNIFIED_GPU_PROVIDER` (mặc định off), ghi log song song.
+
+- __Pha 2 – Refactor tiêu thụ metrics__  
+  - [GpuCloakStrategy] dùng provider thay vì tự đọc NVML; publish snapshot → [MetricsCollectionHub](pre + post‑apply).  
+  - [gpu_resource_monitor.py] chuyển sang provider; bỏ NVML trực tiếp.  
+
+
+
+- __Pha 3 – Dọn trùng lặp điều khiển__  
+  - `utils.GPUManager`: chuyển thành proxy hoặc gắn deprecation + ủy quyền.  
+  - `PrivilegedOperationManager`: bỏ trực tiếp clock/power, ủy quyền về [GPUResourceManager].  
+
+
+- __Pha 4 – Đồng bộ cấu hình & sửa lỗi__  
+  - Đồng bộ sampling/TTL, chuẩn hóa `CUDA_COMMAND`.  
+  - Sửa vòng pre‑unlock `range(_cnt)`.  
+- __Pha 5 – Kiểm thử & rollout__  
+  - Unit tests: snapshot/provider; mock NVML.  
+  - Integration: đa‑GPU, stress; đo số NVML calls trước/sau TTL động.  
+  - Bật dần `USE_UNIFIED_GPU_PROVIDER` sau khi so sánh sai khác trong ngưỡng.
 
-#### **Qualitative Metrics** (Chỉ số định tính):
-
-- **Code maintainability** (khả năng bảo trì): Cyclomatic complexity giảm 40%
-- **Error handling** (xử lý lỗi): Unified error codes và messages
-- **Developer experience** (trải nghiệm dev): Single API surface
-
----
-
-## 5️⃣ **RỦI RO VÀ BIỆN PHÁP GIẢM THIỂU**
-
-### ⚠️ **Risk Assessment Matrix** (Ma trận đánh giá rủi ro – phân tích và phòng ngừa)
-
-| **Rủi Ro** | **Mức độ** | **Xác suất** | **Impact** | **Biện pháp giảm thiểu** |
-|------------|------------|--------------|------------|-------------------------|
-| **Breaking Changes** | **Cao** | 40% | Critical | **Backward compatibility layer** + **Feature flags** cho rollback nhanh |
-| **Performance Regression** | **Trung** | 30% | High | **Continuous monitoring** với baseline metrics + **A/B testing** |
-| **NVML Initialization Conflicts** | **Cao** | 35% | High | **Singleton pattern** + **Thread-safe locks** + **Retry mechanism** |
-| **Memory Leaks** | **Thấp** | 20% | Medium | **tracemalloc monitoring** + **Automatic cache cleanup** |
-| **Edge Cases Failures** | **Trung** | 25% | Medium | **Comprehensive unit tests** + **Fallback mechanisms** |
-
-### 🛡️ **Mitigation Strategies** (Chiến lược giảm thiểu – kế hoạch phòng ngừa)
-
-#### **1. Technical Safeguards** (Biện pháp kỹ thuật):
-```python
-# Feature Toggle System
-ENV_FLAGS = {
-    'USE_UNIFIED_GPU_MANAGER': False,  # Start disabled
-    'ENABLE_METRICS_CACHE': False,     # Progressive rollout
-    'GPU_NVML_FALLBACK': True,         # Safety net
-    'DEBUG_THROTTLE_ENABLED': False    # Testing first
-}
-```
-
-#### **2. Rollback Plan** (Kế hoạch hoàn nguyên):
-- **Version tagging** trước mỗi phase
-- **Git branches** cho parallel development
-- **Quick revert script** trong 5 phút
-- **Database snapshots** (nếu có state)
-
-#### **3. Monitoring & Alerting** (Giám sát và cảnh báo):
-- **Real-time dashboards** cho NVML calls/sec
-- **Alert thresholds**: CPU >5%, Memory >100MB increase
-- **Error rate tracking**: >1% triggers investigation
-- **Performance regression tests** mỗi commit
-
----
-
-## 🎯 **KẾT LUẬN VÀ KHUYẾN NGHỊ**
-
-### ✅ **Giải Pháp Được Đề Xuất:**
-
-**Hybrid Incremental Optimization** (Tối ưu lai tiến bộ – kết hợp và từng bước) với:
-
-1. **Technical Foundation** (Nền tảng kỹ thuật):
-   - Giữ `GPUResourceManager` làm **single source of truth**
-   - Thêm **intelligent caching** với configurable TTL
-   - **Backward compatibility** qua facade pattern
-
-2. **Implementation Approach** (Cách tiếp cận):
-   - **12 ngày timeline** với 3 phases rõ ràng
-   - **Feature flags** cho safe rollout
-   - **Continuous measurement** với baseline metrics
-
-3. **Expected Outcomes** (Kết quả mong đợi):
-   - **↓ 80% NVML API calls** (từ 50+ xuống <10/sec)
-   - **↓ 70% duplicate code** (~2100 lines removed)
-   - **↓ 60% monitoring CPU usage** (từ 8-10% xuống <3%)
-   - **↑ 4x response speed** (từ 200ms xuống <50ms)
-
-### 📝 **Immediate Next Steps** (Bước tiếp theo ngay lập tức):
-
-1. **Approval & Resource Allocation** (phê duyệt và phân bổ nguồn lực)
-2. **Setup monitoring baseline** (thiết lập metrics cơ sở)
-3. **Create feature branch** cho Phase 1
-4. **Begin NVML unification** với safety checks
-
-### 💡 **Critical Success Factors** (Yếu tố thành công then chốt):
-
-- **Incremental deployment** (triển khai từng bước) với validation mỗi phase
-- **Maintain backward compatibility** (giữ tương thích ngược) 100%
-- **Continuous performance monitoring** (theo dõi hiệu năng liên tục)
-- **Clear rollback procedures** (quy trình hoàn nguyên rõ ràng)
-
----
-
-## 📋 **TÓM TẮT TOÀN BỘ BÁO CÁO**
-
-### ✅ **Đã Hoàn Thành:**
-
-Tôi đã phân tích và tổng hợp thành công **3 báo cáo agents** về **GPU codebase optimization** (tối ưu hóa mã nguồn GPU) với các kết quả sau:
-
-### 🏆 **Giải Pháp Tối Ưu Được Chọn:**
-
-**"Hybrid Incremental Optimization"** (Tối ưu lai tiến bộ) - Kết hợp:
-- **Practical approach** từ Agent 01 (khả thi cao, ít rủi ro)
-- **Architectural vision** từ Agent 02 (tầm nhìn dài hạn)
-- **Smart features** từ Agent 03 (caching, ENV gates)
-
-### 📊 **Kết Quả Cam Kết:**
-
-| **Chỉ số** | **Hiện tại** | **Mục tiêu** | **Cải thiện** |
-|------------|--------------|--------------|---------------|
-| NVML API calls | 50+/sec | <10/sec | **↓ 80%** |
-| Duplicate code | ~3000 lines | <900 lines | **↓ 70%** |
-| Response time | 200ms | <50ms | **↑ 4x faster** |
-| CPU monitoring | 8-10% | <3% | **↓ 60%** |
-
-### ⏰ **Timeline:** 
-**12 ngày làm việc** chia thành 3 phases:
-- Phase 1: Foundation (5 ngày)
-- Phase 2: Optimization (4 ngày)
-- Phase 3: Validation (3 ngày)
-
-### 🔑 **Key Success Factors:**
-- **Incremental deployment** với validation mỗi bước
-- **Feature flags** cho safe rollback
-- **Backward compatibility** 100% đảm bảo
-- **Continuous monitoring** với baseline metrics
-
-**Giải pháp này đã sẵn sàng để triển khai** với rủi ro được kiểm soát chặt chẽ và kế hoạch rollback rõ ràng.

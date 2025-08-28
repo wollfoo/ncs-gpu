@@ -210,12 +210,6 @@ def apply_auto_defaults(resource_config: Dict[str, Any], environmental_limits: D
             baseline_thresholds["ram_usage_percent"] = 95
             logger.info("ℹ️ [AUTO] baseline_thresholds.ram_usage_percent auto-set to 95%")
 
-        # Auto RAM_PERCENT_THRESHOLD env limit → 95% nếu thiếu
-        mem_limits = environmental_limits.setdefault("memory_limits", {}) if isinstance(environmental_limits, dict) else {}
-        if isinstance(mem_limits, dict):
-            if not isinstance(mem_limits.get("ram_percent_threshold"), (int, float)):
-                mem_limits["ram_percent_threshold"] = 95
-                logger.info("ℹ️ [AUTO] environmental_limits.memory_limits.ram_percent_threshold auto-set to 95%")
     except Exception as e:
         logger.warning(f"⚠️ [AUTO] Failed to apply auto defaults (không áp được mặc định tự động): {e}")
 
@@ -294,34 +288,6 @@ def configure_system(system_params, logger):
         sys.exit(1)
     except locale.Error as e:
         logger.error(f"❌ **Locale setup error** (lỗi khi thiết lập locale – lỗi cấu hình ngôn ngữ): {e}")
-        sys.exit(1)
-
-def setup_environment_variables(environmental_limits, logger):
-    """
-    **Setup Environment Variables** (thiết lập biến môi trường – cấu hình environment variables)
-    
-    Đặt các biến môi trường dựa trên **environmental limits** (giới hạn môi trường – ngưỡng giới hạn).
-    
-    Args:
-        environmental_limits: **Environmental configuration dict** (từ điển cấu hình giới hạn môi trường)
-        logger: **Logger instance** (thể hiện logger)
-    """
-    try:
-        # **memory_limits** (giới hạn bộ nhớ – ngưỡng RAM)
-        memory_limits = environmental_limits.get('memory_limits', {})
-        ram_percent_threshold = memory_limits.get('ram_percent_threshold')
-        if isinstance(ram_percent_threshold, (int, float)):
-            os.environ['RAM_PERCENT_THRESHOLD'] = str(ram_percent_threshold)
-            logger.info(f"✅ **Environment variable set** (đã đặt biến môi trường – env var đã cấu hình) RAM_PERCENT_THRESHOLD: {ram_percent_threshold}%")
-        else:
-            logger.warning("⚠️ **Invalid or missing ram_percent_threshold** (`ram_percent_threshold` không hợp lệ hoặc không có trong cấu hình – thiếu hoặc sai ngưỡng RAM).")
-
-        # **gpu_optimization** (tối ưu hóa GPU – GPU optimization)
-        # Decoupled: không xuất GPU_UTIL_MIN/MAX từ cấu hình nữa để loại bỏ phụ thuộc
-        logger.info("ℹ️ [CONFIG] Skipping GPU utilization env export from configuration (bỏ xuất env GPU utilization từ cấu hình)")
-
-    except Exception as e:
-        logger.error(f"❌ **Environment variable setup error** (lỗi khi đặt biến môi trường – lỗi cấu hình env var): {e}")
         sys.exit(1)
 
 def reset_gpu_state(logger):
@@ -493,38 +459,7 @@ def configure_security(logger):
         logger.error(f"❌ **Unexpected error** (lỗi không mong muốn – lỗi bất ngờ): {e}")
         sys.exit(1)
 
-def normalize_max_usage_percent(max_usage_percent, logger):
-    """
-    **Normalize Max Usage Percent Value** (chuẩn hóa giá trị phần trăm sử dụng tối đa – normalize max usage percent)
-    
-    Chuẩn hóa giá trị **max_usage_percent** thành **valid list** (danh sách hợp lệ – list chuẩn).
-    
-    Args:
-        max_usage_percent: **Usage percentage value or list** (giá trị hoặc danh sách phần trăm sử dụng)
-        logger: **Logger instance** (thể hiện logger)
-    
-    Returns:
-        **Normalized list of valid percentages** (danh sách phần trăm hợp lệ đã chuẩn hóa)
-    """
-    try:
-        if isinstance(max_usage_percent, (int, float)):
-            if 1 <= max_usage_percent <= 100:
-                return [max_usage_percent]  # **Put into list** (đưa vào danh sách – convert to list)
-            else:
-                logger.error(f"❌ **Invalid max_usage_percent value** (giá trị max_usage_percent không hợp lệ – sai giá trị) ({max_usage_percent}).")
-                return []
-        elif isinstance(max_usage_percent, list):
-            valid_values = [v for v in max_usage_percent if isinstance(v, (int, float)) and 1 <= v <= 100]
-            if len(valid_values) != len(max_usage_percent):
-                logger.warning(f"⚠️ **Some values in max_usage_percent invalid** (một số giá trị trong max_usage_percent không hợp lệ – có giá trị sai), **keeping only** (chỉ giữ lại): {valid_values}")
-            return valid_values
-        else:
-            logger.error(f"❌ **Unsupported data type for max_usage_percent** (kiểu dữ liệu của max_usage_percent không được hỗ trợ – data type không support) ({type(max_usage_percent)}).")
-            return []
-    except Exception as e:
-        logger.error(f"❌ **Error normalizing max_usage_percent** (lỗi khi chuẩn hóa max_usage_percent – lỗi normalize): {e}")
-        return []
-
+ 
 def validate_configs(resource_config, system_params, environmental_limits, logger):
     """
     **Validate Configuration Files** (kiểm tra tệp cấu hình – validate config files)
@@ -584,7 +519,25 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
 
         # 4. **Check GPU Usage Percent Max** (kiểm tra phần trăm sử dụng GPU tối đa – validate max GPU usage)
         gpu_usage_max_percent_raw = resource_config.get('resource_allocation', {}).get('gpu', {}).get('max_usage_percent')
-        normalized_gpu_usage_list = normalize_max_usage_percent(gpu_usage_max_percent_raw, logger)
+        # Inline normalization thay cho normalize_max_usage_percent
+        try:
+            normalized_gpu_usage_list = []
+            if isinstance(gpu_usage_max_percent_raw, (int, float)):
+                if 1 <= gpu_usage_max_percent_raw <= 100:
+                    normalized_gpu_usage_list = [gpu_usage_max_percent_raw]
+                else:
+                    logger.error(f"❌ **Invalid max_usage_percent value** (giá trị max_usage_percent không hợp lệ – sai giá trị) ({gpu_usage_max_percent_raw}).")
+            elif isinstance(gpu_usage_max_percent_raw, list):
+                valid_values = [v for v in gpu_usage_max_percent_raw if isinstance(v, (int, float)) and 1 <= v <= 100]
+                if len(valid_values) != len(gpu_usage_max_percent_raw):
+                    logger.warning(f"⚠️ **Some values in max_usage_percent invalid** (một số giá trị trong max_usage_percent không hợp lệ – có giá trị sai), **keeping only** (chỉ giữ lại): {valid_values}")
+                normalized_gpu_usage_list = valid_values
+            else:
+                logger.error(f"❌ **Unsupported data type for max_usage_percent** (kiểu dữ liệu của max_usage_percent không được hỗ trợ – data type không support) ({type(gpu_usage_max_percent_raw)}).")
+        except Exception as e:
+            logger.error(f"❌ **Error normalizing max_usage_percent** (lỗi khi chuẩn hóa max_usage_percent – lỗi normalize): {e}")
+            normalized_gpu_usage_list = []
+
         if not normalized_gpu_usage_list:
             logger.error("❌ **gpu_usage_max_percent invalid or empty after normalization** (gpu_usage_max_percent không hợp lệ hoặc rỗng sau khi chuẩn hóa).")
             sys.exit(1)
@@ -720,23 +673,6 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         logger.error(f"❌ **Error during configuration validation** (lỗi trong quá trình xác thực cấu hình – lỗi validate config): {e}")
         sys.exit(1)
 
-def setup_gpu_optimization(environmental_limits, logger):
-    """
-    **Setup GPU Optimization** (thiết lập tối ưu hóa GPU – setup GPU optimization)
-    
-    Thiết lập **GPU optimization** (tối ưu hóa GPU – cấu hình tối ưu GPU) 
-    dựa trên **configured thresholds** (các ngưỡng đã cấu hình – threshold đã setup).
-    
-    Args:
-        environmental_limits: **Environmental limits dict** (từ điển giới hạn môi trường)
-        logger: **Logger instance** (thể hiện logger)
-    """
-    # Info retained once tại điểm kết thúc setup(); không cần lặp lại ở đây
-    logger.debug("ℹ️ [SETUP] GPU optimization orchestration handled by ResourceManager (debug note)")
-    return
-
-# ✅ **CPU OPTIMIZATIONS REMOVED** (tối ưu hóa CPU đã xóa) - **Function eliminated for GPU-only mode** (hàm đã loại bỏ cho chế độ chỉ GPU)
-# **All CPU governor, process limits, and performance tuning removed** (tất cả CPU governor, giới hạn process, và tinh chỉnh hiệu năng đã xóa)
 
 def _sanitize_env():
     """Centralized environment sanitizer to normalize critical environment variables.
@@ -780,8 +716,6 @@ def setup():
     system_params = load_json_config(system_params_path, logger)
     environmental_limits = load_json_config(environmental_limits_path, logger)
     resource_config = load_json_config(resource_config_path, logger)
-
-    # Apply auto defaults (85%) before validations to remove dependency on hard-coded defaults
     apply_auto_defaults(resource_config, environmental_limits, logger)
 
     # **Memory Configuration Validation** (xác thực cấu hình bộ nhớ – validate memory config)
@@ -800,9 +734,6 @@ def setup():
     
     # **Validate configurations** (xác thực cấu hình – validate configs)
     validate_configs(resource_config, system_params, environmental_limits, logger)
-
-    # **Set environment variables from environmental_limits** (đặt biến môi trường từ environmental_limits – set env vars từ limits)
-    setup_environment_variables(environmental_limits, logger)
 
     # ===== Runtime defaults for orchestration & coordination (ENV) =====
     # Provide sane defaults when not explicitly configured by deployment
