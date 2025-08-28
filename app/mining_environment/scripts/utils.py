@@ -7,6 +7,8 @@ import time
 import psutil
 import pynvml
 import threading
+import warnings
+import os
 from typing import Any, Dict, Optional
 
 # ---------------------------------------------------------------------------
@@ -87,6 +89,40 @@ class GPUManager:
         self.gpu_initialized = False
         self.logger = logging.getLogger(__name__)
         self.gpu_count = 0
+        # Cache instance của GPUResourceManager để tránh import vòng và khởi tạo nhiều lần
+        self._grm = None  # lazy GPUResourceManager instance
+
+    def _warn_deprecated(self, method_name: str) -> None:
+        """
+        Phát cảnh báo deprecation khi sử dụng GPUManager thay vì GPUResourceManager.
+        """
+        try:
+            warnings.warn(
+                f"GPUManager.{method_name} đã deprecated – hãy sử dụng GPUResourceManager thay thế.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        except Exception:
+            pass
+
+    def _get_grm(self):
+        """
+        Lazy import và khởi tạo GPUResourceManager để tránh vòng phụ thuộc.
+        """
+        if self._grm is not None:
+            return self._grm
+        try:
+            try:
+                from .resource_control import GPUResourceManager  # type: ignore
+            except Exception:
+                from resource_control import GPUResourceManager  # type: ignore
+            # Truyền logger hiện tại; GRM sẽ tự init NVML bên trong nếu cần
+            self._grm = GPUResourceManager(config={}, logger=self.logger)
+            return self._grm
+        except Exception as e:
+            self.logger.warning(f"Không thể khởi tạo GPUResourceManager (sẽ dùng fallback cũ): {e}")
+            self._grm = None
+            return None
 
     def initialize(self) -> bool:
         """
@@ -94,6 +130,28 @@ class GPUManager:
 
         :return: **True** nếu **NVML init** (khởi tạo NVML) thành công, ngược lại **False**.
         """
+        self._warn_deprecated("initialize")
+        # Ưu tiên dùng GPUResourceManager nếu khả dụng
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                # GRM tự init NVML khi khởi tạo; đồng bộ trạng thái từ GRM
+                try:
+                    self.gpu_initialized = bool(grm.is_nvml_initialized())
+                except Exception:
+                    # Nếu GRM không có API, giữ nguyên cờ
+                    pass
+                try:
+                    self.gpu_count = int(grm.get_gpu_count())
+                except Exception:
+                    # Nếu không có API đếm, để 0
+                    self.gpu_count = 0
+                if self.gpu_initialized:
+                    self.logger.info(f"NVML initialized via GPUResourceManager. GPUs detected: {self.gpu_count}")
+                    return True
+            except Exception as e:
+                self.logger.warning(f"Delegation initialize via GPUResourceManager failed: {e}")
+        # Fallback về hành vi cũ
         try:
             pynvml.nvmlInit()
             self.gpu_count = pynvml.nvmlDeviceGetCount()
@@ -127,8 +185,23 @@ class GPUManager:
 
         :return: **Dung lượng** (capacity – sức chứa) (MB). Trả về 0.0 nếu lỗi hoặc chưa **init** (khởi tạo).
         """
+        self._warn_deprecated("get_total_gpu_memory")
         if not self.gpu_initialized:
             return 0.0
+        # Ưu tiên lấy qua GPUResourceManager snapshot
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                snap = grm.get_metrics_snapshot()
+                total_bytes = 0
+                for idx in snap.gpu_indices:
+                    v = snap.mem_total_bytes.get(idx)
+                    if isinstance(v, int):
+                        total_bytes += v
+                return float(total_bytes) / (1024.0 ** 2)
+            except Exception as e:
+                self.logger.debug(f"Fallback NVML path for total memory due to: {e}")
+        # Fallback NVML cũ
         total_memory = 0.0
         try:
             for i in range(self.gpu_count):
@@ -146,8 +219,22 @@ class GPUManager:
 
         :return: **Dung lượng đang sử dụng** (used capacity – sức chứa đã dùng) (MB). Trả về 0.0 nếu lỗi hoặc chưa **init** (khởi tạo).
         """
+        self._warn_deprecated("get_used_gpu_memory")
         if not self.gpu_initialized:
             return 0.0
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                snap = grm.get_metrics_snapshot()
+                used_bytes = 0
+                for idx in snap.gpu_indices:
+                    v = snap.mem_used_bytes.get(idx)
+                    if isinstance(v, int):
+                        used_bytes += v
+                return float(used_bytes) / (1024.0 ** 2)
+            except Exception as e:
+                self.logger.debug(f"Fallback NVML path for used memory due to: {e}")
+        # Fallback NVML cũ
         used_memory = 0.0
         try:
             for i in range(self.gpu_count):
@@ -168,6 +255,30 @@ class GPUManager:
         :param power_limit_w: **Power limit** (giới hạn công suất) (W - watt).
         :return: **True** nếu **set** (thiết lập) thành công, ngược lại **raise exception** (ném ngoại lệ – báo lỗi).
         """
+        self._warn_deprecated("set_gpu_power_limit")
+        # Ưu tiên ủy quyền sang GPUResourceManager
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                ok = False
+                try:
+                    ok = grm.set_gpu_power_limit(None, gpu_index, power_limit_w)
+                except TypeError:
+                    ok = grm.set_gpu_power_limit(gpu_index, power_limit_w)  # type: ignore
+                if ok:
+                    self.logger.info(f"Set GPU power limit via GPUResourceManager: gpu={gpu_index}, limit={power_limit_w}W")
+                    log_gpu_feature(
+                        feature="gpu_optimization",
+                        state="updated",
+                        parameters={"gpu_index": gpu_index, "power_limit_w": power_limit_w},
+                        message=f"Đặt power limit GPU {gpu_index} = {power_limit_w}W",
+                    )
+                    return True
+                else:
+                    raise RuntimeError("GPUResourceManager.set_gpu_power_limit trả về False")
+            except Exception as e:
+                self.logger.warning(f"Delegation set_power_limit failed, fallback NVML: {e}")
+        # Fallback NVML cũ
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             power_limit_mw = power_limit_w * 1000
@@ -209,12 +320,20 @@ class GPUManager:
         :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
         :return: **Power limit** (giới hạn công suất) (float) hoặc **None** nếu lỗi.
         """
+        self._warn_deprecated("get_gpu_power_limit")
         if not self.gpu_initialized:
             self.logger.error("**GPU chưa init** (GPU not initialized – GPU chưa khởi tạo). **Không thể lấy power limit** (Cannot get power limit – không lấy được giới hạn công suất).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
             self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng), chỉ có {self.gpu_count} **GPU** (card đồ họa).")
             return None
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                v = grm.get_gpu_power_limit(gpu_index)
+                return float(v) if v is not None else None
+            except Exception as e:
+                self.logger.debug(f"Delegation get power limit failed, fallback NVML: {e}")
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             power_limit_mw = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
@@ -235,12 +354,21 @@ class GPUManager:
         :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
         :return: **Nhiệt độ** (temperature) (°C), hoặc **None** nếu lỗi.
         """
+        self._warn_deprecated("get_gpu_temperature")
         if not self.gpu_initialized:
             self.logger.error("**Chưa init NVML** (NVML not initialized – NVML chưa khởi tạo). **Không thể lấy nhiệt độ** (Cannot get temperature – không lấy được nhiệt độ).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
             self.logger.error(f"GPU index {gpu_index} không hợp lệ.")
             return None
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                snap = grm.get_metrics_snapshot()
+                v = snap.temperature_c.get(gpu_index)
+                return float(v) if v is not None else None
+            except Exception as e:
+                self.logger.debug(f"Delegation get temperature failed, fallback NVML: {e}")
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
@@ -260,12 +388,27 @@ class GPUManager:
         :param gpu_index: **Chỉ số GPU** (GPU index – số thứ tự card đồ họa).
         :return: **Dict** (từ điển) {'gpu_util_percent', 'memory_util_percent'} hoặc **None** nếu lỗi.
         """
+        self._warn_deprecated("get_gpu_utilization")
         if not self.gpu_initialized:
             self.logger.error("**Chưa init GPU** (GPU not initialized – GPU chưa khởi tạo). **Không thể lấy utilization** (Cannot get utilization – không lấy được mức sử dụng).")
             return None
         if gpu_index < 0 or gpu_index >= self.gpu_count:
             self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng).")
             return None
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                snap = grm.get_metrics_snapshot()
+                util_ratio = snap.utilization.get(gpu_index)
+                mu = snap.mem_used_bytes.get(gpu_index)
+                mt = snap.mem_total_bytes.get(gpu_index)
+                mem_util = (float(mu) / float(mt) * 100.0) if (isinstance(mu, int) and isinstance(mt, int) and mt > 0) else None
+                return {
+                    'gpu_util_percent': float(util_ratio) * 100.0 if isinstance(util_ratio, (int, float)) and util_ratio is not None else 0.0,
+                    'memory_util_percent': float(mem_util) if mem_util is not None else 0.0
+                }
+            except Exception as e:
+                self.logger.debug(f"Delegation get utilization failed, fallback NVML: {e}")
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
@@ -289,12 +432,37 @@ class GPUManager:
         :param mem_clock: **Mức Memory clock** (Memory clock level – mức xung nhịp bộ nhớ) (MHz).
         :return: **True** nếu đặt thành công, **False** nếu lỗi.
         """
+        self._warn_deprecated("set_gpu_clocks")
         if not self.gpu_initialized:
             self.logger.error("**Chưa init GPU** (GPU not initialized – GPU chưa khởi tạo). **Không thể set xung nhịp** (Cannot set clocks – không đặt được xung nhịp).")
             return False
         if gpu_index < 0 or gpu_index >= self.gpu_count:
             self.logger.error(f"**GPU index** (chỉ số GPU) {gpu_index} **không hợp lệ** (invalid – không đúng).")
             return False
+        grm = self._get_grm()
+        if grm is not None:
+            try:
+                ok = False
+                try:
+                    ok = grm.set_gpu_clocks(None, gpu_index, sm_clock, mem_clock)
+                except TypeError:
+                    ok = grm.set_gpu_clocks(gpu_index, sm_clock, mem_clock)  # type: ignore
+                if ok:
+                    self.logger.debug(f"Đặt SM={sm_clock}MHz, MEM={mem_clock}MHz cho GPU={gpu_index} qua GPUResourceManager.")
+                    log_gpu_feature(
+                        feature="gpu_optimization",
+                        state="updated",
+                        parameters={
+                            "gpu_index": gpu_index,
+                            "sm_clock_mhz": sm_clock,
+                            "mem_clock_mhz": mem_clock,
+                        },
+                        message=f"Đặt clock GPU {gpu_index}: SM={sm_clock}, MEM={mem_clock}",
+                    )
+                    return True
+            except Exception as e:
+                self.logger.warning(f"Delegation set_gpu_clocks failed, fallback to nvidia-smi: {e}")
+        # Fallback: nvidia-smi trực tiếp như hành vi cũ
         try:
             cmd_sm = ['nvidia-smi', '-i', str(gpu_index), f'--lock-gpu-clocks={sm_clock}']
             subprocess.run(cmd_sm, check=True)
@@ -394,7 +562,32 @@ class GPUManager:
         :param gpu_settings: Dict GPU index -> { 'power_limit_w':..., 'sm_clock_mhz':..., 'mem_clock_mhz':... }
         :return: True nếu khôi phục thành công, False nếu có lỗi.
         """
+        # Cảnh báo deprecation và ưu tiên ủy quyền sang GPUResourceManager
+        self._warn_deprecated("restore_resources")
         try:
+            grm = self._get_grm()
+            if grm is not None:
+                try:
+                    # Ưu tiên API khôi phục hiện có trong GPUResourceManager
+                    if hasattr(grm, "restore_gpu_settings_for_pid"):
+                        ok = grm.restore_gpu_settings_for_pid(pid)  # type: ignore[attr-defined]
+                        if ok:
+                            self.logger.info(f"Khôi phục GPU qua GPUResourceManager.restore_gpu_settings_for_pid cho PID={pid} hoàn tất.")
+                            return True
+
+                    # Hỗ trợ API hợp nhất nếu hiện diện
+                    if hasattr(grm, "restore_resources"):
+                        try:
+                            ok = grm.restore_resources(pid=pid, gpu_settings=gpu_settings)  # type: ignore[call-arg]
+                        except TypeError:
+                            # Chữ ký cũ không có pid
+                            ok = grm.restore_resources(gpu_settings)  # type: ignore[misc]
+                        if ok:
+                            self.logger.info(f"Khôi phục GPU qua GPUResourceManager.restore_resources cho PID={pid} hoàn tất.")
+                            return True
+                except Exception as e:
+                    # Không chặn fallback – chỉ cảnh báo rồi tiếp tục khôi phục thủ công
+                    self.logger.warning(f"Delegation restore via GPUResourceManager thất bại, sẽ fallback: {e}")
             restored_all = True
             for gpu_index, settings in gpu_settings.items():
                 original_power_limit_w = settings.get('power_limit_w')

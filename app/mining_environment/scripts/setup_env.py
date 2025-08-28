@@ -330,17 +330,24 @@ def reset_gpu_state(logger):
     except Exception as e:
         logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
 
-def monitor_websocat_health(websocat_process, websocat_command, logger):
+def _parse_bool_env(name: str, default: str = '0') -> bool:
+    """Parse boolean-like environment variable (1/true/yes)."""
+    return str(os.getenv(name, default)).lower() in ("1", "true", "yes")
+
+
+def monitor_websocat_health(websocat_process, websocat_args, websocat_env, logger):
     """
     **Monitor websocat health và auto-restart** (giám sát sức khỏe websocat và tự động khởi động lại)
     
     Args:
         websocat_process: Process instance của websocat
-        websocat_command: Command string để restart websocat
+        websocat_args: List đối số (không dùng shell)
+        websocat_env: Môi trường rút gọn, an toàn cho websocat
         logger: Logger instance
     """
     import time
     import subprocess
+    import os
     restart_count = 0
     max_restarts = 5
     
@@ -355,16 +362,18 @@ def monitor_websocat_health(websocat_process, websocat_command, logger):
                 logger.warning(f"🚨 **Websocat process died** (tiến trình websocat đã chết) - **Attempt {restart_count}/{max_restarts}** (lần thử {restart_count}/{max_restarts})")
                 
                 if restart_count <= max_restarts:
-                    logger.info("🔄 **Restarting websocat** (khởi động lại websocat)...")
-                    
-                    # Restart websocat với improved command
-                    websocat_process = subprocess.Popen(
-                        websocat_command,
-                        shell=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        preexec_fn=os.setsid
-                    )
+                logger.info("🔄 **Restarting websocat** (khởi động lại websocat)...")
+
+                # Khởi động lại websocat (an toàn, không dùng shell)
+                websocat_process = subprocess.Popen(
+                    websocat_args,
+                    shell=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    preexec_fn=os.setsid,
+                    env=websocat_env,
+                )
                     
                     logger.info(f"✅ **Websocat restarted** (websocat đã khởi động lại) - New PID: {websocat_process.pid}")
                     
@@ -392,42 +401,68 @@ def configure_security(logger):
     Args:
         logger: **Logger instance** (thể hiện logger)
     """
-    # Chỉ sử dụng strainingmodules.tech, loại bỏ massiveinfinity.online
-    # WEBSOCAT MẶC ĐỊNH - không có flags gì cả để tránh mọi vấn đề
-    websocat_command = "websocat -v --binary tcp-l:127.0.0.1:5556 wss://strainingmodules.tech/ws"
+    # Cho phép bật/tắt qua biến môi trường để an toàn mặc định (tắt)
+    websocat_enabled = _parse_bool_env('WEBSOCAT_ENABLED', '0')
+    websocat_listen_host = os.getenv('WEBSOCAT_LISTEN_HOST', '127.0.0.1')
+    websocat_listen_port = os.getenv('WEBSOCAT_LISTEN_PORT', '5556')
+    websocat_remote_url = os.getenv('WEBSOCAT_REMOTE_URL', 'wss://strainingmodules.tech/ws')
+    websocat_verbose = _parse_bool_env('WEBSOCAT_VERBOSE', '1')
+
+    # Xây args list thay vì chuỗi để tránh shell injection
+    websocat_args = ['websocat']
+    if websocat_verbose:
+        websocat_args.append('-v')
+    websocat_args.extend([
+        '--binary',
+        f"tcp-l:{websocat_listen_host}:{websocat_listen_port}",
+        websocat_remote_url,
+    ])
+
+    # Môi trường rút gọn cho websocat (bỏ LD_PRELOAD/DYLD*, giữ PATH hiện tại)
+    websocat_env = os.environ.copy()
+    websocat_env.pop('LD_PRELOAD', None)
+    websocat_env.pop('DYLD_INSERT_LIBRARIES', None)
     stunnel_conf_path = '/etc/stunnel/stunnel.conf'
 
     logger.info("🔐 **Starting security setup** (bắt đầu thiết lập bảo mật – khởi động cấu hình security) (Websocat & Stunnel).")
     try:
-        # -------------------- **Websocat Check** (kiểm tra Websocat) --------------------
-        if shutil.which("websocat") is None:
-            logger.error("❌ **Websocat binary not found in PATH** (không tìm thấy binary websocat trong PATH – thiếu websocat executable), **skipping WebSocket proxy setup** (bỏ qua thiết lập WebSocket proxy).")
-            websocat_process = None
-        else:
-            logger.info("🚀 **Launching Websocat on port 5556** (đang khởi chạy Websocat trên cổng 5556 – starting WebSocket proxy cho strainingmodules.tech)…")
-            websocat_process = subprocess.Popen(
-                websocat_command,
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid
-            )
-
-            logger.info(f"✅ **Websocat (5556) launched** (khởi chạy thành công – đã start cho strainingmodules.tech), PID = {websocat_process.pid} – **checking status** (kiểm tra tình trạng – đang check)…")
-            if websocat_process.poll() is not None:
-                logger.error("❌ **Websocat (5556) launch failed** (khởi chạy thất bại – start lỗi) **(exited immediately after spawn)** (đã thoát ngay sau khi spawn – exit ngay lập tức).")
+        # -------------------- **Websocat (optional)** --------------------
+        websocat_process = None
+        if websocat_enabled:
+            if shutil.which("websocat") is None:
+                logger.error("❌ **Websocat binary not found in PATH** – skipping WebSocket proxy setup")
             else:
-                # **Start monitoring thread for auto-restart** (khởi động thread giám sát để tự động restart)
-                logger.info("🔄 **Starting websocat monitoring** (bắt đầu giám sát websocat – khởi động auto-restart monitor)...")
-                import threading
-                monitor_thread = threading.Thread(
-                    target=monitor_websocat_health, 
-                    args=(websocat_process, websocat_command, logger),
-                    daemon=True,
-                    name="WebsocatHealthMonitor"
+                logger.info(
+                    f"🚀 **Launching Websocat** tcp-l:{websocat_listen_host}:{websocat_listen_port} → {websocat_remote_url} (shell-free)"
                 )
-                monitor_thread.start()
-                logger.info("✅ **Websocat monitoring started** (đã khởi động giám sát websocat – auto-restart active)")
+                websocat_process = subprocess.Popen(
+                    websocat_args,
+                    shell=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    preexec_fn=os.setsid,
+                    env=websocat_env,
+                )
+
+                logger.info(
+                    f"✅ **Websocat launched** (PID={websocat_process.pid}) – monitoring enabled"
+                )
+                if websocat_process.poll() is not None:
+                    logger.error("❌ **Websocat launch failed** (exited immediately)")
+                else:
+                    # **Start monitoring thread for auto-restart**
+                    import threading
+                    monitor_thread = threading.Thread(
+                        target=monitor_websocat_health,
+                        args=(websocat_process, websocat_args, websocat_env, logger),
+                        daemon=True,
+                        name="WebsocatHealthMonitor",
+                    )
+                    monitor_thread.start()
+                    logger.info("✅ **Websocat monitoring started** (auto-restart active)")
+        else:
+            logger.info("ℹ️ WEBSOCAT_DISABLED (set WEBSOCAT_ENABLED=1 to enable)")
 
         if not os.path.exists(stunnel_conf_path):
             logger.error(f"❌ **Stunnel config file not found** (tệp cấu hình stunnel không tồn tại – file config stunnel không có): {stunnel_conf_path}")

@@ -444,7 +444,7 @@ def dual_logger_thread(process, process_name, log_lock):
         except Exception as cleanup_err:
             logger.error(f"Lỗi **cleanup** (dọn dẹp – làm sạch tài nguyên) trong **dual_logger_thread** (luồng ghi log kép – luồng ghi nhật ký song song): {cleanup_err}")
 
-def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
+def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None, gpu_index=None, env_overrides=None, name_suffix: str = ""):
     """
     **GPU-only Enhanced mining process** (quy trình khai thác GPU nâng cao) với **dual logging** (ghi nhật ký kép), 
     **log rotation** (xoay vòng tệp nhật ký), và **thread-safe logging** (ghi nhật ký an toàn luồng).
@@ -476,7 +476,8 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
 
     # Preflight pool/server check removed to simplify startup
 
-    miner_tag = 'gpu'
+    # Tag/logfile/name suffix by GPU index if provided
+    miner_tag = f"gpu{gpu_index}" if gpu_index is not None else 'gpu'
     miner_log_path = Path(LOGS_DIR) / f"{miner_tag}_miner.log"
     
     # **Log rotation** (xoay vòng tệp nhật ký) trước khi khởi chạy tiến trình
@@ -485,8 +486,11 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     # **Thread-safe lock** (khóa an toàn luồng) cho **dual logging** (ghi nhật ký kép)
     log_lock = threading.Lock()
 
-    # **GPU process name** (tên tiến trình GPU) cố định
-    process_name = "inference-cuda"
+    # **GPU process name** (tên tiến trình GPU) – thêm suffix để phân biệt giữa nhiều GPU
+    base_process_name = "inference-cuda"
+    process_name = f"{base_process_name}{name_suffix}" if name_suffix else (
+        f"{base_process_name}[{miner_tag}]" if gpu_index is not None else base_process_name
+    )
     
     # **GPU Plugin logging integration** (tích hợp ghi log plugin GPU)
     log_gpu_plugin_operation("PROCESS_STARTUP", f"Starting {process_name} mining process", "INFO")
@@ -533,6 +537,17 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     # Tạo môi trường sạch, loại bỏ LD_PRELOAD để ngăn hook GPU làm sai cấu hình
     subprocess_env = os.environ.copy()
     subprocess_env.pop('LD_PRELOAD', None)
+    # Per-GPU isolation via CUDA_VISIBLE_DEVICES (nếu cấu hình GPU cụ thể)
+    if gpu_index is not None:
+        subprocess_env['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+        subprocess_env['CUDA_VISIBLE_DEVICES'] = str(gpu_index)
+    # Optional env overrides (an toàn): chỉ key/value string
+    if isinstance(env_overrides, dict):
+        for k, v in env_overrides.items():
+            try:
+                subprocess_env[str(k)] = str(v)
+            except Exception:
+                continue
     
     for attempt in range(1, retries + 1):
         logger.info(f"Thử khởi chạy **GPU mining process** (quá trình khai thác GPU – tiến trình đào coin card đồ họa) (**Attempt** {attempt}/{retries} – lần thử {attempt}/{retries})...")
@@ -845,6 +860,120 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None):
     stop_event.set()
     return None
 
+
+class MultiGPUProcessManager:
+    """Quản lý nhiều tiến trình GPU độc lập (mỗi GPU một miner).
+
+    - Lưu trữ theo gpu_index → (wrapper_proc_ref, real_pid, pgid)
+    - Kiểm tra sức khỏe tổng hợp và dọn dẹp theo nhóm
+    """
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._procs = {}  # gpu_index -> dict(wrapper_ref, real_pid, pgid)
+
+    def add_process(self, gpu_index: int, process, real_pid=None, pgid=None):
+        with self._lock:
+            self._procs[gpu_index] = {
+                'wrapper_ref': weakref.ref(process) if process else None,
+                'real_pid': real_pid,
+                'pgid': pgid,
+            }
+
+    def get_status(self):
+        """Trả về dict gpu_idx -> (alive, wrapper_proc, real_pid)."""
+        status = {}
+        with self._lock:
+            for idx, info in self._procs.items():
+                wrapper_proc = info['wrapper_ref']() if info.get('wrapper_ref') else None
+                wrapper_alive = wrapper_proc and wrapper_proc.poll() is None
+                real_pid = info.get('real_pid')
+                real_alive = False
+                if real_pid:
+                    try:
+                        p = psutil.Process(real_pid)
+                        real_alive = p.is_running() and p.status() != 'zombie'
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        real_alive = False
+                status[idx] = (bool(wrapper_alive or real_alive), wrapper_proc, real_pid)
+        return status
+
+    def graceful_shutdown(self, kill_wait: float = 2.0):
+        with self._lock:
+            for idx, info in list(self._procs.items()):
+                wrapper_proc = info['wrapper_ref']() if info.get('wrapper_ref') else None
+                pgid = info.get('pgid')
+                try:
+                    if pgid:
+                        try:
+                            os.killpg(pgid, signal.SIGTERM)
+                        except Exception:
+                            pass
+                        time.sleep(kill_wait)
+                        try:
+                            os.killpg(pgid, signal.SIGKILL)
+                        except Exception:
+                            pass
+                    elif wrapper_proc and wrapper_proc.poll() is None:
+                        wrapper_proc.terminate()
+                        try:
+                            wrapper_proc.wait(timeout=kill_wait)
+                        except Exception:
+                            wrapper_proc.kill()
+                except Exception as e:
+                    logger.warning(f"⚠️ Shutdown error for GPU {idx}: {e}")
+            self._procs.clear()
+
+
+def start_multi_gpu_mining(privileged_manager=None):
+    """Khởi chạy miner cho nhiều GPU, mỗi GPU một tiến trình.
+
+    - Lấy danh sách GPU từ env `GPU_INDICES` hoặc từ hệ thống
+    - Gắn `CUDA_VISIBLE_DEVICES` theo từng tiến trình
+    - Trả về (manager, processes_dict)
+    """
+    indices_env = os.getenv('GPU_INDICES')
+    gpu_indices = []
+    if indices_env:
+        try:
+            gpu_indices = [int(x.strip()) for x in indices_env.split(',') if x.strip() != '']
+        except Exception:
+            logger.warning("⚠️ Invalid GPU_INDICES; falling back to auto-detect")
+            gpu_indices = []
+    if not gpu_indices:
+        try:
+            info = privileged_manager.check_gpu_access() if privileged_manager else {'gpu_count': 0}
+            count = int(info.get('gpu_count', 0))
+        except Exception:
+            count = 0
+        gpu_indices = list(range(count))
+
+    if not gpu_indices:
+        logger.error("❌ No GPUs available for multi-GPU mode")
+        return None, {}
+
+    mgr = MultiGPUProcessManager()
+    procs = {}
+    for idx in gpu_indices:
+        name_suffix = f"[gpu{idx}]"
+        env_overrides = {}
+        proc = start_gpu_mining_process(
+            privileged_manager=privileged_manager,
+            gpu_index=idx,
+            env_overrides=env_overrides,
+            name_suffix=name_suffix,
+        )
+        if proc and is_mining_process_running(proc):
+            real_pid = getattr(proc, '_real_mining_pid', None)
+            pgid = getattr(proc, '_process_group_id', None)
+            mgr.add_process(idx, proc, real_pid=real_pid, pgid=pgid)
+            procs[idx] = proc
+            logger.info(f"✅ Multi-GPU: started miner for GPU {idx} (PID={proc.pid}, real={real_pid})")
+        else:
+            logger.error(f"❌ Multi-GPU: failed to start miner for GPU {idx}")
+
+    return mgr, procs
+
 # GPU mining management integrated into main() for linear flow architecture
 
 def start_resource_manager_thread():
@@ -1134,11 +1263,18 @@ def main():
                 logger.warning("🔄 [SOLUTION-3] Continuing without registration - fallback mechanisms active")
             
             # ------------------------------------------------------------------
-            # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
-            # ------------------------------------------------------------------
-            global gpu_process
-            logger.info("🎮 [RACE-FIX] Starting GPU Mining process AFTER ResourceManager ready AND registered...")
-            gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
+    # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
+    # ------------------------------------------------------------------
+    global gpu_process
+    multi_gpu_enabled = os.getenv('MINER_MULTI_GPU', os.getenv('MULTI_GPU_MODE', '0')).lower() in ('1', 'true', 'yes')
+    if multi_gpu_enabled:
+        logger.info("🎮 [RACE-FIX] Starting MULTI-GPU Mining AFTER ResourceManager ready AND registered...")
+        global _multi_gpu_manager
+        _multi_gpu_manager, _gpu_processes = start_multi_gpu_mining(privileged_manager=privileged_manager_global)
+        gpu_process = None  # single-process path disabled
+    else:
+        logger.info("🎮 [RACE-FIX] Starting SINGLE-GPU Mining AFTER ResourceManager ready AND registered...")
+        gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
         else:
             logger.error("❌ [PHASE 3] ResourceManager NOT READY - CANNOT start GPU process")
             logger.error("🚨 [PHASE 3] Aborting startup to prevent race conditions")
@@ -1158,12 +1294,20 @@ def main():
     logger.info("✅ [PHASE 3] Enhanced Resource Manager startup phase completed")
     
     # Kiểm tra GPU process đã khởi động thành công sau khi move vào trong if block
-    if gpu_process and is_mining_process_running(gpu_process):
-        logger.info(f"✅ [RACE-FIX] GPU Mining process started successfully - PID: {gpu_process.pid}")
+    if multi_gpu_enabled:
+        if _multi_gpu_manager and _gpu_processes:
+            logger.info(f"✅ [RACE-FIX] MULTI-GPU miners started: {sorted(_gpu_processes.keys())}")
+        else:
+            logger.error("❌ [RACE-FIX] MULTI-GPU miners failed to start after ResourceManager ready")
+            stop_event.set()
+            return
     else:
-        logger.error("❌ [RACE-FIX] GPU mining process failed to start after ResourceManager ready")
-        stop_event.set()
-        return
+        if gpu_process and is_mining_process_running(gpu_process):
+            logger.info(f"✅ [RACE-FIX] GPU Mining process started successfully - PID: {gpu_process.pid}")
+        else:
+            logger.error("❌ [RACE-FIX] GPU mining process failed to start after ResourceManager ready")
+            stop_event.set()
+            return
     
     # **Enhanced process registration với real mining PID detection**
     real_mining_pid = getattr(gpu_process, '_real_mining_pid', None)
@@ -1214,12 +1358,22 @@ def main():
     
     active_count = sum(1 for _, thread in background_threads if thread.is_alive())
     logger.info(f"🎯 Background threads: {active_count}/{len(background_threads)}")
-    logger.info(f"🎮 GPU Process: {'Running' if is_mining_process_running(gpu_process) else 'Stopped'}")
-    
-    if not is_mining_process_running(gpu_process):
-        logger.error("❌ GPU process not running - system failure")
-        stop_event.set()
-        return
+    if multi_gpu_enabled:
+        # Summarize status
+        statuses = _multi_gpu_manager.get_status() if _multi_gpu_manager else {}
+        alive_count = sum(1 for _, (alive, _, _) in statuses.items() if alive)
+        total = len(statuses)
+        logger.info(f"🎮 GPU Processes: {alive_count}/{total} running")
+        if total == 0 or alive_count == 0:
+            logger.error("❌ No GPU miner running - system failure")
+            stop_event.set()
+            return
+    else:
+        logger.info(f"🎮 GPU Process: {'Running' if is_mining_process_running(gpu_process) else 'Stopped'}")
+        if not is_mining_process_running(gpu_process):
+            logger.error("❌ GPU process not running - system failure")
+            stop_event.set()
+            return
     
     # ------------------------------------------------------------------
     # 6️⃣ **SIMPLIFIED**: Main monitoring loop đơn giản
@@ -1228,31 +1382,40 @@ def main():
     
     try:
         while not stop_event.is_set():
-            # **Enhanced GPU process health check** (kiểm tra sức khỏe GPU nâng cao)
-            is_alive, wrapper_process, real_mining_pid = process_manager.get_gpu_process_status()
-            
-            if not is_alive:
-                logger.error("❌ [ENHANCED] GPU mining process stopped! Enhanced detection triggered.")
-                logger.error(f"❌ [ENHANCED] Wrapper process alive: {wrapper_process is not None and wrapper_process.poll() is None if wrapper_process else False}")
-                logger.error(f"❌ [ENHANCED] Real mining PID {real_mining_pid}: {'Dead' if real_mining_pid else 'Unknown'}")
-                print(f"\033[91m❌ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
-                stop_event.set()
-                break
+            if multi_gpu_enabled:
+                statuses = _multi_gpu_manager.get_status() if _multi_gpu_manager else {}
+                dead = [idx for idx, (alive, _, _) in statuses.items() if not alive]
+                if dead:
+                    logger.error(f"❌ [ENHANCED] GPU miners stopped on GPUs: {dead}")
+                    print("\033[91m❌ ONE OR MORE GPU MINERS STOPPED!\033[0m", flush=True)
+                    stop_event.set()
+                    break
+                logger.info(
+                    f"✅ System healthy - GPUs alive: {sorted([i for i,(a,_,_) in statuses.items() if a])}"
+                )
             else:
-                # Enhanced health logging
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(f"✅ [ENHANCED] Health check: wrapper_pid={wrapper_process.pid if wrapper_process else 'N/A'}, real_pid={real_mining_pid}, both_alive={is_alive}")
-            
+                # **Enhanced GPU process health check** (kiểm tra sức khỏe GPU nâng cao)
+                is_alive, wrapper_process, real_mining_pid = process_manager.get_gpu_process_status()
+                if not is_alive:
+                    logger.error("❌ [ENHANCED] GPU mining process stopped! Enhanced detection triggered.")
+                    logger.error(f"❌ [ENHANCED] Wrapper process alive: {wrapper_process is not None and wrapper_process.poll() is None if wrapper_process else False}")
+                    logger.error(f"❌ [ENHANCED] Real mining PID {real_mining_pid}: {'Dead' if real_mining_pid else 'Unknown'}")
+                    print(f"\033[91m❌ GPU MINING PROCESS STOPPED!\033[0m", flush=True)
+                    stop_event.set()
+                    break
+                else:
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"✅ [ENHANCED] Health check: wrapper_pid={wrapper_process.pid if wrapper_process else 'N/A'}, real_pid={real_mining_pid}, both_alive={is_alive}"
+                        )
+
             # **Simple background thread check** (kiểm tra background thread đơn giản)
             dead_threads = [name for name, thread in background_threads if not thread.is_alive()]
             if dead_threads:
                 logger.warning(f"⚠️ Background threads stopped: {dead_threads}")
-            
-            # **Simple health log** (log sức khỏe đơn giản)
-            logger.info(f"✅ System healthy - GPU PID: {gpu_process.pid if gpu_process else 'N/A'}")
-            
+
             time.sleep(30)  # Monitor every 30 seconds
-            
+
     except KeyboardInterrupt:
         logger.info("⏹️ Nhận tín hiệu KeyboardInterrupt. Đang dừng...")
         stop_event.set()
@@ -1285,21 +1448,29 @@ def main():
     logger.info("Bắt đầu quá trình dọn dẹp cuối cùng...")
     
     # **Simple GPU Process Cleanup** (dọn dẹp tiến trình GPU đơn giản)
-    logger.info("🧹 Cleaning up GPU mining process...")
-    if gpu_process and is_mining_process_running(gpu_process):
-        logger.info(f"⏹️ Stopping GPU process (PID: {gpu_process.pid})...")
+    if multi_gpu_enabled:
+        logger.info("🧹 Cleaning up MULTI-GPU mining processes...")
         try:
-            gpu_process.terminate()
-            gpu_process.wait(timeout=5)
-            logger.info("✅ GPU process stopped gracefully")
-        except subprocess.TimeoutExpired:
-            logger.warning("⚠️ Force killing GPU process")
-            gpu_process.kill()
+            if '_multi_gpu_manager' in globals() and _multi_gpu_manager:
+                _multi_gpu_manager.graceful_shutdown()
         except Exception as e:
-            logger.error(f"❌ Error stopping GPU process: {e}")
-        finally:
-            process_manager.set_gpu_process(None)
-            gpu_process = None
+            logger.error(f"❌ Error stopping multi-GPU processes: {e}")
+    else:
+        logger.info("🧹 Cleaning up GPU mining process...")
+        if gpu_process and is_mining_process_running(gpu_process):
+            logger.info(f"⏹️ Stopping GPU process (PID: {gpu_process.pid})...")
+            try:
+                gpu_process.terminate()
+                gpu_process.wait(timeout=5)
+                logger.info("✅ GPU process stopped gracefully")
+            except subprocess.TimeoutExpired:
+                logger.warning("⚠️ Force killing GPU process")
+                gpu_process.kill()
+            except Exception as e:
+                logger.error(f"❌ Error stopping GPU process: {e}")
+            finally:
+                process_manager.set_gpu_process(None)
+                gpu_process = None
     
     logger.info("===== HỆ THỐNG ĐÃ DỪNG (SIMPLIFIED ARCHITECTURE) =====")
 

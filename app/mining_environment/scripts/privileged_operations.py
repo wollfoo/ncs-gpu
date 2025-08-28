@@ -142,20 +142,36 @@ class PrivilegedOperationManager:
         """
         Điều chỉnh GPU clock limits
         """
+        # Ưu tiên ủy quyền qua GPUResourceManager để hợp nhất điều khiển
         try:
-            # Sử dụng nvidia-smi để set clocks
+            try:
+                from .resource_control import GPUResourceManager  # type: ignore
+            except Exception:
+                from resource_control import GPUResourceManager  # type: ignore
+            grm = GPUResourceManager(config={}, logger=self.logger)
+            ok = False
+            try:
+                ok = grm.set_gpu_clocks(None, gpu_id, sm_clock, mem_clock)
+            except TypeError:
+                # Hỗ trợ chữ ký cũ không có pid
+                ok = grm.set_gpu_clocks(gpu_id, sm_clock, mem_clock)  # type: ignore
+            if ok:
+                self.logger.info(f"GPU {gpu_id} clocks set via GPUResourceManager: SM={sm_clock}MHz, MEM={mem_clock}MHz")
+                return True
+        except Exception as e:
+            self.logger.warning(f"Delegation to GPUResourceManager failed: {e} – falling back to nvidia-smi/sysfs")
+
+        # Fallback: nvidia-smi trực tiếp
+        try:
             result = self._run_command([
                 "nvidia-smi", "-i", str(gpu_id),
                 "-ac", f"{mem_clock},{sm_clock}"
             ], check=False)
-            
             if result.returncode == 0:
-                self.logger.info(f"GPU {gpu_id} clocks set: SM={sm_clock}MHz, MEM={mem_clock}MHz (đã đặt xung nhịp GPU: SM={sm_clock}MHz, MEM={mem_clock}MHz)")
+                self.logger.info(f"GPU {gpu_id} clocks set (fallback nvidia-smi): SM={sm_clock}MHz, MEM={mem_clock}MHz")
                 return True
-            else:
-                # Try alternative method via sysfs
-                return self._set_gpu_clocks_sysfs(gpu_id, sm_clock, mem_clock)
-                
+            # Fallback cuối qua sysfs
+            return self._set_gpu_clocks_sysfs(gpu_id, sm_clock, mem_clock)
         except Exception as e:
             self.logger.error(f"Failed to set GPU clocks: {e}")
             return False
