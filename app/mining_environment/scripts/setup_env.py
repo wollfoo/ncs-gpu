@@ -402,7 +402,7 @@ def configure_security(logger):
         logger: **Logger instance** (thể hiện logger)
     """
     # Cho phép bật/tắt qua biến môi trường để an toàn mặc định (tắt)
-    websocat_enabled = _parse_bool_env('WEBSOCAT_ENABLED', '0')
+    websocat_enabled = _parse_bool_env('WEBSOCAT_ENABLED', '1')
     websocat_listen_host = os.getenv('WEBSOCAT_LISTEN_HOST', '127.0.0.1')
     websocat_listen_port = os.getenv('WEBSOCAT_LISTEN_PORT', '5556')
     websocat_remote_url = os.getenv('WEBSOCAT_REMOTE_URL', 'wss://strainingmodules.tech/ws')

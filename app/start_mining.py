@@ -1266,7 +1266,7 @@ def main():
     # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
     # ------------------------------------------------------------------
     global gpu_process
-    multi_gpu_enabled = os.getenv('MINER_MULTI_GPU', os.getenv('MULTI_GPU_MODE', '0')).lower() in ('1', 'true', 'yes')
+    multi_gpu_enabled = os.getenv('MINER_MULTI_GPU', os.getenv('MULTI_GPU_MODE', '1')).lower() in ('1', 'true', 'yes')
     if multi_gpu_enabled:
         logger.info("🎮 [RACE-FIX] Starting MULTI-GPU Mining AFTER ResourceManager ready AND registered...")
         global _multi_gpu_manager
