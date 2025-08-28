@@ -1,118 +1,82 @@
-# 🔬 **PHÂN TÍCH CHI TIẾT: TẠI SAO CONTAINER SINH RA HÀNG NGHÌN PYTHON PROCESSES**
+### Nhận diện trùng lặp và module tương đồng
+- **NVML lifecycle** (vòng đời NVML – khởi tạo/tắt): trùng giữa `GPUResourceManager` và `SharedResourceManager`. Khuyến nghị 1 đầu mối.
+- **GPU metrics** (chỉ số GPU – nhiệt/điện/utilization): trùng giữa `GPUResourceManager` và `GPUResourceManagerMonitor`. Khuyến nghị chuẩn hoá một nơi đọc, nơi khác chỉ gọi.
+- **GPU reset/clocks** (đặt lại xung): lặp giữa `setup_env.reset_gpu_state` và thao tác trong `resource_control.py` (NVML reset apps clocks). Khuyến nghị gom về một chỗ gọi duy nhất.
+- **VRAM allocation jitter** (dao động cấp phát VRAM – thử nghiệm bộ nhớ): cấp phát tensor CUDA lớn trong `resource_control.py` không kiểm tra dung lượng trước → rủi ro OOM.
 
-## 📊 **NGUYÊN NHÂN GỐC RỀ ĐƯỢC XÁC ĐỊNH**
+### Đánh giá hiệu năng hiện tại
+- **Thời gian xử lý GPU** (GPU-time – thời gian thao tác GPU): Có đoạn `torch.matmul` + `torch.cuda.synchronize()` để “burn GPU”, nhưng chưa có đo có hệ thống/kết hợp dashboard. Xem trích dẫn trên.
+- **Sử dụng tài nguyên** (telemetry NVML – nhiệt/điện/utilization): Có, nhưng phân tán nhiều nơi, sampling chưa nhất quán (không có smoothing/moving-average/cửa sổ thời gian chung).
 
-### **1. INFINITE LOOP TRONG FILE SCANNER** (Vòng lặp vô tận trong quét file)
+### Đề xuất tối ưu (chỉ mô tả, không đổi cấu trúc thư mục)
+1) Hợp nhất API NVML/metrics
+- **Unify NVML** (nhất quán NVML – một đầu mối): Dùng `SharedResourceManager.initialize_nvml()` làm nguồn NVML duy nhất; bỏ khởi tạo NVML ở `GPUResourceManager`.
+- **Single metrics surface** (bề mặt đọc chỉ số duy nhất): Tạo nhóm hàm đọc `temperature/power/utilization` tại `SharedResourceManager` hoặc (nếu ưu tiên) tại `GPUResourceManager`, sau đó:
+  - `GPUResourceManagerMonitor` chỉ gọi sang manager, không tự truy cập NVML.
+  - Các nơi khác (orchestrator/controller) tái dùng hàm này thay vì gọi NVML thẳng.
+- **Reset clocks single point** (điểm reset xung duy nhất): Định nghĩa một “reset” tại `setup_env.reset_gpu_state` và các nơi khác gọi về đây; tránh thao tác NVML reset rải rác.
 
-**🚨 BẰNG CHỨNG:** File `resource_manager.py:694`
-```python
-while not self._scanner_stop_flag:
-    try:
-        # Tìm tất cả PID files
-        pid_files = list(pid_registry_dir.glob('pid_*.json'))
-        # ...xử lý files...
-    except Exception as e:
-        self.logger.error(f"❌ [FILE-SCANNER] Scanner error: {e}")
-    
-    # Sleep 500ms trước khi scan tiếp
-    time.sleep(0.5)
-```
+2) Chuẩn hóa đo GPU-time và sampling
+- **Use PerformanceProfiler** (dùng bộ đo hiệu năng – decorator đo thời gian) để wrap các “điểm nóng” GPU (ví dụ các vòng `torch`/NVML điều chỉnh) thay vì đo ad-hoc, ghi log ra `mining_performance.log`.
+- **Sampling policy** (chính sách lấy mẫu – tần suất đo): đặt 1 tần suất cố định (ví dụ 1–2s) cho NVML sampling ở manager; dashboard/monitor đọc lại từ cache để tránh nhân đôi đọc NVML.
+- **Smoothing** (làm mượt – trung bình trượt): dùng moving-average 5–10 mẫu cho utilization/temperature/power để giảm nhiễu, tránh flip-flop khi điều chỉnh power/clock.
 
-**⚠️ VẤN ĐỀ:** **`_scanner_stop_flag`** (cờ dừng quét - tín hiệu kết thúc) không bao giờ được set `True` do:
-- **Exception handling** (xử lý ngoại lệ) bắt mọi lỗi nhưng vẫn tiếp tục loop
-- Không có **proper cleanup mechanism** (cơ chế dọn dẹp đúng cách) khi container restart
+3) Cải thiện thuật toán điều khiển GPU (giữ hiện trạng, tăng ổn định)
+- **Closed-loop tuning** (điều chỉnh vòng kín – dùng mục tiêu utilization): sử dụng ngưỡng có sẵn `GPU_UTIL_MIN/MAX/TARGET` và ràng buộc `POWER_DWELL_SEC`/`POWER_MAX_DELTA_W` (đã có trong ENV) làm “guardrail”; điều chỉnh step nhỏ, chỉ đổi sau dwell time.
+- **Safety checks** (kiểm soát an toàn – nhiệt/điện): luôn kiểm soát nhiệt trước khi tăng clock/power; rollback nếu vượt safe band.
+- **VRAM guarding** (bảo vệ bộ nhớ VRAM): trước khi cấp phát tensor CUDA lớn, đọc `nvmlDeviceGetMemoryInfo` để so sánh còn trống/giới hạn config, tránh OOM rồi mới cấp phát.
 
-### **2. MULTIPLE THREADING WITHOUT CLEANUP** (Đa luồng không dọn dẹp)
+4) Hạn chế overhead benchmark
+- **Gate benchmark torch** (đặt sau cờ – tránh overhead runtime): chỉ chạy benchmark `torch` khi `RC_TORCH_BENCH=1`, mặc định tắt.
 
-**🚨 BẰNG CHỨNG:** File `resource_manager.py:273-278`
-```python
-self._scanner_thread = threading.Thread(
-    target=self._scan_pid_files,
-    daemon=True,
-    name="PIDFileScanner"
-)
-self._scanner_thread.start()
-```
+### Đề xuất refactor cụ thể (không tạo module mới)
+- **Xoá song song khởi tạo NVML**: Giữ tại `SharedResourceManager.initialize_nvml()`; chuyển `GPUResourceManager` sang kiểm tra trạng thái NVML qua `SharedResourceManager` thay vì tự `pynvml.nvmlInit`.
+  - Bằng chứng NVML ở 2 nơi: xem trích dẫn `resource_manager.py:100–125` và `resource_control.py:153–160`.
+- **Hợp nhất đọc nhiệt/điện/utilization**:
+  - Tạo/giữ bộ API đọc trong 1 nơi (ưu tiên `SharedResourceManager` hoặc `GPUResourceManager`), rồi đổi `GPUResourceManagerMonitor` gọi sang đó, bỏ đọc NVML trực tiếp.
+  - Bằng chứng trùng lặp: `resource_control.py:577–594` vs `gpu_resource_monitor.py:261–279`; `resource_control.py:239–257`; `resource_control.py:1239–1274` vs `gpu_resource_monitor.py:301–319`.
+- **Reset clocks một chỗ**:
+  - Giữ `setup_env.reset_gpu_state` làm entrypoint reset; nơi khác gọi hàm này thay vì NVML reset riêng lẻ.
+  - Bằng chứng: `setup_env.py:344–356` (NVML+nvidia-smi).
+- **Chuẩn hoá đo GPU-time**:
+  - Dùng `PerformanceProfiler.timing_decorator` bọc các điểm nóng I/O NVML hoặc xử lý CUDA “burner”; xuất metric vào `mining_performance.log` thay vì in rải rác.
+  - Bằng chứng decorator: `performance_profiler.py:143–156`.
+- **VRAM allocation guard**:
+  - Trước các cấp phát CUDA lớn ở `resource_control.py:2016–2026` và khối VRAM jitter ở `resource_control.py:2151–2174`, thêm guard kiểm tra `mem.free` (NVML) và tôn trọng `resource_config` (`max_usage_percent` GPU, `VRAM_ALLOC_*` ENV).
 
-**⚠️ VẤN ĐỀ:** Mỗi lần **ResourceManager** (trình quản lý tài nguyên) khởi tạo tạo **daemon thread** (luồng daemon - thread chạy nền) mới, nhưng:
-- **Daemon threads** không được **terminate** (kết thúc) đúng cách
-- **Thread accumulation** (tích lũy luồng) qua nhiều lần restart
+### Kế hoạch đo lường (không chạy code lúc này; mô tả thao tác)
+- **Đo GPU-time** (thời gian thực thi GPU – độ trễ thao tác): bọc vòng `torch.matmul` ở `resource_control.py:2016–2026` bằng `time.perf_counter()` và decorator profiler để ghi `wall_time`, `cpu_time` (đối chiếu `torch.cuda.synchronize()` để đo thật GPU).
+- **Đo tài nguyên** (NVML): lấy snapshot trước-sau (nhiệt/điện/utilization) cùng timestamp; tính delta/mean qua moving-average.
+- **Tiêu chí chấp nhận**:
+  - Không crash khi `NVML` vắng hoặc `nvidia-smi` vắng (fallback đã có).
+  - Telemetry sampling hợp nhất: mỗi 1–2s, không đọc NVML từ nhiều nơi trùng lặp.
+  - Benchmark tắt mặc định; bật có chủ đích qua ENV.
 
-### **3. COMPLEX HANDOFF CHAIN CAUSING DUPLICATE PROCESSES** (Chuỗi chuyển giao phức tạp gây trùng lặp tiến trình)
+### Rủi ro/Edge cases và cách xử lý
+- **0 GPU** (không có GPU): luôn return số liệu 0/safe và skip điều khiển.
+- **NVML lỗi**: giữ fallback `nvidia-smi` chỉ khi cần, có timeout ngắn.
+- **VRAM OOM**: guard trước cấp phát; ưu tiên partial allocation + backoff.
 
-**🚨 BẰNG CHỨNG:** **Sequential Flow** từ phân tích:
-```
-start_mining.py → stealth_inference_cuda.py → HookCoordinator → DirectPIDRegistry → ResourceManager
-```
+### Self-Refine
+- Vòng 1 (phê bình): Đề xuất hợp nhất NVML có thể ảnh hưởng đường gọi cũ; cần đảm bảo các chỗ gọi cũ được chuyển hướng an toàn, đặc biệt đối với rollback và reset clocks.
+- Vòng 2 (sửa/chuẩn hoá): Chọn “giữ API ở `SharedResourceManager`”, còn `GPUResourceManager`/monitor chỉ là “khách hàng” của API này; thêm lớp chuyển tiếp mỏng (adapter) để không đổi chữ ký hàm public hiện có.
 
-**⚠️ VẤN ĐỀ:** 
-- File `stealth_inference_cuda.py:235` tạo **subprocess** (tiến trình con)
-- File [coordinator.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/coordination/coordinator.py:0:0-0:0) có **multiple retry loops** (nhiều vòng lặp thử lại)
-- File [direct_registry.py](cci:7://file:///home/azureuser/opus-gpu/app/pid_logger/direct_registry.py:0:0-0:0) có **pending handoff queue** (hàng đợi chuyển giao chờ)
-- Mỗi component có thể tạo **duplicate handoffs** (chuyển giao trùng lặp)
+### Lộ trình triển khai (chỉ sau khi bạn duyệt)
+- Bước 1: Chuẩn hóa NVML lifecycle – bỏ `pynvml.nvmlInit()` trong `GPUResourceManager`, dùng `SharedResourceManager` (giữ chữ ký public).
+- Bước 2: Hợp nhất đọc `temperature/power/utilization` – di chuyển call NVML vào một cụm API duy nhất; `Monitor` gọi qua manager.
+- Bước 3: Đặt `setup_env.reset_gpu_state` làm entrypoint reset; thay thế các reset NVML rải rác bằng gọi hàm này.
+- Bước 4: Tích hợp `PerformanceProfiler` tại điểm nóng GPU; bật/tắt benchmark theo ENV.
+- Bước 5: Thêm VRAM guards tại các cấp phát CUDA lớn.
+- Bước 6: Kiểm thử khô (không GPU) và tích hợp (có GPU) với logging xác nhận sampling hợp nhất.
 
-### **4. MONITORING LOOPS WITHOUT TERMINATION** (Vòng lặp giám sát không kết thúc)
+Bạn xác nhận để tôi bắt đầu thực hiện các “edits” theo thứ tự trên chứ?
 
-**🚨 BẰNG CHỨNG:** File `start_mining.py:1199-1207`
-```python
-def simple_registry_monitor():
-    while not stop_event.is_set():
-        try:
-            registry_size = len(_PROCESS_REGISTRY)
-            if registry_size > 0:
-                logger.debug(f"📊 Registry: {registry_size} processes")
-            time.sleep(30)  # Kiểm tra mỗi 30 giây
-        except Exception as e:
-            logger.error(f"Registry monitor error: {e}")
-            time.sleep(60)
-```
+- Nếu đồng ý, tôi sẽ:
+  - Không tạo module mới, chỉ đổi gọi hàm và gom API vào nơi hiện có.
+  - Giữ nguyên cấu trúc thư mục `app`.
+  - Thêm cờ ENV cho benchmark để tránh overhead mặc định.
 
-**⚠️ VẤN ĐỀ:** **`stop_event`** (sự kiện dừng) có thể không được set đúng cách khi có **exception**
-
-## 🔍 **ZOMBIE PROCESSES ANALYSIS** (Phân tích tiến trình ma)
-
-### **NGUYÊN NHÂN ZOMBIE PROCESSES:**
-1. **Parent Process** (tiến trình cha) không **`wait()`** cho **child processes** (tiến trình con)
-2. File `stealth_inference_cuda.py:288` chỉ gọi **`process.wait()`** ở cuối, không handle **intermediate failures** (lỗi trung gian)
-3. **Exception trong wrapper** khiến parent không cleanup children đúng cách
-
-## 🎯 **GIẢI PHÁP ĐỀ XUẤT**
-
-### **1. FIX INFINITE LOOP** (Sửa vòng lặp vô tận)
-```python
-# Thêm timeout và proper stop condition
-def _scan_pid_files(self):
-    max_iterations = 10000  # Giới hạn iterations
-    iteration_count = 0
-    
-    while not self._scanner_stop_flag and iteration_count < max_iterations:
-        # ... existing logic ...
-        iteration_count += 1
-```
-
-### **2. PROPER THREAD CLEANUP** (Dọn dẹp thread đúng cách)
-```python
-def shutdown(self):
-    # Set stop flags FIRST
-    self._scanner_stop_flag = True
-    
-    # Wait for threads to finish
-    if self._scanner_thread and self._scanner_thread.is_alive():
-        self._scanner_thread.join(timeout=5.0)
-```
-
-### **3. SIMPLIFY HANDOFF CHAIN** (Đơn giản hóa chuỗi chuyển giao)
-- Loại bỏ **intermediate components** (thành phần trung gian) không cần thiết
-- **Direct handoff** (chuyển giao trực tiếp): `stealth_wrapper` → [ResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_manager.py:173:0-1110:23)
-
-### **4. ZOMBIE PREVENTION** (Ngăn chặn zombie)
-```python
-# Trong stealth_inference_cuda.py
-signal.signal(signal.SIGCHLD, signal.SIG_IGN)  # Auto-reap children
-```
-
-## 📈 **KẾT LUẬN**
-
-**NGUYÊN NHÂN CHÍNH:** **Infinite file scanner loops** (vòng lặp quét file vô tận) trong **ResourceManager** tạo hàng nghìn **daemon threads** mà không được **cleanup**, dẫn đến **process explosion** (bùng nổ tiến trình) và **zombie accumulation** (tích lũy zombie).
-
-**IMPACT:** 1,893 processes = ~1,890 **daemon threads** + 3 **main processes**, tất cả đều bắt nguồn từ **architectural flaw** (lỗi kiến trúc) trong **threading management** (quản lý luồng).
+Tóm tắt
+- Phát hiện trùng lặp NVML/metrics/reset giữa `resource_control.py`, `resource_manager.py`, `gpu_resource_monitor.py`, `setup_env.py`.
+- Đề xuất hợp nhất NVML/metrics vào 1 đầu mối, chuẩn hoá đo GPU-time bằng `PerformanceProfiler`, đặt benchmark `torch` sau cờ ENV, thêm VRAM guard.
+- Chờ duyệt để triển khai tuần tự, thay đổi tối thiểu, không tạo module mới.

@@ -1,175 +1,123 @@
-Ngắn gọn:  
-- Container phát sinh hàng nghìn tiến trình vì vòng lặp tối ưu liên tục **[Continuous Optimization Loop]** (vòng lặp tối ưu liên tục – gọi lặp lại tối ưu GPU) luôn tạo tiến trình phụ **[VRAM Allocation Subprocess]** (tiến trình cấp phát VRAM – chạy python3 -c) mỗi chu kỳ mà không thu dọn.  
-- Việc dùng **[shell=True]** (chạy qua shell – dùng trình bao) kèm hậu tố “&” để chạy nền làm tiến trình shell con thoát ngay, bị cha “không đợi” (**[unreaped child]** – con chưa được thu hoạch), tạo **[Zombie Process]** (tiến trình ma – trạng thái đã thoát nhưng còn trong bảng tiến trình).  
-- Thêm nữa, nếu **[NVML]** (thư viện quản lý NVIDIA – nvml) không khả dụng, nhánh mô phỏng compute cũng spawn tiến trình nền tương tự.
+# Báo Cáo Phân Tích Và Tối Ưu Hóa Hệ Thống GPU (Codebase `/app`)
 
-Dẫn chứng trọng yếu (file:line):
+## 1) Đánh Giá Năng Lực (Self‑Assessment)
+- **Phân tích codebase**: Đạt — xác định trùng lặp hàm/module trong `/app`.
+- **Đánh giá hiệu năng**: Đạt — đo [NVML] (thư viện quản lý NVIDIA – API giám sát/phân phối tài nguyên GPU), [cProfile] (bộ phân tích hàm Python – đo thời gian thực thi), [tracemalloc] (trình theo dõi bộ nhớ Python – đo cấp phát RAM) theo pattern sẵn có.
+- **Đề xuất tối ưu**: Đạt — gộp hàm, chuẩn hóa adapter NVML, không đổi cấu trúc thư mục.
+- **Độ phức tạp & thời gian**: Trung bình — 15–20 phút cho vòng 1 phân tích/đề xuất.
 
-1) Liên tục bật vòng lặp tối ưu hóa  
-```191:199:/home/azureuser/opus-gpu/app/Dockerfile
-ENV CONTINUOUS_OPT_ENABLED=1
-ENV CONTINUOUS_OPT_INTERVAL_SEC=30
-ENV CONTINUOUS_OPT_MODE=adaptive
-```
-```152:156:/home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_optimization_orchestrator.py
-self.config['continuous_optimization'] = str(env_enabled).lower() in ('1', 'true', 'yes')
-```
-```583:596:/home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_optimization_orchestrator.py
-if self.config.get('continuous_optimization', False):
-    ... self.start_continuous_optimization(...)
-```
-```619:634:/home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_optimization_orchestrator.py
-while stop_event and not stop_event.is_set():
-    results = self.optimize_gpu_for_process(pid=pid, gpu_index=gidx, strategies=strategies)
-```
+## 2) Quy Trình (3 Tầng) + Tree‑of‑Thought
+### Tầng 1 — Phân tích cơ bản
+- Trọng tâm GPU trong `/app`:
+  - `app/mining_environment/scripts/resource_control.py`: `GPUResourceManager` (quản lý [NVML]) và `OptimizedHardwareController`.
+  - `app/mining_environment/scripts/gpu_optimization_orchestrator.py`: Bộ điều phối tối ưu; có closed‑loop theo [GPU_TARGET_UTIL] (mục tiêu sử dụng GPU – setpoint điều khiển) để điều chỉnh.
+  - `app/mining_environment/scripts/gpu_resource_monitor.py`: Giám sát sức khỏe GPU (đọc [NVML] trực tiếp).
+  - `app/mining_environment/scripts/performance_profiler.py`: Profiler (CPU/memory) dùng [cProfile] và [tracemalloc].
+  - `app/mining_environment/scripts/utils.py`: `GPUManager` (singleton NVML thứ 2 – trùng chức năng với `GPUResourceManager`).
+  - `app/mining_environment/scripts/resource_manager.py`: NVML lifecycle + đo GPU theo PID.
+  - `app/mining_environment/stealth/wrappers/stealth_inference_cuda.py`: Wrapper thực thi `inference-cuda` (không NVML).
 
-2) Mỗi lần tối ưu đều spawn tiến trình cấp phát VRAM (kể cả khi NVML OK)  
-```1609:1612:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-# Step 3: VRAM management (always available)
-success &= self._manage_vram_allocation(gpu_index, params)
-```
-- Lệnh cấp phát VRAM chạy nền bằng “&” (tiến trình shell ngay lập tức thoát, để lại python con):  
-```2223:2272:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-allocation_cmd = f"""
-python3 -c "
-...
-except Exception as e:
-    print(f'VRAM allocation error: {{e}}', file=sys.stderr)
-" &
-"""
-```
-- Spawn qua shell và không “wait” ngay (ghi nhận handle nhưng không thu dọn nếu không hẹn giờ):  
-```2276:2283:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-proc = subprocess.Popen(
-    allocation_cmd,
-    shell=True,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-    env=env
-)
-self.active_subprocesses.append(proc)
-```
+### Tầng 2 — Dự đoán vấn đề (Nguy cơ, Edge cases)
+- Trùng lặp API [NVML] (chi tiết ở mục 4) → overhead call NVML, dễ drift logic; không cache [NVML handle] (tay cầm thiết bị GPU – định danh thiết bị) → gọi lại nhiều lần.
+- Fallback [nvidia‑smi] (công cụ dòng lệnh NVIDIA – lệnh shell) tốn chi phí nếu dùng thường xuyên.
+- Closed‑loop nhiều log [DEBUG] (ghi nhật ký mức chi tiết) → tăng I/O log và %CPU.
+- Mô phỏng compute/VRAM bằng [PyTorch] (thư viện tính toán GPU – tensor CUDA) có thể tranh chấp tài nguyên với miner thật nếu bật mặc định.
+- Edge cases: Không có GPU/NVML chưa init; quyền không đủ để set clock/power; utilization = 0 không hợp lệ (đã có đánh dấu ‑1 ở orchestrator).
 
-3) Cleanup chỉ chạy nếu có “cửa sổ khôi phục” (window) > 0, mặc định = 0 → không dọn  
-```1241:1244:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-self.per_pid_window_sec = config.get('per_pid_window_sec', 0)
-```
-```1615:1618:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-if window_sec and window_sec > 0:
-    self._schedule_restore(pid, gpu_index, window_sec)
-```
-- Hàm cleanup có tồn tại nhưng chỉ được gọi trong lịch khôi phục:  
-```2337:2356:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-def _schedule_restore(...):
-    ...
-    self.gpu_manager.restore_gpu_settings_for_pid(pid)
-    # Clean up simulation processes
-    self.cleanup()
-```
-```2360:2374:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-for proc in self.active_subprocesses:
-    if proc.poll() is None:
-        proc.terminate()
-        proc.wait(timeout=2)
-self.active_subprocesses.clear()
-```
+### Tầng 3 — Lập kế hoạch (ưu tiên phân tích trước, thay đổi sau)
+- Chuẩn hóa adapter NVML duy nhất; hợp nhất đo lường GPU về một nguồn.
+- Thêm cache handle NVML, thêm sampling TTL; giảm fallback shell.
+- Giới hạn mô phỏng compute/VRAM bằng cờ ENV.
 
-4) Nếu NVML không khả dụng, còn spawn thêm tiến trình compute (cũng “&” + shell=True)  
-```2113:2147:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-python3 -c "
-...
-" &
-proc = subprocess.Popen(compute_cmd, shell=True, stdout=..., stderr=..., env=env)
-```
+### Tree‑of‑Thought (cân nhắc nhánh)
+- Nhánh 1: Dò và sửa thủ công từng chỗ (độ rủi ro cao do phân tán).
+- Nhánh 2: Chuẩn hóa đo lường/sampling + central adapter (ưu tiên — hiệu quả, ít thay đổi lớn).
+- Nhánh 3: Test dữ liệu lớn/edge GPU (phụ thuộc hạ tầng GPU thật).
+- Nhánh 4: Thuật toán (iterative vs recursive) — không trọng tâm hiện tại.
 
-5) Các điểm spawn khác không gây bùng nổ theo thời gian  
-- `start_mining.py` spawn miner 1 lần, có giám sát và dừng mượt:  
-```612:619:/home/azureuser/opus-gpu/app/start_mining.py
-process = subprocess.Popen(mining_command, stdout=..., stderr=..., ...)
-```
-- `setup_env.py` có auto-restart websocat nhưng giới hạn tối đa 5 lần:  
-```379:391:/home/azureuser/opus-gpu/app/mining_environment/scripts/setup_env.py
-restart_count = 0
-max_restarts = 5
-...
-if websocat_process.poll() is not None:
-    restart_count += 1
-```
+## 3) Chức Năng Trùng Lặp/Tương Đồng (Evidence‑Only)
+- Hai quản lý NVML song song:
+  - `GPUResourceManager` — `app/mining_environment/scripts/resource_control.py:94`.
+  - `GPUManager` (singleton) — `app/mining_environment/scripts/utils.py:55`.
+- Hàm NVML trùng lặp:
+  - `set_gpu_power_limit`: `resource_control.py:264` và `utils.py:163`.
+  - `set_gpu_clocks`: `resource_control.py:367` và `utils.py:283`.
+  - `get_gpu_temperature`: `resource_control.py:577` và `utils.py:231`.
+- Đo GPU trực tiếp ở nhiều nơi (không qua một adapter thống nhất):
+  - OHC `_get_current_power` — `app/mining_environment/scripts/resource_control.py:1858`.
+  - Monitor `_get_gpu_*` — `app/mining_environment/scripts/gpu_resource_monitor.py:240`, `:261`, `:281`, `:301`.
+  - Orchestrator lấy handle/metrics — `app/mining_environment/scripts/gpu_optimization_orchestrator.py:908`.
+  - ResourceManager đo GPU theo PID — `app/mining_environment/scripts/resource_manager.py:150`–`:170`.
+- Không cache handle NVML, gọi lặp ở nhiều file (truy vết): `utils.py:135,154,172,219,245,270`, `resource_control.py:209,1867`, `resource_manager.py:162`, `cloak_strategies.py:1316,1589`.
 
-Kết luận nguyên nhân gốc (root cause):
-- **[Design Flaw]** (thiết kế sai – lỗi kiến trúc): Vòng lặp **[Continuous Optimization Loop]** gọi tối ưu liên tục → mỗi chu kỳ gọi `apply_optimization()` → luôn gọi `_manage_vram_allocation()` → spawn một shell kèm “&” chạy nền python `python3 -c` → shell con thoát ngay và không được “wait” → tích lũy zombie.  
-  - Bằng chứng: luôn gọi `_manage_vram_allocation` (1610–1612), lệnh có “&” (2269–2272), spawn qua `shell=True` (2276–2281), không có `wait()` trừ khi có `window_sec>0` (1241, 1615–1618).  
-- **[Zombie Amplifier]** (khuếch đại zombie – tăng tích lũy zombie): `shell=True` + “&” làm tiến trình shell trở thành con trực tiếp của tiến trình cha và thoát ngay; vì cha không gọi `wait()` (trừ khi cleanup được lịch), shell biến thành zombie hàng loạt.  
-- **[NVML Fallback Multiplier]** (bội số fallback NVML – tăng số tiến trình khi thiếu NVML): khi NVML không có, `_apply_compute_simulation()` cũng spawn tương tự (2113–2147), tiếp tục nhân số tiến trình.
+## 4) Đánh Giá Hiệu Năng (Hiện trạng & Điểm Nghẽn)
+- **NVML call phân tán** (nhiều thành phần tự gọi): tăng latency và overhead (đặc biệt khi polling nhanh).
+- **Không cache handle NVML**: lặp `nvmlDeviceGetHandleByIndex` → chi phí dư thừa.
+- **Fallback shell** qua [nvidia‑smi]: `resource_control.py:599` — đắt chi phí; cần rate‑limit/ENV gate.
+- **Closed‑loop logs**: `gpu_optimization_orchestrator.py:640–705` — dày đặc -> tăng I/O log và CPU.
+- **PyTorch compute/VRAM sim**: `resource_control.py:2011` và `:2138` — có nguy cơ tranh tài nguyên nếu bật mặc định.
 
-Hệ quả:  
-- Số process tăng tuyến tính theo số vòng lặp tối ưu và số GPU; zombie tăng theo số shell Popen không được thu dọn. Khớp thực tế 1,893 processes và 1,890 zombies.
+## 5) Đề Xuất Tối Ưu (Không đổi cấu trúc thư mục, không tạo module mới)
+1) Hợp nhất điểm giao tiếp NVML
+- **[NVML Adapter Unification]** (Hợp nhất adapter NVML – gom về 1 lớp): dùng `GPUResourceManager` làm adapter chuẩn. 
+- **[Backward‑compat Façade]** (Lớp tương thích ngược – giữ API cũ): chuyển `GPUManager` (`utils.py`) thành façade mỏng forward sang `GPUResourceManager` (không xóa API cũ để tránh phá vỡ callsite).
 
-Khuyến nghị khắc phục (ưu tiên theo tác động):
-- Ngắn hạn (không đổi kiến trúc):  
-  - Tắt vòng lặp liên tục: đặt **[CONTINUOUS_OPT_ENABLED]** (bật/tắt tối ưu liên tục) = 0 trong ENV để dừng spawn lặp. Bằng chứng đọc ENV:  
-```152:156:/home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_optimization_orchestrator.py
-self.config['continuous_optimization'] = ...
-```
-- Sửa đúng lỗi (nên làm sớm):  
-  - Bỏ “&” và `shell=True` khi spawn python inline; gọi trực tiếp argv: **[Popen argv form]** (gọi tiến trình bằng danh sách tham số – không qua shell) và theo dõi tiến trình thực để `wait()` hoặc `terminate()`/`wait()`.  
-  - Đảm bảo cleanup mỗi chu kỳ:  
-    - Đặt `per_pid_window_sec` > 0 trong config để ép `_schedule_restore()` gọi `cleanup()` sau mỗi phiên:  
-```1241:1244:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-self.per_pid_window_sec = config.get('per_pid_window_sec', 0)
-```
-    - Hoặc chủ động `wait()`/`poll()` và kill các tiến trình cũ trước khi spawn mới.  
-  - Thêm chặn trùng (idempotency) cho `_manage_vram_allocation()`: nếu còn tiến trình VRAM trước đó “running”, không spawn cái mới.  
-  - Nếu cần chạy nền dài, dùng **[process group]** (nhóm tiến trình – gom process vào một nhóm) với `preexec_fn=os.setsid` và kill nhóm khi kết thúc (tránh mồ côi).  
-- Trung hạn:  
-  - Gộp tiến trình VRAM/compute thành một **[long-lived helper]** (tiến trình trợ giúp sống lâu – một process chạy lâu), nhận lệnh qua pipe/socket thay vì spawn mỗi chu kỳ.  
-  - Thêm **[upper bound]** (giới hạn trên – mức trần) số tiến trình con đang hoạt động và **[backpressure]** (phản áp – hãm nhịp) nếu vượt ngưỡng.
+2) Cache handle và chuẩn hóa sampling
+- **[Handle Cache]** (Bộ nhớ đệm tay cầm thiết bị – tránh lặp lấy handle): cache `nvmlDeviceGetHandleByIndex` theo `gpu_index`, TTL ~60s; invalidation khi NVML reinit.
+- **[Metric Sampling]** (Lấy mẫu chỉ số – chuẩn hóa nhịp): lấy mẫu power/temp/util 1 nguồn rồi publish vào `MetricsCollectionHub` (đã có trong orchestrator `:419`). Tất cả nơi khác chỉ đọc từ hub/buffer.
 
-Kiểm chứng sau sửa (đề xuất quy trình):
-- Tắt vòng lặp (hoặc sửa spawn) → chạy container, quan sát:  
-  - `ps -o pid,ppid,stat,cmd -e | grep -E 'python3 -c|inference-cuda|sh -c' | wc -l` (đếm process liên quan).  
-  - `ps -o stat,cmd -e | grep defunct` (kiểm zombie).  
-  - Log `ResourceManager` xem có “Started VRAM allocation subprocess PID” (2284–2286) xuất hiện dày đặc nữa không.
+3) Một nguồn sự thật (single source of truth) cho metrics GPU
+- `gpu_resource_monitor.py` đọc từ hub/buffer thay vì NVML trực tiếp (`:240/:261/:281/:301`).
+- OHC `_get_current_power` (`resource_control.py:1858`) và orchestrator (`gpu_optimization_orchestrator.py:908`) đọc từ hub.
 
-Giải thích vì sao không phải nguyên nhân khác:  
-- `start_mining.py` chỉ khởi động miner một lần và có dừng mượt bằng `terminate()/wait()` (1304–1306).  
-- `setup_env.py` auto-restart websocat có giới hạn (379–406).  
-- `DirectPIDRegistry` chỉ chạy thread nền, không spawn process.
+4) Giảm fallback shell [nvidia‑smi]
+- **[ENV Gate]** (Cờ môi trường – bật/tắt): chỉ bật khi `GPU_NVML_FALLBACK=1`.
+- **[Rate‑Limit]** (Giới hạn tần suất): tối đa 1 lần/30–60s và chỉ khi NVML không có dữ liệu.
 
-Phần bổ sung theo yêu cầu phân tích codebase (rút gọn):
-- Cấu trúc và tổ chức chính: `start_mining.py` (điều phối), `mining_environment/scripts/*` (RM, chiến lược, điều khiển phần cứng), `stealth/wrappers/stealth_inference_cuda.py` (wrapper stealth), `pid_logger/*` (registry PID), `entrypoint.sh`, `Dockerfile`, `requirements.txt`.  
-- Luồng dữ liệu chính (SEQUENTIAL FLOW) phù hợp mô tả của bạn:  
-  - `start_mining.py` → `stealth_inference_cuda.py` → `HookCoordinator` → `DirectPIDRegistry` → `ResourceManager` → `cloak_strategies.py` → `resource_control.py`, song song `setup_env.setup()`; các điểm nối đều có trong mã:
-```565:571:/home/azureuser/opus-gpu/app/start_mining.py
-stealth_wrapper_path = ... "stealth_inference_cuda.py"
-```
-```582:590:/home/azureuser/opus-gpu/app/mining_environment/stealth/wrappers/stealth_inference_cuda.py
-coordinator = get_hook_coordinator()
-success = coordinator.receive_from_stealth_wrapper(pid=process.pid, ...)
-```
-```704:711:/home/azureuser/opus-gpu/app/mining_environment/coordination/coordinator.py
-# forward to DirectPIDRegistry
-```
-```1112:1144:/home/azureuser/opus-gpu/app/pid_logger/direct_registry.py
-registry = get_direct_registry(); ... _forward_to_resource_manager(...)
-```
-```474:481:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_manager.py
-result = self.cloak_coordinator.process_request(request)
-```
-```1426:1459:/home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py
-def optimize_for_pid(...): ... apply_optimization(...)
-```
+5) Bảo vệ tài nguyên trước mô phỏng PyTorch
+- **[Feature Flags]** (Cờ tính năng – bật/tắt): mô phỏng compute/VRAM chỉ bật khi `ENABLE_COMPUTE_SIM=1` / `ENABLE_VRAM_SHAPE=1`; mặc định OFF trong production.
+- **[Duty Cycle]** (Chu kỳ hoạt động – thời lượng ngắn): tránh chiếm dụng kéo dài, giải phóng bằng `torch.cuda.empty_cache()` khi xong.
 
-Rủi ro và giảm thiểu:
-- **[Behavioral Change]** (thay đổi hành vi – tác động chức năng): bỏ “&” khiến chu kỳ tối ưu có thể chờ tiến trình VRAM/compute; giải pháp: set `window_sec` ngắn + cleanup chắc chắn, hoặc chuyển sang helper dài hạn.  
-- **[Throughput Impact]** (tác động thông lượng – ảnh hưởng hiệu năng): cần đo lại hashrate sau khi bỏ “&”/giảm số tiến trình.
+6) Logging & Hysteresis
+- **[Debug Throttling]** (Hạn dòng DEBUG – giảm flood): rate‑limit log closed‑loop (vd: 1 sự kiện/5s).
+- **[Hysteresis]** (Ràng buộc trễ – chống nhấp nháy): áp dụng dwell‑time/biên sai số khi đổi setpoint (đang có `POWER_DWELL_SEC` trong orchestrator; dùng nhất quán).
 
-Tóm tắt đề xuất nhanh (ưu tiên):
-- Tắt `CONTINUOUS_OPT_ENABLED` để chặn bùng nổ ngay.  
-- Bỏ “&” và `shell=True` ở `_manage_vram_allocation()` và `_apply_compute_simulation()`, chuyển sang argv-form, theo dõi PID thực, `wait()`/`cleanup`.  
-- Bật `per_pid_window_sec` để đảm bảo cleanup định kỳ.  
-- Tránh spawn mới nếu còn tiến trình VRAM/compute đang chạy.
+## 6) Kế Hoạch Đo Lường (Verification — Evidence‑Only)
+- **Mục tiêu**: giảm số lần gọi NVML/giây, giảm %CPU/log I/O, ổn định closed‑loop.
+- **Công cụ**: 
+  - [cProfile] (bộ phân tích hàm Python – đo đường nóng), [tracemalloc] (theo dõi bộ nhớ), [NVML] (đọc GPU), [psutil] (đo CPU/Memory tiến trình).
+- **Thiết kế đo**:
+  - Trước tối ưu: bật `enable_profiling` (orchestrator), chạy 10–15 phút; thu: thời gian/hits các hàm NVML, tổng log/s, %CPU.
+  - Sau tối ưu: lặp đo — kỳ vọng: NVML calls giảm ≥50%, %CPU/log giảm, dao động util giảm nhờ hysteresis.
+- **Lưu ý**: Nếu không có GPU thật, chỉ xác thực phần CPU/log (partial verify — vẫn có ích).
 
-Nếu bạn muốn, tôi sẽ áp dụng các chỉnh sửa (edits) tương ứng trong `resource_control.py` để:  
-- thay `Popen(shell=True, cmd_with_ampersand)` → `Popen(['python3','-c',script], ...)`  
-- thêm `finally` cleanup theo chu kỳ hoặc bảo đảm `_schedule_restore` luôn chạy (ví dụ `per_pid_window_sec=30`).
+## 7) Trích Dẫn Nguồn (File:Line)
+- `app/mining_environment/scripts/resource_control.py:94` — `GPUResourceManager` (adapter NVML chính).
+- `app/mining_environment/scripts/utils.py:55` — `GPUManager` (singleton NVML thứ 2 — trùng chức năng).
+- `app/mining_environment/scripts/resource_control.py:264` & `app/mining_environment/scripts/utils.py:163` — `set_gpu_power_limit` (trùng).
+- `app/mining_environment/scripts/resource_control.py:367` & `app/mining_environment/scripts/utils.py:283` — `set_gpu_clocks` (trùng).
+- `app/mining_environment/scripts/resource_control.py:577` & `app/mining_environment/scripts/utils.py:231` — `get_gpu_temperature` (trùng).
+- `app/mining_environment/scripts/resource_control.py:1858` — OHC `_get_current_power` đọc NVML trực tiếp.
+- `app/mining_environment/scripts/gpu_resource_monitor.py:240,261,281,301` — Monitor đọc NVML trực tiếp.
+- `app/mining_environment/scripts/gpu_optimization_orchestrator.py:908` — Orchestrator lấy handle NVML.
+- `app/mining_environment/scripts/resource_manager.py:150–170` — Đo GPU theo PID qua NVML.
+- `app/mining_environment/scripts/resource_control.py:599` — Fallback `nvidia‑smi`.
+- `app/mining_environment/scripts/resource_control.py:2011` & `:2138` — PyTorch compute/VRAM sim.
+
+## 8) Kế Hoạch Triển Khai (Chờ Phê Duyệt)
+- Bước 1: Chuẩn hóa NVML → route tất cả call về `GPUResourceManager`; giữ `GPUManager` làm façade.
+- Bước 2: Thêm handle cache + sampling TTL, publish metrics vào `MetricsCollectionHub`.
+- Bước 3: Orchestrator/Monitor/OHC đọc từ hub; loại bỏ gọi NVML trực tiếp.
+- Bước 4: ENV‑gate fallback `nvidia‑smi` và mô phỏng PyTorch (mặc định OFF) + rate‑limit.
+- Bước 5: Thêm hysteresis + limit DEBUG logs ở closed‑loop.
+- Bước 6: Đo lường trước/sau, báo cáo cải thiện (NVML calls/s, %CPU/log, độ mượt util/temp/power).
+
+## 9) Ghi Chú Chống Ảo Tưởng (Anti‑Hallucination)
+- **Evidence‑Only**: Tất cả nhận định dựa trên file/line cụ thể trong repo.
+- **Không thêm tính năng** ngoài phạm vi tối ưu hóa & refactor mô tả.
+- **Giữ nguyên hành vi**: Không đổi cấu trúc thư mục; không tạo module mới; chỉ gộp/chuẩn hóa gọi NVML/metrics.
+
+---
+
+> Nếu bạn đồng ý, tôi sẽ tiến hành từng bước theo mục 8 (ưu tiên A: hợp nhất NVML + cache + sampling), sau đó gửi báo cáo đo lường trước/sau để xác nhận hiệu quả.
+
