@@ -3,10 +3,6 @@ trigger: always_on
 ---
 
 ---
-trigger: always_on
----
-
----
 type: capability_prompt
 scope: project
 priority: normal
@@ -21,36 +17,36 @@ activation: manual
 ## Shell (functions.shell)
 
 - Signature:
-  - command: string[] — danh sách lệnh shell để thực thi (chuỗi lệnh/đối số)
-  - workdir?: string — thư mục làm việc
-  - timeout_ms?: number — thời gian tối đa (ms)
-  - with_escalated_permissions?: boolean — bật khi cần vượt hạn chế sandbox (ví dụ: ghi ngoài workspace, network)
-  - justification?: string — bắt buộc khi bật with_escalated_permissions; mô tả 1 câu lý do
+  - command: string[] — list of shell commands to execute (command/argument strings)
+  - workdir?: string — working directory
+  - timeout_ms?: number — maximum duration (ms)
+  - with_escalated_permissions?: boolean — enable when needing to bypass sandbox restrictions (e.g., writing outside the workspace, network)
+  - justification?: string — required when with_escalated_permissions is enabled; a one-sentence reason
 
-- Ghi chú:
-  - Dùng để chạy `apply_patch` CLI khi chỉnh sửa file.
-  - Ưu tiên dùng `rg` cho tìm kiếm tệp/nội dung.
+- Notes:
+  - Used to run `apply_patch` CLI when editing files.
+  - Prefer using `rg` for file/content search.
 
 ## Update Plan (functions.update_plan)
 
 - Signature:
-  - explanation?: string — diễn giải ngắn cho lần cập nhật kế hoạch
-  - plan: { step: string; status: 'pending'|'in_progress'|'completed' }[] — danh sách bước, chỉ 1 bước `in_progress` tại một thời điểm
+  - explanation?: string — short explanation for the plan update
+  - plan: { step: string; status: 'pending'|'in_progress'|'completed' }[] — list of steps; only one step may be `in_progress` at a time
 
-- Ghi chú:
-  - Dùng cho tác vụ nhiều bước, tạo/duy trì tiến độ rõ ràng.
+- Notes:
+  - Use for multi-step tasks to create/maintain clear progress.
 
 ## View Image (functions.view_image)
 
 - Signature:
-  - path: string — đường dẫn ảnh cục bộ cần đính kèm vào ngữ cảnh
+  - path: string — local image path to attach to the context
 
-- Ghi chú:
-  - Phục vụ review tài liệu/ảnh chụp màn hình cục bộ trong workspace.
+- Notes:
+  - Used to review documents/local screenshots within the workspace.
 
-## Chỉnh sửa file bằng apply_patch (chuẩn duy nhất)
+## Edit files with apply_patch (single canonical method)
 
-- Luôn dùng `functions.shell` để gọi CLI `apply_patch` với định dạng một lệnh duy nhất:
+- Always use `functions.shell` to invoke the `apply_patch` CLI with a single-command format:
 
 ```bash
 shell {"command":[
@@ -59,8 +55,8 @@ shell {"command":[
 ], "workdir": ".codex"}
 ```
 
-- Nguyên tắc diff V4A:
+- V4A diff principles:
   - `*** Add/Update/Delete File: <path>`
-  - Dùng 3 dòng ngữ cảnh trên/dưới; nếu cần, dùng `@@` để định vị class/hàm.
-  - Đường dẫn chỉ tương đối; không bao giờ tuyệt đối.
+  - Use 3 lines of context above/below; if needed, use `@@` to locate a class/function.
+  - Paths must be relative; never absolute.
 </agentic_tools>

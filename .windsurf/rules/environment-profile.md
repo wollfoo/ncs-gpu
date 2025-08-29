@@ -1,4 +1,8 @@
 ---
+trigger: always_on
+---
+
+---
 type: capability_prompt
 scope: project
 priority: normal

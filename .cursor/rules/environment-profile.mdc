@@ -1,10 +1,6 @@
 ---
-type: capability_prompt
-scope: project
-priority: normal
-activation: always_on
+alwaysApply: true
 ---
-
 # ENVIRONMENT PROFILE – Codex CLI Runtime
 
 <codex_cli_core>
