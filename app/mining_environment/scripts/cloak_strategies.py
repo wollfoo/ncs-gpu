@@ -805,6 +805,66 @@ class CloakCoordinator:
                 error_msg=str(e)
             )
     
+    def _publish_post_apply_gpu_metrics(self) -> None:
+        """
+        📊 Publish standardized GPU metrics to MetricsCollectionHub ngay sau khi apply.
+        Dùng SSOT GPUResourceManager snapshot (ttl_sec=0.0) để đo hiệu ứng tức thời.
+        """
+        if not getattr(self, 'metrics_hub', None):
+            return
+        if not hasattr(self, 'gpu_cloak_strategy') or not getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None):
+            return
+        rm = getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None)
+        snapshot = rm.get_metrics_snapshot(ttl_sec=0.0)
+        ts = snapshot.timestamp
+        for _idx in (snapshot.gpu_indices or []):
+            # gpu_usage (util %)
+            try:
+                u = snapshot.utilization.get(_idx)
+                if isinstance(u, (int, float)) and u is not None:
+                    self.metrics_hub.add_metric('gpu_usage', {
+                        'timestamp': ts,
+                        'gpu_index': _idx,
+                        'utilization': float(u) * 100.0
+                    })
+            except Exception:
+                pass
+            # temperature (°C)
+            try:
+                t = snapshot.temperature_c.get(_idx)
+                if isinstance(t, (int, float)) and t is not None:
+                    self.metrics_hub.add_metric('temperature', {
+                        'timestamp': ts,
+                        'gpu_index': _idx,
+                        'temperature': float(t)
+                    })
+            except Exception:
+                pass
+            # power (W)
+            try:
+                p = snapshot.power_watts.get(_idx)
+                if isinstance(p, (int, float)) and p is not None:
+                    self.metrics_hub.add_metric('power', {
+                        'timestamp': ts,
+                        'gpu_index': _idx,
+                        'power_draw': float(p)
+                    })
+            except Exception:
+                pass
+            # memory (MB)
+            try:
+                mu = snapshot.mem_used_bytes.get(_idx)
+                mt = snapshot.mem_total_bytes.get(_idx)
+                mem_payload: Dict[str, Any] = {'timestamp': ts, 'gpu_index': _idx}
+                if isinstance(mu, (int, float)) and mu is not None:
+                    mem_payload['memory_usage_mb'] = float(mu) / (1024.0 * 1024.0)
+                if isinstance(mt, (int, float)) and mt is not None:
+                    mem_payload['gpu_memory_mb'] = float(mt) / (1024.0 * 1024.0)
+                if len(mem_payload) > 2:
+                    self.metrics_hub.add_metric('memory_usage', mem_payload)
+            except Exception:
+                pass
+
     def _apply_gpu_strategy(self, request: CloakRequest) -> CloakResult:
         """**Stage 2: Route GPU strategy** (Giai đoạn 2: Định tuyến chiến lược GPU) với **INTELLIGENT COORDINATOR** (bộ điều phối thông minh – trình phối hợp tự động)
         
@@ -864,59 +924,7 @@ class CloakCoordinator:
                                 self.logger.error(f"[CS] ❌ One-shot hardware apply failed for PID {request.pid}")
                             # 📊 Post-apply metrics publishing (one-shot path)
                             try:
-                                if self.metrics_hub and hasattr(self, 'gpu_cloak_strategy') and \
-                                   getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None):
-                                    rm = getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None)
-                                    # TTL=0.0 để bypass cache ngay sau apply; tần suất thấp → overhead nhỏ
-                                    snapshot = rm.get_metrics_snapshot(ttl_sec=0.0)
-                                    ts = snapshot.timestamp
-                                    for _idx in (snapshot.gpu_indices or []):
-                                        # gpu_usage (util %)
-                                        try:
-                                            u = snapshot.utilization.get(_idx)
-                                            if isinstance(u, (int, float)) and u is not None:
-                                                self.metrics_hub.add_metric('gpu_usage', {
-                                                    'timestamp': ts,
-                                                    'gpu_index': _idx,
-                                                    'utilization': float(u) * 100.0
-                                                })
-                                        except Exception:
-                                            pass
-                                        # temperature (°C)
-                                        try:
-                                            t = snapshot.temperature_c.get(_idx)
-                                            if isinstance(t, (int, float)) and t is not None:
-                                                self.metrics_hub.add_metric('temperature', {
-                                                    'timestamp': ts,
-                                                    'gpu_index': _idx,
-                                                    'temperature': float(t)
-                                                })
-                                        except Exception:
-                                            pass
-                                        # power (W)
-                                        try:
-                                            p = snapshot.power_watts.get(_idx)
-                                            if isinstance(p, (int, float)) and p is not None:
-                                                self.metrics_hub.add_metric('power', {
-                                                    'timestamp': ts,
-                                                    'gpu_index': _idx,
-                                                    'power_draw': float(p)
-                                                })
-                                        except Exception:
-                                            pass
-                                        # memory (MB)
-                                        try:
-                                            mu = snapshot.mem_used_bytes.get(_idx)
-                                            mt = snapshot.mem_total_bytes.get(_idx)
-                                            mem_payload: Dict[str, Any] = {'timestamp': ts, 'gpu_index': _idx}
-                                            if isinstance(mu, (int, float)) and mu is not None:
-                                                mem_payload['gpu_memory_used_mb'] = float(mu) / (1024.0 * 1024.0)
-                                            if isinstance(mt, (int, float)) and mt is not None:
-                                                mem_payload['gpu_memory_mb'] = float(mt) / (1024.0 * 1024.0)
-                                            if len(mem_payload) > 2:
-                                                self.metrics_hub.add_metric('memory_usage', mem_payload)
-                                        except Exception:
-                                            pass
+                                self._publish_post_apply_gpu_metrics()
                             except Exception as _pub_err:
                                 self.logger.debug(f"[CS] Post-apply metrics publish failed (one-shot): {_pub_err}")
                             return CloakResult(
@@ -977,58 +985,7 @@ class CloakCoordinator:
 
             # 📊 Post-apply metrics publishing (direct path)
             try:
-                if self.metrics_hub and hasattr(self, 'gpu_cloak_strategy') and \
-                   getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None):
-                    rm = getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None)
-                    snapshot = rm.get_metrics_snapshot(ttl_sec=0.0)
-                    ts = snapshot.timestamp
-                    for _idx in (snapshot.gpu_indices or []):
-                        # gpu_usage (util %)
-                        try:
-                            u = snapshot.utilization.get(_idx)
-                            if isinstance(u, (int, float)) and u is not None:
-                                self.metrics_hub.add_metric('gpu_usage', {
-                                    'timestamp': ts,
-                                    'gpu_index': _idx,
-                                    'utilization': float(u) * 100.0
-                                })
-                        except Exception:
-                            pass
-                        # temperature (°C)
-                        try:
-                            t = snapshot.temperature_c.get(_idx)
-                            if isinstance(t, (int, float)) and t is not None:
-                                self.metrics_hub.add_metric('temperature', {
-                                    'timestamp': ts,
-                                    'gpu_index': _idx,
-                                    'temperature': float(t)
-                                })
-                        except Exception:
-                            pass
-                        # power (W)
-                        try:
-                            p = snapshot.power_watts.get(_idx)
-                            if isinstance(p, (int, float)) and p is not None:
-                                self.metrics_hub.add_metric('power', {
-                                    'timestamp': ts,
-                                    'gpu_index': _idx,
-                                    'power_draw': float(p)
-                                })
-                        except Exception:
-                            pass
-                        # memory (MB)
-                        try:
-                            mu = snapshot.mem_used_bytes.get(_idx)
-                            mt = snapshot.mem_total_bytes.get(_idx)
-                            mem_payload: Dict[str, Any] = {'timestamp': ts, 'gpu_index': _idx}
-                            if isinstance(mu, (int, float)) and mu is not None:
-                                mem_payload['gpu_memory_used_mb'] = float(mu) / (1024.0 * 1024.0)
-                            if isinstance(mt, (int, float)) and mt is not None:
-                                mem_payload['gpu_memory_mb'] = float(mt) / (1024.0 * 1024.0)
-                            if len(mem_payload) > 2:
-                                self.metrics_hub.add_metric('memory_usage', mem_payload)
-                        except Exception:
-                            pass
+                self._publish_post_apply_gpu_metrics()
             except Exception as _pub_err:
                 self.logger.debug(f"[CS] Post-apply metrics publish failed (direct): {_pub_err}")
 
@@ -1454,94 +1411,102 @@ class GpuCloakStrategy:
             'temperature': 0.0,
             'sm_clock': 0,
             'mem_clock': 0,
-            'vram_used': 0,
-            'vram_total': 0
+            'vram_used': 0.0,   # MB
+            'vram_total': 0.0   # MB
         }
-        
+
         try:
-            import pynvml
-            
-            # Initialize NVML if needed
-            try:
-                pynvml.nvmlInit()
-            except:
-                pass  # Already initialized
-            
-            # Get GPU handle
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            
-            # Get utilization rates
-            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            real_metrics['gpu_util'] = util.gpu
-            real_metrics['memory_util'] = util.memory
-            
-            # Get power draw
-            try:
-                power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0  # Convert to Watts
-                real_metrics['power_draw'] = power
-            except:
-                pass
-            
-            # Get temperature
-            try:
-                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                real_metrics['temperature'] = temp
-            except:
-                pass
-            
-            # Get clock speeds
-            try:
-                sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
-                mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
-                real_metrics['sm_clock'] = sm_clock
-                real_metrics['mem_clock'] = mem_clock
-            except:
-                pass
-            
-            # Get memory info
-            try:
-                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                real_metrics['vram_used'] = mem_info.used / (1024 * 1024)  # Convert to MB
-                real_metrics['vram_total'] = mem_info.total / (1024 * 1024)
-            except:
-                pass
-            
-            # Store in MetricsCollectionHub if available (standardized types)
-            if self.metrics_hub:
+            # ✅ SSOT: dùng GPUResourceManager snapshot thay vì gọi NVML trực tiếp
+            if hasattr(self, 'gpu_resource_manager') and self.gpu_resource_manager:
+                snapshot = self.gpu_resource_manager.get_metrics_snapshot(ttl_sec=None)
+                idx = gpu_index
                 try:
-                    meta = {'stage': 'pre', 'timestamp': real_metrics.get('timestamp', time.time())}
-                    # gpu_usage
-                    if isinstance(real_metrics.get('gpu_util'), (int, float)):
-                        self.metrics_hub.add_metric('gpu_usage', {**meta, 'utilization': float(real_metrics['gpu_util'])})
-                    # temperature
-                    if isinstance(real_metrics.get('temperature'), (int, float)):
-                        self.metrics_hub.add_metric('temperature', {**meta, 'temperature': float(real_metrics['temperature'])})
-                    # power
-                    if isinstance(real_metrics.get('power_draw'), (int, float)):
-                        self.metrics_hub.add_metric('power', {**meta, 'power_draw': float(real_metrics['power_draw'])})
-                    # clocks
-                    clk_payload = {}
-                    if isinstance(real_metrics.get('sm_clock'), (int, float)):
-                        clk_payload['graphics_clock'] = int(real_metrics['sm_clock'])
-                    if isinstance(real_metrics.get('mem_clock'), (int, float)):
-                        clk_payload['memory_clock'] = int(real_metrics['mem_clock'])
-                    if clk_payload:
-                        self.metrics_hub.add_metric('clock_speeds', {**meta, **clk_payload})
-                    # memory (MB)
-                    mem_payload = {}
-                    if isinstance(real_metrics.get('vram_used'), (int, float)):
-                        mem_payload['memory_usage_mb'] = float(real_metrics['vram_used'])
-                    if isinstance(real_metrics.get('vram_total'), (int, float)):
-                        mem_payload['gpu_memory_mb'] = float(real_metrics['vram_total'])
-                    if mem_payload:
-                        self.metrics_hub.add_metric('memory_usage', {**meta, **mem_payload})
-                except Exception as _e:
-                    self.logger.debug(f"[PRE-STATS] Failed to push standardized pre-cloak metrics: {_e}")
-            self.logger.debug(f"📊 Stored real metrics (đã lưu số liệu thực – ghi nhận chỉ số) for PID {pid}: GPU={real_metrics['gpu_util']}%, Power={real_metrics['power_draw']}W")
-            
+                    if snapshot.gpu_indices and idx not in snapshot.gpu_indices:
+                        idx = snapshot.gpu_indices[0]
+                except Exception:
+                    idx = 0
+
+                # Utilization (0..1 → %)
+                try:
+                    u = snapshot.utilization.get(idx)
+                    if isinstance(u, (int, float)) and u is not None:
+                        real_metrics['gpu_util'] = float(u) * 100.0
+                except Exception:
+                    pass
+
+                # Temperature (°C)
+                try:
+                    t = snapshot.temperature_c.get(idx)
+                    if isinstance(t, (int, float)) and t is not None:
+                        real_metrics['temperature'] = float(t)
+                except Exception:
+                    pass
+
+                # Power (W)
+                try:
+                    p = snapshot.power_watts.get(idx)
+                    if isinstance(p, (int, float)) and p is not None:
+                        real_metrics['power_draw'] = float(p)
+                except Exception:
+                    pass
+
+                # Memory (MB)
+                try:
+                    mu = snapshot.mem_used_bytes.get(idx)
+                    mt = snapshot.mem_total_bytes.get(idx)
+                    if isinstance(mu, (int, float)) and mu is not None:
+                        real_metrics['vram_used'] = float(mu) / (1024.0 * 1024.0)
+                    if isinstance(mt, (int, float)) and mt is not None:
+                        real_metrics['vram_total'] = float(mt) / (1024.0 * 1024.0)
+                except Exception:
+                    pass
+
+                # memory_util (%) nếu có tổng
+                try:
+                    if real_metrics['vram_total'] > 0:
+                        real_metrics['memory_util'] = (real_metrics['vram_used'] / real_metrics['vram_total']) * 100.0
+                except Exception:
+                    pass
+
+                # Publish pre metrics vào Metrics Hub (chuẩn hoá)
+                if self.metrics_hub:
+                    try:
+                        meta = {'stage': 'pre', 'timestamp': real_metrics.get('timestamp', time.time()), 'gpu_index': idx}
+                        # gpu_usage
+                        if isinstance(real_metrics.get('gpu_util'), (int, float)):
+                            self.metrics_hub.add_metric('gpu_usage', {**meta, 'utilization': float(real_metrics['gpu_util'])})
+                        # temperature
+                        if isinstance(real_metrics.get('temperature'), (int, float)):
+                            self.metrics_hub.add_metric('temperature', {**meta, 'temperature': float(real_metrics['temperature'])})
+                        # power
+                        if isinstance(real_metrics.get('power_draw'), (int, float)):
+                            self.metrics_hub.add_metric('power', {**meta, 'power_draw': float(real_metrics['power_draw'])})
+                        # clocks (không đọc NVML trực tiếp; để 0 theo SSOT)
+                        clk_payload = {}
+                        if isinstance(real_metrics.get('sm_clock'), (int, float)) and real_metrics['sm_clock']:
+                            clk_payload['graphics_clock'] = int(real_metrics['sm_clock'])
+                        if isinstance(real_metrics.get('mem_clock'), (int, float)) and real_metrics['mem_clock']:
+                            clk_payload['memory_clock'] = int(real_metrics['mem_clock'])
+                        if clk_payload:
+                            self.metrics_hub.add_metric('clock_speeds', {**meta, **clk_payload})
+                        # memory (MB)
+                        mem_payload = {}
+                        if isinstance(real_metrics.get('vram_used'), (int, float)):
+                            mem_payload['memory_usage_mb'] = float(real_metrics['vram_used'])
+                        if isinstance(real_metrics.get('vram_total'), (int, float)):
+                            mem_payload['gpu_memory_mb'] = float(real_metrics['vram_total'])
+                        if mem_payload:
+                            self.metrics_hub.add_metric('memory_usage', {**meta, **mem_payload})
+                    except Exception as _e:
+                        self.logger.debug(f"[PRE-STATS] Failed to push standardized pre-cloak metrics: {_e}")
+
+            self.logger.debug(
+                f"📊 Stored real metrics (đã lưu số liệu thực) for PID {pid}: GPU={real_metrics['gpu_util']:.1f}%, Power={real_metrics['power_draw']:.1f}W, Temp={real_metrics['temperature']:.1f}°C"
+            )
+
         except Exception as e:
             self.logger.debug(f"Could not collect real metrics (không thể thu thập số liệu thực – lỗi lấy chỉ số): {e}")
-        
+
         return real_metrics
     
     def intelligent_apply(self, request: Dict[str, Any]) -> Dict[str, Any]:
@@ -1716,19 +1681,19 @@ class GpuCloakStrategy:
         Phát hiện số lượng GPU trong hệ thống
         """
         try:
-            # Try NVML first (most reliable)
-            import pynvml
-            pynvml.nvmlInit()
-            count = pynvml.nvmlDeviceGetCount()
-            pynvml.nvmlShutdown()
-            return count
+            # ✅ SSOT: nếu có GPUResourceManager, lấy số lượng từ snapshot
+            if hasattr(self, 'gpu_resource_manager') and self.gpu_resource_manager:
+                snapshot = self.gpu_resource_manager.get_metrics_snapshot(ttl_sec=None)
+                if snapshot.gpu_indices:
+                    return max(1, len(snapshot.gpu_indices))
         except Exception:
-            # Fallback to nvidia-smi
-            try:
-                result = os.popen("nvidia-smi -L | wc -l").read()
-                return int(result.strip())
-            except:
-                return 1  # Default to 1 GPU
+            pass
+        # Fallback to nvidia-smi
+        try:
+            result = os.popen("nvidia-smi -L | wc -l").read()
+            return int(result.strip())
+        except Exception:
+            return 1  # Default to 1 GPU
     
     def _get_current_gpu_metrics(self) -> Dict[str, Any]:
         """
