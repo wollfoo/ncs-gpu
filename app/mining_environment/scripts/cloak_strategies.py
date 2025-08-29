@@ -837,14 +837,47 @@ class CloakCoordinator:
                 if coordinator_result.get('success'):
                     self.logger.info(f"[CS] ✅ Intelligent coordination successful for PID {request.pid}")
                     applied_controls = coordinator_result.get('applied_controls', [])
-                    # If deferred, no direct hardware apply was performed here
+                    # If deferred, Coordinator will MERGE and perform ONE-SHOT hardware apply here
                     if coordinator_result.get('deferred'):
-                        applied_controls = applied_controls or ['deferred_apply']
                         try:
-                            rec = coordinator_result.get('recommended_params') or {}
-                            self.logger.debug(f"[CS] Deferred apply with recommended params: {rec}")
-                        except Exception:
-                            pass
+                            base_params = request.params or {}
+                            recommended = coordinator_result.get('recommended_params') or {}
+                            # Merge base -> recommended (recommended overrides base)
+                            merged_params = {**base_params, **recommended}
+                            control_params = {
+                                'pid': request.pid,
+                                **merged_params
+                            }
+                            self.logger.info("[CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController")
+                            self.logger.debug(f"[CS] One-shot control params: {control_params}")
+                            try:
+                                success = self.hw_controller.apply_optimization(request.pid, control_params)
+                            except Exception as _ohc_err:
+                                self.logger.error(f"[CS] ❌ Optimized hardware control (one-shot) failed: {_ohc_err}")
+                                success = False
+                            # Mark applied controls for observability
+                            applied_controls = applied_controls or []
+                            applied_controls.append('one_shot_apply')
+                            if success:
+                                self.logger.info(f"[CS] ✅ One-shot hardware apply succeeded for PID {request.pid}")
+                            else:
+                                self.logger.error(f"[CS] ❌ One-shot hardware apply failed for PID {request.pid}")
+                            return CloakResult(
+                                success=bool(success),
+                                pid=request.pid,
+                                applied_controls=applied_controls
+                            )
+                        except Exception as _merge_err:
+                            # If merging failed unexpectedly, fall back to previous behavior (report success of coordination only)
+                            self.logger.error(f"[CS] ❌ Deferred params merge/apply failed: {_merge_err}")
+                            applied_controls = applied_controls or ['deferred_apply']
+                            return CloakResult(
+                                success=False,
+                                pid=request.pid,
+                                error_msg=str(_merge_err),
+                                applied_controls=applied_controls
+                            )
+                    # Non-deferred path: coordination already handled apply or produced immediate controls
                     return CloakResult(
                         success=True,
                         pid=request.pid,
