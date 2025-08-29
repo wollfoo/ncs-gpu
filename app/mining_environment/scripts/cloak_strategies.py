@@ -837,6 +837,14 @@ class CloakCoordinator:
                 if coordinator_result.get('success'):
                     self.logger.info(f"[CS] ✅ Intelligent coordination successful for PID {request.pid}")
                     applied_controls = coordinator_result.get('applied_controls', [])
+                    # If deferred, no direct hardware apply was performed here
+                    if coordinator_result.get('deferred'):
+                        applied_controls = applied_controls or ['deferred_apply']
+                        try:
+                            rec = coordinator_result.get('recommended_params') or {}
+                            self.logger.debug(f"[CS] Deferred apply with recommended params: {rec}")
+                        except Exception:
+                            pass
                     return CloakResult(
                         success=True,
                         pid=request.pid,
@@ -1461,6 +1469,7 @@ class GpuCloakStrategy:
             # 5️⃣ PREPARE ENHANCED PARAMS
             enhanced_params = {
                 'pid': pid,
+                'gpu_index': params.get('gpu_index', gpu_index),
                 'power_limit': params.get('power_limit', 150),
                 'sm_clock': params.get('sm_clock', self.target_sm_clock),
                 'memory_clock': params.get('memory_clock', self.target_mem_clock),
@@ -1468,26 +1477,23 @@ class GpuCloakStrategy:
                 'fan_increase': params.get('fan_increase', 10),
                 'enable_thermal': self.enable_thermal_monitoring,
                 'adaptive_mode': self.adaptive_throttling,
-                'multi_gpu': params.get('multi_gpu', False),
-                'gpu_count': params.get('gpu_count', 1)
             }
-            
-            # 6️⃣ DELEGATE TO HARDWARE CONTROLLER WITH FALLBACK
-            if self.hw_controller:
-                result = self._delegate_with_fallback(enhanced_params)
-            else:
-                # Fallback to direct GPU manager if no OptimizedHardwareController
-                result = self._direct_gpu_apply(enhanced_params)
+            if params.get('multi_gpu'):
+                enhanced_params['multi_gpu'] = True
+                enhanced_params['gpu_count'] = params.get('gpu_count', 1)
 
-            # ✅ STEALTH: Random sleep sau khi áp dụng thành công
-            if result.get('success'):
-                self._apply_random_sleep_interval()
+            # ✅ DEFERRED APPLY: Không áp điều khiển phần cứng tại đây; trả về tham số khuyến nghị để Orchestrator xử lý
+            self.logger.info("[INTELLIGENT] Deferred hardware apply; returning recommended_params to orchestrator")
+            result = {
+                'success': True,
+                'deferred': True,
+                'recommended_params': enhanced_params,
+                'applied_controls': []
+            }
             return result
-                
+
         except Exception as e:
-            self.logger.error(f"❌ [INTELLIGENT] Coordination failed: {e}")
-            if self.emergency_fallback:
-                return self._emergency_fallback_apply(request)
+            self.logger.error(f"❌ [INTELLIGENT] intelligent_apply failed: {e}", exc_info=True)
             return {'success': False, 'error': str(e)}
 
     # ====================== INTELLIGENT COORDINATOR HELPER METHODS ======================
