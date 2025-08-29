@@ -1,10 +1,6 @@
 ---
 trigger: always_on
 ---
-
----
-trigger: always_on
----
 ---
 type: capability_prompt
 scope: project
@@ -21,6 +17,11 @@ Method:
 - Start broad, then fan out to focused subqueries.
 - In parallel, launch varied queries; read top hits per query. Deduplicate paths and cache; don’t repeat queries.
 - Avoid over searching for context. If needed, run targeted searches in one parallel batch.
+
+Architecture comprehension mode (exception to parallelization):
+- When the goal is to understand the project architecture or module boundaries, open and read files sequentially — one module at a time — to preserve narrative continuity.
+- Do not open files in parallel to synthesize architecture; avoid batching or parallel reads in this mode.
+- Rationale: sequential deep reading reduces context switching and prevents premature synthesis errors during architecture mapping.
 
 Early stop criteria:
 - You can name exact content to change.
