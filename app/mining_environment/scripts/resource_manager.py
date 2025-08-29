@@ -654,9 +654,6 @@ class ResourceManager(IResourceManager):
             self.logger.info("⚙️ [TIER-1] Starting worker threads...")
             self._start_workers()
             
-            # **DirectPIDRegistry Observer** (DirectPIDRegistry observer đã được thiết lập trong __init__)
-            # Process discovery sẽ được xử lý thông qua DirectPIDRegistry callbacks
-            
             # **TIER 1 FIX: Enhanced Ready Signal with validation** (tín hiệu sẵn sàng nâng cao với xác thực)
             self.logger.info("🎯 [TIER-1] Signaling ResourceManager ready...")
             self.signal_ready()
