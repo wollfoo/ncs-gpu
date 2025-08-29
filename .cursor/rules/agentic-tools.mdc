@@ -1,5 +1,8 @@
 ---
-alwaysApply: false
+alwaysApply: true
+---
+---
+trigger: always_on
 ---
 
 ---
@@ -52,4 +55,3 @@ text: string, // default: null
 wait_ms?: number, // default: 100
 }) => any;
 </agentic_tools>
-

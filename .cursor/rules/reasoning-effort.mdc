@@ -1,5 +1,13 @@
 ---
-alwaysApply: true
+trigger: always_on
+---
+
+---
+trigger: always_on
+---
+
+---
+trigger: always_on
 ---
 ---
 type: capability_prompt
@@ -21,6 +29,7 @@ activation: always_on
       - Less proactive → `reasoning_effort: medium` + `<context_gathering>` (early stop, sequential-only, low tool budget).
       - More proactive → `reasoning_effort: high` + `<persistence>` (do not hand back early; continue until complete).
       - When in architecture comprehension mode (see `<context_gathering>`), execute one tool at a time for file reading; prefer sequential deep reading.
+      - Global rule: For all tasks, execute one tool call at a time (sequential-only). Never issue more than one tool call at the same time.
     
     - Parameter: `reasoning_effort` (controls how deeply to think and how readily to call tools; default `high`). Scale up/down with task difficulty; for complex/multi-step tasks, prefer `high` for best output quality.
     - Multi-turn optimization: best performance when separable tasks are split across multiple agent turns, one task per turn, before proceeding.
