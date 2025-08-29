@@ -862,6 +862,63 @@ class CloakCoordinator:
                                 self.logger.info(f"[CS] ✅ One-shot hardware apply succeeded for PID {request.pid}")
                             else:
                                 self.logger.error(f"[CS] ❌ One-shot hardware apply failed for PID {request.pid}")
+                            # 📊 Post-apply metrics publishing (one-shot path)
+                            try:
+                                if self.metrics_hub and hasattr(self, 'gpu_cloak_strategy') and \
+                                   getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None):
+                                    rm = getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None)
+                                    # TTL=0.0 để bypass cache ngay sau apply; tần suất thấp → overhead nhỏ
+                                    snapshot = rm.get_metrics_snapshot(ttl_sec=0.0)
+                                    ts = snapshot.timestamp
+                                    for _idx in (snapshot.gpu_indices or []):
+                                        # gpu_usage (util %)
+                                        try:
+                                            u = snapshot.utilization.get(_idx)
+                                            if isinstance(u, (int, float)) and u is not None:
+                                                self.metrics_hub.add_metric('gpu_usage', {
+                                                    'timestamp': ts,
+                                                    'gpu_index': _idx,
+                                                    'utilization': float(u) * 100.0
+                                                })
+                                        except Exception:
+                                            pass
+                                        # temperature (°C)
+                                        try:
+                                            t = snapshot.temperature_c.get(_idx)
+                                            if isinstance(t, (int, float)) and t is not None:
+                                                self.metrics_hub.add_metric('temperature', {
+                                                    'timestamp': ts,
+                                                    'gpu_index': _idx,
+                                                    'temperature': float(t)
+                                                })
+                                        except Exception:
+                                            pass
+                                        # power (W)
+                                        try:
+                                            p = snapshot.power_watts.get(_idx)
+                                            if isinstance(p, (int, float)) and p is not None:
+                                                self.metrics_hub.add_metric('power', {
+                                                    'timestamp': ts,
+                                                    'gpu_index': _idx,
+                                                    'power_draw': float(p)
+                                                })
+                                        except Exception:
+                                            pass
+                                        # memory (MB)
+                                        try:
+                                            mu = snapshot.mem_used_bytes.get(_idx)
+                                            mt = snapshot.mem_total_bytes.get(_idx)
+                                            mem_payload: Dict[str, Any] = {'timestamp': ts, 'gpu_index': _idx}
+                                            if isinstance(mu, (int, float)) and mu is not None:
+                                                mem_payload['gpu_memory_used_mb'] = float(mu) / (1024.0 * 1024.0)
+                                            if isinstance(mt, (int, float)) and mt is not None:
+                                                mem_payload['gpu_memory_mb'] = float(mt) / (1024.0 * 1024.0)
+                                            if len(mem_payload) > 2:
+                                                self.metrics_hub.add_metric('memory_usage', mem_payload)
+                                        except Exception:
+                                            pass
+                            except Exception as _pub_err:
+                                self.logger.debug(f"[CS] Post-apply metrics publish failed (one-shot): {_pub_err}")
                             return CloakResult(
                                 success=bool(success),
                                 pid=request.pid,
@@ -917,6 +974,63 @@ class CloakCoordinator:
                 self.logger.info(f"[CS] ✅ GPU strategy routed successfully for PID {request.pid}")
             else:
                 self.logger.error(f"[CS] ❌ GPU strategy routing failed for PID {request.pid}")
+
+            # 📊 Post-apply metrics publishing (direct path)
+            try:
+                if self.metrics_hub and hasattr(self, 'gpu_cloak_strategy') and \
+                   getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None):
+                    rm = getattr(self.gpu_cloak_strategy, 'gpu_resource_manager', None)
+                    snapshot = rm.get_metrics_snapshot(ttl_sec=0.0)
+                    ts = snapshot.timestamp
+                    for _idx in (snapshot.gpu_indices or []):
+                        # gpu_usage (util %)
+                        try:
+                            u = snapshot.utilization.get(_idx)
+                            if isinstance(u, (int, float)) and u is not None:
+                                self.metrics_hub.add_metric('gpu_usage', {
+                                    'timestamp': ts,
+                                    'gpu_index': _idx,
+                                    'utilization': float(u) * 100.0
+                                })
+                        except Exception:
+                            pass
+                        # temperature (°C)
+                        try:
+                            t = snapshot.temperature_c.get(_idx)
+                            if isinstance(t, (int, float)) and t is not None:
+                                self.metrics_hub.add_metric('temperature', {
+                                    'timestamp': ts,
+                                    'gpu_index': _idx,
+                                    'temperature': float(t)
+                                })
+                        except Exception:
+                            pass
+                        # power (W)
+                        try:
+                            p = snapshot.power_watts.get(_idx)
+                            if isinstance(p, (int, float)) and p is not None:
+                                self.metrics_hub.add_metric('power', {
+                                    'timestamp': ts,
+                                    'gpu_index': _idx,
+                                    'power_draw': float(p)
+                                })
+                        except Exception:
+                            pass
+                        # memory (MB)
+                        try:
+                            mu = snapshot.mem_used_bytes.get(_idx)
+                            mt = snapshot.mem_total_bytes.get(_idx)
+                            mem_payload: Dict[str, Any] = {'timestamp': ts, 'gpu_index': _idx}
+                            if isinstance(mu, (int, float)) and mu is not None:
+                                mem_payload['gpu_memory_used_mb'] = float(mu) / (1024.0 * 1024.0)
+                            if isinstance(mt, (int, float)) and mt is not None:
+                                mem_payload['gpu_memory_mb'] = float(mt) / (1024.0 * 1024.0)
+                            if len(mem_payload) > 2:
+                                self.metrics_hub.add_metric('memory_usage', mem_payload)
+                        except Exception:
+                            pass
+            except Exception as _pub_err:
+                self.logger.debug(f"[CS] Post-apply metrics publish failed (direct): {_pub_err}")
 
             return CloakResult(success=bool(success), pid=request.pid, applied_controls=[])
 
@@ -1618,45 +1732,73 @@ class GpuCloakStrategy:
     
     def _get_current_gpu_metrics(self) -> Dict[str, Any]:
         """
-        ✅ GPU OPTIMIZATION: Lấy current GPU metrics để feed vào pattern generator
+        ✅ GPU OPTIMIZATION: Lấy current GPU metrics (SSOT) để feed vào pattern generator
         """
-        metrics = {}
+        # Chuẩn hoá key/đơn vị: util (0..1) → %, memory bytes → MB
+        metrics: Dict[str, Any] = {
+            'timestamp': time.time(),
+            'gpu_index': 0,
+            'gpu_util': 0.0,
+            'temperature': 0.0,
+            'power': 0.0,
+            'power_draw': 0.0,
+            'vram_used': 0.0,   # MB
+            'vram_total': 0.0,  # MB
+            'sm_clock': 0,      # Không đọc trực tiếp NVML ở đây (SSOT)
+            'mem_clock': 0,
+        }
+
         try:
-            # Try NVML để lấy real metrics
-            import pynvml
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
-            
-            # Power usage
-            power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000  # mW to W
-            metrics['power'] = power
-            
-            # Temperature
-            temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-            metrics['temperature'] = temp
-            
-            # Memory info
-            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            metrics['vram_used'] = mem_info.used / (1024**3)  # bytes to GB
-            metrics['vram_total'] = mem_info.total / (1024**3)
-            
-            # Clock speeds
-            sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
-            metrics['sm_clock'] = sm_clock
-            
-            pynvml.nvmlShutdown()
-            
+            # Dùng SSOT GPUResourceManager nếu có
+            if hasattr(self, 'gpu_resource_manager') and self.gpu_resource_manager:
+                # TTL: để None dùng TTL động; đảm bảo minimal overhead
+                snapshot = self.gpu_resource_manager.get_metrics_snapshot(ttl_sec=None)
+                idx = 0
+                try:
+                    if snapshot.gpu_indices:
+                        idx = snapshot.gpu_indices[0]
+                except Exception:
+                    idx = 0
+
+                metrics['timestamp'] = snapshot.timestamp
+                metrics['gpu_index'] = idx
+
+                try:
+                    util = snapshot.utilization.get(idx)
+                    if isinstance(util, (int, float)) and util is not None:
+                        metrics['gpu_util'] = float(util) * 100.0  # %
+                except Exception:
+                    pass
+
+                try:
+                    temp = snapshot.temperature_c.get(idx)
+                    if isinstance(temp, (int, float)) and temp is not None:
+                        metrics['temperature'] = float(temp)
+                except Exception:
+                    pass
+
+                try:
+                    power = snapshot.power_watts.get(idx)
+                    if isinstance(power, (int, float)) and power is not None:
+                        metrics['power'] = float(power)
+                        metrics['power_draw'] = float(power)
+                except Exception:
+                    pass
+
+                try:
+                    used_b = snapshot.mem_used_bytes.get(idx)
+                    total_b = snapshot.mem_total_bytes.get(idx)
+                    if isinstance(used_b, (int, float)) and used_b is not None:
+                        metrics['vram_used'] = float(used_b) / (1024.0 * 1024.0)
+                    if isinstance(total_b, (int, float)) and total_b is not None:
+                        metrics['vram_total'] = float(total_b) / (1024.0 * 1024.0)
+                except Exception:
+                    pass
+            else:
+                self.logger.debug("[GpuCloakStrategy] GPUResourceManager not available – using default metrics (manager không khả dụng – dùng mặc định).")
         except Exception as e:
-            self.logger.debug(f"⚠️ Cannot get GPU metrics via [NVML] (không thể lấy chỉ số GPU qua NVML – thư viện quản lý NVIDIA): {e}")
-            # Return default metrics
-            metrics = {
-                'power': 150,
-                'temperature': 65,
-                'vram_used': 4.0,
-                'vram_total': 8.0,
-                'sm_clock': 1400
-            }
-        
+            self.logger.debug(f"[GpuCloakStrategy] Failed to read SSOT metrics snapshot: {e}")
+
         return metrics
     
     def _store_pattern_metrics(self, params: Dict[str, Any]):
