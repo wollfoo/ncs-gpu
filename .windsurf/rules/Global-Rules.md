@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 ## 🎯 GOLDEN RULES
 
 - Evidence-Only Principle
