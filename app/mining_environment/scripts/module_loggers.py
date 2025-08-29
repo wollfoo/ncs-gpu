@@ -46,7 +46,6 @@ _gpu_optimization_orchestrator_logger = setup_logging('gpu_optimization_orchestr
 _optimized_hardware_controller_logger = setup_logging('optimized_hardware_controller', str(Path(LOGS_DIR) / 'optimizedhardwarecontroller.log'), 'DEBUG')
 _mining_performance_logger = setup_logging('mining_performance', str(Path(LOGS_DIR) / 'mining_performance.log'), 'INFO')
 _audit_integration_logger = setup_logging('audit_integration', str(Path(LOGS_DIR) / 'audit_integration.log'), 'INFO')
-_gpu_monitoring_logger = setup_logging('gpu_monitoring', str(Path(LOGS_DIR) / 'gpu_monitoring.log'), 'INFO')
 _gpu_resource_manager_logger = setup_logging('gpu_resource_manager', str(Path(LOGS_DIR) / 'GPUResourceManager.log'), 'DEBUG')
 _metrics_collection_hub_logger = setup_logging('metrics_collection_hub', str(Path(LOGS_DIR) / 'metricscollectionhub.log'), 'DEBUG')
 _cloak_coordinator_logger = setup_logging('cloak_coordinator', str(Path(LOGS_DIR) / 'cloakcoordinator.log'), 'DEBUG')
@@ -63,7 +62,6 @@ if ENABLE_DEDUPLICATION:
     optimized_hardware_controller_logger = wrap_logger_with_deduplication(_optimized_hardware_controller_logger, use_global=True)
     mining_performance_logger = wrap_logger_with_deduplication(_mining_performance_logger, use_global=True)
     audit_integration_logger = wrap_logger_with_deduplication(_audit_integration_logger, use_global=True)
-    gpu_monitoring_logger = wrap_logger_with_deduplication(_gpu_monitoring_logger, use_global=True)
     adaptive_pattern_generator_logger = wrap_logger_with_deduplication(_adaptive_pattern_generator_logger, use_global=True)
     gpu_resource_manager_logger = wrap_logger_with_deduplication(_gpu_resource_manager_logger, use_global=True)
     metrics_collection_hub_logger = wrap_logger_with_deduplication(_metrics_collection_hub_logger, use_global=True)
@@ -78,7 +76,6 @@ else:
     optimized_hardware_controller_logger = _optimized_hardware_controller_logger
     mining_performance_logger = _mining_performance_logger
     audit_integration_logger = _audit_integration_logger
-    gpu_monitoring_logger = _gpu_monitoring_logger
     adaptive_pattern_generator_logger = _adaptive_pattern_generator_logger
     gpu_resource_manager_logger = _gpu_resource_manager_logger
     metrics_collection_hub_logger = _metrics_collection_hub_logger
@@ -168,15 +165,6 @@ def get_audit_integration_logger():
         Logger: **Audit integration logger instance** (thực thể logger tích hợp kiểm toán – đối tượng ghi nhật ký kiểm tra)
     """
     return audit_integration_logger
-
-def get_gpu_monitoring_logger():
-    """
-    **Get GPU monitoring logger** (Lấy logger giám sát GPU – truy xuất bộ ghi nhật ký theo dõi card đồ họa) - **Dedicated logger** (logger chuyên dụng – bộ ghi riêng) cho **GPU monitoring operations** (hoạt động giám sát GPU – thao tác theo dõi card đồ họa).
-    
-    Returns:
-        Logger: **GPU monitoring logger instance** (thực thể logger giám sát GPU – đối tượng ghi nhật ký theo dõi)
-    """
-    return gpu_monitoring_logger
 
 def get_gpu_resource_manager_logger():
     """
@@ -353,15 +341,7 @@ def get_gpu_stealth_logger():
     """
     return get_stealth_inference_logger()
 
-def get_gpu_monitor_logger():
-    """
-    **Alias for get_gpu_monitoring_logger()** (Bí danh cho get_gpu_monitoring_logger).
-    Để tương thích với bảng mapping Module-to-Log.
-    
-    Returns:
-        Logger: GPU monitoring logger instance
-    """
-    return get_gpu_monitoring_logger()
+## NOTE: gpu_monitoring logger removed (monitor module deprecated)
 
 # NOTE: Alias for dashboard logger removed (module deprecated)
 
@@ -400,11 +380,7 @@ def initialize_plugin_logging():
     audit_integration_logger.info("Available for logging audit integration operations")
     audit_integration_logger.info("============================================")
     
-    # **GPU Monitoring Logging Initialization** (Khởi tạo ghi log giám sát GPU)
-    gpu_monitoring_logger.info("===== GPU MONITORING LOGGING SYSTEM STARTED =====")
-    gpu_monitoring_logger.info("GPU Monitoring Logger initialized and ready")
-    gpu_monitoring_logger.info("Available for logging GPU monitoring operations")
-    gpu_monitoring_logger.info("============================================")
+    # GPU Monitoring logger removed
 
 def log_gpu_plugin_operation(operation: str, details: str, level: str = "INFO"):
     """
@@ -466,17 +442,7 @@ def log_audit_integration_operation(operation: str, details: str, level: str = "
     log_method = getattr(audit_integration_logger, level.lower(), audit_integration_logger.info)
     log_method(f"🔍 Audit Integration - {operation}: {details}")
 
-def log_gpu_monitoring_operation(operation: str, details: str, level: str = "INFO"):
-    """
-    **Log GPU monitoring operation** (Ghi log hoạt động giám sát GPU).
-    
-    Args:
-        operation (str): **Operation name** (tên hoạt động)
-        details (str): **Operation details** (chi tiết hoạt động)
-        level (str): **Log level** (mức log) (INFO, WARNING, ERROR, DEBUG)
-    """
-    log_method = getattr(gpu_monitoring_logger, level.lower(), gpu_monitoring_logger.info)
-    log_method(f"📈 GPU Monitoring - {operation}: {details}")
+## log_gpu_monitoring_operation removed (monitor logger deprecated)
 
 # ===== DOMAIN-SPECIFIC METHODS (Phase 2) =====
 # Thêm các domain-specific methods cho GPU context intelligence
@@ -550,7 +516,6 @@ def validate_phase_2_completion() -> bool:
             get_gpu_optimization_logger(),
             get_mining_performance_logger(),
             get_audit_integration_logger(),
-            get_gpu_monitoring_logger(),
         ]
         
         # Test all new logger functions work
@@ -599,7 +564,7 @@ if __name__ != '__main__':
 __all__ = [
     # Legacy API functions (preserved)
     'get_gpu_plugin_logger', 'get_gpu_cloaking_logger', 'get_gpu_optimization_logger',
-    'get_mining_performance_logger', 'get_audit_integration_logger', 'get_gpu_monitoring_logger',
+    'get_mining_performance_logger', 'get_audit_integration_logger',
     
     # New GPU component logger functions
     'get_stealth_inference_logger', 'get_coordination_logger', 'get_registry_logger',
@@ -609,7 +574,7 @@ __all__ = [
     
     # Operation functions (preserved)
     'log_gpu_plugin_operation', 'log_gpu_cloaking_operation', 'log_gpu_optimization_operation',
-    'log_mining_performance_operation', 'log_audit_integration_operation', 'log_gpu_monitoring_operation',
+    'log_mining_performance_operation', 'log_audit_integration_operation',
     
     # Clean module-level functions
     'log_plugin_lifecycle', 'log_gpu_cloaking', 

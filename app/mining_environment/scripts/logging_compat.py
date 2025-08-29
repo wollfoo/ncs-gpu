@@ -27,7 +27,6 @@ from mining_environment.scripts.module_loggers import (
     get_gpu_optimization_logger,
     get_mining_performance_logger,
     get_audit_integration_logger,
-    get_gpu_monitoring_logger,
     
     # New GPU component loggers
     get_stealth_inference_logger,
@@ -40,13 +39,11 @@ from mining_environment.scripts.module_loggers import (
     get_environment_logger,
     get_nvml_logger,
     get_stealth_monitor_logger,
-    get_dashboard_logger,
     get_pid_logger,
     get_utility_logger,
     
     # Aliases for compatibility
     get_gpu_stealth_logger,
-    get_gpu_monitor_logger,
     
     # Domain-specific methods
     log_thermal_spoofing,
@@ -293,7 +290,6 @@ __all__ = [
     'get_gpu_optimization_logger',
     'get_mining_performance_logger',
     'get_audit_integration_logger',
-    'get_gpu_monitoring_logger',
     'get_stealth_inference_logger',
     'get_coordination_logger',
     'get_registry_logger',
@@ -304,11 +300,9 @@ __all__ = [
     'get_environment_logger',
     'get_nvml_logger',
     'get_stealth_monitor_logger',
-    'get_dashboard_logger',
     'get_pid_logger',
     'get_utility_logger',
     'get_gpu_stealth_logger',
-    'get_gpu_monitor_logger',
     'log_thermal_spoofing',
     'log_plugin_lifecycle',
     'log_gpu_cloaking',
