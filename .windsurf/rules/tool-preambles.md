@@ -19,6 +19,7 @@ activation: always_on
 - Then, immediately outline a structured plan detailing each logical step you’ll follow.
 - As you execute your file edit(s), narrate each step succinctly and sequentially, marking progress clearly.
 - Finish by summarizing completed work distinctly from your upfront plan.
+- Before calling tools, classify the task. If the goal is architecture comprehension (mapping project architecture or module boundaries), enforce sequential-only execution for file reads and searches (one tool at a time) per `<context_gathering>` Architecture comprehension mode.
 </tool_preambles>
 
 ## Example output structure

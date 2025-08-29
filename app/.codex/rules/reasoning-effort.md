@@ -1,10 +1,6 @@
 ---
 trigger: always_on
 ---
-
----
-trigger: always_on
----
 ---
 type: capability_prompt
 scope: project
@@ -15,24 +11,31 @@ activation: always_on
 # REASONING EFFORT – CONTROL THINKING DEPTH + TOOL CALLING
 
 <reasoning_effort>
-- Default: `medium` — cân bằng giữa độ sâu lập luận và chi phí/độ trễ.
-- `low` — tác vụ ngắn, phạm vi rõ, nhạy về độ trễ: giảm khám phá, ưu tiên kiến thức nội bộ, hạn chế tool calls ngoài mục tiêu; kết hợp `<context_gathering>` với ngân sách rất thấp.
-- `high` — tác vụ đa bước/khó/không rõ ràng: tăng kiên trì gọi công cụ, gom ngữ cảnh rộng hơn nhưng có tiêu chí dừng; chia nhỏ nhiệm vụ theo lượt, bám `<persistence>`.
-- Heuristics:
-  - Tăng lên `high` khi gặp mâu thuẫn ngữ cảnh, lỗi liên tiếp, hoặc yêu cầu nhiều bước phụ thuộc.
-  - Giảm xuống `low` khi nhiệm vụ đã vào guồng ổn định, đầu vào/đầu ra rõ, cần giảm độ trễ.
-- Liên kết:
-  - Ít chủ động hơn → `reasoning_effort: low` + `<context_gathering>` (early stop, parallel, tool budget thấp).
-  - Chủ động hơn → `reasoning_effort: high` + `<persistence>` (không trả lại sớm; tiếp tục đến khi hoàn tất).
+- Default: `high` — prioritize reasoning quality and coverage; accept higher cost/latency, especially for complex/multi-step tasks.
+- `medium` — balanced depth vs. latency for most tasks; moderate exploration, leverage `<context_gathering>` selectively to keep responsiveness while preserving quality.
+- `high` — multi-step/hard/ambiguous tasks: increase tool-calling persistence, broaden context with explicit stop criteria; split work across agent turns; adhere to `<persistence>`.
+    - Heuristics:
+      - Raise to `high` when context conflicts, repeated errors, or many interdependent steps appear.
+      - Lower to `medium` when the flow is stable, inputs/outputs are clear, and latency matters.
+    - Links:
+      - Less proactive → `reasoning_effort: medium` + `<context_gathering>` (early stop, sequential-only, low tool budget).
+      - More proactive → `reasoning_effort: high` + `<persistence>` (do not hand back early; continue until complete).
+      - When in architecture comprehension mode (see `<context_gathering>`), execute one tool at a time for file reading; prefer sequential deep reading.
+    
+    - Parameter: `reasoning_effort` (controls how deeply to think and how readily to call tools; default `high`). Scale up/down with task difficulty; for complex/multi-step tasks, prefer `high` for best output quality.
+    - Multi-turn optimization: best performance when separable tasks are split across multiple agent turns, one task per turn, before proceeding.
+- Calibrating eagerness:
+  - Decrease eagerness: lower `reasoning_effort`; use `<context_gathering>` with a low budget and early stop; provide an “escape hatch” like “even if it might not be fully correct” to proceed once essential context is sufficient.
+  - Increase eagerness: raise `reasoning_effort` and apply `<persistence>` to increase persistence and reduce clarifying questions; define explicit stop conditions and safe action boundaries.
 </reasoning_effort>
 
 ## Minimal reasoning – Guidance
 
 <minimal_reasoning_guidelines>
-1) Tóm tắt ngắn phần suy nghĩ ở đầu câu trả lời cuối (có thể dạng bullet) để nâng chất lượng trên tác vụ khó.
-2) Duy trì preamble mô tả kế hoạch và cập nhật tiến độ khi gọi công cụ, theo `<tool_preambles>`.
-3) Làm rõ chỉ dẫn công cụ tối đa; chèn nhắc `<persistence>` để tránh dừng sớm.
-4) Lập kế hoạch tường minh trước khi gọi công cụ vì ngân sách lập luận ít.
+1) Provide a brief summary of your thought process at the start of the final answer (e.g., bullets) to improve performance on difficult tasks.
+2) Maintain a preamble describing the plan and progress during tool calls, per `<tool_preambles>`.
+3) Disambiguate tool instructions as much as possible; insert `<persistence>` reminders to prevent handing back early.
+4) Plan explicitly before calling tools because the reasoning budget is limited.
 </minimal_reasoning_guidelines>
 
 <minimal_reasoning_snippet>

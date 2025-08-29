@@ -10,9 +10,7 @@ Thư mục `scripts/` chứa các module chiến lược, giám sát, tối ưu 
 - `dag_synchronization.py`: đồng bộ DAG/nhiệm vụ có phụ thuộc.
 - `error_management.py`: xử lý/chuẩn hoá lỗi.
 - `error_recovery_coordinator.py`: điều phối khôi phục khi lỗi.
-- `gpu_monitoring_dashboard.py`: hiển thị/tổng hợp chỉ số GPU (CLI/TUI nếu có).
 - `gpu_optimization_orchestrator.py`: dàn nhạc (orchestrator – điều phối) tối ưu GPU.
-- `gpu_resource_monitor.py`: theo dõi tài nguyên GPU (util/mem/temp/power nếu khả dụng).
 - `log_deduplication.py`: khử trùng lặp log.
 - `log_rotation_guard.py`: bảo vệ xoay vòng log.
 - `logging_compat.py`: tương thích/tiện ích logging.

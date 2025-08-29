@@ -311,14 +311,7 @@ def get_start_mining_logger():
     """
     return setup_logging('start_mining', str(Path(LOGS_DIR) / 'start_mining.log'), 'DEBUG')
 
-def get_dashboard_logger():
-    """
-    **Get dashboard logger** (Lấy logger bảng điều khiển) - Logger cho **GPU monitoring dashboard operations** (hoạt động bảng điều khiển giám sát GPU).
-    
-    Returns:
-        Logger: Dashboard logger instance
-    """
-    return setup_logging('dashboard', str(Path(LOGS_DIR) / 'gpu_monitoring_dashboard.log'), 'DEBUG')
+# NOTE: Dashboard logger removed (gpu_monitoring_dashboard deprecated)
 
 def get_pid_logger():
     """
@@ -370,15 +363,7 @@ def get_gpu_monitor_logger():
     """
     return get_gpu_monitoring_logger()
 
-def get_gpu_monitoring_dashboard_logger():
-    """
-    **Alias for get_dashboard_logger()** (Bí danh cho get_dashboard_logger).
-    Được sử dụng trong gpu_monitoring_dashboard.py.
-    
-    Returns:
-        Logger: Dashboard logger instance
-    """
-    return get_dashboard_logger()
+# NOTE: Alias for dashboard logger removed (module deprecated)
 
 def initialize_plugin_logging():
     """
@@ -577,7 +562,6 @@ def validate_phase_2_completion() -> bool:
             get_resource_control_logger(),
             get_environment_logger(),
             get_stealth_monitor_logger(),
-            get_dashboard_logger(),
         ]
         
         all_loggers = test_loggers + new_test_loggers
@@ -620,7 +604,7 @@ __all__ = [
     # New GPU component logger functions
     'get_stealth_inference_logger', 'get_coordination_logger', 'get_registry_logger',
     'get_resource_manager_logger', 'get_resource_control_logger', 'get_environment_logger',
-    'get_stealth_monitor_logger', 'get_dashboard_logger',
+    'get_stealth_monitor_logger',
     'get_start_mining_logger',
     
     # Operation functions (preserved)

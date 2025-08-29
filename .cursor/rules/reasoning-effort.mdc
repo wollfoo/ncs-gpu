@@ -1,17 +1,12 @@
 ---
-alwaysApply: true
----
----
 trigger: always_on
 ---
 ---
 type: capability_prompt
 scope: project
-priority: normal
+priority: high
 activation: always_on
 ---
-
-
 
 # REASONING EFFORT – CONTROL THINKING DEPTH + TOOL CALLING
 
@@ -19,12 +14,19 @@ activation: always_on
 - Default: `high` — prioritize reasoning quality and coverage; accept higher cost/latency, especially for complex/multi-step tasks.
 - `medium` — balanced depth vs. latency for most tasks; moderate exploration, leverage `<context_gathering>` selectively to keep responsiveness while preserving quality.
 - `high` — multi-step/hard/ambiguous tasks: increase tool-calling persistence, broaden context with explicit stop criteria; split work across agent turns; adhere to `<persistence>`.
-- Heuristics:
-  - Raise to `high` when context conflicts, repeated errors, or many interdependent steps appear.
-  - Lower to `medium` when the flow is stable, inputs/outputs are clear, and latency matters.
-- Links:
-  - Less proactive → `reasoning_effort: medium` + `<context_gathering>` (early stop, parallel, low tool budget).
-  - More proactive → `reasoning_effort: high` + `<persistence>` (do not hand back early; continue until complete).
+    - Heuristics:
+      - Raise to `high` when context conflicts, repeated errors, or many interdependent steps appear.
+      - Lower to `medium` when the flow is stable, inputs/outputs are clear, and latency matters.
+    - Links:
+      - Less proactive → `reasoning_effort: medium` + `<context_gathering>` (early stop, sequential-only, low tool budget).
+      - More proactive → `reasoning_effort: high` + `<persistence>` (do not hand back early; continue until complete).
+      - When in architecture comprehension mode (see `<context_gathering>`), execute one tool at a time for file reading; prefer sequential deep reading.
+    
+    - Parameter: `reasoning_effort` (controls how deeply to think and how readily to call tools; default `high`). Scale up/down with task difficulty; for complex/multi-step tasks, prefer `high` for best output quality.
+    - Multi-turn optimization: best performance when separable tasks are split across multiple agent turns, one task per turn, before proceeding.
+- Calibrating eagerness:
+  - Decrease eagerness: lower `reasoning_effort`; use `<context_gathering>` with a low budget and early stop; provide an “escape hatch” like “even if it might not be fully correct” to proceed once essential context is sufficient.
+  - Increase eagerness: raise `reasoning_effort` and apply `<persistence>` to increase persistence and reduce clarifying questions; define explicit stop conditions and safe action boundaries.
 </reasoning_effort>
 
 ## Minimal reasoning – Guidance
@@ -41,20 +43,3 @@ Remember, you are an agent - please keep going until the user's query is complet
 
 You must plan extensively in accordance with the workflow steps before making subsequent function calls, and reflect extensively on the outcomes each function call made, ensuring the user's query, and related sub-requests are completely resolved.
 </minimal_reasoning_snippet>
-
-## Budgets & Stop Criteria
-
-- Level `medium`:
-  - Balance quality/latency; batch queries in small parallel waves.
-  - Stop once you have a minimal action plan and a clear intervention point.
-
-- Level `high`:
-  - No hard cap on tool calls; define explicit stop conditions (completion criteria).
-  - Apply `<persistence>` to keep going until all tasks are done.
-  - Split separable tasks into multiple turns (multi-turn), one task per turn.
-
-## Reasoning context reuse
-
-- Responses API: use `previous_response_id` to pass prior reasoning items across turns, cutting latency and cost.
-- Combine with multi-turn strategy to achieve better performance/stability at `high`.
-
