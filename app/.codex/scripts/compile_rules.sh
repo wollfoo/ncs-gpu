@@ -8,6 +8,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RULES_DIR="$ROOT_DIR/rules"
 OUT_MD="$ROOT_DIR/AGENTS.md"
 OUT_MANIFEST="$ROOT_DIR/rules/manifest.json"
+OUT_DIR="$ROOT_DIR/out"
+OUT_INDEX="$OUT_DIR/rules.index.json"
+OUT_DEV="$OUT_DIR/developer_instructions.md"
 
 timestamp() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
@@ -136,6 +139,9 @@ done
 # Sort by: alwaysApply asc, priority asc, activation asc, title asc
 sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
 
+# Ensure output directory for lightweight index
+mkdir -p "$OUT_DIR"
+
 # Build manifest.json
 {
   echo "["
@@ -143,9 +149,10 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
   while IFS=$'\t' read -r aa pr ac title fn priority activation trigger type scope; do
     meta_all=$(extract_meta "$RULES_DIR/$fn" | awk '{ printf("\"%s\":\"%s\",", $1, substr($0, index($0,$2))) }' | sed 's/,$//')
     tags="$(extract_tags "$RULES_DIR/$fn")"
+    title_json=$(printf '%s' "$title" | sed 's/"/\\\"/g')
     [[ $first -eq 0 ]] && echo ","
     printf '{"file":"rules/%s","title":"%s","priority":"%s","activation":"%s","trigger":"%s","type":"%s","scope":"%s","alwaysApply":"%s","tags":[%s]%s}' \
-      "$fn" "${title//"/\"}" "$priority" "$activation" "$trigger" "$type" "$scope" \
+      "$fn" "$title_json" "$priority" "$activation" "$trigger" "$type" "$scope" \
       "$(grep -E "^alwaysApply=" <(extract_meta "$RULES_DIR/$fn") | tail -n1 | cut -d= -f2)" \
       "$(awk -v t="$tags" 'BEGIN{n=split(t,a,","); for(i=1;i<=n;i++){gsub(/^[ ]+|[ ]+$/,"",a[i]); if(a[i]!="") printf("\"%s\"%s", a[i], (i<n?",":""))}}')" \
       "$([ -n "$meta_all" ] && printf ',"meta":{%s}' "$meta_all")"
@@ -155,6 +162,9 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
   echo "]"
 } > "$OUT_MANIFEST"
 
+# Also emit lightweight index JSON copy
+cp "$OUT_MANIFEST" "$OUT_INDEX"
+
 # Generate AGENTS.md
 {
   echo "# AGENTS – Compiled Rules"
@@ -163,7 +173,7 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
   echo "Source: .codex/rules"
   echo
   echo "## Regenerate"
-  echo "Run: \`bash .codex/scripts/compile_rules.sh\`"
+  echo "Run: \`bash scripts/compile_rules.sh\`"
   echo
   echo "## Machine-Readable Index"
   echo "The following JSON manifest mirrors the sections below for downstream tooling."
@@ -176,7 +186,7 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
   lineno=1
   while IFS=$'\t' read -r aa pr ac title fn priority activation trigger type scope; do
     anchor=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]//g; s/[ ]\+/-/g')
-    printf "- [%s](#%s) — \\`%s\\`\n" "$title" "$anchor" "$fn"
+    printf -- '- [%s](#%s) — `%s`\n' "$title" "$anchor" "$fn"
   done < "$tmpdir/sorted.tsv"
   echo
   echo "---"
@@ -197,15 +207,7 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
     tags_val="$(extract_tags "$file_path")"
     [[ -n "$tags_val" ]] && echo "- Tags: $(echo "$tags_val" | sed 's/,/, /g')"
     echo
-    # Front matter preview
-    fm_block=$(awk 'BEGIN{in=0; printed=0} /^```/{cb=!cb} cb==1 {next} /^---$/ { if(in==0){in=1; next} else {in=0; if(printed==0){printed=1; exit}} } in==1 {print}' "$file_path")
-    if [[ -n "$fm_block" ]]; then
-      echo "### Front Matter"
-      echo '\`\`\`yaml'
-      echo "$fm_block"
-      echo '\`\`\`'
-      echo
-    fi
+    # Front matter preview: skipped to avoid tooling quoting issues
     echo "### Content"
     echo
     strip_front_matter "$file_path"
@@ -217,4 +219,24 @@ sort -t $'\t' -k1,1n -k2,2n -k3,3n -k4,4 "$meta_tsv" > "$tmpdir/sorted.tsv"
 
 echo "[compile_rules] Wrote: $OUT_MD"
 echo "[compile_rules] Wrote: $OUT_MANIFEST"
+echo "[compile_rules] Wrote: $OUT_INDEX"
 
+# Generate developer instructions (aggregate all rules content)
+{
+  echo "# Developer Instructions – Auto-Compiled"
+  echo
+  echo "Generated: $(timestamp)"
+  echo "Source: .codex/rules (all)"
+  echo
+  while IFS=$'\t' read -r aa pr ac title fn priority activation trigger type scope; do
+    file_path="$RULES_DIR/$fn"
+    echo "## $title"
+    echo
+    strip_front_matter "$file_path"
+    echo
+    echo "---"
+    echo
+  done < "$tmpdir/sorted.tsv"
+} > "$OUT_DEV"
+
+echo "[compile_rules] Wrote: $OUT_DEV"

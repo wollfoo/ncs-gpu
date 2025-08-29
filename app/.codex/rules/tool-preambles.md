@@ -15,6 +15,8 @@ activation: always_on
 
 # TOOL PREAMBLES – PLAN + PROGRESS UPDATES
 
+<codex_cli_core>
+
 <tool_preambles>
 - Always begin by rephrasing the user's goal in a friendly, clear, and concise manner, before calling any tools.
 - Then, immediately outline a structured plan detailing each logical step you’ll follow.

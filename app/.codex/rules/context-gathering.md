@@ -17,6 +17,7 @@ Method:
 - Start broad, then fan out to focused subqueries.
 - Sequentially launch varied queries; read top hits per query. Deduplicate paths and cache; don’t repeat queries.
 - Avoid over searching for context. If needed, run targeted searches in a short sequential pass.
+- Tool budget: tối đa 2 lần gọi tool cho giai đoạn gathering (ưu tiên độ chính xác nhanh).
 
 Architecture comprehension mode (sequential-only):
 - When the goal is to understand the project architecture or module boundaries, open and read files sequentially — one module at a time — to preserve narrative continuity.
