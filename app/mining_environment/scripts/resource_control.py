@@ -1459,6 +1459,13 @@ class OptimizedHardwareController:
         # Verification tracking
         self.last_verification = 0
         self.verification_interval = 30  # seconds
+        # Allow ENV override for verification interval
+        try:
+            _vint = os.getenv('BASELINE_VERIFICATION_INTERVAL_SEC')
+            if _vint not in (None, ''):
+                self.verification_interval = max(5, int(float(_vint)))
+        except Exception:
+            pass
         # Per-PID time window (giây) để mô phỏng per-process rồi khôi phục
         self.per_pid_window_sec = config.get('per_pid_window_sec', 30)
         # Map sự kiện hủy restore theo (pid, gpu_index) để hủy sớm các luồng restore đang đợi
@@ -1787,7 +1794,7 @@ class OptimizedHardwareController:
             results['health'] = health
             
             # **Verify baseline** (xác minh baseline)
-            if time.time() - self.last_verification > self.verification_interval:
+            if (time.time() - self.last_verification > self.verification_interval) or self._should_verify_baseline(gpu_index):
                 baseline_ok = self._verify_and_adjust_baseline(gpu_index)
                 # Ghi nhận kết quả verify (true nếu đã kiểm/đồng bộ thành công)
                 results['baseline_verified'] = bool(baseline_ok)
@@ -2760,32 +2767,55 @@ except Exception as e:
         
         return 8 * 1024**3  # Default 8GB to bytes
     
-    def _should_verify_baseline(self) -> bool:
-        """Check if baseline verification is needed"""
+    def _should_verify_baseline(self, gpu_index: int) -> bool:
+        """Check if baseline verification is needed for a specific GPU index.
+        Uses env-overrides for thresholds when available.
+        """
         try:
-            # Get current metrics
-            gpu_index = 0  # Default GPU
+            # Thresholds (ENV overrides)
+            power_dev_pct = 0.30  # 30%
+            temp_dev_c = 10.0     # 10°C
+            try:
+                _p = os.getenv('BASELINE_VERIFY_POWER_DEV_PCT')
+                if _p not in (None, ''):
+                    power_dev_pct = max(0.0, float(_p))
+            except Exception:
+                pass
+            try:
+                _t = os.getenv('BASELINE_VERIFY_TEMP_DEV_C')
+                if _t not in (None, ''):
+                    temp_dev_c = max(0.0, float(_t))
+            except Exception:
+                pass
+
+            # Get current metrics for the specified GPU
             current_power = self._get_current_power(gpu_index)
             current_temp = self.gpu_manager.get_gpu_temperature(gpu_index)
-            
+
             # Check power deviation
-            if current_power:
-                power_deviation = abs(current_power - self.baseline_power) / self.baseline_power
-                if power_deviation > 0.3:  # 30% deviation
-                    self.logger.debug(f"🔍 [OHC._should_verify_baseline] Power deviation detected: {power_deviation:.1%}")
-                    return True
-            
-            # Check temperature deviation  
-            if current_temp:
-                temp_deviation = abs(current_temp - self.baseline_temp)
-                if temp_deviation > 10:  # 10°C deviation
-                    self.logger.debug(f"🔍 [OHC._should_verify_baseline] Temperature deviation detected: {temp_deviation:.1f}°C")
-                    return True
-            
+            try:
+                if current_power is not None and self.baseline_power:
+                    power_deviation = abs(current_power - self.baseline_power) / float(self.baseline_power)
+                    if power_deviation > power_dev_pct:
+                        self.logger.debug(f"🔍 [OHC._should_verify_baseline] Power deviation detected on GPU {gpu_index}: {power_deviation:.1%} (> {power_dev_pct:.0%})")
+                        return True
+            except Exception:
+                pass
+
+            # Check temperature deviation
+            try:
+                if current_temp is not None and self.baseline_temp is not None:
+                    temp_deviation = abs(float(current_temp) - float(self.baseline_temp))
+                    if temp_deviation > temp_dev_c:
+                        self.logger.debug(f"🔍 [OHC._should_verify_baseline] Temperature deviation detected on GPU {gpu_index}: {temp_deviation:.1f}°C (> {temp_dev_c:.1f}°C)")
+                        return True
+            except Exception:
+                pass
+
             return False
-            
+
         except Exception as e:
-            self.logger.warning(f"⚠️ [OHC._should_verify_baseline] Check failed: {e}")
+            self.logger.warning(f"⚠️ [OHC._should_verify_baseline] Check failed for GPU {gpu_index}: {e}")
             return False
 
     def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int, cancel_event: Optional[threading.Event] = None):
