@@ -100,7 +100,7 @@ class ErrorRecoveryCoordinator:
         self.logger = get_coordination_logger()
         self.error_reporter = get_error_reporter()
         
-            self.logger.info("✅ [RecoveryCoordinator] Error recovery coordinator initialized (bộ điều phối khôi phục lỗi đã khởi tạo – hệ thống phục hồi sẵn sàng)")
+        self.logger.info("✅ [RecoveryCoordinator] Error recovery coordinator initialized (bộ điều phối khôi phục lỗi đã khởi tạo – hệ thống phục hồi sẵn sàng)")
     
     def register_recovery_handler(
         self, 
@@ -142,7 +142,7 @@ class ErrorRecoveryCoordinator:
         try:
             # ✅ CIRCUIT BREAKER CHECK
             if self._is_circuit_breaker_open(error_context.error_code):
-                 self.logger.warning(f"🚫 [RecoveryCoordinator] Circuit breaker OPEN (cầu dao mở – tạm ngưng nỗ lực) for {error_context.error_code.value}")
+                self.logger.warning(f"🚫 [RecoveryCoordinator] Circuit breaker OPEN (cầu dao mở – tạm ngưng nỗ lực) for {error_context.error_code.value}")
                 future = Future()
                 future.set_exception(Exception("Circuit breaker is open"))
                 return future
