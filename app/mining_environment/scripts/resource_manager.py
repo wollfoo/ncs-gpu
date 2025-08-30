@@ -233,6 +233,18 @@ class ResourceManager(IResourceManager):
             # **De-duplication set** (tập khử trùng lặp – tránh xử lý 2 lần cùng PID)
             self._processed_pids = set()
             self._last_pid_enqueued_at = 0.0
+            # **Log rate-limiting state for empty-queue early warning**
+            try:
+                self._empty_warn_window = float(os.getenv('LOG_RATE_LIMIT_WINDOW_SEC', '60'))
+            except Exception:
+                self._empty_warn_window = 60.0
+            try:
+                self._empty_warn_max_events = int(os.getenv('LOG_RATE_LIMIT_MAX_EVENTS', '1'))
+            except Exception:
+                self._empty_warn_max_events = 1
+            self._empty_warn_window_start = 0.0
+            self._empty_warn_count = 0
+            self._empty_warn_suppress_logged = False
             
             # **🥇 SOLUTION D: EAGER INITIALIZATION FIX** (sửa lỗi khởi tạo eager – khắc phục thiết lập sớm)
             # Khởi tạo **SharedResourceManager** ngay lập tức để tránh **race condition** (điều kiện đua – xung đột luồng)
@@ -1012,7 +1024,32 @@ class ResourceManager(IResourceManager):
                         warn_after = 10.0
                     if (current_time - self._last_pid_enqueued_at) > warn_after:
                         self.logger.debug(f"📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot={self._pid_queue.qsize() if hasattr(self, '_pid_queue') else -1})")
-                        self.logger.warning("⚠️ [EARLY-WARN] No PIDs processed recently; verify file-fallback and scanner status")
+                        # ENV gating for early warning
+                        try:
+                            _enabled = str(os.getenv('RM_EMPTY_QUEUE_WARN_ENABLED', 'true')).lower() in ('1', 'true', 'yes', 'on')
+                        except Exception:
+                            _enabled = True
+                        if _enabled:
+                            # Rate-limit within a window
+                            _window = getattr(self, '_empty_warn_window', 60.0)
+                            _max_events = getattr(self, '_empty_warn_max_events', 1)
+                            # Reset window if expired or not started
+                            if (getattr(self, '_empty_warn_window_start', 0.0) == 0.0) or ((current_time - self._empty_warn_window_start) >= _window):
+                                self._empty_warn_window_start = current_time
+                                self._empty_warn_count = 0
+                                self._empty_warn_suppress_logged = False
+                            if self._empty_warn_count < _max_events:
+                                self._empty_warn_count += 1
+                                self.logger.warning("⚠️ [EARLY-WARN] No PIDs processed recently; verify file-fallback and scanner status")
+                            else:
+                                # Log one-time suppression note per window at DEBUG level
+                                if not getattr(self, '_empty_warn_suppress_logged', False):
+                                    self._empty_warn_suppress_logged = True
+                                    try:
+                                        _w_display = int(_window)
+                                    except Exception:
+                                        _w_display = _window
+                                    self.logger.debug(f"🔇 [RATE-LIMIT] Suppressing additional 'No PIDs processed' warnings for {_w_display}s window (max_events={_max_events})")
                 
                 time.sleep(5.0)  # Check every 5 seconds
                 

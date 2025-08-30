@@ -453,8 +453,8 @@ class DirectPIDRegistry:
                     logger.info(f"✅ Registered observer: {callback.__name__ if hasattr(callback, '__name__') else 'anonymous'}")
                     return True
                 else:
-                    logger.warning(f"⚠️ Observer already registered: {callback}")
-                    return False
+                    logger.debug(f"[IDEMPOTENT] Observer already registered: {callback}")
+                    return True
         except Exception as e:
             logger.error(f"❌ Failed to register observer: {e}")
             return False
@@ -498,7 +498,7 @@ class DirectPIDRegistry:
         try:
             with self._resource_manager_lock:
                 if self._resource_manager is not None:
-                    logger.warning(f"⚠️ [SOLUTION-1] ResourceManager already registered, replacing with new instance")
+                    logger.info(f"ℹ️ [SOLUTION-1] ResourceManager already registered; replacing with new instance")
                 
                 self._resource_manager = rm_instance
                 logger.info(f"✅ [SOLUTION-1] ResourceManager registered successfully: {rm_instance.__class__.__name__}")
@@ -638,7 +638,7 @@ class DirectPIDRegistry:
             with self._lock:
                 # **Check for duplicate registration** (kiểm tra đăng ký trùng lặp)
                 if pid in self._registry:
-                    logger.warning(f"⚠️ PID {pid} already registered. Updating existing entry.")
+                    logger.info(f"ℹ️ [IDEMPOTENT] PID {pid} already registered. Updating existing entry.")
                 
                 # **Create ProcessInfo** (tạo thông tin tiến trình)
                 process_info = ProcessInfo(
