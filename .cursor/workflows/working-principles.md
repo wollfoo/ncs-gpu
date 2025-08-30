@@ -1,5 +1,6 @@
 ---
-trigger: always_on
+description: Working Principles and Guidelines
+auto_execution_mode: 3
 ---
 
 # Working Principles and Guidelines

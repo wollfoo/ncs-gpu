@@ -171,9 +171,4 @@
 * **Evidence-Only**; **giữ nguyên** quote khi trích log/mã.
 * Nếu dữ liệu thiếu: **nêu rõ giới hạn** và **danh sách dữ liệu cần thêm** để tiếp tục.
 
----
-
-# ⬇️ HÃY BẮT ĐẦU THEO CẤU TRÚC NÀY
-
-1. **Checklist** → 2) **Dấu hiệu kích hoạt (Evidence)** → 3) **Flow Check** → 4) **Mapping log→code** → 5) **ToT (😭) & Root Cause** → 6) **Khắc phục & Test** → 7) **Rủi ro & Backout**.
 
