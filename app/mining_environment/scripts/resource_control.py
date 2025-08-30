@@ -1625,7 +1625,7 @@ class OptimizedHardwareController:
             try:
                 # Get GPU handle
                 handle = self.gpu_manager.get_handle(gpu_idx)
-                if not handle:
+                if handle is None:
                     self.logger.warning(f"⚠️ [OHC.get_gpu_utilization_metrics] No handle for GPU {gpu_idx}")
                     metrics[gpu_idx] = 0.0
                     continue
@@ -1997,7 +1997,7 @@ class OptimizedHardwareController:
         """
         try:
             handle = self.gpu_manager.get_handle(gpu_index)
-            if not handle:
+            if handle is None:
                 return 0.0
             util = pynvml.nvmlDeviceGetUtilizationRates(handle)
             return float(util.gpu) / 100.0
@@ -2094,8 +2094,8 @@ class OptimizedHardwareController:
             current_power_limit = int(self.baseline_power)
         try:
             handle = self.gpu_manager.get_handle(gpu_index)
-            current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM) if handle else 1000
-            current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM) if handle else 877
+            current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM) if handle is not None else 1000
+            current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM) if handle is not None else 877
         except Exception:
             current_sm_clock, current_mem_clock = 1000, 877
 
@@ -2347,7 +2347,7 @@ class OptimizedHardwareController:
                         self.logger.debug(f"⏱️ [OHC._apply_nvml_controls] Setting clocks (requested) - SM: {requested_sm}MHz, Mem: {requested_mem}MHz...")
 
                         handle = self.gpu_manager.get_handle(gpu_index)
-                        if not handle:
+                        if handle is None:
                             self.logger.warning(f"⚠️ [OHC._apply_nvml_controls] No GPU handle for index {gpu_index}; skipping clock tuning")
                         else:
                             # Query supported memory clocks
@@ -2511,7 +2511,7 @@ class OptimizedHardwareController:
             # Clocks: tăng nhẹ theo biến thể profile
             try:
                 handle = self.gpu_manager.get_handle(gpu_index)  # dùng đúng GPU đích để tham chiếu clock hiện tại
-                if handle:
+                if handle is not None:
                     current_sm = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
                     params['sm_clock'] = int(min(1245, current_sm * (1.0 + clock_var * 0.2)))
             except Exception:
@@ -2779,7 +2779,7 @@ except Exception as e:
         
         try:
             handle = self.gpu_manager.get_handle(gpu_index)
-            if handle:
+            if handle is not None:
                 mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 total_gb = mem_info.total / (1024**3)
                 self.logger.debug(f"✅ [OHC._get_total_vram] GPU {gpu_index} has {total_gb:.2f}GB VRAM")
