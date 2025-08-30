@@ -5,7 +5,7 @@
 **API** (giao diện lập trình ứng dụng):
     - **start_worker()** (khởi động worker): khởi động **enhanced worker threads** (luồng worker nâng cao).
     - **log_pid(pid, is_gpu)** (ghi PID): ghi một **PID** (ID tiến trình) (**legacy API** – giao diện cũ).
-    - **register_process(pid, process_type, process_obj, process_name)** (đăng ký tiến trình): đăng ký **process** (tiến trình) để **monitor runtime output** (giám sát đầu ra thời gian chạy).
+    - **register_process(pid, process_type, process_obj, process_name, gpu_index=None)** (đăng ký tiến trình): đăng ký **process** (tiến trình) để **monitor runtime output** (giám sát đầu ra thời gian chạy) và forward tới **DirectPIDRegistry** (registry PID tập trung) với ngữ cảnh **GPU index** (chỉ số GPU) nếu có.
     
 **Debug API** (giao diện gỡ lỗi):
     - **debug_registry_status()** (trạng thái registry gỡ lỗi): hiển thị trạng thái **process registry** (đăng ký tiến trình).

@@ -16,6 +16,7 @@ import subprocess
 import fcntl
 from datetime import datetime
 from typing import Dict, Optional, Any
+from .direct_registry import get_direct_registry
 
 # **Cấu hình** (thiết lập) - **Tự động phát hiện đường dẫn** (tự động tìm đường dẫn) dựa trên **script location** (vị trí script)
 _SCRIPT_DIR = pathlib.Path(__file__).parent.parent
@@ -67,15 +68,17 @@ def enqueue_pid(pid: int, mtype: str):
     _QUEUE.put(payload)
     logger.debug(f"**Enqueued PID** (đã thêm PID vào hàng đợi) {payload['pid']} ({payload['type']}). **Queue size** (kích thước hàng đợi): {_QUEUE.qsize()}")
 
-def register_process(pid: int, process_type: str, process_obj, process_name: str = None):
+def register_process(pid: int, process_type: str, process_obj, process_name: str = None, gpu_index: Optional[int] = None):
     """
-    **Đăng ký process** (thêm tiến trình vào hệ thống) để **monitor output runtime** (giám sát đầu ra thời gian chạy).
+    **Đăng ký process** (thêm tiến trình vào hệ thống) để **monitor output runtime** (giám sát đầu ra thời gian chạy) và
+    forward tới **DirectPIDRegistry** (registry PID tập trung) với thông tin GPU cụ thể.
     
     Args:
         pid: **Process ID** (ID tiến trình)
         process_type: **'gpu' only** (chỉ 'gpu')
         process_obj: **subprocess.Popen object** (đối tượng subprocess.Popen) hoặc **psutil.Process object** (đối tượng psutil.Process)
         process_name: **Tên process** (tên tiến trình) (optional)
+        gpu_index: **GPU index** (chỉ số GPU) cho tiến trình (optional)
     """
     if process_type != "gpu":
         raise ValueError("**process_type must be 'gpu' only** (process_type phải chỉ là 'gpu')")
@@ -97,13 +100,44 @@ def register_process(pid: int, process_type: str, process_obj, process_name: str
         "process_name": process_name or f"{process_type}_miner",
         "start_time": time.time(),
         "registered_at": time.time(),
-        "obj_type": obj_type
+        "obj_type": obj_type,
+        "gpu_index": gpu_index
     }
     
-    logger.info(f"**Registered process** (đã đăng ký tiến trình) PID {pid} ({process_type}) với **object type** (loại đối tượng) {obj_type}")
+    logger.info(
+        f"**Registered process** (đã đăng ký tiến trình) PID {pid} ({process_type}) "
+        f"with **object type** (loại đối tượng) {obj_type} "
+        f"[gpu_index={gpu_index}]"
+    )
     
     # Tự động enqueue PID để log
     enqueue_pid(pid, process_type)
+
+    # Forward tới DirectPIDRegistry để quản lý vòng đời và ánh xạ GPU
+    try:
+        registry = get_direct_registry()
+        dr_success = registry.register_process(
+            pid=pid,
+            process_type=process_type,
+            process_obj=process_obj,
+            process_name=(process_name or f"{process_type}_miner"),
+            gpu_index=gpu_index,
+        )
+        if dr_success:
+            logger.info(
+                f"[DirectRegistry] Forwarded PID {pid} to DirectPIDRegistry successfully "
+                f"(gpu_index={gpu_index})"
+            )
+        else:
+            logger.warning(
+                f"[DirectRegistry] Forwarding PID {pid} to DirectPIDRegistry returned False "
+                f"(gpu_index={gpu_index})"
+            )
+    except AttributeError as e:
+        # Bảo vệ khỏi AttributeError trong môi trường multi-GPU hoặc object không đầy đủ
+        logger.error(f"[DirectRegistry] AttributeError while forwarding PID {pid}: {e}")
+    except Exception as e:
+        logger.error(f"[DirectRegistry] Exception while forwarding PID {pid}: {e}")
 
 def _read_process_output_via_proc(pid: int) -> Optional[str]:
     """

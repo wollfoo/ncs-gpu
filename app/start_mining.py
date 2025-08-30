@@ -738,7 +738,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None, gpu_in
                         if real_mining_pid:
                             # Register real mining process for Enhanced PID Logger
                             real_process_obj = psutil.Process(real_mining_pid)
-                            register_process(real_mining_pid, process_type, real_process_obj, process_name)
+                            register_process(real_mining_pid, process_type, real_process_obj, process_name, gpu_index=gpu_index)
                             logger.info(f"✅ Enhanced PID Logger registered real mining PID {real_mining_pid} ({process_type})")
                             
                             # **Enhanced: Store real mining PID in process object for later use**
@@ -746,7 +746,7 @@ def start_gpu_mining_process(retries=3, delay=5, privileged_manager=None, gpu_in
                             logger.info(f"🎯 [ENHANCED] Real mining PID {real_mining_pid} stored in process object")
                         else:
                             # Fallback: register wrapper PID
-                            register_process(process.pid, process_type, process, process_name)
+                            register_process(process.pid, process_type, process, process_name, gpu_index=gpu_index)
                             logger.warning(f"⚠️ Could not detect real mining PID, using wrapper PID {process.pid}")
                             process._real_mining_pid = None
                             
@@ -1308,16 +1308,25 @@ def main():
             return
     
     # **Enhanced process registration với real mining PID detection**
-    real_mining_pid = getattr(gpu_process, '_real_mining_pid', None)
-    process_group_id = getattr(gpu_process, '_process_group_id', None)
-    
-    process_manager.set_gpu_process(
-        gpu_process, 
-        real_mining_pid=real_mining_pid,
-        process_group_id=process_group_id
-    )
-    
-    logger.info(f"🎯 [ENHANCED] Process manager updated: wrapper_pid={gpu_process.pid}, real_pid={real_mining_pid}, pgid={process_group_id}")
+    if not multi_gpu_enabled:
+        real_mining_pid = getattr(gpu_process, '_real_mining_pid', None)
+        process_group_id = getattr(gpu_process, '_process_group_id', None)
+        
+        process_manager.set_gpu_process(
+            gpu_process, 
+            real_mining_pid=real_mining_pid,
+            process_group_id=process_group_id
+        )
+        
+        wrapper_pid = getattr(gpu_process, 'pid', None)
+        logger.info(f"🎯 [ENHANCED] Process manager updated: wrapper_pid={wrapper_pid}, real_pid={real_mining_pid}, pgid={process_group_id}")
+    else:
+        # Multi-GPU path: handled by _multi_gpu_manager; skip single-process registration
+        try:
+            statuses = _multi_gpu_manager.get_status() if _multi_gpu_manager else {}
+            logger.info(f"🎯 [ENHANCED] Multi-GPU manager active; managed_gpus={sorted(statuses.keys()) if statuses else []}")
+        except Exception as _mg_err:
+            logger.debug(f"[ENHANCED] Multi-GPU registration/logging skipped: {_mg_err}")
     # ------------------------------------------------------------------
     # 5️⃣ **SIMPLIFIED**: Khởi động Simple Registry Monitoring
     # ------------------------------------------------------------------
