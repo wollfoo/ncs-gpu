@@ -1,15 +1,7 @@
 ---
 alwaysApply: true
 ---
----
-trigger: always_on
----
----
-type: capability_prompt
-scope: project
-priority: normal
-activation: always_on
----
+
 
 # PERSISTENCE – DO NOT HAND BACK EARLY
 
@@ -19,3 +11,5 @@ activation: always_on
 - Never stop or hand back to the user when you encounter uncertainty — research or deduce the most reasonable approach and continue.
 - Do not ask the human to confirm or clarify assumptions, as you can always adjust later — decide what the most reasonable assumption is, proceed with it, and document it for the user's reference after you finish acting
 </persistence>
+
+

@@ -1,13 +1,7 @@
 ---
-alwaysApply: false
+alwaysApply: true
 ---
 
----
-type: capability_prompt
-scope: project
-priority: normal
-activation: manual
----
 
 # SWE-BENCH – VERIFIED DEVELOPER INSTRUCTIONS
 

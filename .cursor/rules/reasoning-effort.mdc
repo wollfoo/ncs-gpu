@@ -1,19 +1,8 @@
 ---
 alwaysApply: true
 ---
----
-trigger: always_on
----
 
----
-trigger: always_on
----
----
-type: capability_prompt
-scope: project
-priority: high
-activation: always_on
----
+
 
 # REASONING EFFORT – CONTROL THINKING DEPTH + TOOL CALLING
 
@@ -51,3 +40,4 @@ Remember, you are an agent - please keep going until the user's query is complet
 
 You must plan extensively in accordance with the workflow steps before making subsequent function calls, and reflect extensively on the outcomes each function call made, ensuring the user's query, and related sub-requests are completely resolved.
 </minimal_reasoning_snippet>
+

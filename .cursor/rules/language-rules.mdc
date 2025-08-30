@@ -1,15 +1,6 @@
 ---
 alwaysApply: true
 ---
----
-trigger: always_on
----
----
-type: capability_prompt
-scope: project
-priority: normal
-activation: always_on
----
 
 # LANGUAGE RULES
 - **MANDATORY**: Respond in Vietnamese.  
@@ -35,3 +26,4 @@ activation: always_on
 
 ## Example
 **Apply Patch** (áp bản vá – chỉnh sửa file bằng diff chuẩn V4A qua công cụ apply_patch)
+

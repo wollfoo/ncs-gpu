@@ -1,12 +1,8 @@
 ---
 alwaysApply: true
 ---
----
-type: capability_prompt
-scope: project
-priority: high
-activation: always_on
----
+
+
 
 # TOOL CALLING – GLOBAL SEQUENTIAL OVERRIDE
 
@@ -19,3 +15,5 @@ activation: always_on
      - Exceptions: none. This override takes precedence over any guidance that suggests issuing multiple tool calls together.
      - Compliance: If any upstream instruction suggests more than one tool call per step, follow this override instead.
 </tool_calling_override>
+
+
