@@ -131,6 +131,8 @@ class GPUOptimizationOrchestrator:
         """
         self.config = config or self._get_default_config()
         self.logger = logger
+        # Lazy cache for GPUResourceManager (SSOT provider)
+        self._grm = None
         
         # **Initialize components** (khởi tạo thành phần)
         self._init_components()
@@ -440,6 +442,26 @@ class GPUOptimizationOrchestrator:
         self.hardware_controller = OptimizedHardwareController(safe_gpu_config, gpu_logger)
         self.logger.info("✅ Hardware Controller initialized")
     
+    def _get_grm(self):
+        """Lazy init GPUResourceManager (nguồn chân lý – SSOT)."""
+        try:
+            if getattr(self, '_grm', None) is None:
+                gpu_cfg = {}
+                try:
+                    if isinstance(self.config, dict):
+                        gpu_cfg = self.config.get('gpu_config', {}) or {}
+                except Exception:
+                    gpu_cfg = {}
+                # Pass a child logger; GPUResourceManager will use its own file logger internally
+                self._grm = GPUResourceManager(gpu_cfg, self.logger.getChild('grm'))
+            return self._grm
+        except Exception as _e:
+            try:
+                self.logger.debug(f"[Orchestrator] _get_grm failed: {_e}")
+            except Exception:
+                pass
+            return None
+
     @profile_function(track_memory=True)
     @trace_all
     def optimize_gpu_for_process(self, 
@@ -903,26 +925,56 @@ class GPUOptimizationOrchestrator:
     def _collect_gpu_metrics(self, gpu_index: int) -> Dict[str, Any]:
         """**Collect GPU metrics** (thu thập số liệu GPU)"""
         try:
-            import pynvml
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            
-            metrics = {
-                'timestamp': time.time(),
+            # SSOT: GPUResourceManager snapshot
+            grm = self._get_grm()
+            # Optional TTL override via ENV; fall back to provider default
+            ttl = None
+            try:
+                env_ttl = os.getenv('ORCH_METRICS_TTL_SEC', '')
+                if env_ttl:
+                    ttl = float(env_ttl)
+            except Exception:
+                ttl = None
+
+            if grm is None:
+                raise RuntimeError("GPUResourceManager unavailable")
+
+            snap = grm.get_metrics_snapshot(ttl_sec=ttl)
+            ts = getattr(snap, 'timestamp', time.time())
+            idx = int(gpu_index)
+
+            # Extract per-GPU fields with safe defaults
+            temp = None if getattr(snap, 'temperature_c', None) is None else snap.temperature_c.get(idx)
+            power = None if getattr(snap, 'power_watts', None) is None else snap.power_watts.get(idx)
+            util_ratio = None if getattr(snap, 'utilization', None) is None else snap.utilization.get(idx)
+            mem_used_b = None if getattr(snap, 'mem_used_bytes', None) is None else snap.mem_used_bytes.get(idx)
+            mem_total_b = None if getattr(snap, 'mem_total_bytes', None) is None else snap.mem_total_bytes.get(idx)
+
+            # Convert to orchestrator schema
+            util_pct = None if util_ratio is None else float(util_ratio) * 100.0  # ratio→percent
+            used_gb = None if mem_used_b is None else float(mem_used_b) / (1024**3)
+            total_gb = None if mem_total_b is None else float(mem_total_b) / (1024**3)
+
+            metrics: Dict[str, Any] = {
+                'timestamp': ts,
                 'gpu_index': gpu_index,
-                'temperature': pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU),
-                'power': pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0,  # Convert to watts
-                'utilization': pynvml.nvmlDeviceGetUtilizationRates(handle).gpu,
-                'memory_info': {
-                    'used': pynvml.nvmlDeviceGetMemoryInfo(handle).used / (1024**3),  # GB
-                    'total': pynvml.nvmlDeviceGetMemoryInfo(handle).total / (1024**3)  # GB
-                },
-                'clocks': {
-                    'sm': pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM),
-                    'mem': pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
-                }
             }
-            
+            if temp is not None:
+                metrics['temperature'] = float(temp)
+            if power is not None:
+                metrics['power'] = float(power)
+            if util_pct is not None:
+                metrics['utilization'] = float(util_pct)
+
+            mem_info: Dict[str, Any] = {}
+            if used_gb is not None:
+                mem_info['used'] = used_gb
+            if total_gb is not None:
+                mem_info['total'] = total_gb
+            if mem_info:
+                metrics['memory_info'] = mem_info
+
+            # Clocks are optional; SSOT snapshot may not include them. Preserve adapter behavior.
             return metrics
             
         except Exception as e:

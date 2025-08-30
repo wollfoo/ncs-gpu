@@ -41,6 +41,15 @@ except ImportError:
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
 
+# SSOT GPU provider import (nhà cung cấp số liệu GPU thống nhất)
+try:
+    from .resource_control import GPUResourceManager
+except ImportError:
+    try:
+        from resource_control import GPUResourceManager
+    except ImportError:  # Fallback khi chạy standalone không có module
+        GPUResourceManager = None  # type: ignore
+
 class DAGState(Enum):
     """DAG calculation states (trạng thái tính toán DAG)"""
     NOT_STARTED = "not_started"  # Chưa bắt đầu
@@ -499,6 +508,21 @@ class _DAGPrefetcher:
         self.thread: Optional[threading.Thread] = None
         self.stop = threading.Event()
         self.active = False
+        # Lazy GPUResourceManager instance (khởi tạo lười biếng)
+        self._grm: Optional["GPUResourceManager"] = None  # type: ignore[name-defined]
+
+    def _get_grm(self) -> "GPUResourceManager":  # type: ignore[name-defined]
+        """
+        Lazy-initialize and return GPUResourceManager (khởi tạo lười biếng và trả về GRM).
+        Dùng làm SSOT cho metrics để guard prefetch theo utilization.
+        """
+        if self._grm is not None:
+            return self._grm
+        if GPUResourceManager is None:
+            raise RuntimeError("GPUResourceManager not available (module import failed)")
+        cfg: Dict[str, Any] = {}
+        self._grm = GPUResourceManager(cfg, logger)
+        return self._grm
 
     def start(self):
         enable = os.getenv('DAG_PREFETCH_ENABLE', '1').lower() in ('1','true','yes')
@@ -529,20 +553,18 @@ class _DAGPrefetcher:
 
         while not self.stop.is_set():
             try:
-                # Guard: check utilization via NVML if available
+                # Guard: check utilization via SSOT GPUResourceManager if available
                 allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')
                 if not allow_under_80:
                     try:
-                        import pynvml
-                        pynvml.nvmlInit()
-                        handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
-                        util = pynvml.nvmlDeviceGetUtilizationRates(handle).gpu / 100.0
-                        pynvml.nvmlShutdown()
+                        grm = self._get_grm()
+                        snapshot = grm.get_metrics_snapshot(ttl_sec=None)
+                        util = float(snapshot.utilization.get(gpu_id, 0.0))
                         if util < util_guard:
                             time.sleep(5)
                             continue
                     except Exception:
-                        # If NVML not available, proceed cautiously
+                        # If provider not available, proceed cautiously
                         pass
 
                 # Prefetch next epoch if any

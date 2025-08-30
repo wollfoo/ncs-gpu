@@ -39,6 +39,15 @@ except ImportError:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
+# SSOT GPU provider import (nhà cung cấp số liệu GPU thống nhất)
+try:
+    from .resource_control import GPUResourceManager
+except ImportError:
+    try:
+        from resource_control import GPUResourceManager
+    except ImportError:  # Fallback khi chạy standalone không có module
+        GPUResourceManager = None  # type: ignore
+
 # **Constants** (hằng số)
 COORDINATION_DIR = Path(os.getenv('LOGS_DIR', '/app/mining_environment/logs')) / 'gpu_coordination'
 LOCK_FILE = COORDINATION_DIR / "coordination.lock"
@@ -722,6 +731,9 @@ class CrossProcessCoordinator:
         """
         self.pid = pid
         
+        # Lazy GPUResourceManager instance (khởi tạo lười biếng)
+        self._grm: Optional["GPUResourceManager"] = None  # type: ignore[name-defined]
+
         # Initialize components
         self.reservation_manager = ResourceReservationManager()
         self.conflict_resolver = ConflictResolver(self.reservation_manager)
@@ -751,13 +763,35 @@ class CrossProcessCoordinator:
         logger.info(f"🚀 **Cross-Process Coordinator initialized** "
                    f"(bộ điều phối liên tiến trình đã khởi tạo): PID {pid}")
     
-    def _init_semaphores(self):
-        """Initialize GPU semaphores"""
+    def _get_grm(self) -> "GPUResourceManager":  # type: ignore[name-defined]
+        """
+        Lazy-initialize and return GPUResourceManager (khởi tạo lười biếng và trả về GRM).
+        Dùng làm SSOT cho số lượng GPU và metrics.
+        """
+        if self._grm is not None:
+            return self._grm
+        if GPUResourceManager is None:
+            raise RuntimeError("GPUResourceManager not available (module import failed)")
+        # Cho phép cấu hình TTL nhẹ qua ENV; nếu không có thì GRM tự động điều chỉnh TTL
+        cfg: Dict[str, Any] = {}
         try:
-            import pynvml
-            pynvml.nvmlInit()
-            gpu_count = pynvml.nvmlDeviceGetCount()
-            
+            _ttl = os.getenv('COORD_METRICS_TTL_SEC')
+            if _ttl is not None:
+                cfg['metrics_cache_ttl_sec'] = float(_ttl)
+        except Exception:
+            pass
+        self._grm = GPUResourceManager(cfg, logger)
+        return self._grm
+
+    def _init_semaphores(self):
+        """Initialize GPU semaphores (khởi tạo cờ hiệu GPU) bằng SSOT GPUResourceManager"""
+        try:
+            grm = self._get_grm()
+            # Lấy snapshot và suy ra số GPU từ gpu_indices
+            snapshot = grm.get_metrics_snapshot(ttl_sec=None)
+            indices = snapshot.gpu_indices or []
+            gpu_count = len(indices)
+
             # Allow override of max_count via ENV COORD_GPU_SEM_MAX_COUNT (default 1 for max stability)
             try:
                 _sem_max_env = os.getenv('COORD_GPU_SEM_MAX_COUNT')
@@ -767,15 +801,20 @@ class CrossProcessCoordinator:
             except Exception:
                 sem_max_count = 1
 
+            if gpu_count <= 0:
+                # Không phát hiện được GPU → fallback 1 GPU ảo để đảm bảo tiến trình chạy ổn định
+                self.gpu_semaphores[0] = GPUSemaphore("gpu_0", max_count=sem_max_count)
+                logger.warning("⚠️ Không phát hiện được GPU từ snapshot; dùng fallback 1 semaphore gpu_0")
+                return
+
             for i in range(gpu_count):
-                # Configurable processes per GPU (default 2)
                 self.gpu_semaphores[i] = GPUSemaphore(f"gpu_{i}", max_count=sem_max_count)
-            
+
             logger.info(f"🎮 **Initialized {gpu_count} GPU semaphores** "
-                       f"(đã khởi tạo {gpu_count} cờ hiệu GPU)")
+                        f"(đã khởi tạo {gpu_count} cờ hiệu GPU)")
         except Exception as e:
             logger.error(f"❌ **Failed to initialize GPU semaphores** "
-                        f"(khởi tạo cờ hiệu GPU thất bại): {e}")
+                         f"(khởi tạo cờ hiệu GPU thất bại): {e}")
             # Default to 1 GPU
             try:
                 _sem_max_env = os.getenv('COORD_GPU_SEM_MAX_COUNT')

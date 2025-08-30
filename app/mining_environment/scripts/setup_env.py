@@ -362,21 +362,18 @@ def monitor_websocat_health(websocat_process, websocat_args, websocat_env, logge
                 logger.warning(f"🚨 **Websocat process died** (tiến trình websocat đã chết) - **Attempt {restart_count}/{max_restarts}** (lần thử {restart_count}/{max_restarts})")
                 
                 if restart_count <= max_restarts:
-                logger.info("🔄 **Restarting websocat** (khởi động lại websocat)...")
-
-                # Khởi động lại websocat (an toàn, không dùng shell)
-                websocat_process = subprocess.Popen(
-                    websocat_args,
-                    shell=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    close_fds=True,
-                    preexec_fn=os.setsid,
-                    env=websocat_env,
-                )
-                    
+                    logger.info("🔄 **Restarting websocat** (khởi động lại websocat)...")
+                    # Khởi động lại websocat (an toàn, không dùng shell)
+                    websocat_process = subprocess.Popen(
+                        websocat_args,
+                        shell=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True,
+                        preexec_fn=os.setsid,
+                        env=websocat_env,
+                    )
                     logger.info(f"✅ **Websocat restarted** (websocat đã khởi động lại) - New PID: {websocat_process.pid}")
-                    
                     # Reset counter on successful restart
                     if websocat_process.poll() is None:
                         restart_count = 0

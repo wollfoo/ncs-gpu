@@ -5,7 +5,7 @@ import subprocess
 import functools
 import time
 import psutil
-import pynvml
+# NVML dependency removed – use GPUResourceManager snapshots
 import threading
 import warnings
 import os
@@ -39,7 +39,7 @@ def retry(exception_to_check: Any, tries: int = 4, delay: float = 3.0, backoff: 
             while mtries > 1:
                 try:
                     return func(*args, **kwargs)
-                except exception_to_check as e:
+                except Exception as e:
                     logging.getLogger(__name__).warning(
                         f"**Lỗi** (error – ngoại lệ) '{e}' xảy ra trong '{func.__name__}'. "
                         f"**Thử lại sau** (retrying after – thực hiện lại sau) {mdelay} giây..."
@@ -131,53 +131,31 @@ class GPUManager:
         :return: **True** nếu **NVML init** (khởi tạo NVML) thành công, ngược lại **False**.
         """
         self._warn_deprecated("initialize")
-        # Ưu tiên dùng GPUResourceManager nếu khả dụng
+        # Khởi tạo dựa trên GPUResourceManager snapshot (SSOT), không gọi NVML trực tiếp
         grm = self._get_grm()
-        if grm is not None:
-            try:
-                # GRM tự init NVML khi khởi tạo; đồng bộ trạng thái từ GRM
-                try:
-                    self.gpu_initialized = bool(grm.is_nvml_initialized())
-                except Exception:
-                    # Nếu GRM không có API, giữ nguyên cờ
-                    pass
-                try:
-                    self.gpu_count = int(grm.get_gpu_count())
-                except Exception:
-                    # Nếu không có API đếm, để 0
-                    self.gpu_count = 0
-                if self.gpu_initialized:
-                    self.logger.info(f"NVML initialized via GPUResourceManager. GPUs detected: {self.gpu_count}")
-                    return True
-            except Exception as e:
-                self.logger.warning(f"Delegation initialize via GPUResourceManager failed: {e}")
-        # Fallback về hành vi cũ
         try:
-            pynvml.nvmlInit()
-            self.gpu_count = pynvml.nvmlDeviceGetCount()
-            self.gpu_initialized = True
-            self.logger.info(f"**NVML khởi tạo thành công** (NVML initialized successfully – NVML đã thiết lập xong). **Phát hiện** (detected – tìm thấy) {self.gpu_count} **GPU** (card đồ họa).")
+            if grm is None:
+                self.gpu_initialized = False
+                self.gpu_count = 0
+                self.logger.warning("GPUResourceManager không khả dụng; bỏ qua NVML init. GPUManager chỉ làm wrapper.")
+                return False
+            snap = grm.get_metrics_snapshot()
+            self.gpu_count = len(snap.gpu_indices)
+            self.gpu_initialized = self.gpu_count > 0
+            self.logger.info(f"Initialized via GPUResourceManager snapshot. GPUs detected: {self.gpu_count}")
             return True
-        except pynvml.NVMLError as e:
-            self.gpu_initialized = False
-            self.logger.warning(f"**Không thể khởi tạo NVML** (Cannot initialize NVML – không thiết lập được NVML): {e}. **GPUManager sẽ vô hiệu** (GPUManager will be disabled – trình quản lý GPU sẽ bị tắt).")
-            return False
         except Exception as e:
             self.gpu_initialized = False
-            self.logger.error(f"**Lỗi không xác định** (Unexpected error – lỗi bất ngờ) khi **khởi tạo GPUManager** (initializing GPUManager – thiết lập trình quản lý GPU): {e}")
+            self.gpu_count = 0
+            self.logger.warning(f"Không thể khởi tạo qua GPUResourceManager: {e}")
             return False
 
     def shutdown_nvml(self) -> None:
         """
         **Giải phóng NVML** (shutdown NVML – đóng thư viện quản lý NVIDIA) nếu đã khởi tạo. **Đồng bộ** (synchronous – thực hiện tuần tự).
         """
-        if self.gpu_initialized:
-            try:
-                pynvml.nvmlShutdown()
-                self.logger.info("**NVML đã được đóng thành công** (NVML shutdown successfully – NVML đã tắt xong).")
-                self.gpu_initialized = False
-            except pynvml.NVMLError as e:
-                self.logger.error(f"**Lỗi khi đóng NVML** (Error shutting down NVML – lỗi tắt NVML): {e}")
+        # NVML lifecycle được quản lý bởi GPUResourceManager; phương thức này là no-op
+        self.logger.info("shutdown_nvml() deprecated – NVML lifecycle is managed by GPUResourceManager (no-op).")
 
     def get_total_gpu_memory(self) -> float:
         """
@@ -201,17 +179,8 @@ class GPUManager:
                 return float(total_bytes) / (1024.0 ** 2)
             except Exception as e:
                 self.logger.debug(f"Fallback NVML path for total memory due to: {e}")
-        # Fallback NVML cũ
-        total_memory = 0.0
-        try:
-            for i in range(self.gpu_count):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                total_memory += mem_info.total / (1024**2)
-            return total_memory
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi khi lấy tổng bộ nhớ GPU** (Error getting total GPU memory – lỗi lấy tổng bộ nhớ card đồ họa): {e}")
-            return 0.0
+        # NVML fallback đã loại bỏ – chỉ dùng SSOT qua GPUResourceManager
+        return 0.0
 
     def get_used_gpu_memory(self) -> float:
         """
@@ -234,19 +203,10 @@ class GPUManager:
                 return float(used_bytes) / (1024.0 ** 2)
             except Exception as e:
                 self.logger.debug(f"Fallback NVML path for used memory due to: {e}")
-        # Fallback NVML cũ
-        used_memory = 0.0
-        try:
-            for i in range(self.gpu_count):
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                used_memory += mem_info.used / (1024**2)
-            return used_memory
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi khi lấy bộ nhớ GPU đã sử dụng** (Error getting used GPU memory – lỗi lấy bộ nhớ card đồ họa đã dùng): {e}")
-            return 0.0
+        # NVML fallback đã loại bỏ – chỉ dùng SSOT qua GPUResourceManager
+        return 0.0
 
-    @retry(pynvml.NVMLError, tries=3, delay=2, backoff=2)
+    @retry(Exception, tries=3, delay=2, backoff=2)
     def set_gpu_power_limit(self, gpu_index: int, power_limit_w: int) -> bool:
         """
         **Đặt power limit cho GPU** (set GPU power limit – thiết lập giới hạn công suất card đồ họa), có **cơ chế retry** (retry mechanism – cơ chế thử lại) nếu gặp **NVML error** (lỗi NVML).
@@ -277,41 +237,10 @@ class GPUManager:
                 else:
                     raise RuntimeError("GPUResourceManager.set_gpu_power_limit trả về False")
             except Exception as e:
-                self.logger.warning(f"Delegation set_power_limit failed, fallback NVML: {e}")
-        # Fallback NVML cũ
-        try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            power_limit_mw = power_limit_w * 1000
-            pynvml.nvmlDeviceSetPowerManagementLimit(handle, power_limit_mw)
-            self.logger.info(f"**Đặt power limit GPU** (Set GPU power limit – thiết lập giới hạn công suất card đồ họa) {gpu_index} = {power_limit_w}W.")
-            # ----- JSON log -----
-            log_gpu_feature(
-                feature="gpu_optimization",
-                state="updated",
-                parameters={"gpu_index": gpu_index, "power_limit_w": power_limit_w},
-                message=f"Đặt power limit GPU {gpu_index} = {power_limit_w}W",
-            )
-            return True
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi khi đặt power limit GPU** (Error setting GPU power limit – lỗi thiết lập giới hạn công suất card đồ họa) {gpu_index}: {e}")
-            log_gpu_feature(
-                feature="gpu_optimization",
-                state="error",
-                parameters={"gpu_index": gpu_index, "power_limit_w": power_limit_w},
-                error_code="NVML_ERR",
-                message=str(e),
-            )
-            raise
-        except Exception as e:
-            self.logger.error(f"**Lỗi bất ngờ set power limit GPU** (Unexpected error setting GPU power limit – lỗi không mong đợi khi thiết lập giới hạn công suất card đồ họa) {gpu_index}: {e}")
-            log_gpu_feature(
-                feature="gpu_optimization",
-                state="error",
-                parameters={"gpu_index": gpu_index, "power_limit_w": power_limit_w},
-                error_code="POWER_ERR",
-                message=str(e),
-            )
-            raise
+                # SSOT policy: không còn fallback NVML trực tiếp
+                raise RuntimeError(f"Delegation set_power_limit via GPUResourceManager failed: {e}")
+        # NVML fallback đã loại bỏ – ném lỗi để trigger retry/handling ở callsite
+        raise RuntimeError("GPUResourceManager unavailable; NVML fallback disabled per SSOT policy")
 
     def get_gpu_power_limit(self, gpu_index: int) -> Optional[float]:
         """
@@ -334,18 +263,8 @@ class GPUManager:
                 return float(v) if v is not None else None
             except Exception as e:
                 self.logger.debug(f"Delegation get power limit failed, fallback NVML: {e}")
-        try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            power_limit_mw = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
-            power_limit_w = power_limit_mw / 1000
-            self.logger.debug(f"**GPU** (card đồ họa) {gpu_index} **power limit** (giới hạn công suất) = {power_limit_w}W.")
-            return power_limit_w
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi NVML get power limit GPU** (NVML error getting GPU power limit – lỗi NVML khi lấy giới hạn công suất card đồ họa) {gpu_index}: {e}")
-            return None
-        except Exception as e:
-            self.logger.error(f"**Lỗi get power limit GPU** (Error getting GPU power limit – lỗi lấy giới hạn công suất card đồ họa) {gpu_index}: {e}")
-            return None
+        # NVML fallback đã loại bỏ – chỉ dùng SSOT qua GPUResourceManager
+        return None
 
     def get_gpu_temperature(self, gpu_index: int) -> Optional[float]:
         """
@@ -369,17 +288,8 @@ class GPUManager:
                 return float(v) if v is not None else None
             except Exception as e:
                 self.logger.debug(f"Delegation get temperature failed, fallback NVML: {e}")
-        try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-            self.logger.debug(f"**Nhiệt độ GPU** (GPU temperature – nhiệt độ card đồ họa) {gpu_index} = {temperature}°C.")
-            return float(temperature)
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi NVML khi lấy nhiệt độ GPU** (NVML error getting GPU temperature – lỗi NVML khi lấy nhiệt độ card đồ họa) {gpu_index}: {e}")
-            return None
-        except Exception as e:
-            self.logger.error(f"**Lỗi khi lấy nhiệt độ GPU** (Error getting GPU temperature – lỗi lấy nhiệt độ card đồ họa) {gpu_index}: {e}")
-            return None
+        # NVML fallback đã loại bỏ – chỉ dùng SSOT qua GPUResourceManager
+        return None
 
     def get_gpu_utilization(self, gpu_index: int) -> Optional[Dict[str, float]]:
         """
@@ -409,19 +319,8 @@ class GPUManager:
                 }
             except Exception as e:
                 self.logger.debug(f"Delegation get utilization failed, fallback NVML: {e}")
-        try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            return {
-                'gpu_util_percent': float(utilization.gpu),
-                'memory_util_percent': float(utilization.memory)
-            }
-        except pynvml.NVMLError as e:
-            self.logger.error(f"**Lỗi NVML get utilization GPU** (NVML error getting GPU utilization – lỗi NVML khi lấy mức sử dụng GPU) {gpu_index}: {e}")
-            return None
-        except Exception as e:
-            self.logger.error(f"**Lỗi khi get utilization GPU** (Error getting GPU utilization – lỗi lấy mức sử dụng GPU) {gpu_index}: {e}")
-            return None
+        # NVML fallback đã loại bỏ – chỉ dùng SSOT qua GPUResourceManager
+        return None
 
     def set_gpu_clocks(self, gpu_index: int, sm_clock: int, mem_clock: int) -> bool:
         """
