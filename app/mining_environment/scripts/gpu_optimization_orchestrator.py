@@ -773,39 +773,45 @@ class GPUOptimizationOrchestrator:
     def _get_available_gpu_indices(self) -> List[int]:
         """
         **Auto-detect available GPUs** (tự động phát hiện số lượng GPU khả dụng).
-        Trả về danh sách chỉ số GPU. Fallback về [0] nếu không thể truy vấn NVML.
+        Trả về danh sách chỉ số GPU. Ưu tiên SSOT qua GPUResourceManager; fallback về [0] nếu provider không sẵn sàng.
         """
         try:
-            import pynvml
-            pynvml.nvmlInit()
-            count = int(pynvml.nvmlDeviceGetCount())
-            if count <= 0:
-                return [0]
-            return list(range(count))
+            grm = self._get_grm()
+            if grm is not None:
+                try:
+                    count = int(grm.get_gpu_count())
+                except Exception:
+                    # Nếu get_gpu_count không có, suy ra từ snapshot
+                    snap = grm.get_metrics_snapshot(ttl_sec=None)
+                    count = len(getattr(snap, 'gpu_indices', []) or [])
+                if count <= 0:
+                    return [0]
+                return list(range(count))
         except Exception:
+            pass
+        try:
             # Fallback: parse stealth_inference_cuda.log để đoán số GPU
-            try:
-                logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
-                path = Path(logs_dir) / 'stealth_inference_cuda.log'
-                if path.exists():
-                    text = ''
-                    with open(path, 'r') as f:
-                        try:
-                            f.seek(0, 2)
-                            size = f.tell()
-                            f.seek(max(0, size - 16384))
-                        except Exception:
-                            pass
-                        text = f.read()
-                    # Count occurrences of lines starting with "#<index>"
-                    import re
-                    indices = set(int(m.group(1)) for m in re.finditer(r"#(\d+)\s", text))
-                    if indices:
-                        return list(sorted(indices))
-            except Exception:
-                pass
-            # Fallback an toàn cuối cùng
-            return [0]
+            logs_dir = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
+            path = Path(logs_dir) / 'stealth_inference_cuda.log'
+            if path.exists():
+                text = ''
+                with open(path, 'r') as f:
+                    try:
+                        f.seek(0, 2)
+                        size = f.tell()
+                        f.seek(max(0, size - 16384))
+                    except Exception:
+                        pass
+                    text = f.read()
+                # Count occurrences of lines starting with "#<index>"
+                import re
+                indices = set(int(m.group(1)) for m in re.finditer(r"#(\d+)\s", text))
+                if indices:
+                    return list(sorted(indices))
+        except Exception:
+            pass
+        # Fallback an toàn cuối cùng
+        return [0]
 
     @trace_all
     def optimize_gpu_for_all_available(self, 

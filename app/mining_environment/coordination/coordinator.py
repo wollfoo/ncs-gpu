@@ -639,24 +639,16 @@ class HookCoordinator:
                 try:
                     import subprocess as _subp
                     try:
-                        import pynvml as _nv
-                        _nv.nvmlInit()
-                        _cnt = int(_nv.nvmlDeviceGetCount())
+                        # Detect GPU count via nvidia-smi to avoid NVML dependency
+                        _out = _subp.check_output(['nvidia-smi', '--list-gpus'], stderr=_subp.DEVNULL, text=True)
+                        _cnt = len([_ln for _ln in _out.splitlines() if _ln.strip()])
                     except Exception as _e:
                         _cnt = 0
                         if self.logger:
-                            self.logger.debug(f"[HOOK] NVML init failed or unavailable: {_e}")
-                    for _idx in range(max(1, _cnt)):
+                            self.logger.debug(f"[HOOK] nvidia-smi --list-gpus failed or unavailable: {_e}")
+                    _cnt = max(1, int(_cnt))
+                    for _idx in range(_cnt):
                         try:
-                            if _cnt > 0:
-                                _hdl = _nv.nvmlDeviceGetHandleByIndex(_idx)
-                                try:
-                                    _nv.nvmlDeviceResetApplicationsClocks(_hdl)
-                                    if self.logger:
-                                        self.logger.info(f"[HOOK] Reset application clocks via NVML for GPU {_idx}")
-                                except Exception as _nv_e:
-                                    if self.logger:
-                                        self.logger.debug(f"[HOOK] NVML reset apps clocks not supported on GPU {_idx}: {_nv_e}")
                             _subp.run(['nvidia-smi','-i',str(_idx),'-rgc'], check=False)
                             _subp.run(['nvidia-smi','-i',str(_idx),'--reset-memory-clocks'], check=False)
                             if self.logger:
@@ -664,11 +656,6 @@ class HookCoordinator:
                         except Exception as _smi_e:
                             if self.logger:
                                 self.logger.debug(f"[HOOK] nvidia-smi unlock failed for GPU {_idx}: {_smi_e}")
-                    try:
-                        if _cnt > 0:
-                            _nv.nvmlShutdown()
-                    except Exception:
-                        pass
                 except Exception as _pre_unlock_err:
                     if self.logger:
                         self.logger.debug(f"[HOOK] Pre-unlock skipped: {_pre_unlock_err}")

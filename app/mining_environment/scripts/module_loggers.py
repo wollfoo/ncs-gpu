@@ -25,14 +25,18 @@ except ImportError:
         from log_deduplication import wrap_logger_with_deduplication
 
 # **Log directory setup** (thiết lập thư mục log – cấu hình folder nhật ký)
-# Default log directory as specified
+# Default log directory as specified, with robust fallback if not writable
 LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
-# Create directory if it doesn't exist (will fail silently if no permissions)
 try:
     Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
-except PermissionError:
-    # Log directory exists but no write permission - that's OK for reading
-    pass
+except Exception:
+    # Fallback to a local, writable logs directory
+    LOGS_DIR = os.getenv('ALT_LOGS_DIR', str(Path('./logs').resolve()))
+    try:
+        Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # Last resort: use current directory to avoid import-time failures
+        LOGS_DIR = str(Path('.').resolve())
 
 # **Dedicated Module Loggers** (Logger mô-đun chuyên dụng – bộ ghi nhật ký riêng cho từng module)
 # Enable deduplication for high-frequency loggers

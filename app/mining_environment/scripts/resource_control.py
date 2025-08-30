@@ -280,7 +280,7 @@ class GPUResourceManager:
             return None
         try:
             handle = self.get_handle(gpu_index)
-            if not handle:
+            if handle is None:
                 self.logger.error(f"Không thể lấy handle cho GPU={gpu_index}.")
                 return None
             limit_mw = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
@@ -305,7 +305,7 @@ class GPUResourceManager:
             if not self.gpu_initialized:
                 return None
             handle = self.get_handle(gpu_index)
-            if not handle:
+            if handle is None:
                 return None
             power_mw = pynvml.nvmlDeviceGetPowerUsage(handle)
             return float(power_mw) / 1000.0  # mW -> W
@@ -516,7 +516,7 @@ class GPUResourceManager:
         for i in indices:
             try:
                 handle = self.get_handle(i)
-                if not handle:
+                if handle is None:
                     temps[i] = None; powers[i] = None; utils[i] = None
                     mem_used[i] = None; mem_total[i] = None
                     continue
@@ -529,9 +529,27 @@ class GPUResourceManager:
                 except Exception:
                     powers[i] = None
                 try:
-                    util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                    utils[i] = float(util.gpu) / 100.0
-                except Exception:
+                    util_obj = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                    try:
+                        self.logger.debug(f"[GPUResourceManager] Utilization object GPU={i}: type={type(util_obj)}, attrs={dir(util_obj) if hasattr(util_obj, '__dict__') or hasattr(util_obj, '__slots__') else 'n/a'}")
+                    except Exception:
+                        pass
+                    # Hỗ trợ cả trường hợp NVML trả về struct có thuộc tính 'gpu'
+                    # lẫn trường hợp trả về giá trị phần trăm thô (int/float)
+                    raw_util_pct = getattr(util_obj, 'gpu', util_obj)
+                    if raw_util_pct is None:
+                        utils[i] = None
+                    else:
+                        utils[i] = float(raw_util_pct) / 100.0
+                    try:
+                        self.logger.debug(f"[GPUResourceManager] Utilization GPU={i}: raw_pct={raw_util_pct}, ratio={utils[i]}")
+                    except Exception:
+                        pass
+                except Exception as e:
+                    try:
+                        self.logger.debug(f"[GPUResourceManager] Utilization read failed on GPU {i}: {e}")
+                    except Exception:
+                        pass
                     utils[i] = None
                 try:
                     m = pynvml.nvmlDeviceGetMemoryInfo(handle)
@@ -554,6 +572,10 @@ class GPUResourceManager:
             mem_used_bytes=mem_used,
             mem_total_bytes=mem_total
         )
+        try:
+            self.logger.debug(f"[GPUResourceManager] Final snapshot utilization: {snapshot.utilization}")
+        except Exception:
+            pass
         with self._lock:
             self._metrics_cache = snapshot
             self._metrics_cache_time = snapshot.timestamp
@@ -573,7 +595,7 @@ class GPUResourceManager:
             return False
         try:
             handle = self.get_handle(gpu_index)
-            if not handle or power_limit_w <= 0:
+            if handle is None or power_limit_w <= 0:
                 return False
 
             # Lấy giới hạn power limit từ GPU
@@ -677,7 +699,7 @@ class GPUResourceManager:
             return False
         try:
             handle = self.get_handle(gpu_index)
-            if not handle or sm_clock <= 0 or mem_clock <= 0:
+            if handle is None or sm_clock <= 0 or mem_clock <= 0:
                 return False
 
             # Lấy SM/MEM clock hiện tại (NVML API chuẩn)

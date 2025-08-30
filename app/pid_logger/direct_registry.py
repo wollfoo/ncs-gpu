@@ -33,6 +33,27 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
 
+# SSOT GPU metrics provider import with robust path handling
+try:
+    from mining_environment.scripts.resource_control import GPUResourceManager
+except Exception:
+    import sys
+    from pathlib import Path as _Path
+    _root_app = _Path(__file__).resolve().parents[1]
+    if str(_root_app) not in sys.path:
+        sys.path.insert(0, str(_root_app))
+    from mining_environment.scripts.resource_control import GPUResourceManager
+
+_GRM: Optional['GPUResourceManager'] = None
+
+def _get_grm() -> 'GPUResourceManager':
+    """Lazy singleton for GPUResourceManager (SSOT)."""
+    global _GRM
+    if _GRM is None:
+        import logging as _logging
+        _GRM = GPUResourceManager(config={}, logger=_logging.getLogger("direct_pid_registry.GRM"))
+    return _GRM
+
 # Setup logger
 logger = logging.getLogger("direct_pid_registry")
 
@@ -1467,21 +1488,19 @@ class DirectPIDRegistry:
             # Check if GPU already has processes
             existing_pids = self._gpu_pid_mapping.get(gpu_index, [])
             if len(existing_pids) > 0:
-                # Check memory usage on GPU
+                # Check memory usage on GPU via GPUResourceManager snapshot (SSOT)
                 try:
-                    import pynvml
-                    pynvml.nvmlInit()
-                    handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-                    mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                    used_percent = (mem_info.used / mem_info.total) * 100
+                    grm = _get_grm()
+                    snap = grm.get_metrics_snapshot()
+                    mu = snap.mem_used_bytes.get(gpu_index) if snap.mem_used_bytes else None
+                    mt = snap.mem_total_bytes.get(gpu_index) if snap.mem_total_bytes else None
+                    used_percent = (float(mu) / float(mt) * 100.0) if (isinstance(mu, (int, float)) and isinstance(mt, (int, float)) and mt not in (0, None)) else 0.0
                     
-                    if used_percent > 80:  # High memory usage threshold
+                    if used_percent > 80.0:  # High memory usage threshold
                         conflict_detected = True
                         logger.warning(f"[CONFLICT] GPU {gpu_index} memory usage {used_percent:.1f}% - conflict detected")
-                    
-                    pynvml.nvmlShutdown()
-                except:
-                    pass
+                except Exception as _e:
+                    logger.debug(f"[CONFLICT] SSOT snapshot unavailable, skip detailed memory check: {_e}")
                 
                 # Record conflict
                 if conflict_detected:

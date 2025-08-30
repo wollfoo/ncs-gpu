@@ -293,40 +293,25 @@ def configure_system(system_params, logger):
 def reset_gpu_state(logger):
     """
     **Reset GPU state to normal** (đặt lại trạng thái GPU về bình thường – mở khóa xung/điện nếu có)
-    - Gọi NVML để reset Application Clocks
-    - Gọi nvidia-smi để bỏ lock graphics/memory clocks
+    - Gọi nvidia-smi để bỏ lock graphics/memory clocks (không dùng NVML trực tiếp)
     Thực thi best-effort, bỏ qua lỗi nếu không hỗ trợ.
     """
     try:
         import subprocess
+        # Phát hiện số GPU qua nvidia-smi; nếu không có, vẫn thử GPU 0 để best-effort
         try:
-            import pynvml
-            pynvml.nvmlInit()
-            count = int(pynvml.nvmlDeviceGetCount())
-        except Exception as e:
+            count = detect_gpu_count(logger)
+        except Exception:
             count = 0
-            logger.warning(f"⚠️ [GPU-RESET] NVML init failed or unavailable: {e}. Falling back to nvidia-smi only")
-        # NVML: reset application clocks
-        for idx in range(max(1, count)):
+        total = max(1, int(count) if isinstance(count, int) else 0)
+        for idx in range(total):
             try:
-                if count > 0:
-                    handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
-                    try:
-                        pynvml.nvmlDeviceResetApplicationsClocks(handle)
-                        logger.info(f"[GPU-RESET] Reset application clocks via NVML for GPU {idx}")
-                    except Exception as nvml_e:
-                        logger.debug(f"[GPU-RESET] NVML reset apps clocks not supported for GPU {idx}: {nvml_e}")
                 # nvidia-smi: unlock graphics/memory clocks
                 subprocess.run(['nvidia-smi','-i',str(idx),'-rgc'], check=False)
                 subprocess.run(['nvidia-smi','-i',str(idx),'--reset-memory-clocks'], check=False)
                 logger.info(f"[GPU-RESET] Unlocked clocks via nvidia-smi for GPU {idx}")
             except Exception as smi_e:
                 logger.debug(f"[GPU-RESET] nvidia-smi unlock failed for GPU {idx}: {smi_e}")
-        try:
-            if count > 0:
-                pynvml.nvmlShutdown()
-        except Exception:
-            pass
     except Exception as e:
         logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
 

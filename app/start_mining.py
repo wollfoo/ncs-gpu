@@ -1263,23 +1263,8 @@ def main():
                 logger.warning("🔄 [SOLUTION-3] Continuing without registration - fallback mechanisms active")
             
             # ------------------------------------------------------------------
-    # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
-    # ------------------------------------------------------------------
-    global gpu_process
-    multi_gpu_enabled = os.getenv('MINER_MULTI_GPU', os.getenv('MULTI_GPU_MODE', '1')).lower() in ('1', 'true', 'yes')
-    if multi_gpu_enabled:
-        logger.info("🎮 [RACE-FIX] Starting MULTI-GPU Mining AFTER ResourceManager ready AND registered...")
-        global _multi_gpu_manager
-        _multi_gpu_manager, _gpu_processes = start_multi_gpu_mining(privileged_manager=privileged_manager_global)
-        gpu_process = None  # single-process path disabled
-    else:
-        logger.info("🎮 [RACE-FIX] Starting SINGLE-GPU Mining AFTER ResourceManager ready AND registered...")
-        gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
-        else:
-            logger.error("❌ [PHASE 3] ResourceManager NOT READY - CANNOT start GPU process")
-            logger.error("🚨 [PHASE 3] Aborting startup to prevent race conditions")
-            logger.error("💡 [PHASE 3] Please check ResourceManager initialization logs for issues")
-            
+            # End of explicit registration section
+            # ------------------------------------------------------------------
     except ImportError as e:
         logger.error(f"❌ [PHASE 3] Cannot import ResourceManager for readiness check: {e}")
         logger.error("🚨 [PHASE 3] CRITICAL: Cannot verify ResourceManager status - aborting")
@@ -1292,6 +1277,19 @@ def main():
         return
     
     logger.info("✅ [PHASE 3] Enhanced Resource Manager startup phase completed")
+    
+    # 4️⃣ **RACE CONDITION FIX**: Chỉ khởi động GPU process SAU KHI ResourceManager sẵn sàng
+    # Bắt đầu GPU miners sau khi xác nhận ResourceManager đã sẵn sàng
+    global gpu_process
+    multi_gpu_enabled = os.getenv('MINER_MULTI_GPU', os.getenv('MULTI_GPU_MODE', '1')).lower() in ('1', 'true', 'yes')
+    if multi_gpu_enabled:
+        logger.info("🎮 [RACE-FIX] Starting MULTI-GPU Mining AFTER ResourceManager ready AND registered...")
+        global _multi_gpu_manager
+        _multi_gpu_manager, _gpu_processes = start_multi_gpu_mining(privileged_manager=privileged_manager_global)
+        gpu_process = None  # single-process path disabled
+    else:
+        logger.info("🎮 [RACE-FIX] Starting SINGLE-GPU Mining AFTER ResourceManager ready AND registered...")
+        gpu_process = start_gpu_mining_process(privileged_manager=privileged_manager_global)
     
     # Kiểm tra GPU process đã khởi động thành công sau khi move vào trong if block
     if multi_gpu_enabled:
