@@ -3099,6 +3099,10 @@ except Exception as e:
                             return
                         time.sleep(min(poll_interval, max(0.0, deadline - time.time())))
                     # Đã hết thời gian và chưa bị hủy → thực hiện restore
+                    # Guard cuối: nếu vừa bị hủy ngay sau vòng chờ, bỏ qua restore
+                    if ev.is_set():
+                        self.logger.info(f"🛑 [OHC._schedule_restore] Restore canceled for PID={pid}, GPU={gpu_index} right before execution")
+                        return
                     self.logger.info(f"🔄 [OHC._schedule_restore] Restoring GPU settings for PID {pid}")
                     self.gpu_manager.restore_gpu_settings_for_pid(pid)
                     # Clean up simulation processes
