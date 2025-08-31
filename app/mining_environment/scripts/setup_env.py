@@ -717,6 +717,13 @@ def setup():
     # ---------------------------------------------------
     _sanitize_env()
 
+    # Ensure LOGS_DIR default exists before logger initialization
+    try:
+        if os.getenv('LOGS_DIR') in (None, ''):
+            os.environ['LOGS_DIR'] = '/app/mining_environment/logs'
+    except Exception:
+        pass
+
     CONFIG_DIR = os.getenv('CONFIG_DIR', '/app/mining_environment/config')
     LOGS_DIR = os.getenv('LOGS_DIR', '/app/mining_environment/logs')
     os.makedirs(LOGS_DIR, exist_ok=True)
@@ -787,6 +794,9 @@ def setup():
     # Safety defaults for power/utilization/clock behavior
     _set_default_env('ALLOW_UTIL_UNDER_80', '0')
     _set_default_env('ALLOW_CLOCK_LOCK', '1')  # Enable controlled clock lock by default
+    _set_default_env('CLOCK_LOCK_VERIFY_WINDOW_SEC', '60')  # time window for verification (sec)
+    _set_default_env('CLOCK_LOCK_TEMP_MAX', '70')           # max allowable temp (C)
+    _set_default_env('CLOCK_LOCK_MIN_INCREASE_PCT', '5')    # min hashrate increase (%) required
     _set_default_env('GPU_PRE_UNLOCK', '1')
 
     # Closed-loop defaults (enable and tune for stability) – Inference default profile

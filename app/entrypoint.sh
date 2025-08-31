@@ -22,8 +22,6 @@ SCRIPT_DIR=${SCRIPT_DIR:-"/app/mining_environment/scripts"}
 CONFIG_DIR=${CONFIG_DIR:-"/app/mining_environment/config"}
 LOG_DIR=${LOG_DIR:-${LOGS_DIR:-"/app/mining_environment/logs"}}
 
-# All CPU-related paths removed - GPU-only operation
-
 # ===== ĐỊNH NGHĨA CÁC HÀM CƠ BẢN TRƯỚC =====
 
 log() {

@@ -241,6 +241,188 @@ class GPUResourceManager:
             self.gpu_initialized = False
             return False
 
+    def verify_clock_lock_conditions(
+        self,
+        pid: int,
+        gpu_index: int,
+        window_sec: Optional[int] = None,
+        temp_max: Optional[float] = None,
+        min_increase_pct: Optional[float] = None,
+    ) -> bool:
+        """
+        Verify whether conditions are safe to lock GPU clocks for a given PID/GPU.
+
+        Checks recent mining output logs within a time window to measure hashrate trend,
+        normalizes units (H/s, kH/s, MH/s, GH/s, TH/s), computes percentage increase,
+        and confirms current GPU temperature is below a configurable maximum.
+
+        Env vars:
+        - CLOCK_LOCK_VERIFY_WINDOW_SEC: time window for log verification (default: 60)
+        - CLOCK_LOCK_TEMP_MAX: max GPU temp allowed for lock (default: 70°C)
+        - CLOCK_LOCK_MIN_INCREASE_PCT: min % increase in hashrate over window (default: 5%)
+        - LOGS_DIR: custom logs directory (default resolves to mining_environment/logs)
+        """
+        try:
+            # Resolve parameters from env if not provided
+            try:
+                if window_sec is None:
+                    window_sec = int(str(os.getenv('CLOCK_LOCK_VERIFY_WINDOW_SEC', '60')))
+            except Exception:
+                window_sec = 60
+            try:
+                if temp_max is None:
+                    temp_max = float(str(os.getenv('CLOCK_LOCK_TEMP_MAX', '70')))
+            except Exception:
+                temp_max = 70.0
+            try:
+                if min_increase_pct is None:
+                    min_increase_pct = float(str(os.getenv('CLOCK_LOCK_MIN_INCREASE_PCT', '5')))
+            except Exception:
+                min_increase_pct = 5.0
+
+            # Determine logs directory and file to read
+            try:
+                logs_dir = os.getenv('LOGS_DIR')
+                if not logs_dir or logs_dir.strip() == '':
+                    # Default to app/mining_environment/logs relative to this file
+                    logs_dir = str(Path(__file__).resolve().parent.parent / 'logs')
+            except Exception:
+                logs_dir = str(Path(__file__).resolve().parent.parent / 'logs')
+            log_path = Path(logs_dir) / 'pid_gpu.log'
+
+            if not log_path.exists():
+                self.logger.info(f"[RC.verify] pid_gpu.log not found at {log_path} → cannot verify; skip lock")
+                return False
+
+            now_ts = time.time()
+            window_start = now_ts - float(max(1, int(window_sec)))
+
+            def _parse_hashrate(text: str) -> Optional[float]:
+                """Extract and normalize hashrate in H/s from a text line. Returns None if not found."""
+                try:
+                    # Look for patterns like: 125.4 MH/s, 1.2 GH/s, 950 kH/s, 500 H/s
+                    m = re.search(r"(?i)(\d+(?:[\.,]\d+)?)\s*([KMGT]?)[Hh]\s*/\s*s", text)
+                    if not m:
+                        return None
+                    num_s = m.group(1).replace(',', '.')
+                    prefix = m.group(2).upper() if m.group(2) else ''
+                    base = float(num_s)
+                    mult = 1.0
+                    if prefix == 'K':
+                        mult = 1e3
+                    elif prefix == 'M':
+                        mult = 1e6
+                    elif prefix == 'G':
+                        mult = 1e9
+                    elif prefix == 'T':
+                        mult = 1e12
+                    return base * mult
+                except Exception:
+                    return None
+
+            hashrates: List[tuple] = []  # (ts, rate_hs)
+
+            # Efficient read: keep a bounded deque of recent lines to limit memory
+            from collections import deque as _deque
+            recent_lines = _deque(maxlen=5000)
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        recent_lines.append(line)
+            except Exception as e:
+                self.logger.warning(f"[RC.verify] Failed reading {log_path}: {e}")
+                return False
+
+            # Parse both JSON and raw formats
+            for line in list(recent_lines):
+                line = line.strip()
+                if not line:
+                    continue
+
+                parsed_ts: Optional[float] = None
+                parsed_pid: Optional[int] = None
+                text_payload: Optional[str] = None
+
+                # Attempt JSON first
+                try:
+                    obj = json.loads(line)
+                    # JSON structured runtime output has 'output' field
+                    if isinstance(obj, dict) and 'output' in obj:
+                        parsed_ts = float(obj.get('timestamp', now_ts))
+                        parsed_pid = int(obj.get('pid')) if 'pid' in obj else None
+                        text_payload = str(obj.get('output', ''))
+                except Exception:
+                    obj = None
+
+                if parsed_ts is None or parsed_pid is None or text_payload is None:
+                    # Fallback: raw text format like: [ts] [Runtime: xx] [PID: 1234] actual_output
+                    try:
+                        m = re.match(r"^\[(?P<ts>\d{4}-\d{2}-\d{2} [0-9:\.]+)\]\s+\[Runtime:[^\]]+\]\s+\[PID:\s*(?P<pid>\d+)\]\s+(?P<out>.*)$", line)
+                        if m:
+                            ts_str = m.group('ts')
+                            parsed_pid = int(m.group('pid'))
+                            text_payload = m.group('out')
+                            try:
+                                parsed_ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                            except ValueError:
+                                parsed_ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                    except Exception:
+                        parsed_ts = None
+
+                if parsed_ts is None or parsed_pid is None or text_payload is None:
+                    continue
+                if parsed_pid != int(pid):
+                    continue
+                if parsed_ts < window_start:
+                    continue
+
+                rate = _parse_hashrate(text_payload)
+                if rate is not None and rate > 0:
+                    hashrates.append((parsed_ts, rate))
+
+            if len(hashrates) < 2:
+                self.logger.info(f"[RC.verify] Not enough hashrate samples in last {window_sec}s for PID={pid} → skip lock")
+                return False
+
+            # Sort by timestamp and compute increase percentage (first → last)
+            hashrates.sort(key=lambda x: x[0])
+            first_ts, first_rate = hashrates[0]
+            last_ts, last_rate = hashrates[-1]
+
+            if first_rate <= 0:
+                self.logger.info(f"[RC.verify] Baseline hashrate non-positive ({first_rate}) → skip lock")
+                return False
+
+            increase_pct = (last_rate - first_rate) / max(1e-9, first_rate) * 100.0
+
+            # Temperature safety
+            try:
+                temp_now = self.get_gpu_temperature(gpu_index)
+            except Exception:
+                temp_now = None
+
+            temp_ok = True
+            if temp_now is not None and temp_max is not None:
+                temp_ok = float(temp_now) <= float(temp_max)
+
+            ok = (increase_pct >= float(min_increase_pct)) and temp_ok
+            try:
+                self.logger.info(
+                    f"[RC.verify] PID={pid} GPU={gpu_index} | window={window_sec}s | samples={len(hashrates)} | "
+                    f"first={first_rate:.3g} H/s → last={last_rate:.3g} H/s (Δ={increase_pct:.1f}%) | "
+                    f"temp={temp_now}°C ≤ {temp_max}°C? {temp_ok} | result={ok}"
+                )
+            except Exception:
+                pass
+            return ok
+        except Exception as e:
+            self.logger.error(f"[RC.verify] Exception during verification: {e}")
+            try:
+                self.logger.debug(traceback.format_exc())
+            except Exception:
+                pass
+            return False
+
     def is_nvml_initialized(self) -> bool:
         """
         Kiểm tra NVML đã được khởi tạo hay chưa.
@@ -728,7 +910,7 @@ class GPUResourceManager:
 
             # Guard: chỉ cho phép lock xung khi ALLOW_CLOCK_LOCK=1
             try:
-                allow_clock_lock = os.getenv('ALLOW_CLOCK_LOCK', '0').lower() in ('1','true','yes')
+                allow_clock_lock = os.getenv('ALLOW_CLOCK_LOCK', '1').lower() in ('1','true','yes')
             except Exception:
                 allow_clock_lock = False
             if not allow_clock_lock:
@@ -2376,8 +2558,62 @@ class OptimizedHardwareController:
             except Exception:
                 pass
 
+        # Determine success and optionally attempt clock lock upon verification
+        success_final = abs(achieved - target) <= max(1e-3, tolerance)
+
+        # Conditional clock lock: only when target reached, not canceled, and verification passes
+        try:
+            # Respect ALLOW_CLOCK_LOCK (set_gpu_clocks also guards, but we pre-check to reduce noise)
+            allow_clock_lock = str(os.getenv('ALLOW_CLOCK_LOCK', '1')).lower() in ('1', 'true', 'yes')
+        except Exception:
+            allow_clock_lock = False
+
+        if success_final and allow_clock_lock and not loop_cancel_event.is_set():
+            try:
+                verify_window = None
+                try:
+                    env_w = os.getenv('CLOCK_LOCK_VERIFY_WINDOW_SEC')
+                    if env_w not in (None, ''):
+                        verify_window = int(env_w)
+                except Exception:
+                    verify_window = None
+
+                verified = self.gpu_manager.verify_clock_lock_conditions(
+                    pid=pid,
+                    gpu_index=gpu_index,
+                    window_sec=verify_window
+                )
+                if verified:
+                    # Use current clocks (last applied) as lock targets; allow override via env
+                    try:
+                        sm_override = os.getenv('LOCK_TARGET_SM_CLOCK')
+                        mem_override = os.getenv('LOCK_TARGET_MEM_CLOCK')
+                        lock_sm = int(sm_override) if sm_override not in (None, '') else int(current_sm_clock)
+                        lock_mem = int(mem_override) if mem_override not in (None, '') else int(current_mem_clock)
+                    except Exception:
+                        lock_sm, lock_mem = int(current_sm_clock), int(current_mem_clock)
+
+                    if self.gpu_manager.set_gpu_clocks(pid, gpu_index, lock_sm, lock_mem):
+                        try:
+                            self.logger.info(
+                                f"🔒 [OHC.set_target_utilization] Clocks locked after verification | GPU={gpu_index} "
+                                f"SM={lock_sm}MHz, MEM={lock_mem}MHz, PID={pid}"
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        self.logger.info(
+                            f"[OHC.set_target_utilization] Clock lock request failed/skipped | GPU={gpu_index}, PID={pid}"
+                        )
+                else:
+                    self.logger.info(
+                        f"[OHC.set_target_utilization] Verification failed → skipping clock lock | GPU={gpu_index}, PID={pid}"
+                    )
+            except Exception as e:
+                self.logger.warning(f"[OHC.set_target_utilization] Clock lock verification step errored: {e}")
+
         return {
-            'success': abs(achieved - target) <= max(1e-3, tolerance),
+            'success': success_final,
             'gpu_index': gpu_index,
             'target': target,
             'achieved': achieved,
