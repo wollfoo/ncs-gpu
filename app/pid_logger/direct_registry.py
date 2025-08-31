@@ -28,7 +28,7 @@ import mmap
 import pickle
 import heapq
 from pathlib import Path
-from typing import Dict, List, Callable, Optional, Any, Tuple
+from typing import Dict, List, Callable, Optional, Any, Tuple, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
@@ -408,6 +408,10 @@ class DirectPIDRegistry:
         # **ENHANCED: PID Lifecycle Tracker** (theo dõi vòng đời PID)
         self._lifecycle_tracker: Dict[int, List[Tuple[ProcessState, float]]] = {}  # PID -> [(state, timestamp)]
         self._state_durations: Dict[ProcessState, List[float]] = defaultdict(list)  # State -> [durations]
+        
+        # **UNREGISTER guards** (bộ bảo vệ cho hủy đăng ký) để giảm spam log và race
+        self._unregistering_pids: Set[int] = set()
+        self._pid_last_unreg_ts: Dict[int, float] = {}
         
         # **SOLUTION 1: Direct ResourceManager Reference** (tham chiếu ResourceManager trực tiếp)
         self._resource_manager = None  # Will be set via register_resource_manager()
@@ -1300,7 +1304,7 @@ class DirectPIDRegistry:
         
         Args:
             pid: Process ID cần hủy đăng ký
-            
+        
         Returns:
             bool: True nếu deregistration thành công
         """
@@ -1318,8 +1322,106 @@ class DirectPIDRegistry:
             logger.error(f"❌ Failed to deregister process PID {pid}: {e}")
             return False
     
-    # ==================== ENHANCED FEATURES ====================
-    
+    def unregister_process(self, pid: int) -> bool:
+        """
+        Idempotent unregister API – dọn dẹp toàn diện mọi dữ liệu liên quan đến PID.
+        Hành vi:
+        - Thread-safe và idempotent (gọi lặp lại vẫn trả True, không lỗi)
+        - Xóa khỏi registry, ánh xạ GPU, shared memory, và file-based registry
+        - Cập nhật lifecycle TERMINATED và thông báo observers ngay lập tức
+        - Tích hợp mềm với ResourceManager nếu có API phù hợp (không bịa API)
+        """
+        start_ts = time.time()
+        # Guard để tránh unregister trùng lặp đồng thời
+        with self._lock:
+            if pid in self._unregistering_pids:
+                last = self._pid_last_unreg_ts.get(pid, 0.0)
+                if start_ts - last > 1.0:
+                    logger.debug(f"[UNREGISTER] PID {pid} unregistration already in progress")
+                    self._pid_last_unreg_ts[pid] = start_ts
+                return True
+            self._unregistering_pids.add(pid)
+        try:
+            process_info: Optional[ProcessInfo] = None
+            with self._lock:
+                process_info = self._registry.get(pid)
+                if process_info:
+                    process_info.is_active = False
+                    process_info.last_seen = start_ts
+                    try:
+                        if process_info.metadata is None:
+                            process_info.metadata = {}
+                        process_info.metadata['unregistered'] = True
+                        process_info.metadata['lifecycle_state'] = ProcessState.TERMINATED.value
+                    except Exception:
+                        pass
+                # Lifecycle tracking – ghi nhận TERMINATED
+                try:
+                    self.track_lifecycle_transition(pid, ProcessState.TERMINATED)
+                except Exception:
+                    logger.debug(f"[UNREGISTER] Lifecycle tracking failed for PID {pid}")
+
+                # Xóa ánh xạ GPU
+                try:
+                    if pid in self._pid_gpu_mapping:
+                        gpu_index = self._pid_gpu_mapping.pop(pid)
+                        if gpu_index in self._gpu_pid_mapping and pid in self._gpu_pid_mapping[gpu_index]:
+                            self._gpu_pid_mapping[gpu_index].remove(pid)
+                except Exception as map_err:
+                    logger.debug(f"[UNREGISTER] GPU mapping cleanup failed for PID {pid}: {map_err}")
+
+                # Xóa khỏi registry
+                try:
+                    if pid in self._registry:
+                        del self._registry[pid]
+                    self._stats['active_processes'] = len([p for p in self._registry.values() if p.is_active])
+                except Exception as reg_err:
+                    logger.debug(f"[UNREGISTER] Registry removal failed for PID {pid}: {reg_err}")
+
+            # Xóa khỏi shared memory và file registry (ngoài lock chính)
+            shm_ok = self.remove_from_shared_memory(pid)
+            file_ok = self._delete_pid_file(pid)
+
+            # Notify observers
+            try:
+                if process_info is None:
+                    process_info = ProcessInfo(
+                        pid=pid,
+                        process_type="gpu",
+                        process_obj=None,
+                        process_name="unknown",
+                        registered_at=start_ts,
+                        start_time=start_ts,
+                        is_active=False,
+                        metadata={'unregistered': True, 'lifecycle_state': ProcessState.TERMINATED.value}
+                    )
+                self._notify_observers(process_info)
+            except Exception as obs_err:
+                logger.debug(f"[UNREGISTER] Observer notification failed for PID {pid}: {obs_err}")
+
+            # Tích hợp mềm với ResourceManager nếu có
+            try:
+                rm = self._try_get_resource_manager()
+                if rm is not None:
+                    if hasattr(rm, 'on_process_unregistered'):
+                        rm.on_process_unregistered(pid)
+                    elif hasattr(rm, 'cleanup_pid'):
+                        rm.cleanup_pid(pid)
+                    elif hasattr(rm, 'forget_pid'):
+                        rm.forget_pid(pid)
+            except Exception as rm_err:
+                logger.debug(f"[UNREGISTER] Optional ResourceManager cleanup failed for PID {pid}: {rm_err}")
+
+            logger.info(f"🧹 [UNREGISTER] Completed cleanup for PID {pid} (shm={shm_ok}, file={file_ok})")
+            return True
+        except Exception as e:
+            logger.error(f"❌ [UNREGISTER] Failed to unregister PID {pid}: {e}")
+            return False
+        finally:
+            with self._lock:
+                self._unregistering_pids.discard(pid)
+                self._pid_last_unreg_ts[pid] = time.time()
+
     def _setup_shared_memory(self):
         """
         Setup shared memory IPC cho cross-process communication.
@@ -1382,6 +1484,60 @@ class DirectPIDRegistry:
                 
         except Exception as e:
             logger.error(f"[SHM] Failed to write PID {pid}: {e}")
+            return False
+    
+    def remove_from_shared_memory(self, pid: int) -> bool:
+        """
+        Remove PID data from shared memory (idempotent).
+        """
+        if not self._shm_enabled:
+            return False
+        try:
+            with self._shm_lock:
+                shm_file = self._shm_path / "registry.shm"
+                if not shm_file.exists():
+                    return True
+                with open(shm_file, 'rb') as f:
+                    shm_data = pickle.load(f)
+                # Remove entries idempotently
+                try:
+                    if pid in shm_data.get('pids', []):
+                        shm_data['pids'] = [p for p in shm_data['pids'] if p != pid]
+                except Exception:
+                    pass
+                try:
+                    if 'metadata' in shm_data and str(pid) in shm_data['metadata']:
+                        shm_data['metadata'].pop(str(pid), None)
+                except Exception:
+                    pass
+                shm_data['timestamp'] = time.time()
+                with open(shm_file, 'wb') as f:
+                    pickle.dump(shm_data, f)
+                logger.debug(f"[SHM] Removed PID {pid} from shared memory")
+                return True
+        except Exception as e:
+            logger.debug(f"[SHM] Failed to remove PID {pid} from shared memory: {e}")
+            return False
+
+    def _delete_pid_file(self, pid: int) -> bool:
+        """
+        Delete PID registry file if exists (idempotent).
+        """
+        try:
+            if not _ensure_file_registry_dir():
+                # Nếu không tạo được dir, vẫn coi là xong để không chặn unregister
+                return False
+            file_path = RegistryConfig.FILE_REGISTRY_DIR / f"{RegistryConfig.REGISTRY_FILE_PREFIX}{pid}{RegistryConfig.REGISTRY_FILE_SUFFIX}"
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                    logger.debug(f"[FILE-REGISTRY] Deleted file for PID {pid}: {file_path.name}")
+                except Exception as e:
+                    logger.debug(f"[FILE-REGISTRY] Failed to delete file for PID {pid}: {e}")
+                    return False
+            return True
+        except Exception as e:
+            logger.debug(f"[FILE-REGISTRY] Exception during delete for PID {pid}: {e}")
             return False
     
     def read_from_shared_memory(self) -> Dict[str, Any]:
