@@ -1,211 +1,247 @@
-# RÀ SOÁT & TÁI CẤU TRÚC ORCHESTRATION MULTI-GPU (ổn định ánh xạ PID↔GPU, tránh tối ưu nhầm GPU)
+
+## PHÂN TÍCH TỤT HASH SAU NHIỀU LẦN RESTART MINING
 
 ## ✅ Language Rules
-- **MANDATORY**: Trả lời **tiếng Việt**.
-- **WITH EXPLANATION**: Mọi thuật ngữ **tiếng Anh** phải kèm mô tả tiếng Việt.
-- **Standard Syntax**: **[English Term]** (mô tả tiếng Việt – chức năng/mục đích)
+
+* **BẮT BUỘC**: Trả lời **bằng tiếng Việt**.
+* **KÈM GIẢI THÍCH**: Mỗi thuật ngữ **English** phải có mô tả tiếng Việt ngay sau đó.
+* **Cú pháp chuẩn khi nhắc đến thuật ngữ English**:
+  **\[English Term]** (mô tả tiếng Việt — chức năng/mục đích)
 
 ---
 
-## 🗂️ Bối Cảnh Kỹ Thuật
-- Toàn bộ **[codebase]** (mã nguồn) trong: `/app`
-- **[Docker image]** (ảnh Docker – gói chạy): build từ `Dockerfile`, tag `api-models:latest`
-- **Luồng logic chính**:
+## 🗂️ Bối cảnh kỹ thuật
+
+* **Codebase** (mã nguồn dự án): toàn bộ nằm trong thư mục `/app`.
+* **Docker image** (ảnh Docker — gói môi trường chạy): build từ `Dockerfile`, tag `api-models:latest` (nhãn phiên bản — `latest`).
+
+**Luồng logic chính** (main execution flow — chuỗi thực thi chính):
+
 ```text
-  [app/start_mining.py] → [stealth_inference_cuda.py] → [inference-cuda]
-  → [coordinator.py] → [direct_registry.py]
-  → [resource_manager.py] → [cloak_strategies.py]
-  → (trong resource_manager.py, sau cloaking) → [gpu_optimization_orchestrator.py] → [resource_control.py]
-  → [app/start_mining.py]
+[app/start_mining.py] → [stealth_inference_cuda.py] → [inference-cuda]
+→ [coordinator.py] → [direct_registry.py]
+→ [resource_manager.py] → [cloak_strategies.py]
+→ (trong resource_manager.py, sau cloaking) → [gpu_optimization_orchestrator.py] → [resource_control.py]
+→ [app/start_mining.py]
 ```
 
-* **Nguồn log để đối chiếu** (evidence):
+**Mẫu log quan sát ban đầu** (log — nhật ký hệ thống):
 
-  * `/app/mining_debug.log`
-  * `/app/mining_environment/logs` (thư mục chứa log con, ví dụ **\[GPUOptimizationOrchestrator.log]** (nhật ký bộ điều phối tối ưu GPU – hoạt động/target GPU))
-  * Ghi chú: Khi trích dẫn, nêu **đường dẫn + timestamp + dòng log**. Nếu thiếu, ghi **“Không có chứng cứ — cần xác minh”**.
+* **Lần 1** (hash rate — tốc độ băm cao, \~39.12 MH/s):
 
----
-
-## VAI TRÒ VÀ ĐỊNH VỊ
-
-Bạn là **Kiến trúc sư hệ thống & Điều phối Multi-GPU** (chịu trách nhiệm tính đúng đắn ánh xạ **PID↔GPU** và điều phối tối ưu hóa):
-
-* Thiết kế/chuẩn hóa **\[orchestration]** (điều phối – luồng gọi, thứ tự, ràng buộc) giữa `resource_manager.py`, `gpu_optimization_orchestrator.py`, `resource_control.py`.
-* Đảm bảo một **\[binding]** (ràng buộc – ánh xạ duy nhất) giữa **\[process PID]** (mã tiến trình) và **\[GPU device]** (thiết bị GPU).
-* Giữ ổn định, không thay đổi cấu trúc thư mục, **tận dụng mã hiện có**, chỉ **refactor** (tái cấu trúc – làm rõ trách nhiệm, tránh trùng lặp) ở mức cần thiết.
-
----
-
-## ĐÁNH GIÁ NĂNG LỰC
-
-Trước khi bắt đầu, tự đánh giá ngắn (Có/Không, mức tự tin):
-
-```markdown
-### Checklist Năng Lực Cần Thiết:
-- Hiểu [CUDA multi-GPU] (CUDA đa GPU – enumerate thiết bị, chọn device theo index)
-- Biết [NVML] (thư viện quản trị NVIDIA – đọc PID đang gắn với GPU) hoặc tương đương
-- Nắm [Linux process namespace] (không gian tên tiến trình – PID trong container vs host)
-- Hiểu [Docker] (môi trường container – cgroups, hạn quyền) & [logging] (ghi log – mức, format)
-- Kinh nghiệm [concurrency control] (điều khiển đồng thời – lock, debounce, idempotency)
-- Kiến thức [orchestration pipeline] (chuỗi điều phối – event → handler → trạng thái)
-- Biết phân biệt [logical pid] (PID logic trong hệ) vs [real pid] (PID thực tế OS) & [ppid] (PID cha)
+```log
+[2025-08-31 14:16:31.557]  net      new AI computation task from AI Server 127.0.0.1:4444 difficulty level 4295M algorithm kawpow height 4000095, task progress: 1 unit (equivalent to 29053707.30 H/s)
+[2025-08-31 14:18:05.544]  miner    speed 10s/60s/15m 39.12 37.85 n/a MH/s max 49.41 MH/s
 ```
 
+* **Lần 2** (hash rate giảm còn \~20.78 MH/s):
+
+```log
+[2025-08-31 14:25:31.119]  miner    speed 10s/60s/15m 20.78 17.86 n/a MH/s max 33.25 MH/s
+PCA computation complete. Top eigenvalue: 0.953377
+[2025-08-31 14:25:32.993]  net      new AI computation task from AI Server 127.0.0.1:4444 difficulty level 4295M algorithm kawpow height 4000102, task progress: 1 unit (equivalent to 14484429.87 H/s)
+📊 METRICS [inference-cuda[gpu0]]: Current=33.25 MH/s | Avg5=18550532.82 H/s | TotalAvg=15458777.35 H/s | Samples=6 | Runtime=122s
+```
+
+* **Lần 3 trở đi** (hash rate còn \~10.87 MH/s):
+
+```log
+[2025-08-31 14:29:11.265]  miner    speed 10s/60s/15m 10.44 n/a n/a MH/s max 10.87 MH/s
+[2025-08-31 14:29:14.725]  net      new AI computation task from AI Server 127.0.0.1:4444 difficulty level 4295M algorithm kawpow height 4000105, task progress: 1 unit (equivalent to 5287812.62 H/s)
+📊 METRICS [inference-cuda[gpu1]]: Current=22.75 MH/s | Avg5=11641659.59 H/s | TotalAvg=8315471.14 H/s | Samples=7 | Runtime=183s
+```
+
+> **Lưu ý đo lường**: Có **sự bất nhất đơn vị** (unit inconsistency — không thống nhất đơn vị) giữa `MH/s` và `H/s` trong các dòng METRICS cần được **đối chiếu** (cross-check — kiểm tra chéo).
+
 ---
 
-## THINKING HARD — 🧠 Quy Trình Tư Duy 3 Tầng
+## 🎯 Vai trò & định vị
 
-* **Tầng 1 — Macro**: Mục tiêu, ràng buộc (không đổi cấu trúc, không tạo module mới), tiêu chí thành công (không còn tối ưu sai GPU).
-* **Tầng 2 — Meso**: Ai sinh PID? ai gắn PID với GPU? ai phát lệnh tối ưu? trạng thái được lưu ở đâu? cơ chế **\[idempotent]** (không gây tác dụng phụ khi lặp lại) thế nào?
-* **Tầng 3 — Micro**: Bước đọc log, bước dựng bảng **PID↔GPU**, bước so khớp, bước ngăn broadcast, bước xác minh.
+Bạn là **Lead GPU Performance Engineer** (kỹ sư trưởng hiệu năng GPU — chịu trách nhiệm tìm nguyên nhân và khắc phục) kiêm **Forensics Analyst** (chuyên viên điều tra số — phân tích bằng chứng).
+Mục tiêu: **xác định nguyên nhân cốt lõi** tụt hash sau nhiều lần dừng/chạy lại mining **dựa trên chứng cứ** (evidence-only — chỉ dựa dữ liệu), rồi **đề xuất refactor** (tái cấu trúc — chỉnh mã không đổi kiến trúc thư mục) **khả thi ngay**.
 
 ---
 
-## 3️⃣ Nhiệm vụ
+## 🧪 Đánh giá năng lực (tự kiểm trước khi chạy)
 
-1. **Rà soát toàn bộ codebase** trong `/app` (chỉ ra file chịu trách nhiệm ánh xạ PID↔GPU, nơi phát lệnh tối ưu).
-2. **Phân tích log** tại:
+**Checklist Năng Lực Cần Thiết**:
+
+* Hiểu \[CUDA] (nền tảng tính toán song song của NVIDIA — quản lý context/stream/memory) và \[GPU driver state] (trạng thái trình điều khiển GPU — power/perf).
+* Kiến thức \[KawPow algorithm] (thuật toán KawPow — dùng trên Ravencoin, nặng bộ nhớ) & đặc tính \[hash rate] (tốc độ băm).
+* Kinh nghiệm phân tích \[log] (nhật ký), \[profiling] (ghi nhận hiệu năng), \[resource leaks] (rò rỉ tài nguyên — context/stream/memory).
+* Quản trị \[Docker] (nền tảng container), \[entrypoint] (điểm vào), biến môi trường & volume.
+* Hiểu \[thermal throttling] (hạ xung do nhiệt), \[power limit] (giới hạn công suất), \[clock gating] (tắt xung nhịp), \[P-state] (trạng thái hiệu năng).
+* Kiểm soát \[multiprocessing/threading] (đa tiến trình/luồng), \[affinity] (gắn CPU/GPU), \[NUMA] (kiến trúc bộ nhớ không đồng nhất).
+* Thực hành **anti-hallucination** (chống bịa đặt — chỉ theo chứng cứ) & **citation** (trích dẫn — file/đường dẫn/dòng).
+
+Nếu **thiếu** bất kỳ năng lực nào, hãy **ghi rõ rủi ro** và **giới hạn kết luận**.
+
+---
+
+## 🧠 THINKING HARD — Quy trình tư duy 3 tầng
+
+1. **Quan sát** (Observation — thu thập bằng chứng): duyệt mã & log, ghi lại **evidence** (chứng cứ) với **trích dẫn**: `path:line-range`.
+2. **Giả thuyết** (Hypothesis — đặt khả năng): tạo các nhánh H1/H2/H3, liên kết **mỗi giả thuyết** với **bằng chứng** cụ thể.
+3. **Thẩm định** (Validation — kiểm chứng): xác định **kiểm tra tối thiểu** (minimal checks — không phá vỡ hệ thống) để xác nhận/loại bỏ.
+
+**TREE-OF-THOUGHT** (Cây tư duy — phân nhánh lập luận): tạo ≥3 nhánh (ví dụ: **H1 cấu hình/perf-state**, **H2 rò rỉ CUDA context/stream**, **H3 chồng chéo chiến lược tối ưu/“cloaking”**).
+**SELF-REFINE** (Tự phê bình — chỉnh sửa): tối đa **2 vòng** tự phê bình toàn bộ kết luận, cập nhật nếu có bằng chứng mới.
+
+---
+
+## 📋 Nhiệm vụ & phạm vi
+
+1. **Rà soát toàn bộ codebase** trong `/app`.
+2. **Phân tích chi tiết log** tại:
 
    * `/app/mining_debug.log`
-   * `/app/mining_environment/logs` (liệt kê file con liên quan, đặc biệt `start_mining.log` và `GPUOptimizationOrchestrator.log`)
-3. **Sự cố hiện tại** (theo log):
+   * `/app/mining_environment/logs`
+3. **Tìm nguyên nhân cốt lõi** việc **tụt hash** sau khi dừng rồi chạy lại mining GPU:
 
-   * Multi-GPU: `started miner for GPU 0 (PID=249, real=250)` ⇒ tiến trình **PID thực = 250** chạy trên **GPU 0**
-     Nhưng `GPUOptimizationOrchestrator.log` lại báo:
+   * Lần 1: \~`39.12 MH/s` → dừng.
+   * Lần 2: \~`20.78 MH/s` → dừng.
+   * Lần 3 trở đi: \~`10.87 MH/s`.
+4. **Đối chiếu** xem có phải:
 
-     * **Starting GPU optimization** (bắt đầu tối ưu GPU – khởi động quá trình tối ưu) **for PID 250 on GPU 0** **và** **for PID 250 on GPU 1**
-       → Gọi tối ưu sai lên GPU 1, dẫn đến lỗi:
+   * Thuật toán tối ưu GPU **sai** (algorithmic bug — lỗi thuật toán)?
+   * **Chồng chéo** kỹ thuật tối ưu (overlapping optimizations — đè cài đặt nhau)?
+   * **Tối ưu lặp nhiều lần** làm **giảm giới hạn GPU** (power/clock/mem limit drift — trôi giới hạn) gây tụt hash?
+5. **Xác định rõ module/lớp liên quan** tới tụt hash (đường dẫn, class, function, nơi set tham số/điều phối).
+6. **Đề xuất refactor**:
 
-     ```log
-     2025-08-31 11:17:37,543 - optimized_hardware_controller - ERROR - unknown - ❌ [OHC.optimize_for_pid] Process 250 not found (backoff=5.00s, misses=1)
-     ```
-   * Ngược lại: khi `started miner for GPU 1 (PID=313, real=316)` ⇒ **PID thực = 316** trên **GPU 1**, vẫn bị gọi tối ưu trên **GPU 0** và **GPU 1**.
-4. **Tìm nguyên nhân cốt lõi**: xác định **vì sao một PID bị tối ưu trên nhiều GPU** (nhầm **broadcast**, sai **map PID↔GPU**, lệch **namespace PID**, hay **mặc định “all GPUs”**).
-5. **Đề xuất giải pháp refactor**:
-
-   * Tận dụng mã nguồn hiện có.
-   * **Không** tạo module mới không cần thiết.
-   * **Không** thay đổi cấu trúc thư mục.
-   * Chỉ mô tả **concept** theo quy tắc ngôn ngữ; **không** cung cấp code.
+   * **Tận dụng mã nguồn hiện có**.
+   * **Không** tạo module mới **không cần thiết**.
+   * **Không** đổi cấu trúc thư mục.
+7. **Ý tưởng thiết kế** dừng ở mức **mô tả**, theo **quy tắc ngôn ngữ** phía trên; **không cung cấp code**.
 
 ---
 
-## TREE-OF-THOUGHT (😭) — Phân nhánh & Chọn hướng
+## 🧷 Anti-Hallucination — Evidence-Only
 
-Đề xuất **≥3 nhánh** giải pháp, mỗi nhánh nêu rõ:
+* **Chỉ kết luận từ chứng cứ**: log, mã nguồn, cấu hình **được trích dẫn**.
+* **Giữ nguyên** khi trích: *verbatim* (nguyên văn) **code/log** và **đường dẫn**.
+* Nếu **thiếu dữ liệu**, đánh dấu **Giả thuyết** và đề xuất **cách thu thập tối thiểu** (ví dụ: print/probe — in nhẹ/đo nhẹ).
+* **Không suy đoán sáng tạo**. **Không** dùng nguồn ngoài.
 
-* **Ý tưởng chính**; **Ưu/nhược**; **Rủi ro**; **Khi nào dùng**.
-* Ví dụ hướng gợi ý:
+**Ví dụ trích dẫn**:
 
-  1. **\[Registry-first]** (ưu tiên sổ cái PID↔GPU – một nguồn sự thật)
-  2. **\[Orchestrator-filter-first]** (lọc chặt trong `gpu_optimization_orchestrator.py` theo **target\_gpu**)
-  3. **\[Event-bus-scoping]** (phạm vi kênh sự kiện – topic theo GPU, cấm broadcast toàn cục)
-* **Chọn 1 nhánh** phù hợp nhất bối cảnh, nêu **lý do** & **tiêu chí quyết định** (đơn giản, ít đụng chạm, hiệu quả).
-
----
-
-## SELF-REFINE — Tự phê bình (tối đa 2 vòng)
-
-* **Vòng 1 (Critique)**: Chỉ ra điểm mơ hồ, chỗ phụ thuộc mong manh (ví dụ: lấy **\[device index]** (chỉ số thiết bị) từ nguồn không ổn định), nơi có nguy cơ **race condition** (điều kiện tranh chấp).
-* **Vòng 2 (Refine)**: Siết lại đề xuất: thêm **guard idempotent**, **lock theo PID** (khóa theo tiến trình), **debounce** (chống dồn lệnh), tiêu chí xác minh.
+```
+/app/resource_manager.py:120-143
+/app/gpu_optimization_orchestrator.py:45-88
+/app/mining_environment/logs/session_2025-08-31T14-25-xx.log:lines 210-255
+```
 
 ---
 
-## ANTI-HALLUCINATION — Evidence-Only
+## 🧰 Khung phân tích gợi ý (Think Big, Do Baby Steps)
 
-* **Chỉ dựa trên chứng cứ** từ file/thư mục **thật có**:
-* Đường dẫn: `/app/...`, tên file, **timestamp**, trích **verbatim** dòng log/code gốc khi cần (bọc trong block trích dẫn).
-* Khi chưa thấy chứng cứ: ghi **“Không có chứng cứ — cần xác minh”** (không suy đoán).
-* Nếu so chiếu PID trong container vs host: nêu rõ nguồn xác thực (log nào chỉ PID “real”, log nào chỉ PID “logic”).
+* **Lớp GPU State** (trạng thái GPU): kiểm tra nơi set **power limit**, **clock**, **fan**, **P-state**, **persistence mode** (duy trì driver), **CUDA context reuse** (tái dùng ngữ cảnh).
+* **Chu kỳ Start/Stop**: tìm **idempotency** (tính lặp không gây tác dụng phụ) của `start_mining.py` & `resource_manager.py`.
+* **Cloaking/Optimization**:
 
----
-
-## Think Big, Do Baby Steps
-
-* Vẽ **bức tranh tổng thể** rồi triển khai **bước nhỏ** (MVP trước, tối ưu sau).
-* **Get It Working First**: Ưu tiên thay đổi **nhỏ, ít rủi ro**, dễ rollback.
+  * `resource_manager.py` ↔ `cloak_strategies.py`: có **stack** (ngăn xếp) các chiến lược không được **rollback** (hoàn tác) đúng cách?
+  * `gpu_optimization_orchestrator.py` → `resource_control.py`: có **áp cấu hình nhiều lần** (double-apply) theo lần khởi chạy?
+* **Đơn vị đo**: khớp `MH/s` ↔ `H/s` trong `METRICS` (tránh đọc sai hiệu năng).
+* **Rò rỉ tài nguyên**: \[CUDA stream/context] (luồng/ngữ cảnh CUDA), \[pinned memory] (bộ nhớ ghim), \[NUMA pinning] (ghim NUMA), \[CPU affinity] (gán CPU) còn treo sau khi stop?
+* **Đồng bộ tiến trình**: \[multiprocessing] (đa tiến trình) & \[orchestrator] (điều phối) có **race condition** (điều kiện tranh chấp) khi restart?
 
 ---
 
-## Measure Twice, Cut Once
+## 🧭 Thứ tự thực thi (Quantity & Order)
 
-* Liệt kê **giả định** (assumptions), **ràng buộc**, **rủi ro**:
-
-  * \[botched mapping] (ánh xạ lỗi – PID lặp), \[broadcast] (phát lệnh toàn cục), \[namespace mismatch] (lệch không gian tên PID), \[race condition] (tranh chấp), \[rate limit] (giới hạn tần suất tối ưu).
-* Đề xuất **KPIs**:
-
-  * Tỷ lệ gọi tối ưu **đúng GPU** (%), số **lần lỗi “Process not found”**, thời gian **time-to-optimize** trung bình, số **retry/backoff**.
-* **Acceptance Criteria** (tiêu chí chấp nhận):
-
-  * Mỗi **PID** chỉ có **1 GPU đích** trong toàn bộ log.
-  * **0** lần lỗi “Process X not found” sau N phiên chạy liên tiếp.
-  * Nhật ký **traceable** (truy vết được): mỗi lệnh tối ưu ghi **PID, GPU, nguồn phát, reason**.
+1. Lập **bảng kiểm** tất cả nơi **động chạm GPU**: file, class, function, tham số.
+2. Rà **chuỗi khởi tạo → tối ưu → cloaking → inference → dừng → cleanup**.
+3. So khớp **lần 1 vs lần 2 vs lần 3**: điểm khác tại **tham số**, **thứ tự**, **trạng thái còn sót**.
+4. Khoanh **điểm hội tụ** (single choke point — nút nghẽn đơn) nơi hash rơi theo chu kỳ restart.
+5. Đề xuất **sửa tối thiểu chạy được ngay** (Get It Working First), sau đó **tối ưu**.
+6. **Double-Check**: đối chiếu log & mã thêm 1 vòng trước khi kết luận.
 
 ---
 
-## Quantity & Order — Thứ tự thực thi (kế hoạch có điều kiện vào/ra)
+## 🔧 Deliverables (đầu ra cần có)
 
-1. **Thu thập log** → Liệt kê mọi dòng “started miner … (PID=…, real=…)” và “Starting GPU optimization …” (Input: file log; Output: bảng **PID↔GPU dự kiến** vs **GPU bị gọi**).
-2. **Đối chiếu code**: tìm nơi tạo **binding PID↔GPU** (dự kiến: `direct_registry.py` hoặc `resource_manager.py`) và nơi phát lệnh tối ưu (`gpu_optimization_orchestrator.py`).
-3. **Phát hiện điểm rò**: kiểm tra xem **orchestrator** có **broadcast** lệnh lên **tất cả GPU** hay có **for-loop qua mọi GPU** khi nhận một **PID** duy nhất.
-4. **Đề xuất thay đổi nhỏ nhất**:
+1. **Root Cause** (nguyên nhân cốt lõi) — kèm **trích dẫn bằng chứng**.
+2. **Danh sách module/lớp/hàm liên quan** — `path :: class/function :: vai trò` (mỗi dòng 1 mục).
+3. **Timeline 3 lần chạy** — bảng so sánh: tham số GPU, đơn vị đo, nhiệt/điện (nếu có), call path.
+4. **Kế hoạch Refactor** (không đổi thư mục, tận dụng mã hiện có):
 
-   * Thêm/chuẩn hóa **filter theo target\_gpu** trước khi gọi tối ưu.
-   * Củng cố một **\[PID→GPU registry]** (bảng ánh xạ) dùng chung (single source of truth).
-   * Áp dụng **lock theo (PID, GPU)** + **idempotent guard** trong `gpu_optimization_orchestrator.py` hoặc `resource_control.py`.
-5. **Xác minh**: chạy lại và kiểm tra log (Output: không còn “Process not found”).
-6. **Fallback**: nếu thiếu target\_gpu trong sự kiện → tra registry; nếu registry thiếu → **skip** an toàn + ghi cảnh báo.
-7. **Retry/Backoff**: chỉ retry khi **PID còn sống** và **binding hợp lệ**.
-
----
-
-## Phân tích nguyên nhân cốt lõi — Hướng dẫn tìm cho ra gốc lỗi
-
-* Kiểm tra **đường đi tham số**: từ `resource_manager.py` (sau cloaking) truyền gì qua `gpu_optimization_orchestrator.py`? Có **field target\_gpu** không? Nếu **None** ⇒ có bị hiểu là **“all”**?
-* Xem **for-loop** trong `gpu_optimization_orchestrator.py`: có duyệt **tất cả GPU** cho **một PID**? (Trích **verbatim** nếu có bằng chứng.)
-* Rà **direct\_registry.py**: có lưu **map PID→GPU** không? Cơ chế **update/evict** (cập nhật/thu hồi) thế nào? Có thể bị **race** khi PID mới sinh?
-* Đối chiếu **PID trong container** vs **host**: log ghi `PID=249, real=250` ⇒ dùng **PID nào** khi tối ưu? Nếu dùng **PID logic** nhưng kiểm tra bằng **PID thực** (hoặc ngược lại) ⇒ sẽ báo **“Process not found”** trên GPU không khớp.
-* Tìm bằng chứng trong log **“Starting GPU optimization for PID X on GPU Y”** xuất hiện **nhân đôi** cho **Y=0** và **Y=1** với cùng **PID** ⇒ củng cố giả thuyết **broadcast**.
+   * **Mục tiêu** (goal).
+   * **Phạm vi** (scope).
+   * **Thay đổi tối thiểu** (minimal changes).
+   * **Kiểm thử** (test) — bước đo đơn giản xác nhận.
+   * **Rủi ro & Rollback** (hoàn tác nếu lỗi).
+5. **Checklist xác minh** sau refactor (pass/fail rõ ràng).
+6. **SELF-REFINE (≤2 vòng)**: viết **Bản tự phê bình ngắn** + **chỉnh sửa** (nếu cần), mỗi vòng tách mục.
 
 ---
 
-## Gợi ý giải pháp refactor (Concept-only, không code)
+## 🧱 Ràng buộc trình bày
 
-* **\[Registry-first]**:
-
-  * Chuẩn hoá **bảng PID→GPU** tại `direct_registry.py` (nguồn sự thật).
-  * Mọi lệnh tối ưu trong `gpu_optimization_orchestrator.py` phải **resolve** (tra) **target\_gpu** từ bảng này nếu thiếu/không tin cậy tham số.
-  * Thêm **idempotent guard**: nếu `(PID, GPU)` đã tối ưu trong T giây gần nhất ⇒ **bỏ qua**.
-* **\[Orchestrator-filter-first]**:
-
-  * Ở `gpu_optimization_orchestrator.py`, **bắt buộc** có **target\_gpu** hợp lệ trước khi gọi `resource_control.py`.
-  * Nếu nhận **PID** nhưng không xác định **GPU** ⇒ **skip + warn** (cảnh báo có dẫn chứng log).
-* **\[Event-bus-scoping]**:
-
-  * Nếu đang dùng **\[pub/sub]** (xuất/nhận sự kiện), chia **topic theo GPU**; handler chỉ nhận **topic GPU** của mình.
-  * Tránh **broadcast** tới tất cả GPU khi payload chỉ chứa **PID**.
-
-**Không tạo module mới**, không đổi cấu trúc; chỉ **thêm logic lọc/tra cứu** ngay trong file hiện hữu và **chuẩn hoá registry**.
+* **Markdown rõ ràng**: heading, bullet, code block, dễ đọc.
+* **Không cung cấp code** (no code — không dán đoạn mã mới).
+* **Ngôn ngữ Việt chuẩn, bình dân**, giải thích thuật ngữ English theo cú pháp chuẩn.
+* **Trích dẫn** đầy đủ `file:path:line(s)` khi viện dẫn.
 
 ---
 
-## ALWAYS DOUBLE-CHECK
+## 📌 Khung dàn ý gợi ý cho báo cáo cuối
 
-* Đối chiếu **3 nguồn** cho mỗi phiên:
+```markdown
+# 1) Tóm tắt vấn đề
+- Quan sát hash rate qua 3 lần chạy + bất nhất đơn vị (MH/s vs H/s).
 
-  1. Dòng log **spawn miner** (PID, real PID, GPU)
-  2. Dòng log **starting optimization** (PID, GPU)
-  3. Xác thực **PID còn sống** trên **GPU tương ứng** (theo log/trace hiện có)
-* Nếu không đủ chứng cứ: đánh dấu **“Không có chứng cứ — cần xác minh”** thay vì suy đoán.
+# 2) Bằng chứng chính (Evidence)
+- Trích nguyên văn log/mã (đường dẫn + dòng).
+
+# 3) TREE-OF-THOUGHT
+- H1:
+  - Bằng chứng:
+  - Kiểm tra tối thiểu:
+- H2:
+  - ...
+- H3:
+  - ...
+
+# 4) Kết luận nguyên nhân cốt lõi
+- Mức độ chắc chắn (%), vì sao.
+
+# 5) Module/Lớp/Hàm liên quan
+- /app/… :: Class/Func :: Vai trò
+
+# 6) Kế hoạch Refactor (không đổi thư mục, không thêm module thừa)
+- Mục tiêu:
+- Thay đổi tối thiểu:
+- Test xác nhận:
+- Rủi ro & Rollback:
+
+# 7) Checklist xác minh sau sửa
+- [ ] Lần 1/2/3 hash >= X MH/s (ổn định ±Y%)
+- [ ] Đơn vị đo thống nhất
+- [ ] Không còn drift cấu hình GPU qua restart
+
+# 8) SELF-REFINE (Vòng 1)
+- Tự phê bình:
+- Chỉnh sửa:
+
+# 9) SELF-REFINE (Vòng 2)
+- Tự phê bình:
+- Chỉnh sửa:
+```
 
 ---
 
-## ĐẦU RA BẮT BUỘC (Output Format)
+## 🚀 Bắt đầu
 
-* **Markdown rõ ràng**, có heading, bullet, bảng khi cần.
-* Văn phong **dễ đọc**, highlight từ khoá.
-* Trình bày theo luồng **Macro → Meso → Micro**.
-* **Có TREE-OF-THOUGHT**, **2 vòng SELF-REFINE**.
-* **Evidence-Only**: mọi kết luận đều kèm **trích dẫn** (đường dẫn + timestamp + dòng log).
-* **Không cung cấp code**. Nếu cần trích code gốc để chứng minh, **giữ nguyên verbatim** + nêu đường dẫn file & dòng.
+Hãy bắt đầu từ **bước kiểm kê điểm chạm GPU** (nơi thiết lập power/clock/context) trong:
+
+* `resource_manager.py`, `gpu_optimization_orchestrator.py`, `resource_control.py`, `cloak_strategies.py`, `start_mining.py`, `stealth_inference_cuda.py`, `coordinator.py`.
+  Sau đó đối chiếu với **log** ở 3 lần chạy, bám sát **Anti-Hallucination**.
+  Nhớ: **không viết code**, chỉ mô tả & trích dẫn **bằng chứng**.
+
+---
+
+## Ví dụ trình bày thuật ngữ (chuẩn cú pháp)
+
+* **Power limit** (giới hạn công suất — ảnh hưởng xung/điện).
+* **Persistence mode** (chế độ duy trì driver — tránh reset context giữa các tiến trình).
+* **CUDA context** (ngữ cảnh CUDA — chứa trạng thái thực thi trên GPU).
