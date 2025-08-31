@@ -333,6 +333,7 @@ def dual_logger_thread(process, process_name, log_lock):
     # **Select appropriate logger** (chọn logger phù hợp) dựa trên loại tiến trình
     thread_logger = gpu_miner_logger if 'gpu' in process_name.lower() else logger
     hash_rates = []  # **Track hash rates** (theo dõi tốc độ băm) cho **performance metrics** (chỉ số hiệu suất)
+    last_unit = None  # **Remember last hashrate unit** (ghi nhớ đơn vị hashrate gần nhất) để chuẩn hoá hiển thị
     start_time = time.time()
     line_count = 0
     
@@ -386,6 +387,8 @@ def dual_logger_thread(process, process_name, log_lock):
                     if hash_rate_match:
                         hash_rate = float(hash_rate_match.group(1))
                         unit = hash_rate_match.group(2)
+                        # Ghi nhận đơn vị cuối cùng để dùng nhất quán khi hiển thị (Current/Avg/Total)
+                        last_unit = unit
                         
                         # **Unit conversion** (chuyển đổi đơn vị đo lường)
                         multiplier = {
@@ -405,14 +408,23 @@ def dual_logger_thread(process, process_name, log_lock):
                             recent_avg = sum(hash_rates[-5:]) / 5
                             total_avg = sum(hash_rates) / len(hash_rates)
                             
-                            # **Real-time metrics display** (hiển thị các chỉ số thời gian thực)
+                            # **Real-time metrics display** (hiển thị các chỉ số thời gian thực) –
+                            # Chuẩn hoá Avg5/TotalAvg về cùng đơn vị với Current để tránh nhầm lẫn MH/s vs H/s
+                            disp_mul = max(1, int(multiplier.get(unit, 1)))
+                            avg5_disp = recent_avg / disp_mul
+                            total_avg_disp = total_avg / disp_mul
                             metrics_line = (f"\033[96m📊 METRICS [{process_name}]: "
-                                          f"Current={hash_rate:.2f} {unit} | "
-                                          f"Avg5={recent_avg:.2f} H/s | "
-                                          f"TotalAvg={total_avg:.2f} H/s | "
-                                          f"Samples={len(hash_rates)} | "
-                                          f"Runtime={runtime:.0f}s\033[0m")
+                                            f"Current={hash_rate:.2f} {unit} | "
+                                            f"Avg5={avg5_disp:.2f} {unit} | "
+                                            f"TotalAvg={total_avg_disp:.2f} {unit} | "
+                                            f"Samples={len(hash_rates)} | "
+                                            f"Runtime={runtime:.0f}s\033[0m")
                             print(metrics_line, flush=True)
+                            # Ghi thêm vào logger để có dấu vết trong log file
+                            try:
+                                thread_logger.info(metrics_line)
+                            except Exception:
+                                pass
                         
                     
                     # **Status indicators** (chỉ báo trạng thái hoạt động) mỗi 100 dòng
@@ -435,8 +447,27 @@ def dual_logger_thread(process, process_name, log_lock):
                          f"HashSamples={len(hash_rates)}")
             if hash_rates:
                 total_avg = sum(hash_rates) / len(hash_rates)
-                final_stats += f" | AvgHashRate={total_avg:.2f} H/s"
+                # Chọn đơn vị hiển thị đẹp (pretty unit). Ưu tiên last_unit nếu có; nếu không, tự chọn theo magnitude
+                units_order = [('TH/s', 10**12), ('GH/s', 10**9), ('MH/s', 10**6), ('KH/s', 10**3), ('H/s', 1)]
+                if last_unit is None:
+                    disp_unit, disp_value = 'H/s', total_avg
+                    for u, m in units_order:
+                        if total_avg >= m:
+                            disp_unit = u
+                            disp_value = total_avg / m
+                            break
+                else:
+                    # Dùng last_unit để nhất quán với dòng METRICS gần nhất
+                    mul_map = {'H/s': 1, 'KH/s': 10**3, 'MH/s': 10**6, 'GH/s': 10**9, 'TH/s': 10**12}
+                    disp_unit = last_unit
+                    disp_value = total_avg / float(mul_map.get(disp_unit, 1))
+                final_stats += f" | AvgHashRate={disp_value:.2f} {disp_unit}"
             final_stats += "\033[0m"
+            # Ghi thêm vào logger để tiện truy vết
+            try:
+                thread_logger.info(final_stats)
+            except Exception:
+                pass
             
             print(final_stats, flush=True)
             logger.info(f"**Dual logging thread** (luồng ghi log kép – luồng ghi nhật ký song song) đã dừng cho {process_name}: **runtime** (thời gian chạy – thời lượng hoạt động) {runtime:.0f}s")

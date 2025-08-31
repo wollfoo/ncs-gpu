@@ -2267,6 +2267,11 @@ class OptimizedHardwareController:
                 except Exception:
                     pass
             self.restore_cancel_events[key] = loop_cancel_event
+            # Hủy mọi restore pending khác trên cùng GPU từ PID khác để tránh restore muộn
+            try:
+                _ = self._cancel_pending_restores_for_gpu(gpu_index, except_key=key)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -2992,6 +2997,62 @@ except Exception as e:
             self.logger.warning(f"⚠️ [OHC._should_verify_baseline] Check failed for GPU {gpu_index}: {e}")
             return False
 
+    def _cancel_pending_restores_for_gpu(self, gpu_index: int, except_key: Optional[tuple] = None) -> int:
+        """
+        Hủy tất cả các restore đang chờ theo GPU (cross-PID) ngoại trừ một khóa tùy chọn.
+        Trả về số lượng restore đã hủy.
+
+        Purpose: Khi một PID mới bắt đầu tối ưu trên cùng GPU, mọi restore pending
+        từ PID cũ (trên cùng GPU) có thể gây reset device-wide (NVML reset clocks),
+        làm tụt hashrate của phiên mới. Hàm này chủ động hủy các restore pending khác.
+        """
+        # Cho phép opt-out qua ENV nếu cần thử nghiệm
+        try:
+            if str(os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')).lower() in ('0', 'false', 'no'):
+                return 0
+        except Exception:
+            pass
+
+        canceled = 0
+        try:
+            keys_to_cancel = []
+            for key, ev in list(self.restore_cancel_events.items()):
+                try:
+                    _, k_gpu = key
+                except Exception:
+                    continue
+                try:
+                    same_gpu = int(k_gpu) == int(gpu_index)
+                except Exception:
+                    same_gpu = (k_gpu == gpu_index)
+                if same_gpu and (except_key is None or key != except_key):
+                    keys_to_cancel.append(key)
+
+            for key in keys_to_cancel:
+                ev = self.restore_cancel_events.get(key)
+                if ev:
+                    try:
+                        ev.set()
+                    except Exception:
+                        pass
+                try:
+                    del self.restore_cancel_events[key]
+                except Exception:
+                    pass
+                canceled += 1
+
+            if canceled > 0:
+                try:
+                    self.logger.debug(f"🧹 [OHC] Canceled {canceled} pending restore(s) on GPU {gpu_index} (except={except_key})")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                self.logger.debug(f"[OHC] _cancel_pending_restores_for_gpu error: {e}")
+            except Exception:
+                pass
+        return canceled
+
     def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int, cancel_event: Optional[threading.Event] = None):
         # Cancellable restore of device-wide settings after time window (per-PID simulation window)
         try:
@@ -3008,6 +3069,13 @@ except Exception as e:
                     pass
             # Ghi nhận event hiện hành cho key này
             self.restore_cancel_events[key] = cancel_event
+
+            # Hủy các restore pending khác trên cùng GPU (cross-PID) để tránh reset device-wide 
+            # ảnh hưởng đến phiên tối ưu hiện tại
+            try:
+                _ = self._cancel_pending_restores_for_gpu(gpu_index, except_key=key)
+            except Exception:
+                pass
 
             # Poll interval ngắn để hủy sớm
             poll_env = os.getenv('RESTORE_POLL_INTERVAL_SEC')
