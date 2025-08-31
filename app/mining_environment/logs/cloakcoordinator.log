@@ -1,0 +1,49 @@
+2025-08-31 14:27:55,235 - cloak_coordinator - INFO - unknown - 💓 [Heartbeat] CloakCoordinator initialized (logger active)
+2025-08-31 14:27:55,244 - cloak_coordinator - INFO - unknown - [CS] **CloakCoordinator initialized** (CloakCoordinator đã khởi tạo – bộ điều phối ngụy trang đã thiết lập) - **Stage 2 ready** (giai đoạn 2 sẵn sàng)
+2025-08-31 14:28:08,289 - cloak_coordinator - INFO - unknown - 💓 [Heartbeat] CloakCoordinator initialized (logger active)
+2025-08-31 14:28:08,293 - cloak_coordinator - DEBUG - unknown - [CS] Injected shared MetricsCollectionHub into GpuCloakStrategy
+2025-08-31 14:28:08,293 - cloak_coordinator - INFO - unknown - [CS] **CloakCoordinator initialized** (CloakCoordinator đã khởi tạo – bộ điều phối ngụy trang đã thiết lập) - **Stage 2 ready** (giai đoạn 2 sẵn sàng)
+2025-08-31 14:28:08,294 - cloak_coordinator - INFO - unknown - [CS] **Auto-selected strategy** (đã tự động chọn chiến lược) 'gpu' từ **config** (cấu hình)
+2025-08-31 14:28:08,294 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 142 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:08,294 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 142
+2025-08-31 14:28:08,294 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:08,466 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 142
+2025-08-31 14:28:08,466 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:08,467 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 142, 'gpu_index': 0, 'power_limit': 50, 'memory_clock': 877, 'sm_clock': 1070, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:08,490 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 142
+2025-08-31 14:28:10,521 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 142 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:10,522 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 142
+2025-08-31 14:28:10,523 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:10,523 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 142 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:10,524 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 142
+2025-08-31 14:28:10,525 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:10,558 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 142
+2025-08-31 14:28:10,558 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:10,559 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 142, 'gpu_index': 0, 'power_limit': 50, 'memory_clock': 877, 'sm_clock': 1277, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:10,559 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 142
+2025-08-31 14:28:10,560 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:10,560 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 142, 'gpu_index': 0, 'power_limit': 50, 'memory_clock': 877, 'sm_clock': 962, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:10,593 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 142
+2025-08-31 14:28:10,595 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 142
+2025-08-31 14:28:14,807 - cloak_coordinator - INFO - unknown - [CS] **Auto-selected strategy** (đã tự động chọn chiến lược) 'gpu' từ **config** (cấu hình)
+2025-08-31 14:28:14,807 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 209 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:14,807 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 209
+2025-08-31 14:28:14,808 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:14,931 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 209
+2025-08-31 14:28:14,932 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:14,932 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 209, 'gpu_index': 0, 'power_limit': 51, 'memory_clock': 877, 'sm_clock': 1002, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:14,952 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 209
+2025-08-31 14:28:17,016 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 209 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:17,017 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 209
+2025-08-31 14:28:17,018 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:17,019 - cloak_coordinator - INFO - unknown - [CS] **Stage 2**: Đang xử lý **PID** 209 (mã tiến trình) với **strategy** 'gpu' (chiến lược)
+2025-08-31 14:28:17,020 - cloak_coordinator - INFO - unknown - [CS] 🎯 **Routing GPU strategy** (định tuyến chiến lược GPU – chuyển hướng phương pháp card đồ họa) qua **INTELLIGENT COORDINATOR** (bộ điều phối thông minh) cho **PID** 209
+2025-08-31 14:28:17,021 - cloak_coordinator - INFO - unknown - [CS] 🧠 **Using GpuCloakStrategy as intelligent coordinator** (đang dùng GpuCloakStrategy làm bộ điều phối thông minh – sử dụng chiến lược GPU như trình phối hợp tự động)
+2025-08-31 14:28:17,109 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 209
+2025-08-31 14:28:17,109 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:17,109 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 209, 'gpu_index': 0, 'power_limit': 50, 'memory_clock': 877, 'sm_clock': 885, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:17,163 - cloak_coordinator - INFO - unknown - [CS] ✅ Intelligent coordination successful for PID 209
+2025-08-31 14:28:17,163 - cloak_coordinator - INFO - unknown - [CS] ⚙️ Consuming deferred params and performing ONE-SHOT hardware apply via OptimizedHardwareController
+2025-08-31 14:28:17,164 - cloak_coordinator - DEBUG - unknown - [CS] One-shot control params: {'pid': 209, 'gpu_index': 0, 'power_limit': 50, 'memory_clock': 877, 'sm_clock': 1268, 'temp_threshold': 78, 'vram_target': 0.5, 'multi_gpu': True, 'gpu_count': 2, 'skip_throttle': True, 'fan_increase': 10, 'enable_thermal': True, 'adaptive_mode': True}
+2025-08-31 14:28:17,172 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 209
+2025-08-31 14:28:17,232 - cloak_coordinator - INFO - unknown - [CS] ✅ One-shot hardware apply succeeded for PID 209

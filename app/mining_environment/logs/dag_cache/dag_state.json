@@ -1,0 +1,15 @@
+{
+  "ethash_450": {
+    "epoch": 450,
+    "algorithm": "ethash",
+    "state": "completed",
+    "progress": 100.0,
+    "gpu_id": 0,
+    "file_path": "ethash_epoch_450.dag",
+    "size_bytes": 5046586572,
+    "hash": "3a637377c9ce0e3b6e96c3c0fa926c0bb8d0293c1415dc13e049b7451aa59f74",
+    "start_time": 1756650490.5987046,
+    "end_time": 1756650492.609585,
+    "error": null
+  }
+}

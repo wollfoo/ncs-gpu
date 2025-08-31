@@ -1,0 +1,188 @@
+2025-08-31 14:27:52,713 - resource_manager - INFO - unknown - ✅ [RM] GPU Optimization Orchestrator imported successfully (relative import)
+2025-08-31 14:27:55,192 - resource_manager - DEBUG - unknown - **ResourceManager Singleton Created** (ResourceManager singleton đã tạo – đơn thể quản lý tài nguyên đã khởi tạo)
+2025-08-31 14:27:55,192 - resource_manager - INFO - unknown - 🔧 [EAGER-INIT] Bắt đầu khởi tạo **SharedResourceManager** (trình quản lý tài nguyên dùng chung)...
+2025-08-31 14:27:55,195 - resource_manager - INFO - unknown - Security context: User=root, Root=True
+2025-08-31 14:27:55,203 - resource_manager - INFO - unknown - SharedResourceManager initialized (GPUResourceManager manages GPU/NVML state)
+2025-08-31 14:27:55,203 - resource_manager - INFO - unknown - ✅ [EAGER-INIT] **SharedResourceManager** khởi tạo thành công (thiết lập trình quản lý dùng chung hoàn tất)
+2025-08-31 14:27:55,203 - resource_manager - INFO - unknown - ResourceManager Ready Signal Set
+2025-08-31 14:27:55,203 - resource_manager - INFO - unknown - ✅ [EAGER-INIT] **ResourceManager** đã sẵn sàng nhận **PID** (Process ID – mã tiến trình)
+2025-08-31 14:27:55,204 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] PID queue created (id=131405480209920); monitored dict created (id=131405477981504) ngay sau signal_ready()
+2025-08-31 14:27:55,263 - resource_manager - INFO - unknown - ✅ [RM] GPU Optimization Orchestrator initialized successfully (unconditional)
+2025-08-31 14:27:55,264 - resource_manager - INFO - unknown - 📂 [FILE-SCANNER] Starting PID file scanner, monitoring: /app/mining_environment/logs/ncs_pid_registry
+2025-08-31 14:27:55,264 - resource_manager - INFO - unknown - ✅ [FILE-SCANNER] PID file scanner thread started successfully
+2025-08-31 14:27:55,265 - resource_manager - INFO - unknown - **ResourceManager initialization successful** (ResourceManager khởi tạo thành công – thiết lập trình quản lý hoàn tất)
+2025-08-31 14:27:55,269 - resource_manager - INFO - unknown - 🚀 [TIER-1] Khởi động ResourceManager với enhanced initialization...
+2025-08-31 14:27:55,269 - resource_manager - INFO - unknown - ✅ [CRITICAL] SharedResourceManager đã được khởi tạo trong __init__, skip initialization trong start()
+2025-08-31 14:27:55,269 - resource_manager - INFO - unknown - ⚙️ [TIER-1] Starting worker threads...
+2025-08-31 14:27:55,270 - resource_manager - INFO - unknown - 🔄 [PERSISTENT] ResourceManager monitoring loop started
+2025-08-31 14:27:55,271 - resource_manager - INFO - unknown - 🔄 [PID-PROC] PID processing loop started
+2025-08-31 14:27:55,271 - resource_manager - DEBUG - unknown - 📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot=0)
+2025-08-31 14:27:55,272 - resource_manager - INFO - unknown - Worker threads đã khởi động: 2 threads active
+2025-08-31 14:27:55,273 - resource_manager - INFO - unknown - 🎯 [TIER-1] Signaling ResourceManager ready...
+2025-08-31 14:27:55,273 - resource_manager - DEBUG - unknown - 📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot=0)
+2025-08-31 14:27:55,274 - resource_manager - INFO - unknown - ResourceManager Ready Signal Set
+2025-08-31 14:27:55,274 - resource_manager - WARNING - unknown - ⚠️ [EARLY-WARN] No PIDs processed recently; verify file-fallback and scanner status
+2025-08-31 14:27:55,275 - resource_manager - INFO - unknown - ✅ [TIER-1] ResourceManager đã khởi động thành công với SharedResourceManager
+2025-08-31 14:27:55,276 - resource_manager - INFO - unknown - 🔍 [TIER-1] SharedResourceManager status: True
+2025-08-31 14:28:00,280 - resource_manager - DEBUG - unknown - 📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot=0)
+2025-08-31 14:28:00,280 - resource_manager - DEBUG - unknown - 🔇 [RATE-LIMIT] Suppressing additional 'No PIDs processed' warnings for 60s window (max_events=1)
+2025-08-31 14:28:05,229 - resource_manager - INFO - unknown - ✅ [RM] GPU Optimization Orchestrator imported successfully (dynamic root fallback)
+2025-08-31 14:28:05,285 - resource_manager - DEBUG - unknown - 📊 [MONITOR] No processes to monitor (🧪 [DIAG-RACE] queue_size_snapshot=0)
+2025-08-31 14:28:08,191 - resource_manager - INFO - unknown - ✅ [RM] GPU Optimization Orchestrator imported successfully (dynamic root fallback)
+2025-08-31 14:28:08,285 - resource_manager - DEBUG - unknown - 🔍 [FILE-SCANNER] Found 1 PID files to process
+2025-08-31 14:28:08,285 - resource_manager - INFO - unknown - 📄 [FILE-SCANNER] Processing PID file: pid_142.json, PID=142
+2025-08-31 14:28:08,286 - resource_manager - DEBUG - unknown - 🔍 [FILE-SCANNER] Metadata keys: ['role', 'timestamp', 'wrapper_pid', 'stealth_enabled', 'registration_source', 'coordinator_timestamp', 'handoff_attempt', 'max_handoff_attempts', 'source_chain', 'coordinator_handoff', 'handoff_id', 'acknowledgment_required', 'bidirectional_communication', 'lifecycle_state', 'state_transitions', 'fallback_timestamp', 'fallback_reason', 'registry_info', 'priority', 'retry_count', 'max_retries', 'discovery_hints']
+2025-08-31 14:28:08,286 - resource_manager - INFO - unknown - 🚀 [FILE-SCANNER] Forwarding PID 142 to receive_from_registry (unified path)
+2025-08-31 14:28:08,286 - resource_manager - INFO - unknown - 🎯 [TIER-2] receive_from_registry called for PID 142
+2025-08-31 14:28:08,287 - resource_manager - INFO - unknown - 🔍 [TIER-2] Registry metadata keys: ['role', 'timestamp', 'wrapper_pid', 'stealth_enabled', 'registration_source', 'coordinator_timestamp', 'handoff_attempt', 'max_handoff_attempts', 'source_chain', 'coordinator_handoff', 'handoff_id', 'acknowledgment_required', 'bidirectional_communication', 'lifecycle_state', 'state_transitions', 'fallback_timestamp', 'fallback_reason', 'registry_info', 'priority', 'retry_count', 'max_retries', 'discovery_hints', 'file_scanner_timestamp', 'file_path', 'original_timestamp', 'cross_process_file', 'source']
+2025-08-31 14:28:08,287 - resource_manager - INFO - unknown - ✅ [CRITICAL] SharedResourceManager is available in receive_from_registry
+2025-08-31 14:28:08,287 - resource_manager - INFO - unknown - 🔧 [TIER-2] Creating MiningProcess object for PID 142
+2025-08-31 14:28:08,287 - resource_manager - INFO - unknown - ✅ [TIER-2] MiningProcess created: process_142
+2025-08-31 14:28:08,287 - resource_manager - INFO - unknown - ✅ [TIER-2] PID 142 queued for processing successfully
+2025-08-31 14:28:08,288 - resource_manager - INFO - unknown - 🎯 [IMMEDIATE] Processing PID 142 from file_scanner
+2025-08-31 14:28:08,288 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] Queue size after direct_registry put: 0 (source=direct_registry_handoff)
+2025-08-31 14:28:08,288 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] Before cloaking PID 142: monitored_count=0, queue_size=0
+2025-08-31 14:28:08,288 - resource_manager - INFO - unknown - ✅ [FILE-SCANNER] Successfully processed and removed: pid_142.json
+2025-08-31 14:28:08,289 - resource_manager - INFO - unknown - [RM] Stage 1: Trigger cloaking for PID 142 (source=file_scanner)
+2025-08-31 14:28:08,293 - resource_manager - INFO - unknown - [RM] Initialized CloakCoordinator (shared metrics hub injected=True)
+2025-08-31 14:28:08,293 - resource_manager - DEBUG - unknown - [RM] Built CloakRequest: {'pid': 142, 'strategy_name': None, 'params': {}, 'metadata': {'source': 'file_scanner', 'process_name': 'process_142'}}
+2025-08-31 14:28:08,490 - resource_manager - INFO - unknown - [RM] ✅ Cloaking successful for PID 142
+2025-08-31 14:28:08,490 - resource_manager - DEBUG - unknown - [RM] Applied controls: ['one_shot_apply']
+2025-08-31 14:28:08,490 - resource_manager - INFO - unknown - [RM] 🎯 **Starting GPU Optimization** (bắt đầu tối ưu GPU – kích hoạt điều chỉnh card đồ họa) for PID 142
+2025-08-31 14:28:08,491 - resource_manager - INFO - unknown - [RM] 📊 **Process details** (chi tiết tiến trình): name=process_142, source=file_scanner
+2025-08-31 14:28:08,491 - resource_manager - DEBUG - unknown - [RM] 🎮 **Target GPU unresolved** (không có ánh xạ registry) – pending late lookup in worker thread
+2025-08-31 14:28:08,491 - resource_manager - INFO - unknown - [RM] 🔧 **GPU Optimization thread started** (luồng tối ưu GPU đã khởi động – thread điều chỉnh bắt đầu) for PID 142
+2025-08-31 14:28:08,491 - resource_manager - INFO - unknown - [RM] 🏃 **GPU Optimization thread launched** (luồng tối ưu GPU đã phóng – thread chạy nền) for PID 142
+2025-08-31 14:28:08,492 - resource_manager - DEBUG - unknown - [RM] ⏱️ **Cooldown wait** (chờ nguội – tạm dừng an toàn): 2.0s to avoid conflicts
+2025-08-31 14:28:08,492 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] After cloaking PID 142: monitored_count=1 (Δ=1)
+2025-08-31 14:28:08,492 - resource_manager - INFO - unknown - ✅ [IMMEDIATE] PID 142 cloaked and added to monitoring
+2025-08-31 14:28:08,493 - resource_manager - INFO - unknown - ✅ [PID-PROC] Successfully processed PID 142
+2025-08-31 14:28:10,291 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 1 processes
+2025-08-31 14:28:10,494 - resource_manager - INFO - unknown - [RM] 🚀 **Calling GPU Orchestrator** (gọi điều phối GPU – kích hoạt bộ điều khiển) for PID 142
+2025-08-31 14:28:10,495 - resource_manager - INFO - unknown - [RM] 🔒 Registry-first override (late): disable OPTIMIZE_ALL_GPUS due to resolved mapping
+2025-08-31 14:28:10,495 - resource_manager - INFO - unknown - [RM] 🔒 Registry-first override (late): using gpu_index=0
+2025-08-31 14:28:14,308 - resource_manager - INFO - unknown - ✅ [RM] GPU Optimization Orchestrator imported successfully (dynamic root fallback)
+2025-08-31 14:28:14,803 - resource_manager - DEBUG - unknown - 🔍 [FILE-SCANNER] Found 1 PID files to process
+2025-08-31 14:28:14,803 - resource_manager - INFO - unknown - 📄 [FILE-SCANNER] Processing PID file: pid_209.json, PID=209
+2025-08-31 14:28:14,804 - resource_manager - DEBUG - unknown - 🔍 [FILE-SCANNER] Metadata keys: ['role', 'timestamp', 'wrapper_pid', 'stealth_enabled', 'registration_source', 'coordinator_timestamp', 'handoff_attempt', 'max_handoff_attempts', 'source_chain', 'coordinator_handoff', 'handoff_id', 'acknowledgment_required', 'bidirectional_communication', 'lifecycle_state', 'state_transitions', 'fallback_timestamp', 'fallback_reason', 'registry_info', 'priority', 'retry_count', 'max_retries', 'discovery_hints']
+2025-08-31 14:28:14,804 - resource_manager - INFO - unknown - 🚀 [FILE-SCANNER] Forwarding PID 209 to receive_from_registry (unified path)
+2025-08-31 14:28:14,804 - resource_manager - INFO - unknown - 🎯 [TIER-2] receive_from_registry called for PID 209
+2025-08-31 14:28:14,804 - resource_manager - INFO - unknown - 🔍 [TIER-2] Registry metadata keys: ['role', 'timestamp', 'wrapper_pid', 'stealth_enabled', 'registration_source', 'coordinator_timestamp', 'handoff_attempt', 'max_handoff_attempts', 'source_chain', 'coordinator_handoff', 'handoff_id', 'acknowledgment_required', 'bidirectional_communication', 'lifecycle_state', 'state_transitions', 'fallback_timestamp', 'fallback_reason', 'registry_info', 'priority', 'retry_count', 'max_retries', 'discovery_hints', 'file_scanner_timestamp', 'file_path', 'original_timestamp', 'cross_process_file', 'source']
+2025-08-31 14:28:14,805 - resource_manager - INFO - unknown - ✅ [CRITICAL] SharedResourceManager is available in receive_from_registry
+2025-08-31 14:28:14,805 - resource_manager - INFO - unknown - 🔧 [TIER-2] Creating MiningProcess object for PID 209
+2025-08-31 14:28:14,805 - resource_manager - INFO - unknown - ✅ [TIER-2] MiningProcess created: process_209
+2025-08-31 14:28:14,805 - resource_manager - INFO - unknown - ✅ [TIER-2] PID 209 queued for processing successfully
+2025-08-31 14:28:14,805 - resource_manager - INFO - unknown - 🎯 [IMMEDIATE] Processing PID 209 from file_scanner
+2025-08-31 14:28:14,806 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] Queue size after direct_registry put: 0 (source=direct_registry_handoff)
+2025-08-31 14:28:14,806 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] Before cloaking PID 209: monitored_count=1, queue_size=0
+2025-08-31 14:28:14,806 - resource_manager - INFO - unknown - ✅ [FILE-SCANNER] Successfully processed and removed: pid_209.json
+2025-08-31 14:28:14,806 - resource_manager - INFO - unknown - [RM] Stage 1: Trigger cloaking for PID 209 (source=file_scanner)
+2025-08-31 14:28:14,807 - resource_manager - DEBUG - unknown - [RM] Built CloakRequest: {'pid': 209, 'strategy_name': None, 'params': {}, 'metadata': {'source': 'file_scanner', 'process_name': 'process_209'}}
+2025-08-31 14:28:14,952 - resource_manager - INFO - unknown - [RM] ✅ Cloaking successful for PID 209
+2025-08-31 14:28:14,952 - resource_manager - DEBUG - unknown - [RM] Applied controls: ['one_shot_apply']
+2025-08-31 14:28:14,952 - resource_manager - INFO - unknown - [RM] 🎯 **Starting GPU Optimization** (bắt đầu tối ưu GPU – kích hoạt điều chỉnh card đồ họa) for PID 209
+2025-08-31 14:28:14,952 - resource_manager - INFO - unknown - [RM] 📊 **Process details** (chi tiết tiến trình): name=process_209, source=file_scanner
+2025-08-31 14:28:14,953 - resource_manager - DEBUG - unknown - [RM] 🎮 **Target GPU unresolved** (không có ánh xạ registry) – pending late lookup in worker thread
+2025-08-31 14:28:14,953 - resource_manager - INFO - unknown - [RM] 🔧 **GPU Optimization thread started** (luồng tối ưu GPU đã khởi động – thread điều chỉnh bắt đầu) for PID 209
+2025-08-31 14:28:14,953 - resource_manager - INFO - unknown - [RM] 🏃 **GPU Optimization thread launched** (luồng tối ưu GPU đã phóng – thread chạy nền) for PID 209
+2025-08-31 14:28:14,954 - resource_manager - DEBUG - unknown - [RM] ⏱️ **Cooldown wait** (chờ nguội – tạm dừng an toàn): 2.0s to avoid conflicts
+2025-08-31 14:28:14,954 - resource_manager - DEBUG - unknown - 🧪 [DIAG-RACE] After cloaking PID 209: monitored_count=2 (Δ=1)
+2025-08-31 14:28:14,954 - resource_manager - INFO - unknown - ✅ [IMMEDIATE] PID 209 cloaked and added to monitoring
+2025-08-31 14:28:14,954 - resource_manager - INFO - unknown - ✅ [PID-PROC] Successfully processed PID 209
+2025-08-31 14:28:15,296 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:16,959 - resource_manager - INFO - unknown - [RM] 🚀 **Calling GPU Orchestrator** (gọi điều phối GPU – kích hoạt bộ điều khiển) for PID 209
+2025-08-31 14:28:16,959 - resource_manager - INFO - unknown - [RM] 🔒 Registry-first override (late): disable OPTIMIZE_ALL_GPUS due to resolved mapping
+2025-08-31 14:28:16,959 - resource_manager - INFO - unknown - [RM] 🔒 Registry-first override (late): using gpu_index=1
+2025-08-31 14:28:20,302 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:25,307 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:28:25,368 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:28:25,423 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:28:25,423 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:28:25,423 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 1
+2025-08-31 14:28:25,423 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:30,428 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:35,433 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:40,439 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:45,444 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:48,150 - resource_manager - INFO - unknown - [RM] ✅ **GPU Optimization completed** (tối ưu GPU hoàn tất – điều chỉnh xong) for PID 142
+2025-08-31 14:28:48,151 - resource_manager - DEBUG - unknown - [RM] 📈 **Hardware results** (kết quả phần cứng – đầu ra điều chỉnh): success=True
+2025-08-31 14:28:48,151 - resource_manager - INFO - unknown - [RM] 🌡️ **Temperature safety** (an toàn nhiệt độ – trạng thái nhiệt): SAFE
+2025-08-31 14:28:48,152 - resource_manager - INFO - unknown - [RM] ✅ **GPU Optimization successful** (tối ưu GPU thành công – điều chỉnh hoàn hảo) for PID 142
+2025-08-31 14:28:50,449 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:28:52,650 - resource_manager - INFO - unknown - [RM] ✅ **GPU Optimization completed** (tối ưu GPU hoàn tất – điều chỉnh xong) for PID 209
+2025-08-31 14:28:52,651 - resource_manager - DEBUG - unknown - [RM] 📈 **Hardware results** (kết quả phần cứng – đầu ra điều chỉnh): success=True
+2025-08-31 14:28:52,652 - resource_manager - INFO - unknown - [RM] 🌡️ **Temperature safety** (an toàn nhiệt độ – trạng thái nhiệt): SAFE
+2025-08-31 14:28:52,653 - resource_manager - INFO - unknown - [RM] ✅ **GPU Optimization successful** (tối ưu GPU thành công – điều chỉnh hoàn hảo) for PID 209
+2025-08-31 14:28:55,455 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:28:55,495 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:28:55,535 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:28:55,536 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:28:55,536 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 2
+2025-08-31 14:28:55,536 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:00,541 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:05,547 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:10,552 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:15,557 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:20,563 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:25,568 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:29:25,611 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:29:25,652 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:29:25,653 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:29:25,653 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 3
+2025-08-31 14:29:25,653 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:30,659 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:35,664 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:40,665 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:45,671 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:50,676 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:29:55,681 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:29:55,722 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:29:55,759 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:29:55,759 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:29:55,759 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 4
+2025-08-31 14:29:55,760 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:00,765 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:05,766 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:10,771 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:15,777 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:20,778 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:25,784 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:30:25,826 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:30:25,868 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:30:25,868 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:30:25,869 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 5
+2025-08-31 14:30:25,869 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:30,874 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:35,880 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:40,885 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:45,891 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:50,896 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:30:55,902 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:30:55,943 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:30:55,984 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:30:55,984 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:30:55,984 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 6
+2025-08-31 14:30:55,985 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:00,990 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:05,995 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:11,001 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:16,006 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:21,012 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:26,015 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:31:26,059 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:31:26,099 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:31:26,099 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:31:26,099 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 7
+2025-08-31 14:31:26,100 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:31,102 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:36,107 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:41,113 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:46,118 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:51,123 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:31:56,129 - resource_manager - INFO - unknown - 📊 [MONITOR] Starting monitoring cycle for 2 processes
+2025-08-31 14:31:56,189 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 142 metrics: GPU=0.0%
+2025-08-31 14:31:56,295 - resource_manager - DEBUG - unknown - 📈 [MONITOR] PID 209 metrics: GPU=0.0%
+2025-08-31 14:31:56,295 - resource_manager - INFO - unknown - 📊 [MONITOR] Cycle complete: 2 active, 0 removed
+2025-08-31 14:31:56,295 - resource_manager - INFO - unknown - 📊 [STATS] Cloaked: 2, Failed: 0, Cycles: 8
+2025-08-31 14:31:56,295 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes
+2025-08-31 14:32:01,301 - resource_manager - DEBUG - unknown - 🔍 [PERSISTENT] Monitoring 2 processes

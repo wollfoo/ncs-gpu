@@ -1,0 +1,150 @@
+2025-08-31 14:27:52,522 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:27:52,522 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:27:52,522 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:27:52,522 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:27:52,663 - gpu_optimization - INFO - unknown - [MHub] ✅ [Recovery] Strategy recovery handlers registered successfully (đăng ký bộ xử lý phục hồi chiến lược thành công – handlers đã sẵn sàng)
+🔍 **Performance Profiler initialized** (bộ phân tích hiệu năng đã khởi tạo): memory_tracking=enabled
+2025-08-31 14:27:52,784 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:27:52,784 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:27:52,784 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:27:52,784 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:27:55,192 - gpu_optimization - INFO - unknown - [MHub] ✅ [StrategyCache] Intelligent strategy cache initialized
+2025-08-31 14:27:55,193 - gpu_optimization - INFO - unknown - [MHub] 📊 [StrategyCache] Config: max_size=500, ttl=7200.0s, policy=intelligent
+🚀 **Parallel Executor initialized** (bộ thực thi song song đã khởi tạo): max_workers=4
+2025-08-31 14:27:55,237 - gpu_optimization - INFO - unknown - 🔄 DAG Synchronizer initialized (cache: /app/mining_environment/logs/dag_cache)
+2025-08-31 14:27:55,239 - gpu_optimization - INFO - unknown - [OHC] Env flags -> ENABLE_DYNAMIC_BALANCING=True, ENABLE_DAG_SYNC=True
+2025-08-31 14:27:55,249 - gpu_optimization - INFO - unknown - [OHC] Env flags -> ENABLE_DYNAMIC_BALANCING=True, ENABLE_DAG_SYNC=True
+2025-08-31 14:27:55,253 - gpu_optimization - INFO - unknown - [OHC] Env flags -> ENABLE_DYNAMIC_BALANCING=True, ENABLE_DAG_SYNC=True
+2025-08-31 14:28:05,313 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:28:05,314 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:28:05,314 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:28:05,314 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:28:05,338 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:28:05,338 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:28:05,338 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:28:05,338 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:28:08,137 - gpu_optimization - INFO - unknown - [MHub] ✅ [Recovery] Strategy recovery handlers registered successfully (đăng ký bộ xử lý phục hồi chiến lược thành công – handlers đã sẵn sàng)
+🔍 **Performance Profiler initialized** (bộ phân tích hiệu năng đã khởi tạo): memory_tracking=enabled
+2025-08-31 14:28:08,291 - gpu_optimization - INFO - unknown - [OHC] Env flags -> ENABLE_DYNAMIC_BALANCING=True, ENABLE_DAG_SYNC=True
+📝 Task added: gpu_power_pid142_gpu0 (priority: 10)
+📝 Task added: gpu_clock_pid142_gpu0 (priority: 8)
+📝 Task added: temperature_pid142_gpu0 (priority: 9)
+📝 Task added: memory_pid142_gpu0 (priority: 7)
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 4 tasks
+🔄 **Executing task** (đang thực thi tác vụ): gpu_power_pid142_gpu0
+⏭️ **Task skipped** (bỏ qua tác vụ): temperature_pid142_gpu0 (dependencies not met)
+🔄 **Executing task** (đang thực thi tác vụ): gpu_clock_pid142_gpu0
+⏭️ **Task skipped** (bỏ qua tác vụ): memory_pid142_gpu0 (dependencies not met)
+✅ **Task completed** (tác vụ hoàn thành): gpu_power_pid142_gpu0 in 0.00s
+✅ **Task completed** (tác vụ hoàn thành): gpu_clock_pid142_gpu0 in 0.00s
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 2
+  Successful: 2
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:28:10,597 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=142, Strategy=gpu, GPU=0
+2025-08-31 14:28:10,603 - gpu_optimization - INFO - unknown - 📝 GPU 0 registered for DAG ethash_450 calculation
+2025-08-31 14:28:11,409 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:28:11,409 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:28:11,409 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:28:11,409 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:28:11,434 - gpu_optimization - INFO - unknown - ===== GPU OPTIMIZATION LOGGING SYSTEM STARTED =====
+2025-08-31 14:28:11,434 - gpu_optimization - INFO - unknown - GPU Optimization Logger initialized and ready
+2025-08-31 14:28:11,434 - gpu_optimization - INFO - unknown - Available for logging GPU optimization operations
+2025-08-31 14:28:11,434 - gpu_optimization - INFO - unknown - ============================================
+2025-08-31 14:28:12,614 - gpu_optimization - INFO - unknown - ✅ DAG ethash_450 completed by GPU 0 (4812.8MB in 2.0s)
+2025-08-31 14:28:14,271 - gpu_optimization - INFO - unknown - [MHub] ✅ [Recovery] Strategy recovery handlers registered successfully (đăng ký bộ xử lý phục hồi chiến lược thành công – handlers đã sẵn sàng)
+🔍 **Performance Profiler initialized** (bộ phân tích hiệu năng đã khởi tạo): memory_tracking=enabled
+📝 Task added: gpu_power_pid209_gpu1 (priority: 10)
+📝 Task added: gpu_clock_pid209_gpu1 (priority: 8)
+📝 Task added: temperature_pid209_gpu1 (priority: 9)
+📝 Task added: memory_pid209_gpu1 (priority: 7)
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 4 tasks
+⏭️ **Task skipped** (bỏ qua tác vụ): temperature_pid209_gpu1 (dependencies not met)
+🔄 **Executing task** (đang thực thi tác vụ): gpu_power_pid209_gpu1
+⏭️ **Task skipped** (bỏ qua tác vụ): memory_pid209_gpu1 (dependencies not met)
+🔄 **Executing task** (đang thực thi tác vụ): gpu_clock_pid209_gpu1
+✅ **Task completed** (tác vụ hoàn thành): gpu_power_pid209_gpu1 in 0.00s
+✅ **Task completed** (tác vụ hoàn thành): gpu_clock_pid209_gpu1 in 0.00s
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 4
+  Successful: 4
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:28:17,239 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=209, Strategy=gpu, GPU=1
+📊 **Results aggregated** (kết quả đã tổng hợp): 4/8 successful
+⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 37.597s (mất 37.597 giây)
+⛔ Duplicate task blocked: 'gpu_power_pid142_gpu0'
+⛔ Duplicate task blocked: 'gpu_clock_pid142_gpu0'
+⛔ Duplicate task blocked: 'temperature_pid142_gpu0'
+⛔ Duplicate task blocked: 'memory_pid142_gpu0'
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 0 tasks
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 4
+  Successful: 4
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:28:48,156 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=142, Strategy=gpu, GPU=0
+📊 **Results aggregated** (kết quả đã tổng hợp): 4/8 successful
+⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 35.626s (mất 35.626 giây)
+⛔ Duplicate task blocked: 'gpu_power_pid209_gpu1'
+⛔ Duplicate task blocked: 'gpu_clock_pid209_gpu1'
+⛔ Duplicate task blocked: 'temperature_pid209_gpu1'
+⛔ Duplicate task blocked: 'memory_pid209_gpu1'
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 0 tasks
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 4
+  Successful: 4
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:28:52,656 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=209, Strategy=gpu, GPU=1
+📊 **Results aggregated** (kết quả đã tổng hợp): 4/8 successful
+⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 35.317s (mất 35.317 giây)
+📊 **Results aggregated** (kết quả đã tổng hợp): 4/8 successful
+⚠️ **Slow function** (hàm chậm – thời gian thực thi cao): mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 35.409s (mất 35.409 giây)
+⛔ Duplicate task blocked: 'gpu_power_pid142_gpu0'
+⛔ Duplicate task blocked: 'gpu_clock_pid142_gpu0'
+⛔ Duplicate task blocked: 'temperature_pid142_gpu0'
+⛔ Duplicate task blocked: 'memory_pid142_gpu0'
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 0 tasks
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 4
+  Successful: 4
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:31:58,740 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=142, Strategy=gpu, GPU=0
+⛔ Duplicate task blocked: 'gpu_power_pid209_gpu1'
+⛔ Duplicate task blocked: 'gpu_clock_pid209_gpu1'
+⛔ Duplicate task blocked: 'temperature_pid209_gpu1'
+⛔ Duplicate task blocked: 'memory_pid209_gpu1'
+🎯 **Starting parallel execution** (bắt đầu thực thi song song): 0 tasks
+============================================================
+📈 **Execution Summary** (tóm tắt thực thi):
+  Total executed: 4
+  Successful: 4
+  Failed: 0
+  Timeouts: 0
+  Total duration: 0.00s
+  Average duration: 0.00s
+============================================================
+2025-08-31 14:32:03,282 - gpu_optimization - INFO - unknown - [OHC] Starting optimization for PID=209, Strategy=gpu, GPU=1

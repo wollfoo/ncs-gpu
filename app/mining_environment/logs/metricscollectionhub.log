@@ -1,0 +1,774 @@
+2025-08-31 14:27:55,232 - metrics_collection_hub - INFO - unknown - 💓 [Heartbeat] MetricsCollectionHub initialized (logger active)
+2025-08-31 14:27:55,232 - metrics_collection_hub - INFO - unknown - [MHub] Single-file export enabled → /app/mining_environment/logs/metrics.json
+2025-08-31 14:27:55,232 - metrics_collection_hub - INFO - unknown - [MHub] Initialized with buffer_size=1000, log_interval=60s
+2025-08-31 14:27:55,233 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:27:55,233 - metrics_collection_hub - INFO - unknown - [MHub] Started background logging thread
+2025-08-31 14:27:55,233 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:27:55,234 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for gpu_usage
+2025-08-31 14:27:55,235 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: gpu_usage
+2025-08-31 14:27:55,235 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:27:55,236 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:27:55,236 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for gpu_usage
+2025-08-31 14:27:55,237 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: gpu_usage
+2025-08-31 14:27:55,237 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:27:55,238 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:27:55,238 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for memory_usage
+2025-08-31 14:27:55,239 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: memory_usage
+2025-08-31 14:27:55,239 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:27:55,240 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:27:55,241 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for memory_usage
+2025-08-31 14:27:55,241 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: memory_usage
+2025-08-31 14:27:55,242 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:27:55,242 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:27:55,243 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:27:55,243 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:27:55,243 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:27:55,244 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:27:55,244 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:27:55,244 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:27:55,245 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:27:55,246 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:27:55,246 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for temperature
+2025-08-31 14:27:55,246 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: temperature
+2025-08-31 14:27:55,247 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:27:55,248 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:27:55,248 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for power
+2025-08-31 14:27:55,248 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: power
+2025-08-31 14:27:55,249 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:27:55,249 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:27:55,250 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for power
+2025-08-31 14:27:55,251 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: power
+2025-08-31 14:27:55,251 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:27:55,252 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:27:55,252 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for clock_speeds
+2025-08-31 14:27:55,253 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: clock_speeds
+2025-08-31 14:27:55,253 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:27:55,254 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:27:55,254 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for clock_speeds
+2025-08-31 14:27:55,255 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: clock_speeds
+2025-08-31 14:27:55,255 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:27:55,256 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:27:55,257 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:27:55,257 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:27:55,257 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:27:55,258 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:27:55,258 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:27:55,258 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:27:55,259 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:27:55,259 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:27:55,259 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:27:55,260 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:27:55,261 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:27:55,261 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:27:55,261 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:27:55,262 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:27:55,262 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: 10
+2025-08-31 14:27:55,262 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for gpu_usage
+2025-08-31 14:27:55,263 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: 10
+2025-08-31 14:27:55,263 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for memory_usage
+2025-08-31 14:27:55,263 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: 10
+2025-08-31 14:27:55,264 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for process_health
+2025-08-31 14:27:55,265 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: 10
+2025-08-31 14:27:55,266 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for temperature
+2025-08-31 14:27:55,266 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: 10
+2025-08-31 14:27:55,266 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for power
+2025-08-31 14:27:55,267 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: 10
+2025-08-31 14:27:55,267 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for clock_speeds
+2025-08-31 14:27:55,267 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: 10
+2025-08-31 14:27:55,268 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for io_activity
+2025-08-31 14:27:55,268 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: 10
+2025-08-31 14:27:55,268 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for network
+2025-08-31 14:27:55,269 - metrics_collection_hub - INFO - unknown - [MHub] Exported metrics to /app/mining_environment/logs/metrics.json
+2025-08-31 14:27:55,270 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:27:55,271 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:27:55,271 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for gpu_usage
+2025-08-31 14:27:55,271 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: gpu_usage
+2025-08-31 14:27:55,272 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:27:55,272 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:27:55,273 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for gpu_usage
+2025-08-31 14:27:55,273 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: gpu_usage
+2025-08-31 14:27:55,274 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:27:55,275 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:27:55,275 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for memory_usage
+2025-08-31 14:27:55,276 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: memory_usage
+2025-08-31 14:27:55,276 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:27:55,277 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:27:55,277 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for memory_usage
+2025-08-31 14:27:55,278 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: memory_usage
+2025-08-31 14:27:55,278 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:27:55,279 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:27:55,279 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:27:55,279 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:27:55,279 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:27:55,280 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for temperature
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: temperature
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for power
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: power
+2025-08-31 14:27:55,281 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for power
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: power
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:27:55,282 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for clock_speeds
+2025-08-31 14:27:55,283 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: clock_speeds
+2025-08-31 14:27:55,283 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:27:55,283 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:27:55,283 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for clock_speeds
+2025-08-31 14:27:55,283 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: clock_speeds
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:27:55,284 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:27:55,285 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:27:55,286 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:27:55,286 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:27:55,286 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:27:55,286 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:27:55,286 - metrics_collection_hub - INFO - unknown - [MHub] Periodic stats update: 0 metric types tracked
+2025-08-31 14:28:08,295 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:08,295 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:08.295252
+2025-08-31 14:28:08,295 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 0→1
+2025-08-31 14:28:08,295 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:08,295 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:08.295818
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 0→1
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:08.296377
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 0→1
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:08,296 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:08.296913
+2025-08-31 14:28:08,297 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 0→1
+2025-08-31 14:28:10,518 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:10,518 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 1→2
+2025-08-31 14:28:10,518 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:10,518 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 1→2
+2025-08-31 14:28:10,518 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:10,519 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 1→2
+2025-08-31 14:28:10,519 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:10,519 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 0→1
+2025-08-31 14:28:10,524 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:10,524 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.524445
+2025-08-31 14:28:10,524 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 2→3
+2025-08-31 14:28:10,525 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:10,525 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.525912
+2025-08-31 14:28:10,526 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 2→3
+2025-08-31 14:28:10,526 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:10,526 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:10,526 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.526852
+2025-08-31 14:28:10,527 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.527116
+2025-08-31 14:28:10,527 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 3→4
+2025-08-31 14:28:10,527 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 2→3
+2025-08-31 14:28:10,527 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:10,528 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:10,528 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.528450
+2025-08-31 14:28:10,528 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.528669
+2025-08-31 14:28:10,528 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 3→4
+2025-08-31 14:28:10,529 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 1→2
+2025-08-31 14:28:10,529 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:10,530 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.530230
+2025-08-31 14:28:10,530 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 3→4
+2025-08-31 14:28:10,530 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:10,531 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:10.531218
+2025-08-31 14:28:10,531 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 2→3
+2025-08-31 14:28:14,808 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:14,808 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:14.808762
+2025-08-31 14:28:14,808 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 4→5
+2025-08-31 14:28:14,809 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:14,809 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:14.809350
+2025-08-31 14:28:14,809 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 4→5
+2025-08-31 14:28:14,809 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:14,809 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:14.809900
+2025-08-31 14:28:14,810 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 4→5
+2025-08-31 14:28:14,810 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:14,810 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:14.810464
+2025-08-31 14:28:14,810 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 3→4
+2025-08-31 14:28:17,007 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:17,007 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 5→6
+2025-08-31 14:28:17,009 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:17,009 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 5→6
+2025-08-31 14:28:17,009 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:17,010 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 5→6
+2025-08-31 14:28:17,012 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:17,012 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 1→2
+2025-08-31 14:28:17,023 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:17,023 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.023662
+2025-08-31 14:28:17,024 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['utilization']
+2025-08-31 14:28:17,027 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 6→7
+2025-08-31 14:28:17,027 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.027828
+2025-08-31 14:28:17,028 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:17,028 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.028550
+2025-08-31 14:28:17,028 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 6→7
+2025-08-31 14:28:17,029 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:17,029 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.029338
+2025-08-31 14:28:17,029 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 6→7
+2025-08-31 14:28:17,030 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:17,030 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.030264
+2025-08-31 14:28:17,029 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 7→8
+2025-08-31 14:28:17,030 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 4→5
+2025-08-31 14:28:17,030 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['power_draw']
+2025-08-31 14:28:17,031 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.031354
+2025-08-31 14:28:17,031 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 7→8
+2025-08-31 14:28:17,035 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['temperature']
+2025-08-31 14:28:17,036 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.035985
+2025-08-31 14:28:17,036 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 7→8
+2025-08-31 14:28:17,036 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: clock_speeds, data_keys: ['graphics_clock', 'memory_clock']
+2025-08-31 14:28:17,036 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Added timestamp: 2025-08-31T14:28:17.036595
+2025-08-31 14:28:17,036 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - clock_speeds buffer: 5→6
+2025-08-31 14:28:48,078 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:48,079 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 8→9
+2025-08-31 14:28:48,079 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:48,079 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 8→9
+2025-08-31 14:28:48,079 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:48,079 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 8→9
+2025-08-31 14:28:48,080 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:48,080 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 2→3
+2025-08-31 14:28:48,151 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:48,151 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 9→10
+2025-08-31 14:28:48,152 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:48,153 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 9→10
+2025-08-31 14:28:48,153 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:48,153 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 9→10
+2025-08-31 14:28:48,153 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:48,153 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 3→4
+2025-08-31 14:28:52,571 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:52,571 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 10→11
+2025-08-31 14:28:52,571 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:52,572 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 10→11
+2025-08-31 14:28:52,572 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:52,572 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 10→11
+2025-08-31 14:28:52,572 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:52,572 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 4→5
+2025-08-31 14:28:52,651 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:28:52,651 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 11→12
+2025-08-31 14:28:52,652 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:28:52,652 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 11→12
+2025-08-31 14:28:52,652 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:28:52,653 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 11→12
+2025-08-31 14:28:52,653 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:28:52,654 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 5→6
+2025-08-31 14:28:55,287 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:28:55,287 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:28:55,287 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for gpu_usage
+2025-08-31 14:28:55,289 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:28:55,290 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:28:55,290 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for gpu_usage
+2025-08-31 14:28:55,290 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:28:55,290 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:28:55,290 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for memory_usage
+2025-08-31 14:28:55,292 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:28:55,292 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:28:55,293 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for memory_usage
+2025-08-31 14:28:55,294 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:28:55,294 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:28:55,295 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:28:55,295 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:28:55,295 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:28:55,295 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:28:55,295 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:28:55,296 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:28:55,296 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:28:55,296 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:28:55,296 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for temperature
+2025-08-31 14:28:55,298 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:28:55,298 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:28:55,298 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for power
+2025-08-31 14:28:55,300 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:28:55,300 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:28:55,301 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for power
+2025-08-31 14:28:55,301 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:28:55,301 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:28:55,301 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:28:55,303 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:28:55,303 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:28:55,303 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:28:55,305 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:28:55,305 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:28:55,305 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:28:55,305 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:28:55,306 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:28:55,306 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:28:55,306 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:28:55,306 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:28:55,306 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:28:55,307 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:28:55,308 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:28:55,308 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: 10
+2025-08-31 14:28:55,308 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/12 metrics for gpu_usage
+2025-08-31 14:28:55,308 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: 10
+2025-08-31 14:28:55,308 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 6/6 metrics for memory_usage
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: 10
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for process_health
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: 10
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/12 metrics for temperature
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: 10
+2025-08-31 14:28:55,309 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/12 metrics for power
+2025-08-31 14:28:55,310 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: 10
+2025-08-31 14:28:55,310 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 6/6 metrics for clock_speeds
+2025-08-31 14:28:55,310 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: 10
+2025-08-31 14:28:55,310 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for io_activity
+2025-08-31 14:28:55,310 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: 10
+2025-08-31 14:28:55,311 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for network
+2025-08-31 14:28:55,313 - metrics_collection_hub - INFO - unknown - [MHub] Exported metrics to /app/mining_environment/logs/metrics.json
+2025-08-31 14:28:55,313 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:28:55,313 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:28:55,313 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for gpu_usage
+2025-08-31 14:28:55,315 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:28:55,315 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:28:55,316 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for gpu_usage
+2025-08-31 14:28:55,316 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:28:55,316 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:28:55,316 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for memory_usage
+2025-08-31 14:28:55,318 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:28:55,318 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:28:55,318 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for memory_usage
+2025-08-31 14:28:55,320 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:28:55,320 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:28:55,320 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:28:55,320 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:28:55,321 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:28:55,321 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:28:55,321 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:28:55,321 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:28:55,321 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:28:55,322 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:28:55,322 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for temperature
+2025-08-31 14:28:55,323 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:28:55,324 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:28:55,324 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for power
+2025-08-31 14:28:55,326 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:28:55,326 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:28:55,326 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 12 metrics for power
+2025-08-31 14:28:55,326 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:28:55,326 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:28:55,327 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:28:55,328 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:28:55,328 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:28:55,329 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:28:55,330 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:28:55,331 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:28:55,332 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:28:55,332 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:28:55,332 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:28:55,333 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:28:55,333 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:28:55,333 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:28:55,333 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:28:55,333 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:28:55,334 - metrics_collection_hub - DEBUG - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:28:55,334 - metrics_collection_hub - INFO - unknown - [MHub] Periodic stats update: 5 metric types tracked
+2025-08-31 14:29:23,396 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:29:23,396 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 12→13
+2025-08-31 14:29:23,396 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:29:23,397 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 12→13
+2025-08-31 14:29:23,397 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:29:23,397 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 12→13
+2025-08-31 14:29:23,397 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:29:23,397 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 6→7
+2025-08-31 14:29:27,981 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:29:27,981 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 13→14
+2025-08-31 14:29:27,981 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:29:27,982 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 13→14
+2025-08-31 14:29:27,982 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:29:27,982 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 13→14
+2025-08-31 14:29:27,982 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:29:27,982 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 7→8
+2025-08-31 14:29:55,334 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:29:55,334 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:29:55,335 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:29:55,337 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:29:55,337 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:29:55,337 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:29:55,337 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:29:55,338 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:29:55,338 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:29:55,340 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:29:55,340 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:29:55,340 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:29:55,342 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:29:55,342 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:29:55,342 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:29:55,342 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:29:55,343 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:29:55,343 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:29:55,343 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:29:55,343 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:29:55,343 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:29:55,344 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:29:55,344 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:29:55,346 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:29:55,346 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:29:55,346 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:29:55,348 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:29:55,348 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:29:55,348 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:29:55,349 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:29:55,349 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:29:55,349 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:29:55,351 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:29:55,351 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:29:55,351 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:29:55,353 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:29:55,353 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:29:55,353 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:29:55,353 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:29:55,353 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:29:55,354 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:29:55,354 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:29:55,354 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:29:55,354 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:29:55,354 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:29:55,355 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:29:55,355 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:29:55,355 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:29:55,355 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:29:55,355 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:29:55,355 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: 10
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for gpu_usage
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: 10
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 8/8 metrics for memory_usage
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: 10
+2025-08-31 14:29:55,356 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for process_health
+2025-08-31 14:29:55,357 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: 10
+2025-08-31 14:29:55,357 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for temperature
+2025-08-31 14:29:55,357 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: 10
+2025-08-31 14:29:55,357 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for power
+2025-08-31 14:29:55,357 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: 10
+2025-08-31 14:29:55,358 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 6/6 metrics for clock_speeds
+2025-08-31 14:29:55,358 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: 10
+2025-08-31 14:29:55,358 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for io_activity
+2025-08-31 14:29:55,358 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: 10
+2025-08-31 14:29:55,358 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for network
+2025-08-31 14:29:55,360 - metrics_collection_hub - INFO - unknown - [MHub] Exported metrics to /app/mining_environment/logs/metrics.json
+2025-08-31 14:29:55,360 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:29:55,361 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:29:55,361 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:29:55,363 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:29:55,363 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:29:55,363 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:29:55,363 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:29:55,363 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:29:55,364 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:29:55,365 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:29:55,365 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:29:55,366 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:29:55,367 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:29:55,368 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:29:55,368 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:29:55,368 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:29:55,368 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:29:55,368 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:29:55,368 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:29:55,369 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:29:55,369 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:29:55,369 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:29:55,369 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:29:55,371 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:29:55,371 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:29:55,371 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:29:55,373 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:29:55,373 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:29:55,374 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:29:55,374 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:29:55,374 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:29:55,374 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:29:55,376 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:29:55,376 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:29:55,376 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:29:55,378 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:29:55,378 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:29:55,378 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:29:55,379 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:29:55,379 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:29:55,379 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:29:55,379 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:29:55,379 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:29:55,379 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:29:55,380 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:29:55,380 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:29:55,380 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:29:55,380 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:29:55,380 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:29:55,380 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:29:55,381 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:29:55,381 - metrics_collection_hub - INFO - unknown - [MHub] Periodic stats update: 5 metric types tracked
+2025-08-31 14:30:55,381 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:30:55,382 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:30:55,382 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:30:55,384 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:30:55,384 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:30:55,384 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:30:55,384 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:30:55,385 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:30:55,385 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:30:55,386 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:30:55,387 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:30:55,387 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:30:55,389 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:30:55,389 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:30:55,390 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:30:55,390 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:30:55,390 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:30:55,390 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:30:55,390 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:30:55,391 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:30:55,391 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:30:55,391 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:30:55,391 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:30:55,393 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:30:55,393 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:30:55,393 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:30:55,395 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:30:55,395 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:30:55,396 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:30:55,396 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:30:55,396 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:30:55,396 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:30:55,398 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:30:55,398 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:30:55,398 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:30:55,400 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:30:55,400 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:30:55,401 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:30:55,401 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:30:55,401 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:30:55,401 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:30:55,401 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:30:55,401 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:30:55,402 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:30:55,402 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:30:55,402 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:30:55,402 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:30:55,402 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:30:55,403 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:30:55,403 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:30:55,403 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:30:55,403 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: 10
+2025-08-31 14:30:55,403 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for gpu_usage
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: 10
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 8/8 metrics for memory_usage
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: 10
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for process_health
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: 10
+2025-08-31 14:30:55,404 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for temperature
+2025-08-31 14:30:55,405 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: 10
+2025-08-31 14:30:55,405 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for power
+2025-08-31 14:30:55,405 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: 10
+2025-08-31 14:30:55,405 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 6/6 metrics for clock_speeds
+2025-08-31 14:30:55,405 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: 10
+2025-08-31 14:30:55,406 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for io_activity
+2025-08-31 14:30:55,406 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: 10
+2025-08-31 14:30:55,406 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for network
+2025-08-31 14:30:55,408 - metrics_collection_hub - INFO - unknown - [MHub] Exported metrics to /app/mining_environment/logs/metrics.json
+2025-08-31 14:30:55,408 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:30:55,408 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:30:55,408 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:30:55,410 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:30:55,410 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:30:55,411 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:30:55,411 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:30:55,411 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:30:55,411 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:30:55,413 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:30:55,413 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:30:55,413 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:30:55,415 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:30:55,415 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:30:55,415 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:30:55,415 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:30:55,416 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:30:55,416 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:30:55,416 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:30:55,416 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:30:55,416 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:30:55,417 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:30:55,417 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:30:55,419 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:30:55,419 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:30:55,419 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:30:55,421 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:30:55,421 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:30:55,421 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:30:55,421 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:30:55,422 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:30:55,422 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:30:55,423 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:30:55,424 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:30:55,424 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:30:55,425 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:30:55,426 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:30:55,426 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:30:55,426 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:30:55,426 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:30:55,426 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:30:55,427 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:30:55,427 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:30:55,427 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:30:55,427 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:30:55,427 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:30:55,428 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:30:55,428 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:30:55,428 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:30:55,428 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:30:55,428 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:30:55,429 - metrics_collection_hub - INFO - unknown - [MHub] Periodic stats update: 5 metric types tracked
+2025-08-31 14:31:55,429 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:31:55,429 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:31:55,430 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:31:55,432 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:31:55,432 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:31:55,432 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:31:55,432 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:31:55,432 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:31:55,433 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:31:55,434 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:31:55,435 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:31:55,435 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:31:55,436 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:31:55,437 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:31:55,437 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:31:55,438 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:31:55,438 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:31:55,438 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:31:55,438 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:31:55,438 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:31:55,438 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:31:55,439 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:31:55,439 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:31:55,441 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:31:55,441 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:31:55,441 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:31:55,443 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:31:55,443 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:31:55,443 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:31:55,443 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:31:55,444 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:31:55,444 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:31:55,446 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:31:55,446 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:31:55,446 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:31:55,448 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:31:55,448 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:31:55,448 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:31:55,448 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:31:55,448 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:31:55,449 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:31:55,449 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:31:55,449 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:31:55,449 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:31:55,449 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:31:55,450 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:31:55,450 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:31:55,450 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:31:55,450 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:31:55,450 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:31:55,450 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:31:55,451 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: 10
+2025-08-31 14:31:55,451 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for gpu_usage
+2025-08-31 14:31:55,451 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: 10
+2025-08-31 14:31:55,451 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 8/8 metrics for memory_usage
+2025-08-31 14:31:55,451 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: 10
+2025-08-31 14:31:55,452 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for process_health
+2025-08-31 14:31:55,452 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: 10
+2025-08-31 14:31:55,452 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for temperature
+2025-08-31 14:31:55,452 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: 10
+2025-08-31 14:31:55,452 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 10/14 metrics for power
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: 10
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 6/6 metrics for clock_speeds
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: 10
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for io_activity
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: 10
+2025-08-31 14:31:55,453 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning last 0/0 metrics for network
+2025-08-31 14:31:55,455 - metrics_collection_hub - INFO - unknown - [MHub] Exported metrics to /app/mining_environment/logs/metrics.json
+2025-08-31 14:31:55,455 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: utilization
+2025-08-31 14:31:55,456 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:31:55,456 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:31:55,458 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: gpu_usage, field: memory_used
+2025-08-31 14:31:55,458 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: gpu_usage, last_n: None
+2025-08-31 14:31:55,459 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for gpu_usage
+2025-08-31 14:31:55,459 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: memory_usage_mb
+2025-08-31 14:31:55,459 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:31:55,459 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:31:55,461 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: memory_usage, field: gpu_memory_mb
+2025-08-31 14:31:55,461 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: memory_usage, last_n: None
+2025-08-31 14:31:55,461 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 8 metrics for memory_usage
+2025-08-31 14:31:55,463 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: health_score
+2025-08-31 14:31:55,463 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:31:55,463 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:31:55,464 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:31:55,464 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: process_health, field: cpu_percent
+2025-08-31 14:31:55,464 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: process_health, last_n: None
+2025-08-31 14:31:55,464 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for process_health
+2025-08-31 14:31:55,464 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: process_health
+2025-08-31 14:31:55,464 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: temperature, field: temperature
+2025-08-31 14:31:55,465 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: temperature, last_n: None
+2025-08-31 14:31:55,465 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for temperature
+2025-08-31 14:31:55,467 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_draw
+2025-08-31 14:31:55,467 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:31:55,467 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:31:55,469 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: power, field: power_limit
+2025-08-31 14:31:55,469 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: power, last_n: None
+2025-08-31 14:31:55,469 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 14 metrics for power
+2025-08-31 14:31:55,469 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: graphics_clock
+2025-08-31 14:31:55,470 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:31:55,470 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:31:55,471 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: clock_speeds, field: memory_clock
+2025-08-31 14:31:55,472 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: clock_speeds, last_n: None
+2025-08-31 14:31:55,472 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 6 metrics for clock_speeds
+2025-08-31 14:31:55,473 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: read_bytes
+2025-08-31 14:31:55,474 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:31:55,474 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:31:55,474 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:31:55,474 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: io_activity, field: write_bytes
+2025-08-31 14:31:55,474 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: io_activity, last_n: None
+2025-08-31 14:31:55,475 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for io_activity
+2025-08-31 14:31:55,475 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: io_activity
+2025-08-31 14:31:55,475 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_sent
+2025-08-31 14:31:55,475 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:31:55,475 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:31:55,475 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:31:55,476 - metrics_collection_hub - DEBUG - unknown - [MHub.calculate_statistics] Entry - type: network, field: bytes_recv
+2025-08-31 14:31:55,476 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Entry - type: network, last_n: None
+2025-08-31 14:31:55,476 - metrics_collection_hub - DEBUG - unknown - [MHub.get_metrics] Returning all 0 metrics for network
+2025-08-31 14:31:55,476 - metrics_collection_hub - WARNING - unknown - ⚠️ [MHub.calculate_statistics] No metrics found for type: network
+2025-08-31 14:31:55,476 - metrics_collection_hub - INFO - unknown - [MHub] Periodic stats update: 5 metric types tracked
+2025-08-31 14:31:58,736 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:31:58,736 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 14→15
+2025-08-31 14:31:58,736 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:31:58,736 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 14→15
+2025-08-31 14:31:58,736 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:31:58,737 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 14→15
+2025-08-31 14:31:58,737 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:31:58,737 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 8→9
+2025-08-31 14:32:03,277 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: gpu_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'utilization']
+2025-08-31 14:32:03,278 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - gpu_usage buffer: 15→16
+2025-08-31 14:32:03,278 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: temperature, data_keys: ['stage', 'timestamp', 'gpu_index', 'temperature']
+2025-08-31 14:32:03,278 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - temperature buffer: 15→16
+2025-08-31 14:32:03,278 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: power, data_keys: ['stage', 'timestamp', 'gpu_index', 'power_draw']
+2025-08-31 14:32:03,278 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - power buffer: 15→16
+2025-08-31 14:32:03,279 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Entry - type: memory_usage, data_keys: ['stage', 'timestamp', 'gpu_index', 'memory_usage_mb', 'gpu_memory_mb']
+2025-08-31 14:32:03,279 - metrics_collection_hub - DEBUG - unknown - [MHub.add_metric] Success - memory_usage buffer: 9→10

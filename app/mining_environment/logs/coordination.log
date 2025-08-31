@@ -1,0 +1,145 @@
+2025-08-31 14:27:55,230 - coordination - INFO - unknown - 🎮 **Initialized 2 GPU semaphores** (đã khởi tạo 2 cờ hiệu GPU)
+2025-08-31 14:27:55,230 - coordination - INFO - unknown - 📨 **Message server started** (máy chủ nhắn tin đã khởi động – server IPC sẵn sàng): PID 61
+2025-08-31 14:27:55,231 - coordination - INFO - unknown - 🚀 **Cross-Process Coordinator initialized** (bộ điều phối liên tiến trình đã khởi tạo): PID 61
+2025-08-31 14:28:05,543 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Applied 4 environment variable defaults** ([CẤU HÌNH-TIER-4] Đã áp dụng 4 giá trị mặc định biến môi trường)
+2025-08-31 14:28:05,543 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Updated retry configuration** ([CẤU HÌNH-TIER-4] Đã cập nhật cấu hình thử lại): {'max_retries': 3, 'initial_delay': 2.0, 'backoff_factor': 1.5, 'max_delay': 10.0}
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - 🔗 **HookCoordinator initialized with unified logging** (HookCoordinator khởi tạo với ghi log thống nhất)
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - 🏥 **[HEALTH] Health monitoring system initialized** ([SỨC KHỎE] Hệ thống giám sát sức khỏe đã khởi tạo)
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Centralized configuration manager initialized** ([CẤU HÌNH-TIER-4] Trình quản lý cấu hình tập trung đã khởi tạo)
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - ✅ [SINGLETON] Enhanced HookCoordinator singleton created with linear flow support
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - 🔗 [SINGLETON] Enhanced features: direct handoff, deferred coordination, comprehensive cleanup
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Receiving PID 142 from stealth wrapper (PRIMARY ENTRY POINT)** ([LUỒNG-TUYẾN TÍNH] Nhận PID 142 từ stealth wrapper - điểm vào chính)
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - 📊 **[MONITORING] Handoff Chain Start** ([GIÁM SÁT] Bắt đầu chuỗi bàn giao): stealth_inference_cuda → HookCoordinator [PID=142]
+2025-08-31 14:28:05,544 - coordination - DEBUG - unknown - 🔍 **[LINEAR-FLOW] Process metadata** ([LUỒNG-TUYẾN TÍNH] Siêu dữ liệu process): {'role': 'real', 'timestamp': 1756650485.5433335, 'wrapper_pid': 141, 'stealth_enabled': False, 'registration_source': 'stealth_inference_cuda'}
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - ⏰ **[MONITORING] Timestamp** ([GIÁM SÁT] Dấu thời gian): 2025-08-31 14:28:05
+2025-08-31 14:28:05,544 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] PID 142 registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID 142 đã đăng ký với HookCoordinator)
+2025-08-31 14:28:05,857 - coordination - INFO - unknown - [HOOK] Unlocked clocks via nvidia-smi for GPU 0
+2025-08-31 14:28:05,901 - coordination - INFO - unknown - [HOOK] Unlocked clocks via nvidia-smi for GPU 1
+2025-08-31 14:28:05,901 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID 142 before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID 142 trước khi chuyển tiếp registry...)
+2025-08-31 14:28:05,901 - coordination - INFO - unknown - 🚀 **[READINESS-START] Starting enhanced readiness check** ([BẮT ĐẦU-SẴN SÀNG] Bắt đầu kiểm tra sẵn sàng nâng cao) **for PID 142** (cho PID 142) **with timeout=45s** (với timeout=45s)
+2025-08-31 14:28:05,901 - coordination - INFO - unknown - 🎯 **[READINESS-THRESHOLDS]** ([NGƯỠNG-SẴN SÀNG]) **Minimum**: 0.6, **Ideal**: 0.8
+2025-08-31 14:28:05,901 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] Checking subprocess environment** ([KIỂM TRA-ENV] Đang kiểm tra môi trường subprocess) **with 151 variables** (với 151 biến)
+2025-08-31 14:28:05,902 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG] Environment variable dump** ([DEBUG-KIỂM TRA-ENV] Dump biến môi trường):
+2025-08-31 14:28:05,902 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** KAWPOW_DAG_PROGRESSIVE = 1
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE = 1** **from subprocess environment** (từ môi trường subprocess)
+2025-08-31 14:28:05,902 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** CUDA_LAUNCH_BLOCKING = NOT_SET
+2025-08-31 14:28:05,902 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** CUDA_CACHE_DISABLE = NOT_SET
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check** ([KIỂM TRA-ENV] Kiểm tra KAWPOW_DAG_PROGRESSIVE): **value**='1', **result**=True
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - ✅ **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE correctly set** ([KIỂM TRA-ENV] KAWPOW_DAG_PROGRESSIVE đã thiết lập đúng): '1'
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] CUDA_LAUNCH_BLOCKING check** ([KIỂM TRA-ENV] Kiểm tra CUDA_LAUNCH_BLOCKING): **value**='0', **result**=False, **dag_safe**=False
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🚀 **[HASHRATE-FIX] Skipping CUDA_LAUNCH_BLOCKING auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_LAUNCH_BLOCKING trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] CUDA_CACHE_DISABLE check** ([KIỂM TRA-ENV] Kiểm tra CUDA_CACHE_DISABLE): **value**='0', **result**=False, **dag_safe**=False
+2025-08-31 14:28:05,902 - coordination - INFO - unknown - 🚀 **[HASHRATE-FIX] Skipping CUDA_CACHE_DISABLE auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_CACHE_DISABLE trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)
+2025-08-31 14:28:05,903 - coordination - INFO - unknown - 📊 **[ENV-CHECK] Raw score** ([KIỂM TRA-ENV] Điểm thô): 3.0/3.0 = 1.000
+2025-08-31 14:28:05,903 - coordination - INFO - unknown - 📊 **[ENV-CHECK] Final results** ([KIỂM TRA-ENV] Kết quả cuối cùng): **progressive**=True, **cuda_blocking**=False, **cache_disable**=False
+2025-08-31 14:28:05,903 - coordination - INFO - unknown - ✅ **[ENV-CHECK] Good environment configuration score** ([KIỂM TRA-ENV] Điểm cấu hình môi trường tốt): 1.00
+2025-08-31 14:28:05,904 - coordination - DEBUG - unknown - 🔍 **[DAG-FILES] No DAG files found at common locations** ([FILE-DAG] Không tìm thấy file DAG ở các vị trí thông thường)
+2025-08-31 14:28:05,904 - coordination - DEBUG - unknown - 🔍 **[DAG-FILES] Searched patterns** ([FILE-DAG] Các mẫu đã tìm kiếm): ['/tmp/kawpow_dag_*', '/var/tmp/kawpow_dag_*', './kawpow_dag_*', '/tmp/ethash_*', '/var/tmp/ethash_*', '/tmp/*.dag', '/var/tmp/*.dag', './*.dag', '/tmp/cuckoo_*', '/tmp/autolykos_*', '/tmp/octopus_*']
+2025-08-31 14:28:05,904 - coordination - INFO - unknown - 📊 **[READINESS-PROGRESS] Weighted score** ([TIẾN TRÌNH-SẴN SÀNG] Điểm có trọng số): 0.860 (2.0/3 **checks > 0.5** (kiểm tra > 0.5))
+2025-08-31 14:28:05,904 - coordination - INFO - unknown -    ├─ process_alive: ✅ **PASS** **(score: 1.000)** (điểm: 1.000)
+2025-08-31 14:28:05,904 - coordination - INFO - unknown -    ├─ env_config: ✅ **PASS** **(score: 1.000)** (điểm: 1.000)
+2025-08-31 14:28:05,904 - coordination - INFO - unknown -    ├─ dag_files: ⚠️ **NEEDS ATTENTION** **(score: 0.300)** (điểm: 0.300)
+2025-08-31 14:28:05,905 - coordination - INFO - unknown - 🎯 **[READINESS-EXCELLENT] Excellent readiness score** ([SẴN SÀNG-XUẤT SẮC] Điểm sẵn sàng xuất sắc): 0.860
+2025-08-31 14:28:07,907 - coordination - INFO - unknown - ✅ **[READINESS-STABLE] Process 142 verified stable** ([ỔN ĐỊNH-SẴN SÀNG] Process 142 đã xác minh ổn định)
+2025-08-31 14:28:07,907 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] Enhanced readiness check passed for PID 142 - DAG allocation complete** ([LUỒNG-TUYẾN TÍNH] Kiểm tra sẵn sàng nâng cao đã qua cho PID 142 - phân bổ DAG hoàn tất)
+2025-08-31 14:28:07,908 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Starting enhanced forwarding to DirectPIDRegistry for PID 142...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu chuyển tiếp nâng cao đến DirectPIDRegistry cho PID 142...)
+2025-08-31 14:28:07,908 - coordination - INFO - unknown - 🔄 **[RETRY-1] Attempting to forward PID 142 to DirectPIDRegistry...** ([THỬ LẠI-1] Đang thử chuyển tiếp PID 142 đến DirectPIDRegistry...)
+2025-08-31 14:28:07,908 - coordination - INFO - unknown - 🔄 **[SOLUTION-2] Enhanced forwarding PID 142 to DirectPIDRegistry** ([GIẢI PHÁP-2] Chuyển tiếp nâng cao PID 142 đến DirectPIDRegistry)
+2025-08-31 14:28:07,908 - coordination - DEBUG - unknown - 🔄 **[HANDOFF-RETRY] PID 142 attempt 1/3** ([THỬ LẠI-BÀN GIAO] PID 142 lần thử 1/3)
+2025-08-31 14:28:08,197 - coordination - DEBUG - unknown - ⏳ **[ACK-WAIT] Waiting for DirectPIDRegistry acknowledgment for PID 142** ([CHỜ XÁC NHẬN] Đang chờ xác nhận từ DirectPIDRegistry cho PID 142)
+2025-08-31 14:28:08,197 - coordination - DEBUG - unknown - ✅ **[ACK-WAIT] Registry acknowledgment received for PID 142 after 0.2ms** ([CHỜ XÁC NHẬN] Đã nhận xác nhận từ registry cho PID 142 sau 0.2ms)
+2025-08-31 14:28:08,198 - coordination - INFO - unknown - ✅ **[SOLUTION-2] DirectPIDRegistry handoff successful with acknowledgment for PID 142** ([GIẢI PHÁP-2] Bàn giao DirectPIDRegistry thành công với xác nhận cho PID 142)
+2025-08-31 14:28:08,198 - coordination - INFO - unknown - 📝 **[HANDOFF-SUCCESS] Recorded successful handoff for PID 142** ([BÀN GIAO-THÀNH CÔNG] Đã ghi lại bàn giao thành công cho PID 142) (attempt: 1, duration: 172.7ms)
+2025-08-31 14:28:08,198 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] PID 142 successfully forwarded to DirectPIDRegistry** ([LUỒNG-TUYẾN TÍNH] PID 142 đã chuyển tiếp thành công đến DirectPIDRegistry) **(attempt 1)** (lần thử 1)
+2025-08-31 14:28:09,291 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Applied 4 environment variable defaults** ([CẤU HÌNH-TIER-4] Đã áp dụng 4 giá trị mặc định biến môi trường)
+2025-08-31 14:28:09,291 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Updated retry configuration** ([CẤU HÌNH-TIER-4] Đã cập nhật cấu hình thử lại): {'max_retries': 3, 'initial_delay': 2.0, 'backoff_factor': 1.5, 'max_delay': 10.0}
+2025-08-31 14:28:09,292 - coordination - INFO - unknown - 🔗 **HookCoordinator initialized with unified logging** (HookCoordinator khởi tạo với ghi log thống nhất)
+2025-08-31 14:28:09,292 - coordination - INFO - unknown - 🏥 **[HEALTH] Health monitoring system initialized** ([SỨC KHỎE] Hệ thống giám sát sức khỏe đã khởi tạo)
+2025-08-31 14:28:09,292 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Centralized configuration manager initialized** ([CẤU HÌNH-TIER-4] Trình quản lý cấu hình tập trung đã khởi tạo)
+2025-08-31 14:28:09,292 - coordination - INFO - unknown - ✅ [SINGLETON] Enhanced HookCoordinator singleton created with linear flow support
+2025-08-31 14:28:09,293 - coordination - INFO - unknown - 🔗 [SINGLETON] Enhanced features: direct handoff, deferred coordination, comprehensive cleanup
+2025-08-31 14:28:09,293 - coordination - INFO - unknown - 🏥 **[HEALTH] Health monitoring loop started** ([SỨC KHỎE] Đã bắt đầu vòng lặp giám sát sức khỏe)
+2025-08-31 14:28:09,293 - coordination - INFO - unknown - 🏥 **[HEALTH] Health monitoring thread started** ([SỨC KHỎE] Đã khởi động luồng giám sát sức khỏe)
+2025-08-31 14:28:09,294 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 1 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 1 tiến trình hoạt động)
+2025-08-31 14:28:09,294 - coordination - INFO - unknown - 📝 **[REGISTER] PID 142 registered for hook coordination** ([ĐĂNG KÝ] PID 142 đã đăng ký cho điều phối hook)
+2025-08-31 14:28:09,294 - coordination - INFO - unknown - 🏥 **[HEALTH] PID 142 added to health monitoring** ([SỨC KHỎE] PID 142 đã thêm vào giám sát sức khỏe) **(total: 1)** (tổng: 1)
+2025-08-31 14:28:09,295 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - warm-up window** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - cửa sổ làm ấm) (age=0.00s, window=5.0s)
+2025-08-31 14:28:10,503 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
+2025-08-31 14:28:11,639 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Applied 4 environment variable defaults** ([CẤU HÌNH-TIER-4] Đã áp dụng 4 giá trị mặc định biến môi trường)
+2025-08-31 14:28:11,639 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Updated retry configuration** ([CẤU HÌNH-TIER-4] Đã cập nhật cấu hình thử lại): {'max_retries': 3, 'initial_delay': 2.0, 'backoff_factor': 1.5, 'max_delay': 10.0}
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - 🔗 **HookCoordinator initialized with unified logging** (HookCoordinator khởi tạo với ghi log thống nhất)
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - 🏥 **[HEALTH] Health monitoring system initialized** ([SỨC KHỎE] Hệ thống giám sát sức khỏe đã khởi tạo)
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - ⚙️ **[TIER-4-CONFIG] Centralized configuration manager initialized** ([CẤU HÌNH-TIER-4] Trình quản lý cấu hình tập trung đã khởi tạo)
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - ✅ [SINGLETON] Enhanced HookCoordinator singleton created with linear flow support
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - 🔗 [SINGLETON] Enhanced features: direct handoff, deferred coordination, comprehensive cleanup
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Receiving PID 209 from stealth wrapper (PRIMARY ENTRY POINT)** ([LUỒNG-TUYẾN TÍNH] Nhận PID 209 từ stealth wrapper - điểm vào chính)
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - 📊 **[MONITORING] Handoff Chain Start** ([GIÁM SÁT] Bắt đầu chuỗi bàn giao): stealth_inference_cuda → HookCoordinator [PID=209]
+2025-08-31 14:28:11,640 - coordination - DEBUG - unknown - 🔍 **[LINEAR-FLOW] Process metadata** ([LUỒNG-TUYẾN TÍNH] Siêu dữ liệu process): {'role': 'real', 'timestamp': 1756650491.6393604, 'wrapper_pid': 207, 'stealth_enabled': False, 'registration_source': 'stealth_inference_cuda'}
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - ⏰ **[MONITORING] Timestamp** ([GIÁM SÁT] Dấu thời gian): 2025-08-31 14:28:11
+2025-08-31 14:28:11,640 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] PID 209 registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID 209 đã đăng ký với HookCoordinator)
+2025-08-31 14:28:12,017 - coordination - INFO - unknown - [HOOK] Unlocked clocks via nvidia-smi for GPU 0
+2025-08-31 14:28:12,071 - coordination - INFO - unknown - [HOOK] Unlocked clocks via nvidia-smi for GPU 1
+2025-08-31 14:28:12,073 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID 209 before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID 209 trước khi chuyển tiếp registry...)
+2025-08-31 14:28:12,073 - coordination - INFO - unknown - 🚀 **[READINESS-START] Starting enhanced readiness check** ([BẮT ĐẦU-SẴN SÀNG] Bắt đầu kiểm tra sẵn sàng nâng cao) **for PID 209** (cho PID 209) **with timeout=45s** (với timeout=45s)
+2025-08-31 14:28:12,073 - coordination - INFO - unknown - 🎯 **[READINESS-THRESHOLDS]** ([NGƯỠNG-SẴN SÀNG]) **Minimum**: 0.6, **Ideal**: 0.8
+2025-08-31 14:28:12,073 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] Checking subprocess environment** ([KIỂM TRA-ENV] Đang kiểm tra môi trường subprocess) **with 151 variables** (với 151 biến)
+2025-08-31 14:28:12,074 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG] Environment variable dump** ([DEBUG-KIỂM TRA-ENV] Dump biến môi trường):
+2025-08-31 14:28:12,074 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** KAWPOW_DAG_PROGRESSIVE = 1
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE = 1** **from subprocess environment** (từ môi trường subprocess)
+2025-08-31 14:28:12,074 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** CUDA_LAUNCH_BLOCKING = NOT_SET
+2025-08-31 14:28:12,074 - coordination - DEBUG - unknown - 🔍 **[ENV-CHECK-DEBUG]** CUDA_CACHE_DISABLE = NOT_SET
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE check** ([KIỂM TRA-ENV] Kiểm tra KAWPOW_DAG_PROGRESSIVE): **value**='1', **result**=True
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - ✅ **[ENV-CHECK] KAWPOW_DAG_PROGRESSIVE correctly set** ([KIỂM TRA-ENV] KAWPOW_DAG_PROGRESSIVE đã thiết lập đúng): '1'
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] CUDA_LAUNCH_BLOCKING check** ([KIỂM TRA-ENV] Kiểm tra CUDA_LAUNCH_BLOCKING): **value**='0', **result**=False, **dag_safe**=False
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🚀 **[HASHRATE-FIX] Skipping CUDA_LAUNCH_BLOCKING auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_LAUNCH_BLOCKING trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🔍 **[ENV-CHECK] CUDA_CACHE_DISABLE check** ([KIỂM TRA-ENV] Kiểm tra CUDA_CACHE_DISABLE): **value**='0', **result**=False, **dag_safe**=False
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 🚀 **[HASHRATE-FIX] Skipping CUDA_CACHE_DISABLE auto-fix during normal mining** ([SỬA LỖI-HASHRATE] Bỏ qua tự động sửa CUDA_CACHE_DISABLE trong mining bình thường) **(performance preservation)** (bảo toàn hiệu suất)
+2025-08-31 14:28:12,074 - coordination - INFO - unknown - 📊 **[ENV-CHECK] Raw score** ([KIỂM TRA-ENV] Điểm thô): 3.0/3.0 = 1.000
+2025-08-31 14:28:12,075 - coordination - INFO - unknown - 📊 **[ENV-CHECK] Final results** ([KIỂM TRA-ENV] Kết quả cuối cùng): **progressive**=True, **cuda_blocking**=False, **cache_disable**=False
+2025-08-31 14:28:12,075 - coordination - INFO - unknown - ✅ **[ENV-CHECK] Good environment configuration score** ([KIỂM TRA-ENV] Điểm cấu hình môi trường tốt): 1.00
+2025-08-31 14:28:12,076 - coordination - DEBUG - unknown - 🔍 **[DAG-FILES] No DAG files found at common locations** ([FILE-DAG] Không tìm thấy file DAG ở các vị trí thông thường)
+2025-08-31 14:28:12,076 - coordination - DEBUG - unknown - 🔍 **[DAG-FILES] Searched patterns** ([FILE-DAG] Các mẫu đã tìm kiếm): ['/tmp/kawpow_dag_*', '/var/tmp/kawpow_dag_*', './kawpow_dag_*', '/tmp/ethash_*', '/var/tmp/ethash_*', '/tmp/*.dag', '/var/tmp/*.dag', './*.dag', '/tmp/cuckoo_*', '/tmp/autolykos_*', '/tmp/octopus_*']
+2025-08-31 14:28:12,076 - coordination - INFO - unknown - 📊 **[READINESS-PROGRESS] Weighted score** ([TIẾN TRÌNH-SẴN SÀNG] Điểm có trọng số): 0.860 (2.0/3 **checks > 0.5** (kiểm tra > 0.5))
+2025-08-31 14:28:12,076 - coordination - INFO - unknown -    ├─ process_alive: ✅ **PASS** **(score: 1.000)** (điểm: 1.000)
+2025-08-31 14:28:12,076 - coordination - INFO - unknown -    ├─ env_config: ✅ **PASS** **(score: 1.000)** (điểm: 1.000)
+2025-08-31 14:28:12,076 - coordination - INFO - unknown -    ├─ dag_files: ⚠️ **NEEDS ATTENTION** **(score: 0.300)** (điểm: 0.300)
+2025-08-31 14:28:12,076 - coordination - INFO - unknown - 🎯 **[READINESS-EXCELLENT] Excellent readiness score** ([SẴN SÀNG-XUẤT SẮC] Điểm sẵn sàng xuất sắc): 0.860
+2025-08-31 14:28:14,078 - coordination - INFO - unknown - ✅ **[READINESS-STABLE] Process 209 verified stable** ([ỔN ĐỊNH-SẴN SÀNG] Process 209 đã xác minh ổn định)
+2025-08-31 14:28:14,078 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] Enhanced readiness check passed for PID 209 - DAG allocation complete** ([LUỒNG-TUYẾN TÍNH] Kiểm tra sẵn sàng nâng cao đã qua cho PID 209 - phân bổ DAG hoàn tất)
+2025-08-31 14:28:14,078 - coordination - INFO - unknown - 🚀 **[LINEAR-FLOW] Starting enhanced forwarding to DirectPIDRegistry for PID 209...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu chuyển tiếp nâng cao đến DirectPIDRegistry cho PID 209...)
+2025-08-31 14:28:14,079 - coordination - INFO - unknown - 🔄 **[RETRY-1] Attempting to forward PID 209 to DirectPIDRegistry...** ([THỬ LẠI-1] Đang thử chuyển tiếp PID 209 đến DirectPIDRegistry...)
+2025-08-31 14:28:14,079 - coordination - INFO - unknown - 🔄 **[SOLUTION-2] Enhanced forwarding PID 209 to DirectPIDRegistry** ([GIẢI PHÁP-2] Chuyển tiếp nâng cao PID 209 đến DirectPIDRegistry)
+2025-08-31 14:28:14,079 - coordination - DEBUG - unknown - 🔄 **[HANDOFF-RETRY] PID 209 attempt 1/3** ([THỬ LẠI-BÀN GIAO] PID 209 lần thử 1/3)
+2025-08-31 14:28:14,321 - coordination - DEBUG - unknown - ⏳ **[ACK-WAIT] Waiting for DirectPIDRegistry acknowledgment for PID 209** ([CHỜ XÁC NHẬN] Đang chờ xác nhận từ DirectPIDRegistry cho PID 209)
+2025-08-31 14:28:14,321 - coordination - DEBUG - unknown - ✅ **[ACK-WAIT] Registry acknowledgment received for PID 209 after 0.3ms** ([CHỜ XÁC NHẬN] Đã nhận xác nhận từ registry cho PID 209 sau 0.3ms)
+2025-08-31 14:28:14,322 - coordination - INFO - unknown - ✅ **[SOLUTION-2] DirectPIDRegistry handoff successful with acknowledgment for PID 209** ([GIẢI PHÁP-2] Bàn giao DirectPIDRegistry thành công với xác nhận cho PID 209)
+2025-08-31 14:28:14,322 - coordination - INFO - unknown - 📝 **[HANDOFF-SUCCESS] Recorded successful handoff for PID 209** ([BÀN GIAO-THÀNH CÔNG] Đã ghi lại bàn giao thành công cho PID 209) (attempt: 1, duration: 134.1ms)
+2025-08-31 14:28:14,322 - coordination - INFO - unknown - ✅ **[LINEAR-FLOW] PID 209 successfully forwarded to DirectPIDRegistry** ([LUỒNG-TUYẾN TÍNH] PID 209 đã chuyển tiếp thành công đến DirectPIDRegistry) **(attempt 1)** (lần thử 1)
+2025-08-31 14:28:15,316 - coordination - INFO - unknown - 📝 **[REGISTER] PID 209 registered for hook coordination** ([ĐĂNG KÝ] PID 209 đã đăng ký cho điều phối hook)
+2025-08-31 14:28:15,316 - coordination - INFO - unknown - 🏥 **[HEALTH] PID 209 added to health monitoring** ([SỨC KHỎE] PID 209 đã thêm vào giám sát sức khỏe) **(total: 2)** (tổng: 2)
+2025-08-31 14:28:16,985 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
+2025-08-31 14:28:39,326 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:28:39,326 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:28:39,326 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:28:48,135 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
+2025-08-31 14:28:52,619 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
+2025-08-31 14:29:09,357 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:29:09,357 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:29:09,357 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:29:39,382 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:29:39,382 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:29:39,382 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:30:09,410 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:30:09,410 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:30:09,410 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:30:39,440 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:30:39,441 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:30:39,441 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:31:09,472 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:31:09,472 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:31:09,473 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:31:39,499 - coordination - DEBUG - unknown - 🏥 **[HEALTH] Running health check for 2 active processes** ([SỨC KHỎE] Đang chạy kiểm tra sức khỏe cho 2 tiến trình hoạt động)
+2025-08-31 14:31:39,500 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 209 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 209 - chưa ghi nhận bàn giao)
+2025-08-31 14:31:39,500 - coordination - DEBUG - unknown - ⏳ **[HEALTH] Skipping health check for PID 142 - no handoff recorded yet** ([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID 142 - chưa ghi nhận bàn giao)
+2025-08-31 14:31:58,693 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
+2025-08-31 14:32:03,250 - coordination - INFO - unknown - 🧭 **Reservation bypass enabled** (bỏ qua đặt trước tài nguyên)
