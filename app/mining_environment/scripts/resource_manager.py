@@ -16,6 +16,7 @@ from threading import RLock
 from typing import List, Any, Dict, Optional
 from pathlib import Path
 import os
+import sys
 
 # **Core project imports** (import lõi dự án – nhập các module chính)
 from mining_environment.scripts.utils import MiningProcess, CloakRequest, CloakResult
@@ -26,6 +27,25 @@ from mining_environment.scripts.privileged_operations import get_privileged_mana
 from mining_environment.scripts.module_loggers import get_resource_manager_logger
 from mining_environment.scripts.error_management import get_error_reporter
 from mining_environment.scripts.strategy_cache import get_strategy_cache, CacheEvictionPolicy
+
+# Optional import: DirectPIDRegistry accessor (registry-first GPU resolution)
+try:
+    # Prefer absolute import via project root present in sys.path
+    from pid_logger.direct_registry import get_direct_registry  # type: ignore
+    DIRECT_REGISTRY_AVAILABLE = True
+except Exception:
+    # Fallback: dynamically inject project root
+    try:
+        import sys
+        project_root = Path(__file__).resolve().parents[2]
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        from pid_logger.direct_registry import get_direct_registry  # type: ignore
+        DIRECT_REGISTRY_AVAILABLE = True
+    except Exception:
+        # As a defensive default, continue without registry
+        get_direct_registry = None  # type: ignore
+        DIRECT_REGISTRY_AVAILABLE = False
 
 # **Module logger** (logger module – bộ ghi nhật ký thành phần)
 module_logger = get_resource_manager_logger()
@@ -527,8 +547,26 @@ class ResourceManager(IResourceManager):
                         self.logger.info(f"[RM] 📊 **Process details** (chi tiết tiến trình): name={process.name}, source={source}")
                         
                         # **Determine GPU index** (xác định chỉ số GPU – chọn card đồ họa)
-                        gpu_index = 0
-                        self.logger.debug(f"[RM] 🎮 **Target GPU** (GPU mục tiêu – card đồ họa được chọn): index={gpu_index}")
+                        gpu_index = -1  # unknown by default; avoid wrong fallback
+                        resolved_gpu_idx = None
+                        # Registry-first resolution: use DirectPIDRegistry mapping if available
+                        try:
+                            if DIRECT_REGISTRY_AVAILABLE and callable(get_direct_registry):  # type: ignore
+                                reg = get_direct_registry()  # type: ignore
+                                pi = reg.get_process_info(process.pid)
+                                if pi and getattr(pi, 'metadata', None):
+                                    rg = pi.metadata.get('gpu_index')
+                                    if isinstance(rg, int):
+                                        resolved_gpu_idx = int(rg)
+                        except Exception as _e:
+                            # Non-fatal; fall back to default
+                            self.logger.debug(f"[RM] Registry GPU resolution failed for PID {process.pid}: {_e}")
+
+                        if isinstance(resolved_gpu_idx, int):
+                            gpu_index = resolved_gpu_idx
+                            self.logger.info(f"[RM] 🎮 **Target GPU resolved from registry** (GPU mục tiêu lấy từ registry): index={gpu_index}")
+                        else:
+                            self.logger.debug(f"[RM] 🎮 **Target GPU unresolved** (không có ánh xạ registry) – pending late lookup in worker thread")
                         
                         # **Async GPU optimization** (tối ưu GPU bất đồng bộ – điều chỉnh không chặn)
                         def _optimize_async(pid_val: int, gpu_idx: int):
@@ -548,11 +586,40 @@ class ResourceManager(IResourceManager):
                                 try:
                                     self.logger.info(f"[RM] 🚀 **Calling GPU Orchestrator** (gọi điều phối GPU – kích hoạt bộ điều khiển) for PID {pid_val}")
                                     
-                                    # Quyết định nhánh tối ưu: tất cả GPU hay một GPU
+                                    # Quyết định nhánh tối ưu: tất cả GPU hay một GPU (registry-first override)
                                     try:
                                         optimize_all = str(os.getenv('OPTIMIZE_ALL_GPUS', 'true')).lower() in ('1', 'true', 'yes', 'all')
                                     except Exception:
                                         optimize_all = True
+
+                                    # If we have a valid target GPU, force single-GPU optimization regardless of env
+                                    if isinstance(gpu_idx, int) and gpu_idx >= 0:
+                                        if optimize_all:
+                                            self.logger.info("[RM] 🔒 Registry-first override: disable OPTIMIZE_ALL_GPUS due to known PID→GPU mapping")
+                                        optimize_all = False
+
+                                    # Extra safety: attempt on-the-fly registry lookup if gpu_idx invalid
+                                    if (not isinstance(gpu_idx, int) or gpu_idx < 0) and DIRECT_REGISTRY_AVAILABLE and callable(get_direct_registry):  # type: ignore
+                                        try:
+                                            reg2 = get_direct_registry()  # type: ignore
+                                            pi2 = reg2.get_process_info(pid_val)
+                                            maybe_gpu = None
+                                            if pi2 and getattr(pi2, 'metadata', None):
+                                                maybe_gpu = pi2.metadata.get('gpu_index')
+                                            if isinstance(maybe_gpu, int) and maybe_gpu >= 0:
+                                                gpu_idx = int(maybe_gpu)
+                                                # Disable broadcast once we know the exact target GPU
+                                                if optimize_all:
+                                                    self.logger.info("[RM] 🔒 Registry-first override (late): disable OPTIMIZE_ALL_GPUS due to resolved mapping")
+                                                optimize_all = False
+                                                self.logger.info(f"[RM] 🔒 Registry-first override (late): using gpu_index={gpu_idx}")
+                                        except Exception as _e2:
+                                            self.logger.debug(f"[RM] Late registry lookup failed for PID {pid_val}: {_e2}")
+
+                                    # Final decision gate: if gpu_idx still invalid, skip to avoid broadcast/wrong GPU
+                                    if not (isinstance(gpu_idx, int) and gpu_idx >= 0):
+                                        self.logger.warning(f"[RM] ⛔ Skipping GPU optimization for PID {pid_val}: unknown target GPU mapping (avoid broadcast)")
+                                        return
 
                                     if optimize_all and hasattr(self._gpu_orchestrator, 'optimize_gpu_for_all_available'):
                                         # Log detected GPU indices before ALL-GPU optimization (NVML or stealth log fallback)
