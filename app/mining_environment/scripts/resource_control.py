@@ -188,6 +188,26 @@ class GPUResourceManager:
         except Exception:
             self.metrics_cache_ttl_sec = 0.5
 
+        # ------- PID negative cache & backoff (bộ đệm âm tính PID & backoff) -------
+        # Lưu thời điểm hết hạn cache âm tính theo PID (pid -> expiry_ts)
+        self._neg_cache_expiry: Dict[int, float] = {}
+        # Số lần liên tiếp gặp trạng thái "không tồn tại" để tính backoff luỹ thừa
+        self._neg_cache_hits: Dict[int, int] = {}
+        # Thời điểm lần cuối log cảnh báo cho PID để chống spam
+        self._pid_last_log_ts: Dict[int, float] = {}
+        try:
+            self._pid_backoff_base: float = float(os.getenv('PID_NOT_FOUND_BACKOFF_BASE_SEC', str(self.config.get('pid_not_found_backoff_base_sec', 5.0))))
+        except Exception:
+            self._pid_backoff_base = 5.0
+        try:
+            self._pid_backoff_max: float = float(os.getenv('PID_NOT_FOUND_BACKOFF_MAX_SEC', str(self.config.get('pid_not_found_backoff_max_sec', 60.0))))
+        except Exception:
+            self._pid_backoff_max = 60.0
+        try:
+            self._pid_log_suppress_window: float = float(os.getenv('PID_NOT_FOUND_LOG_SUPPRESS_SEC', str(self.config.get('pid_not_found_log_suppress_sec', 20.0))))
+        except Exception:
+            self._pid_log_suppress_window = 20.0
+
         # Tự động khởi tạo NVML
         self.initialize_nvml()
 
@@ -1136,17 +1156,65 @@ class GPUResourceManager:
             'timestamp': time.time(),
             'errors': []
         }
-        
+        # Negative cache short-circuit (bỏ qua nhanh nếu PID đang trong cache âm tính)
+        now = time.time()
+        try:
+            with self._lock:
+                expiry = self._neg_cache_expiry.get(pid, 0.0)
+            if expiry and now < expiry:
+                # Chỉ log thưa để tránh spam
+                last_log = self._pid_last_log_ts.get(pid, 0.0)
+                if (now - last_log) > self._pid_log_suppress_window:
+                    try:
+                        self.logger.debug(f"[validate_pid_health] PID {pid} is negative-cached for {expiry - now:.3f}s remaining")
+                    except Exception:
+                        pass
+                    self._pid_last_log_ts[pid] = now
+                health_metrics['errors'].append('Process does not exist (negative_cache)')
+                return health_metrics
+        except Exception:
+            # Nếu có lỗi ở nhánh cache, tiếp tục kiểm tra bình thường
+            pass
+
         try:
             # Step 1: Check process existence
             if not psutil.pid_exists(pid):
+                # Cập nhật negative cache + backoff luỹ thừa
+                hits = 1
+                backoff = self._pid_backoff_base
+                try:
+                    with self._lock:
+                        hits = self._neg_cache_hits.get(pid, 0) + 1
+                        self._neg_cache_hits[pid] = hits
+                        backoff = min(self._pid_backoff_max, self._pid_backoff_base * (2 ** (hits - 1)))
+                        self._neg_cache_expiry[pid] = now + backoff
+                except Exception:
+                    pass
+
+                # Suppress log spam theo cửa sổ thời gian
+                last_log = self._pid_last_log_ts.get(pid, 0.0)
+                if (time.time() - last_log) > self._pid_log_suppress_window:
+                    self.logger.warning(f"PID {pid} does not exist (backoff={backoff:.2f}s, hits={hits})")
+                    self._pid_last_log_ts[pid] = time.time()
+                else:
+                    self.logger.debug(f"PID {pid} does not exist (suppressed)")
+
                 health_metrics['errors'].append('Process does not exist')
-                self.logger.warning(f"PID {pid} does not exist")
                 return health_metrics
             
             health_metrics['pid_exists'] = True
             # Alias for backward compatibility to avoid downstream KeyError
             health_metrics['exists'] = health_metrics['pid_exists']
+
+            # Clear negative cache khi PID quay lại tồn tại
+            try:
+                with self._lock:
+                    if pid in self._neg_cache_expiry:
+                        del self._neg_cache_expiry[pid]
+                    if pid in self._neg_cache_hits:
+                        del self._neg_cache_hits[pid]
+            except Exception:
+                pass
             
             # Step 2: Get process object and basic info
             try:
@@ -1531,6 +1599,25 @@ class OptimizedHardwareController:
         except Exception:
             self.dag_wait_timeout_sec = int(self.config.get('dag_wait_timeout_sec', 60))
 
+        # -------- Concurrency guard & backoff per-PID cho optimize_for_pid --------
+        self._opt_global_lock: RLock = RLock()
+        self._pid_optimize_locks: Dict[int, threading.Lock] = {}
+        self._pid_optimize_miss_counts: Dict[int, int] = {}
+        self._pid_optimize_next_allowed_ts: Dict[int, float] = {}
+        self._opt_last_log_ts: Dict[int, float] = {}
+        try:
+            self._opt_backoff_base_sec: float = float(os.getenv('OHC_PID_BACKOFF_BASE_SEC', str(self.config.get('ohc_pid_backoff_base_sec', 5.0))))
+        except Exception:
+            self._opt_backoff_base_sec = 5.0
+        try:
+            self._opt_backoff_max_sec: float = float(os.getenv('OHC_PID_BACKOFF_MAX_SEC', str(self.config.get('ohc_pid_backoff_max_sec', 60.0))))
+        except Exception:
+            self._opt_backoff_max_sec = 60.0
+        try:
+            self._opt_log_suppress_window: float = float(os.getenv('OHC_LOG_SUPPRESS_SEC', str(self.config.get('ohc_log_suppress_sec', 20.0))))
+        except Exception:
+            self._opt_log_suppress_window = 20.0
+
     def ensure_dag_ready(self, gpu_index: int) -> bool:
         """
         **DAG SYNCHRONIZATION: Ensure DAG is ready for mining** (đảm bảo DAG sẵn sàng cho mining)
@@ -1699,14 +1786,7 @@ class OptimizedHardwareController:
             self.logger.info("ℹ️ Dynamic balancing disabled via ENABLE_DYNAMIC_BALANCING; defaulting to GPU 0")
             gpu_index = 0
         
-        self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
-        if self._mirror_logger:
-            try:
-                self._mirror_logger.info(f"[OHC] Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
-            except Exception:
-                pass
-        
-        # Start timing
+        # Start timing & results early để phục vụ các nhánh guard/backoff trả sớm
         start_time = time.time()
         results = {
             'success': False,
@@ -1715,10 +1795,51 @@ class OptimizedHardwareController:
             'gpu_index': gpu_index,
             'baseline_verified': False,
             'operations_applied': [],
-            'temperature_prediction': None  # **INTELLIGENCE LAYER: Temperature prediction result**
+            'temperature_prediction': None
         }
-        
+
+        # Concurrency guard (không cho hai tối ưu hoá cùng lúc trên cùng PID)
+        acquired_lock = False
+        with self._opt_global_lock:
+            lock = self._pid_optimize_locks.get(pid)
+            if lock is None:
+                lock = threading.Lock()
+                self._pid_optimize_locks[pid] = lock
+        if not lock.acquire(blocking=False):
+            # Một tối ưu hoá đang chạy – tránh spam
+            now_guard = time.time()
+            last_log = self._opt_last_log_ts.get(pid, 0.0)
+            if (now_guard - last_log) > self._opt_log_suppress_window:
+                self.logger.debug(f"[optimize_for_pid] Concurrent optimization suppressed for PID {pid}")
+                self._opt_last_log_ts[pid] = now_guard
+            results['error'] = 'optimize_concurrent_guard'
+            results['duration'] = time.time() - start_time
+            return results
+        acquired_lock = True
+
         try:
+            # Backoff kiểm tra nhanh: nếu còn thời gian backoff thì trả sớm, tránh log spam
+            now_bf = time.time()
+            next_allowed = self._pid_optimize_next_allowed_ts.get(pid, 0.0)
+            if now_bf < next_allowed:
+                remain = max(0.0, next_allowed - now_bf)
+                last_log = self._opt_last_log_ts.get(pid, 0.0)
+                if (now_bf - last_log) > self._opt_log_suppress_window:
+                    self.logger.debug(f"[optimize_for_pid] Backoff active for PID {pid} (remaining {remain:.2f}s)")
+                    self._opt_last_log_ts[pid] = now_bf
+                results['error'] = 'optimize_backoff_active'
+                results['backoff_remaining_sec'] = remain
+                results['duration'] = time.time() - start_time
+                return results
+
+            # Chỉ log bắt đầu khi không bị guard/backoff
+            self.logger.info(f"🎯 Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
+            if self._mirror_logger:
+                try:
+                    self._mirror_logger.info(f"[OHC] Starting optimization for PID={pid}, Strategy={strategy}, GPU={gpu_index}")
+                except Exception:
+                    pass
+
             # **Normalize strategy for robust comparisons** (chuẩn hóa chiến lược để so sánh ổn định)
             normalized_strategy = self._normalize_strategy(strategy)
             self.logger.debug(f"🧭 [OHC.optimize_for_pid] Normalized strategy: {normalized_strategy}")
@@ -1795,10 +1916,35 @@ class OptimizedHardwareController:
             except Exception:
                 pid_exists = False
             if not pid_exists:
-                self.logger.error(f"❌ [OHC.optimize_for_pid] Process {pid} not found")
+                # Cập nhật backoff cho optimize khi PID không tồn tại
+                misses = 1
+                bf = self._opt_backoff_base_sec
+                try:
+                    with self._opt_global_lock:
+                        misses = self._pid_optimize_miss_counts.get(pid, 0) + 1
+                        self._pid_optimize_miss_counts[pid] = misses
+                        bf = min(self._opt_backoff_max_sec, self._opt_backoff_base_sec * (2 ** (misses - 1)))
+                        self._pid_optimize_next_allowed_ts[pid] = time.time() + bf
+                except Exception:
+                    pass
+                # Suppress log spam theo cửa sổ
+                now_nf = time.time()
+                last_log = self._opt_last_log_ts.get(pid, 0.0)
+                if (now_nf - last_log) > self._opt_log_suppress_window:
+                    self.logger.error(f"❌ [OHC.optimize_for_pid] Process {pid} not found (backoff={bf:.2f}s, misses={misses})")
+                    self._opt_last_log_ts[pid] = now_nf
+                else:
+                    self.logger.debug(f"[OHC.optimize_for_pid] Process {pid} not found (suppressed)")
                 results['error'] = f"Process {pid} not found"
                 return results
             self.logger.debug(f"✅ [OHC.optimize_for_pid] PID {pid} health: score={health.get('health_score', 'N/A')}, memory={health.get('memory_percent', 'N/A')}")
+            # Reset backoff khi PID hợp lệ trở lại
+            try:
+                with self._opt_global_lock:
+                    self._pid_optimize_miss_counts.pop(pid, None)
+                    self._pid_optimize_next_allowed_ts.pop(pid, None)
+            except Exception:
+                pass
             # Optional: enforce minimal health score via ENV
             try:
                 min_health_env = os.getenv('ENFORCE_PID_HEALTH_MIN')
@@ -1888,6 +2034,12 @@ class OptimizedHardwareController:
             self.logger.error(f"Optimization error for PID {pid}: {e}")
             results['error'] = str(e)
             results['success'] = False
+        finally:
+            # Always release per-PID optimization lock to avoid deadlocks
+            try:
+                lock.release()
+            except Exception:
+                pass
             
         try:
             results['duration'] = time.time() - start_time

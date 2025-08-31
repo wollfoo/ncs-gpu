@@ -61,6 +61,11 @@ class HookCoordinator:
         self.duplicate_detection_window: float = 5.0  # **5-second deduplication window** (cửa sổ loại trùng 5 giây)
         self.handoff_sequence_numbers: Dict[int, int] = {}  # **Track handoff sequence per PID** (theo dõi chuỗi handoff theo PID)
         
+        # ✅ **HEALTH GATING / WARM-UP** (cổng sức khỏe / làm ấm)
+        self.registration_timestamps: Dict[int, float] = {}  # **Track registration time per PID** (theo dõi thời điểm đăng ký theo PID)
+        self.health_warmup_seconds: float = 5.0  # **Warm-up window to suppress false alarms** (cửa sổ làm ấm để ngăn cảnh báo sai)
+        self.handoff_protection_period: float = 5.0  # **Protection after handoff** (bảo vệ sau bàn giao)
+        
         # ✅ **HEALTH CHECK** (kiểm tra sức khỏe): **Hook coordination health monitoring attributes** (thuộc tính giám sát sức khỏe điều phối hook)
         self.active_processes: Set[int] = set()
         self.hook_status_history: Dict[int, list] = {}  # **Track status changes over time** (theo dõi thay đổi trạng thái theo thời gian)
@@ -570,6 +575,7 @@ class HookCoordinator:
             self.active_processes.add(pid)
             self.hook_status_history[pid] = []
             self.recovery_attempts[pid] = 0
+            self.registration_timestamps[pid] = time.time()
             
             # ✅ **HEALTH MONITORING: Auto-start health monitoring on first registration** (GIÁM SÁT SỨC KHỎE: tự động bắt đầu giám sát sức khỏe khi đăng ký đầu tiên)
             if not self.health_monitoring_active:
@@ -609,6 +615,7 @@ class HookCoordinator:
             with self.lock:
                 self.hooks_ready[pid] = False  # **Initialize as not ready** (khởi tạo là chưa sẵn sàng)
                 self.active_processes.add(pid)
+                self.registration_timestamps[pid] = current_time
                 
                 # **Initialize tracking data** (khởi tạo dữ liệu theo dõi)
                 if pid not in self.hook_status_history:
@@ -880,6 +887,7 @@ class HookCoordinator:
             self.active_processes.discard(pid)
             self.hook_status_history.pop(pid, None)
             self.recovery_attempts.pop(pid, None)
+            self.registration_timestamps.pop(pid, None)
             
             # ✅ **IDEMPOTENCY CLEANUP: Remove handoff tracking data** (DỌN DẸP IDEMPOTENCY: xóa dữ liệu theo dõi bàn giao)
             self.handoff_timestamps.pop(pid, None)
@@ -1363,20 +1371,41 @@ class HookCoordinator:
         
         for pid in processes_to_check:
             try:
-                # **✅ ENHANCED FIX: Skip health check for recent handoffs to prevent race conditions** (sửa lỗi nâng cao: bỏ qua kiểm tra sức khỏe cho các bàn giao gần đây để tránh race conditions)
+                # **✅ ENHANCED FIX: Sentinel + Warm-up gating to prevent false positives**
+                # (sửa lỗi nâng cao: sentinel + cửa sổ làm ấm để tránh báo động sai)
                 with self.lock:
-                    last_handoff_time = self.handoff_timestamps.get(pid, 0)
+                    last_handoff_time = self.handoff_timestamps.get(pid, None)
+                    registration_time = self.registration_timestamps.get(pid, None)
                 
                 current_time = time.time()
+                
+                # **Warm-up gating based on registration time** (cổng làm ấm dựa trên thời điểm đăng ký)
+                if registration_time is not None:
+                    reg_age = current_time - registration_time
+                    if reg_age < self.health_warmup_seconds:
+                        if self.logger:
+                            self.logger.debug(f"⏳ **[HEALTH] Skipping health check for PID {pid} - warm-up window** "
+                                              f"([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID {pid} - cửa sổ làm ấm) "
+                                              f"(age={reg_age:.2f}s, window={self.health_warmup_seconds}s)")
+                        continue
+                
+                # **Sentinel for unknown handoff timestamp** (sentinel cho dấu thời gian bàn giao chưa biết)
+                if last_handoff_time is None:
+                    if self.logger:
+                        self.logger.debug(f"⏳ **[HEALTH] Skipping health check for PID {pid} - no handoff recorded yet** "
+                                          f"([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID {pid} - chưa ghi nhận bàn giao)")
+                    continue
+                
                 time_since_handoff = current_time - last_handoff_time
-                # **✅ HEALTH_CHECK_PROTECTION_PERIOD: Enhanced protection for handoff coordination** (thời gian bảo vệ kiểm tra sức khỏe: bảo vệ nâng cao cho điều phối bàn giao)
-                handoff_protection_period = 5.0  # **5-second protection period for new handoffs (increased from 3.0s)** (thời gian bảo vệ 5 giây cho các bàn giao mới - tăng từ 3.0s)
+                # **✅ HEALTH_CHECK_PROTECTION_PERIOD: Enhanced protection for handoff coordination**
+                # (thời gian bảo vệ kiểm tra sức khỏe: bảo vệ nâng cao cho điều phối bàn giao)
+                handoff_protection_period = self.handoff_protection_period
                 
                 if time_since_handoff < handoff_protection_period:
                     if self.logger:
                         self.logger.debug(f"⏳ **[HEALTH] Skipping health check for PID {pid} - recent handoff** "
-                                        f"([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID {pid} - bàn giao gần đây) "
-                                        f"({time_since_handoff:.2f}s ago, protection: {handoff_protection_period}s)")
+                                          f"([SỨC KHỎE] Bỏ qua kiểm tra sức khỏe cho PID {pid} - bàn giao gần đây) "
+                                          f"({time_since_handoff:.2f}s ago, protection: {handoff_protection_period}s)")
                     continue
                 
                 # **Verify hook status for each PID** (xác minh trạng thái hook cho mỗi PID)
