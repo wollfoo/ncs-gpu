@@ -1,4 +1,4 @@
-**Chẩn đoán tụt hash mining GPU sau nhiều lần restart - và đề xuất phương án khắc phục**
+**Giải Pháp Khắc Phục Tụt Hashrate GPU Mining**
 
 ### Tóm tắt phát hiện
 - Hashrate suy giảm theo lượt khởi động (restart) do “tối ưu chồng chéo” giữa các lớp điều khiển NVML: [GPUOptimizationOrchestrator] (bộ điều phối tối ưu – ra lệnh vòng kín), [OptimizedHardwareController] (điều khiển phần cứng – đặt Power/clocks) và [GPUResourceManager] (quản lý tài nguyên – nguồn chân lý).  

@@ -2569,6 +2569,38 @@ class OptimizedHardwareController:
             error = target - util
             self.logger.info(f"[OHC.set_target_utilization] Iter {iterations}: util={util:.3f}, target={target:.3f}, error={error:.3f}")
 
+            # Skip adjustment if GPU not yet active (startup grace)
+            min_util_threshold = 0.1  # 10%
+            try:
+                min_util_env = os.getenv('GPU_CLOSED_LOOP_MIN_UTIL')
+                if min_util_env:
+                    min_util_threshold = float(min_util_env)
+            except:
+                pass
+            
+            if util < min_util_threshold:
+                self.logger.info(f"[OHC.set_target_utilization] GPU util too low ({util:.1%} < {min_util_threshold:.1%}), maintaining baseline clocks")
+                # Ensure baseline is maintained
+                try:
+                    baseline_min_sm = int(os.getenv('MIN_SM_CLOCK', '1200'))
+                    baseline_min_power = int(os.getenv('MIN_POWER_LIMIT', '120'))
+                    if current_sm_clock < baseline_min_sm or current_power_limit < baseline_min_power:
+                        self.logger.info(f"🔧 Re-enforcing baseline: SM={baseline_min_sm}MHz, Power={baseline_min_power}W")
+                        self._apply_nvml_controls(pid, gpu_index, {
+                            'sm_clock': baseline_min_sm,
+                            'mem_clock': current_mem_clock,
+                            'power_limit': baseline_min_power
+                        })
+                        current_sm_clock = baseline_min_sm
+                        current_power_limit = baseline_min_power
+                except Exception as e:
+                    self.logger.debug(f"Baseline re-enforcement error: {e}")
+                
+                if _sleep_poll(max(0.1, min_interval_sec)):
+                    self.logger.info("🛑 Canceled/TTL during low util wait → exiting")
+                    break
+                continue
+
             # Check convergence
             if abs(error) <= max(1e-3, tolerance):
                 self.logger.info("✅ [OHC.set_target_utilization] Target reached within tolerance")
@@ -2588,7 +2620,9 @@ class OptimizedHardwareController:
             if actuator not in ("power", "clock", "auto"):
                 actuator = "power"
 
-            increased = error > 0.0
+            # FIX: Correct logic - if util < target, we need MORE power/clock
+            # error > 0 means util is BELOW target, so we should INCREASE resources
+            increased = error > 0.0  # Positive error = need to increase util = increase power/clock
 
             if actuator in ("power", "auto"):
                 step = step_power_watts if increased else -step_power_watts
@@ -2607,7 +2641,17 @@ class OptimizedHardwareController:
 
             if actuator in ("clock", "auto"):
                 step_clk = step_sm_clock_mhz if increased else -step_sm_clock_mhz
-                desired_sm = int(max(500, min(2100, current_sm_clock + step_clk)))
+                # Add baseline protection - never go below MIN_SM_CLOCK
+                try:
+                    baseline_min_sm = int(os.getenv('MIN_SM_CLOCK', '1200'))
+                except:
+                    baseline_min_sm = 1200
+                desired_sm = int(max(baseline_min_sm, min(2100, current_sm_clock + step_clk)))
+                
+                # Log if we're hitting baseline limit
+                if desired_sm == baseline_min_sm and (current_sm_clock + step_clk) < baseline_min_sm:
+                    self.logger.info(f"⚠️ Clock adjustment limited by MIN_SM_CLOCK={baseline_min_sm}MHz")
+                
                 applied = self._apply_nvml_controls(
                     pid,
                     gpu_index,

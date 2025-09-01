@@ -799,10 +799,17 @@ def setup():
     _set_default_env('CLOCK_LOCK_MIN_INCREASE_PCT', '5')    # min hashrate increase (%) required
     _set_default_env('GPU_PRE_UNLOCK', '1')
     # Baseline enforcement defaults (hashrate stability)
-    _set_default_env('MIN_POWER_LIMIT', '120')              # Watts
-    _set_default_env('MIN_SM_CLOCK', '1200')                # MHz
+    _set_default_env('MIN_SM_CLOCK', '1200')  # Default 1200 MHz
+    _set_default_env('MIN_MEM_CLOCK', '877')  # Default 877 MHz
+    _set_default_env('MIN_POWER_LIMIT', '120')  # Default 120W
     # Cross-PID restore cancellation default (avoid stale PID resets)
     _set_default_env('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')
+
+    # Closed-loop control tuning parameters
+    _set_default_env('GPU_CLOSED_LOOP_STEP_SM', '30')  # Larger steps for faster convergence
+    _set_default_env('GPU_CLOSED_LOOP_MIN_UTIL', '0.1')  # Skip adjustment if util < 10%
+    _set_default_env('GPU_CLOSED_LOOP_STARTUP_GRACE', '30')  # Startup grace period in seconds
+    _set_default_env('GPU_CLOSED_LOOP_MAX_SEC', '60')  # Max duration for closed-loop
 
     # Closed-loop defaults (enable and tune for stability) – Inference default profile
     _force_env('GPU_CLOSED_LOOP_ENABLED', '1')
