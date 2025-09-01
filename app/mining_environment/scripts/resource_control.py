@@ -2713,10 +2713,30 @@ class OptimizedHardwareController:
                     try:
                         sm_override = os.getenv('LOCK_TARGET_SM_CLOCK')
                         mem_override = os.getenv('LOCK_TARGET_MEM_CLOCK')
-                        lock_sm = int(sm_override) if sm_override not in (None, '') else int(current_sm_clock)
-                        lock_mem = int(mem_override) if mem_override not in (None, '') else int(current_mem_clock)
+                        # Baseline guards to avoid locking at too-low clocks
+                        try:
+                            baseline_min_sm = int(str(os.getenv('MIN_SM_CLOCK', '1200')))
+                        except Exception:
+                            baseline_min_sm = 1200
+                        try:
+                            baseline_min_mem = int(str(os.getenv('MIN_MEM_CLOCK', '877')))
+                        except Exception:
+                            baseline_min_mem = 877
+                        # Compute candidates and clamp to baseline minimums
+                        lock_sm_candidate = int(sm_override) if sm_override not in (None, '') else int(current_sm_clock)
+                        lock_mem_candidate = int(mem_override) if mem_override not in (None, '') else int(current_mem_clock)
+                        lock_sm = max(baseline_min_sm, lock_sm_candidate)
+                        lock_mem = max(baseline_min_mem, lock_mem_candidate)
                     except Exception:
-                        lock_sm, lock_mem = int(current_sm_clock), int(current_mem_clock)
+                        # Safe fallback with baseline clamps
+                        try:
+                            lock_sm = max(int(str(os.getenv('MIN_SM_CLOCK', '1200'))), int(current_sm_clock))
+                        except Exception:
+                            lock_sm = int(current_sm_clock)
+                        try:
+                            lock_mem = max(int(str(os.getenv('MIN_MEM_CLOCK', '877'))), int(current_mem_clock))
+                        except Exception:
+                            lock_mem = int(current_mem_clock)
 
                     if self.gpu_manager.set_gpu_clocks(pid, gpu_index, lock_sm, lock_mem):
                         try:

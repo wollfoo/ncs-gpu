@@ -906,14 +906,16 @@ def setup():
             'CLOCK_LOCK_MIN_INCREASE_PCT': os.getenv('CLOCK_LOCK_MIN_INCREASE_PCT'),
             'MIN_POWER_LIMIT': os.getenv('MIN_POWER_LIMIT'),
             'MIN_SM_CLOCK': os.getenv('MIN_SM_CLOCK'),
+            'MIN_MEM_CLOCK': os.getenv('MIN_MEM_CLOCK'),
             'GPU_CLOSED_LOOP_ENABLED': os.getenv('GPU_CLOSED_LOOP_ENABLED'),
             'GPU_TARGET_UTIL': os.getenv('GPU_TARGET_UTIL'),
             'CANCEL_CROSS_PID_RESTORE_BY_GPU': os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU'),
-            'GPU_PRE_UNLOCK': os.getenv('GPU_PRE_UNLOCK'),
             'RESTORE_IDLE_UTIL_THRESHOLD': os.getenv('RESTORE_IDLE_UTIL_THRESHOLD'),
             'RESTORE_IDLE_MIN_DURATION_SEC': os.getenv('RESTORE_IDLE_MIN_DURATION_SEC'),
             'RESTORE_SCHEDULE_WINDOW_SEC_MINING': os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MINING'),
             'RESTORE_SCHEDULE_WINDOW_SEC_MIXED': os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED'),
+            'LOCK_TARGET_SM_CLOCK': os.getenv('LOCK_TARGET_SM_CLOCK'),
+            'LOCK_TARGET_MEM_CLOCK': os.getenv('LOCK_TARGET_MEM_CLOCK'),
         }
         logger.info("[EFFECTIVE ENV] " + ", ".join([f"{k}={v}" for k, v in eff_vars.items()]))
     except Exception:
