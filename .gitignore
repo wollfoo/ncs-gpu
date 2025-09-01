@@ -11,7 +11,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .claude/
-# *log*
+*log*
 # C extensions
 # *.so
 .mcp.json
