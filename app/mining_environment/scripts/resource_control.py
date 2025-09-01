@@ -914,7 +914,8 @@ class GPUResourceManager:
             except Exception:
                 allow_clock_lock = False
             if not allow_clock_lock:
-                self.logger.info(f"[RC] ⛔ Skipping clock lock (ALLOW_CLOCK_LOCK=0) | requested SM={sm_clock}MHz, MEM={mem_clock}MHz | gpu={gpu_index}")
+                env_acl = os.getenv('ALLOW_CLOCK_LOCK')
+                self.logger.info(f"[RC] ⛔ Skipping clock lock (ALLOW_CLOCK_LOCK={env_acl}) | requested SM={sm_clock}MHz, MEM={mem_clock}MHz | gpu={gpu_index}")
                 return False
 
             # Safety gates: temperature + NVML supported check before locking

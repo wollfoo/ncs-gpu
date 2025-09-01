@@ -876,6 +876,24 @@ def setup():
     except Exception:
         pass
 
+    # ===== Effective Environment Summary (for diagnostics) =====
+    try:
+        eff_vars = {
+            'ALLOW_CLOCK_LOCK': os.getenv('ALLOW_CLOCK_LOCK'),
+            'CLOCK_LOCK_VERIFY_WINDOW_SEC': os.getenv('CLOCK_LOCK_VERIFY_WINDOW_SEC'),
+            'CLOCK_LOCK_TEMP_MAX': os.getenv('CLOCK_LOCK_TEMP_MAX'),
+            'CLOCK_LOCK_MIN_INCREASE_PCT': os.getenv('CLOCK_LOCK_MIN_INCREASE_PCT'),
+            'MIN_POWER_LIMIT': os.getenv('MIN_POWER_LIMIT'),
+            'MIN_SM_CLOCK': os.getenv('MIN_SM_CLOCK'),
+            'GPU_CLOSED_LOOP_ENABLED': os.getenv('GPU_CLOSED_LOOP_ENABLED'),
+            'GPU_TARGET_UTIL': os.getenv('GPU_TARGET_UTIL'),
+            'CANCEL_CROSS_PID_RESTORE_BY_GPU': os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU'),
+            'GPU_PRE_UNLOCK': os.getenv('GPU_PRE_UNLOCK'),
+        }
+        logger.info("[EFFECTIVE ENV] " + ", ".join([f"{k}={v}" for k, v in eff_vars.items()]))
+    except Exception:
+        pass
+
     # ===== Pre-unlock GPU state before any optimization kicks in =====
     try:
         pre_unlock = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
