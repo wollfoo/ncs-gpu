@@ -798,6 +798,11 @@ def setup():
     _set_default_env('CLOCK_LOCK_TEMP_MAX', '70')           # max allowable temp (C)
     _set_default_env('CLOCK_LOCK_MIN_INCREASE_PCT', '5')    # min hashrate increase (%) required
     _set_default_env('GPU_PRE_UNLOCK', '1')
+    # Baseline enforcement defaults (hashrate stability)
+    _set_default_env('MIN_POWER_LIMIT', '120')              # Watts
+    _set_default_env('MIN_SM_CLOCK', '1200')                # MHz
+    # Cross-PID restore cancellation default (avoid stale PID resets)
+    _set_default_env('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')
 
     # Closed-loop defaults (enable and tune for stability) – Inference default profile
     _force_env('GPU_CLOSED_LOOP_ENABLED', '1')
