@@ -1,6 +1,0 @@
-2025-08-31 14:27:55,234 - strategy_engine - INFO - unknown - 💓 [Heartbeat] StrategyEngine initialized (logger active)
-2025-08-31 14:27:55,250 - strategy_engine - INFO - unknown - ✅ [StrategyEngine] Initialized successfully
-2025-08-31 14:28:10,521 - strategy_engine - INFO - unknown - 📋 [StrategyEngine] Applying strategy: gpu_power
-2025-08-31 14:28:10,522 - strategy_engine - INFO - unknown - 📋 [StrategyEngine] Applying strategy: gpu_clock
-2025-08-31 14:28:17,016 - strategy_engine - INFO - unknown - 📋 [StrategyEngine] Applying strategy: gpu_power
-2025-08-31 14:28:17,019 - strategy_engine - INFO - unknown - 📋 [StrategyEngine] Applying strategy: gpu_clock
