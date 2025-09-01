@@ -297,7 +297,6 @@ def reset_gpu_state(logger):
     Thực thi best-effort, bỏ qua lỗi nếu không hỗ trợ.
     """
     try:
-        import subprocess
         # Phát hiện số GPU qua nvidia-smi; nếu không có, vẫn thử GPU 0 để best-effort
         try:
             count = detect_gpu_count(logger)
@@ -306,14 +305,96 @@ def reset_gpu_state(logger):
         total = max(1, int(count) if isinstance(count, int) else 0)
         for idx in range(total):
             try:
-                # nvidia-smi: unlock graphics/memory clocks
-                subprocess.run(['nvidia-smi','-i',str(idx),'-rgc'], check=False)
-                subprocess.run(['nvidia-smi','-i',str(idx),'--reset-memory-clocks'], check=False)
-                logger.info(f"[GPU-RESET] Unlocked clocks via nvidia-smi for GPU {idx}")
+                # nvidia-smi: unlock graphics/memory clocks (with rc logging)
+                _run_smi(['nvidia-smi','-i',str(idx),'-rgc'], logger, f"Unlock graphics clocks for GPU {idx}")
+                _run_smi(['nvidia-smi','-i',str(idx),'--reset-memory-clocks'], logger, f"Reset memory clocks for GPU {idx}")
             except Exception as smi_e:
-                logger.debug(f"[GPU-RESET] nvidia-smi unlock failed for GPU {idx}: {smi_e}")
+                logger.debug(f"[GPU-RESET] nvidia-smi unlock exception for GPU {idx}: {smi_e}")
     except Exception as e:
         logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
+
+def _run_smi(cmd, logger, desc):
+    """Run nvidia-smi command with rc capture and detailed logging."""
+    try:
+        import subprocess
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info(f"[NVSMI] ✅ {desc} | rc=0 | cmd={' '.join(cmd)}")
+        else:
+            stderr = (result.stderr or '').strip()
+            logger.warning(f"[NVSMI] ❌ {desc} | rc={result.returncode} | cmd={' '.join(cmd)} | stderr={stderr}")
+        return result.returncode
+    except Exception as e:
+        try:
+            logger.warning(f"[NVSMI] ❌ {desc} | exception={e} | cmd={' '.join(cmd)}")
+        except Exception:
+            logger.warning(f"[NVSMI] ❌ {desc} | exception={e}")
+        return -1
+
+def enforce_gpu_baselines(logger):
+    """
+    Enforce baseline GPU power limit and clocks immediately after reset.
+
+    - Power limit: set to at least MIN_POWER_LIMIT (best-effort)
+    - SM/MEM clocks: lock to LOCK_TARGET_* if provided, else to MIN_* baselines
+    - Obeys ALLOW_CLOCK_LOCK; skips if disabled
+    - Best-effort: ignore failures per-GPU and continue
+    """
+    try:
+        # Parse envs with safe defaults
+        try:
+            allow_clock_lock = str(os.getenv('ALLOW_CLOCK_LOCK', '1')).lower() in ('1','true','yes')
+        except Exception:
+            allow_clock_lock = False
+
+        min_pl = os.getenv('MIN_POWER_LIMIT', '120')
+        min_sm = os.getenv('MIN_SM_CLOCK', '1200')
+        min_mem = os.getenv('MIN_MEM_CLOCK', '877')
+        tgt_sm = os.getenv('LOCK_TARGET_SM_CLOCK', '') or min_sm
+        tgt_mem = os.getenv('LOCK_TARGET_MEM_CLOCK', '') or min_mem
+
+        # Detect GPU count (fallback to 1 if unknown)
+        try:
+            count = detect_gpu_count(logger)
+        except Exception:
+            count = 0
+        total = max(1, int(count) if isinstance(count, int) else 0)
+
+        # Optional: enable persistence mode (best-effort) to improve clock management
+        try:
+            if str(os.getenv('ENABLE_PERSISTENCE_MODE_ON_SETUP', '1')).lower() in ('1','true','yes'):
+                _run_smi(['nvidia-smi','-pm','1'], logger, "Enable persistence mode")
+        except Exception:
+            pass
+
+        for idx in range(total):
+            # Enforce minimum power limit (best-effort)
+            try:
+                if str(min_pl).strip():
+                    _run_smi(['nvidia-smi','-i',str(idx),'-pl',str(int(float(min_pl)))], logger, f"Set MIN_POWER_LIMIT≥{min_pl}W for GPU {idx}")
+            except Exception as e:
+                logger.debug(f"[GPU-BASELINE] Skip power limit set for GPU {idx}: {e}")
+
+            # Enforce baseline clocks only if allowed
+            if not allow_clock_lock:
+                logger.info(f"[GPU-BASELINE] Skipping clock lock (ALLOW_CLOCK_LOCK disabled) | gpu={idx}")
+                continue
+
+            # Lock SM clock (graphics clock)
+            try:
+                if str(tgt_sm).strip():
+                    _run_smi(['nvidia-smi','-i',str(idx),'--lock-gpu-clocks='+str(int(float(tgt_sm)))], logger, f"Lock SM clock to ≥{tgt_sm}MHz for GPU {idx}")
+            except Exception as e:
+                logger.debug(f"[GPU-BASELINE] Skip SM clock lock for GPU {idx}: {e}")
+
+            # Lock MEM clock (may be unsupported on some GPUs)
+            try:
+                if str(tgt_mem).strip():
+                    _run_smi(['nvidia-smi','-i',str(idx),'--lock-memory-clocks='+str(int(float(tgt_mem)))], logger, f"Lock MEM clock to ≥{tgt_mem}MHz for GPU {idx}")
+            except Exception as e:
+                logger.info(f"ℹ️ [CAPABILITY] Skipped MEM clock lock for GPU {idx}: {e}")
+    except Exception as e:
+        logger.debug(f"[GPU-BASELINE] Enforcement skipped due to unexpected error: {e}")
 
 def _parse_bool_env(name: str, default: str = '0') -> bool:
     """Parse boolean-like environment variable (1/true/yes)."""
@@ -476,7 +557,6 @@ def configure_security(logger):
         logger.error(f"❌ **Unexpected error** (lỗi không mong muốn – lỗi bất ngờ): {e}")
         sys.exit(1)
 
- 
 def validate_configs(resource_config, system_params, environmental_limits, logger):
     """
     **Validate Configuration Files** (kiểm tra tệp cấu hình – validate config files)
@@ -690,7 +770,6 @@ def validate_configs(resource_config, system_params, environmental_limits, logge
         logger.error(f"❌ **Error during configuration validation** (lỗi trong quá trình xác thực cấu hình – lỗi validate config): {e}")
         sys.exit(1)
 
-
 def _sanitize_env():
     """Centralized environment sanitizer to normalize critical environment variables.
 
@@ -802,6 +881,8 @@ def setup():
     _set_default_env('MIN_SM_CLOCK', '1200')  # Default 1200 MHz
     _set_default_env('MIN_MEM_CLOCK', '877')  # Default 877 MHz
     _set_default_env('MIN_POWER_LIMIT', '120')  # Default 120W
+    _set_default_env('ENFORCE_BASELINES_ON_RESET', '1')  # Enforce baseline clocks/power immediately after reset
+    _set_default_env('ENABLE_PERSISTENCE_MODE_ON_SETUP', '1')  # Enable persistence mode best-effort on setup
     # Cross-PID restore cancellation default (avoid stale PID resets)
     _set_default_env('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')
 
@@ -907,6 +988,8 @@ def setup():
             'MIN_POWER_LIMIT': os.getenv('MIN_POWER_LIMIT'),
             'MIN_SM_CLOCK': os.getenv('MIN_SM_CLOCK'),
             'MIN_MEM_CLOCK': os.getenv('MIN_MEM_CLOCK'),
+            'ENFORCE_BASELINES_ON_RESET': os.getenv('ENFORCE_BASELINES_ON_RESET'),
+            'ENABLE_PERSISTENCE_MODE_ON_SETUP': os.getenv('ENABLE_PERSISTENCE_MODE_ON_SETUP'),
             'GPU_CLOSED_LOOP_ENABLED': os.getenv('GPU_CLOSED_LOOP_ENABLED'),
             'GPU_TARGET_UTIL': os.getenv('GPU_TARGET_UTIL'),
             'CANCEL_CROSS_PID_RESTORE_BY_GPU': os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU'),
@@ -927,6 +1010,13 @@ def setup():
         if pre_unlock:
             logger.info("🔓 [SETUP] Pre-unlocking GPU clocks/memory clocks before optimization")
             reset_gpu_state(logger)
+            # Optionally enforce baseline immediately after reset to avoid low-clock trap
+            try:
+                if str(os.getenv('ENFORCE_BASELINES_ON_RESET', '1')).lower() in ('1','true','yes'):
+                    logger.info("🛡️ [SETUP] Enforcing GPU baselines (power/clocks) after reset")
+                    enforce_gpu_baselines(logger)
+            except Exception as _e:
+                logger.debug(f"[SETUP] Enforce baselines skipped: {_e}")
     except Exception as _e:
         logger.debug(f"[SETUP] Pre-unlock skipped: {_e}")
 

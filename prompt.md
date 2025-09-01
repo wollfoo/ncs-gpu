@@ -1,209 +1,166 @@
-# ✅ LANGUAGE RULES
-- **MANDATORY**: Trả lời hoàn toàn bằng **Tiếng Việt**.  
-- **WITH EXPLANATION**: Mọi **[English Term] (mô tả tiếng Việt – chức năng/mục đích)** đều phải kèm giải thích.  
-- **Standard Syntax** khi dùng thuật ngữ:
-  - **[Root cause] (nguyên nhân gốc rễ – vì sao xảy ra lỗi)**
-  - **[Hypothesis] (giả thuyết – điều cần kiểm chứng)**
-  - **[Evidence] (bằng chứng – trích từ log/tập tin cụ thể)**
-  - **[Refactor] (tái cấu trúc – chỉnh sửa không đổi kiến trúc)**
-  - **[Constraint] (ràng buộc – điều không được phá vỡ)**
-  - **[ToT] (Tree-of-Thought – suy nghĩ phân nhánh)**
-  - **[Self-Refine] (tự phê bình – chỉnh sửa tối đa 2 vòng)**
+# Hãy chọn sub agent phù hợp để thực hiện task này 
+
+# Chẩn đoán tụt hash mining GPU sau nhiều lần restart
+
+## ✅ Language Rules
+- **MANDATORY**: Trả lời bằng **Tiếng Việt**.  
+- **WITH EXPLANATION**: Mọi thuật ngữ **[English Term] (mô tả tiếng Việt – chức năng/mục đích)** phải kèm **mô tả tiếng Việt ngắn** ngay sau lần xuất hiện **đầu tiên** trong phần trả lời.
+- **Standard Syntax** khi trích dẫn thuật ngữ:  
+  **[Application clocks] (xung ứng dụng – cấu hình xung nhịp do ứng dụng đặt)**, **[Power limit] (giới hạn công suất – ràng buộc TDP)**, **[Persistence mode] (chế độ duy trì – giữ ngữ cảnh GPU khi không có tiến trình)**, **[CUDA context] (ngữ cảnh CUDA – phiên làm việc GPU)**, **[NVML] (thư viện quản lý NVIDIA – API đọc/đặt trạng thái GPU)**, **[Thermal throttling] (giảm xung do nhiệt – hạ tần số để hạ nhiệt)**, **[P-state] (trạng thái hiệu năng – cấp xung/điện của GPU)**, **[KawPow] (thuật toán mining – workload dạng memory-hard)**, **[TOT/Tree-of-Thought] (cây suy luận – phân nhánh giả thuyết)**, **[Self-Refine] (tự hiệu chỉnh – vòng rà soát cải tiến)**.
 
 ---
 
-# 🗂️ BỐI CẢNH KỸ THUẬT
-- **Codebase**: toàn bộ trong đường dẫn `/app`.  
-- **[Docker image] (ảnh Docker – môi trường chạy)**: build từ `Dockerfile`, tag `api-models:latest`.
+## 🗂️ Bối Cảnh Kỹ Thuật
+- **Codebase**: toàn bộ trong `/app`.
+- **Docker image** (ảnh Docker – gói môi trường chạy): build từ `Dockerfile`, tag `api-models:latest`.
 
-**Luồng logic chính (main flow)**:
-```text
-[app/start_mining.py] → [stealth_inference_cuda.py] → [inference-cuda]
-→ [coordinator.py] → [direct_registry.py]
-→ [resource_manager.py] → [cloak_strategies.py]
-→ (trong resource_manager.py, sau cloaking) → [gpu_optimization_orchestrator.py] → [resource_control.py]
-→ [app/start_mining.py]
+**Luồng logic chính** (kiểm tra theo thứ tự và trích dẫn file/func thực tế):
 ```
 
-**\[Constraints] (ràng buộc – phải tuân thủ):**
+\[app/start\_mining.py] → \[stealth\_inference\_cuda.py] → \[inference-cuda]
+→ \[coordinator.py] → \[direct\_registry.py]
+→ \[resource\_manager.py] → \[cloak\_strategies.py]
+→ (trong resource\_manager.py, sau cloaking) → \[gpu\_optimization\_orchestrator.py] → \[resource\_control.py]
+→ \[app/start\_mining.py]
 
-* Không tạo **module** mới nếu **không thật sự cần**.
-* Không thay đổi **cấu trúc thư mục**.
-* Không cung cấp **code**; chỉ mô tả thiết kế và lộ trình thực thi bằng tiếng Việt bình dân.
-
----
-
-# 🎯 VAI TRÒ & ĐỊNH VỊ
-
-Bạn là **\[GPU Performance Investigator] (chuyên gia điều tra hiệu năng GPU – tìm nguyên nhân tụt hash)**.
-Mục tiêu: Xác định **\[Root cause] (nguyên nhân gốc rễ)** tụt hash sau nhiều lần dừng/chạy lại mining; chỉ rõ **module/lớp/hàm** liên quan; đề xuất **\[Refactor] (tái cấu trúc tối thiểu)** theo ràng buộc.
-
----
-
-# 📊 DỮ LIỆU KHỞI TẠO (giữ nguyên trích dẫn verbatim)
-
-* **Lần 1** (khoảng `39.12 MH/s`):
-
-```log
-[2025-08-31 14:16:31.557]  net      new AI computation task from AI Server 127.0.0.1:4444 difficulty level 4295M algorithm kawpow height 4000095, task progress: 1 unit (equivalent to 29053707.30 H/s)
-[2025-08-31 14:18:05.544]  miner    speed 10s/60s/15m 39.12 37.85 n/a MH/s max 49.41 MH/s
-```
-
-* **Lần 2** (khoảng `28.59 MH/s`):
-
-```log
-01 07:13:51.788]  miner    speed 10s/60s/15m 28.59 27.43 n/a MH/s max 37.48 MH/s
-2025-09-01 07:13:51,789 - gpu_miner - INFO - unknown - [2025-09-01 07:13:51][inference-cuda[gpu1]][R:183s] 2025-09-01 07:13:51,788 - stealth_inference - INFO - unknown - [inference-cuda-stdout] [2025-09-01 07:13:51.788]  miner    speed 10s/60s/15m 28.59 27.43 n/a MH/s max 37.48 MH/s
-📊 METRICS [inference-cuda[gpu1]]: Current=37.48 MH/s | Avg5=29.01 MH/s | TotalAvg=25.60 MH/s | Samples=8 | Runtime=183s
-2025-09-01 07:13:51,789 - gpu_miner - INFO - unknown - 📊 METRICS [inference-cuda[gpu1]]: Current=37.48 MH/s | Avg5=29.01 MH/s | TotalAvg=25.60 MH/s | Samples=8 | Runtime=183s
-```
-
-* **Lần 3+** (khoảng `~10.9 MH/s`):
-
-```log
-[2025-09-01 07:18:50][inference-cuda[gpu0]][R:122s] 2025-09-01 07:18:50,484 - stealth_inference - INFO - unknown - [inference-cuda-stdout] [2025-09-01 07:18:50.483]  miner    speed 10s/60s/15m 10.96 11.09 n/a MH/s max 11.49 MH/s
-2025-09-01 07:18:50,485 - gpu_miner - INFO - unknown - [2025-09-01 07:18:50][inference-cuda[gpu0]][R:122s] 2025-09-01 07:18:50,484 - stealth_inference - INFO - unknown - [inference-cuda-stdout] [2025-09-01 07:18:50.483]  miner    speed 10s/60s/15m 10.96 11.09 n/a MH/s max 11.49 MH/s
-📊 METRICS [inference-cuda[gpu0]]: Current=11.49 MH/s | Avg5=7.23 MH/s | TotalAvg=6.03 MH/s | Samples=6 | Runtime=122s
-2025-09-01 07:18:50,485 - gpu_miner - INFO - unknown - 📊 METRICS [inference-cuda[gpu0]]: Current=11.49 MH/s | Avg5=7.23 MH/s | TotalAvg=6.03 MH/s | Samples=6 | Runtime=122s
 ```
 
 ---
 
-# 🧪 PHẠM VI KIỂM TRA & NGUỒN BẰNG CHỨNG
-
-* **Codebase**: quét toàn bộ `/app` (đọc file, trích dẫn nguyên văn khi cần).
-* **Logs**:
-
-  * `/app/mining_debug.log`
-  * `/app/mining_environment/logs`
-* **\[Anti-Hallucination] (chống ảo tưởng – nói theo chứng cứ)**:
-
-  * Chỉ kết luận dựa trên **\[Evidence] (bằng chứng)**: trích đoạn **log**, **đường dẫn file**, **tên hàm/lớp** chính xác.
-  * Khi nhắc đến **code**, **giữ nguyên verbatim** (không sửa, không suy đoán).
-  * Nếu **không truy cập được file**, phải nêu rõ: **“thiếu bằng chứng”**, kèm **danh sách mục cần thu thập**.
-
----
-
-# ✅ ĐÁNH GIÁ NĂNG LỰC (tự kiểm ngay trước khi chạy)
-
-Điền **Có/Không**:
-
-```markdown
-### Checklist Năng Lực Cần Thiết:
-- Hiểu [KawPoW] (thuật toán Ravencoin – phụ thuộc DAG/VRAM/nhịp bộ nhớ).
-- Biết [CUDA Context] (ngữ cảnh CUDA – có thể rò rỉ/giữ trạng thái sau lần chạy).
-- Biết [P-State / Power Limit] (trạng thái công suất – ảnh hưởng xung/điện áp).
-- Biết [Persistence Mode] (chế độ giữ GPU nóng – tránh tạo lại context).
-- Nắm [GPU Thermal Throttling] (hạn xung do nhiệt – tụt hiệu năng dần).
-- Đọc & đối chiếu log đa nguồn; grep/tìm kiếm call-chain trong `/app`.
-- Hiểu module: `resource_manager.py`, `cloak_strategies.py`, `gpu_optimization_orchestrator.py`, `resource_control.py`.
+## 📦 Dữ Liệu Log (Evidence ban đầu – trích dẫn nguyên văn)
+> Lần 1 (≈ **29.12 MH/s**)
 ```
 
----
+2025-09-01 12:40:33,359 ... task progress: 1 unit (equivalent to 32669992.44 H/s)
+2025-09-01 12:40:33,360 ... task progress: 1 unit (equivalent to 29598351.54 H/s)
+... 📊 METRICS \[inference-cuda\[gpu0]]: Current=29598351.54 H/s | ...
 
-# 🧠 THINKING HARD – QUY TRÌNH TƯ DUY 3 TẦNG
+```
 
-1. **Tầng 1 – Khám phá**: Lập **bản đồ call-flow** từ log & code; xác định nơi **thiết lập/tối ưu GPU** (ai thay đổi power/clock/affinity?).
-2. **Tầng 2 – Giả thuyết**: Dựng **\[ToT] (phân nhánh)** về nguyên nhân tụt hash theo lớp **phần cứng (nhiệt/điện/clock)**, **trình điều khiển (driver/context/pstate)**, **ứng dụng (thuật toán/luồng/tối ưu chồng chéo)**.
-3. **Tầng 3 – Kiểm chứng**: Tìm **\[Evidence] (bằng chứng)** xác nhận/loại trừ từng nhánh; kết thúc với **\[Root cause] (nguyên nhân gốc rễ)** duy nhất (hoặc top-2 kèm độ tin cậy).
+> Lần 2 (≈ **20.59 MH/s**)
+```
 
----
+2025-09-01 12:53:36,327 ... task progress: 1 unit (equivalent to 17065126.22 H/s)
+... 📊 METRICS \[inference-cuda\[gpu0]]: Current=17065126.22 H/s | ...
+2025-09-01 12:53:36,329 ... task progress: 1 unit (equivalent to 19788845.50 H/s)
+... 📊 METRICS \[inference-cuda\[gpu1]]: Current=19788845.50 H/s | ...
 
-# 3️⃣ NHIỆM VỤ CỤ THỂ
+```
 
-1. Rà soát toàn bộ **codebase** trong `/app` để:
+> Lần 3+ (≈ **10.87 MH/s**)
+```
 
-   * Liệt kê **module/lớp/hàm** có thao tác **GPU tuning** (**\[Power/Clock/SM/Memory Affinity] (chỉnh công suất/xung/SM/bộ nhớ)**), đặc biệt:
+2025-09-01 13:39:28,220 ... task progress: 1 unit (equivalent to 10646703.18 H/s)
+... 📊 METRICS \[inference-cuda\[gpu1]]: Current=10646703.18 H/s | ...
+2025-09-01 13:39:28,226 ... task progress: 1 unit (equivalent to 10198681.48 H/s)
+... 📊 METRICS \[inference-cuda\[gpu0]]: Current=10198681.48 H/s | ...
 
-     * `resource_manager.py`, `cloak_strategies.py`, `gpu_optimization_orchestrator.py`, `resource_control.py`.
-   * Trích dẫn nguyên văn nơi **đặt/thay đổi** tham số GPU (ví dụ: power limit, application clocks, CUDA env, device selection).
-2. Phân tích chi tiết **log** tại:
+```
 
-   * `/app/mining_debug.log`
-   * `/app/mining_environment/logs`
-   * Truy vết **thời điểm** và **thứ tự** thao tác tối ưu (ai chạy trước/sau), so khớp với **dao động hash** trong log tham chiếu.
-3. Làm rõ **\[Root cause] (nguyên nhân gốc rễ)** tụt hash khi dừng/rerun:
+**Log cần đọc từ máy chạy thật**:
+- `/app/mining_debug.log`
+- `/app/mining_environment/logs` (duyệt tất cả file con theo mốc thời gian)
 
-   * So sánh **Lần 1 (39.12 MH/s)** → **Lần 2 (28.59 MH/s)** → **Lần 3+ (\~10.9 MH/s)**.
-   * Kiểm tra:
-
-     * **\[Wrong Algorithm] (sai thuật toán)**: có đổi algorithm hay tham số miner?
-     * **\[Optimization Overlap] (chồng chéo tối ưu)**: nhiều lớp chỉnh GPU đè nhau?
-     * **\[Cumulative Constraint] (giảm dần giới hạn)**: mỗi lần chạy hạ power/clock thêm?
-     * **\[CUDA Context Leak] (rò rỉ ngữ cảnh CUDA)**: giữ trạng thái xấu giữa lần chạy?
-     * **\[Thermal/P-State Lock] (kẹt trạng thái nhiệt/công suất)**: không reset về mặc định?
-     * **\[Device Mapping Drift] (lệch GPU0/GPU1)**: phiên trước tối ưu GPU1, phiên sau chạy trên GPU0?
-4. Chỉ rõ **module** và **chức năng/lớp** liên quan trực tiếp đến tụt hash (trích dẫn đường dẫn + tên hàm + dòng nếu có).
-5. Đề xuất **\[Refactor] (tối thiểu)**:
-
-   * Tận dụng mã hiện có; **không** tạo module mới không cần thiết; **không** đổi cấu trúc thư mục.
-   * Thiết kế ở mức mô tả (tiếng Việt bình dân), **không** đưa code.
-   * Ưu tiên **\[Get It Working First] (chạy ổn trước)**, tối ưu sau.
-6. Lập **kế hoạch xác minh**:
-
-   * Bộ **\[Sanity Checks] (kiểm tra nhanh)** trước/sau chạy.
-   * **Kịch bản A/B**: bật/tắt từng tối ưu để cô lập nguyên nhân.
-   * **\[Rollback Plan] (kế hoạch quay lui)** nếu hash giảm.
+> **Lưu ý**: Khi trích chứng cứ, luôn ghi **timestamp**, **module**, **dòng** và **đường dẫn file** nếu có.
 
 ---
 
-# 🌳 TREE-OF-THOUGHT (ToT – phân nhánh)
-
-* Nhánh A: **\[Thermal Throttling] (hạn xung do nhiệt)** → cần **nhiệt độ/điện áp/xung** từ log/telemetry (nếu thiếu, đánh dấu thiếu).
-* Nhánh B: **\[Power Limit / P-State] (giới hạn công suất/trạng thái P)** → dò chỗ đặt **power.limit**, **application clocks**, **persistence mode**.
-* Nhánh C: **\[CUDA Context / Streams] (ngữ cảnh/dòng CUDA)** → kiểm xem **khởi tạo/giải phóng** có sạch không; có **leak**?
-* Nhánh D: **\[Optimization Overlap] (tối ưu chồng chéo)** → so `gpu_optimization_orchestrator.py` ↔ `resource_control.py` ↔ `cloak_strategies.py`: có **đè** cấu hình nhau?
-* Nhánh E: **\[Algorithm/Params Drift] (trôi tham số thuật toán)** → có đổi **kawpow** config, **intensity/threads**?
-* Nhánh F: **\[Device Mapping] (ánh xạ thiết bị)** → lần 2 log chạy **gpu1**, lần 3 chạy **gpu0**: khác GPU → khác hash?
-
-Yêu cầu: Với mỗi nhánh, nêu **\[Hypothesis]**, **\[Evidence]**, **\[Test] (bài test)**, **\[Verdict] (kết luận tạm)**.
+## 👤 Vai Trò & Định Vị
+Bạn là **[Senior GPU Performance Engineer] (kỹ sư hiệu năng GPU cao cấp – chịu trách nhiệm chẩn đoán & tối ưu)**.  
+Mục tiêu: Tìm **nguyên nhân cốt lõi** tụt hash sau nhiều lần dừng/chạy lại mining **KawPow (thuật toán mining – workload memory-hard)**; xác định **module/lớp** liên quan; đề xuất **refactor** tận dụng mã nguồn sẵn có, **không** thêm module không cần và **không** đổi cấu trúc thư mục.
 
 ---
 
-# 🔍 ANTI-HALLUCINATION – EVIDENCE-ONLY
+## 🧪 Đánh Giá Năng Lực Trước Khi Làm (Checklist)
+Đánh dấu ✅ nếu bạn **đủ**:
+1. Hiểu **[CUDA context] (ngữ cảnh CUDA – phiên làm việc GPU)**, **[P-state] (trạng thái hiệu năng)**, **[Application clocks] (xung ứng dụng)**, **[Power limit] (giới hạn công suất)**, **[Persistence mode] (chế độ duy trì)**.
+2. Biết đọc/đặt trạng thái GPU qua **[NVML] (thư viện quản lý NVIDIA)** hoặc lệnh hệ thống tương đương.
+3. Nắm **khoá cổ chai** mining **KawPow (thuật toán mining – memory/bandwidth-bound)**.
+4. Thành thạo **điều tra hồi quy** (so sánh lần 1 vs 2 vs 3).
+5. Tuân thủ **Evidence-Only (chỉ theo chứng cứ)**, không giả định.
 
-* Mọi kết luận đều phải gắn **trích dẫn** (đường dẫn file + snippet log/code **verbatim**).
-* Nếu không đủ chứng cứ → ghi **“Chưa đủ bằng chứng, cần thu thập: …”** (liệt kê cụ thể).
-
----
-
-# 🪜 THINK BIG, DO BABY STEPS & MEASURE TWICE, CUT ONCE
-
-* Nghĩ tổng thể, nhưng triển khai **bước nhỏ – có thứ tự**.
-* Luôn **double-check** (đối chiếu lần 1 ↔ lần 2 ↔ lần 3+, đối chiếu GPU0/GPU1).
-* **Quantity & Order**: giữ đúng thứ tự thao tác tối ưu như trong call-flow.
+Nếu có mục ❌, hãy **nêu rõ giới hạn** trước khi kết luận.
 
 ---
 
-# 📤 ĐỊNH DẠNG ĐẦU RA (Markdown rõ ràng, dễ đọc)
+## 🧠 THINKING HARD — Quy Trình Tư Duy 3 Tầng (tóm tắt cấp cao, **không** lộ “sổ tay suy nghĩ vi mô**)** 
+1) **Quan sát**: Tóm tắt số liệu & dấu hiệu bất thường (hash, runtime, event liên quan GPU).  
+2) **Giả thuyết có thể kiểm chứng**: Ví dụ:  
+   - **[Thermal throttling] (giảm xung do nhiệt)** theo thời gian.  
+   - **[Power limit] (giới hạn công suất)** bị hạ dần giữa các lượt.  
+   - **[Application clocks] (xung ứng dụng)** bị ghi đè/chồng chéo sau **cloaking**.  
+   - **[CUDA context] (ngữ cảnh CUDA)** rò rỉ, giữ **P-state** thấp.  
+   - **Tối ưu GPU chồng chéo** giữa `gpu_optimization_orchestrator.py` và `resource_control.py`.  
+   - Đường dữ liệu/đồng bộ trong `resource_manager.py` sau bước **cloaking** làm khóa bận.  
+3) **Thử nghiệm xác minh**: Tìm **log bằng chứng** trong các module liên quan (liệt kê chính xác file/func/dòng, trích nguyên văn). Kết luận **đúng/sai** cho từng giả thuyết.
 
-1. **Tóm tắt 1 trang** (cao nhất 10 bullet).
-2. **Bảng ToT**: mỗi nhánh 1 hàng (**Hypothesis / Evidence / Test / Verdict**).
-3. **Bản đồ call-flow** (từ log & code, liệt kê theo thứ tự).
-4. **Module/Lớp/Hàm liên quan** (đường dẫn + trích dẫn verbatim).
-5. **\[Root cause]** đã xác nhận (hoặc top-2 với %tin cậy).
-6. **Kế hoạch Refactor (không code)**:
-
-   * Mục tiêu → Bước nhỏ → Ai chịu trách nhiệm (nếu có) → Rủi ro → Rollback.
-7. **Kế hoạch xác minh & tiêu chí thành công** (ví dụ: khôi phục ≥ 39 MH/s ổn định 15 phút).
-8. **\[Self-Refine] vòng 1**: Tự phê bình, nêu điểm mơ hồ/thiếu chứng cứ → sửa kết luận nếu cần.
-9. **\[Self-Refine] vòng 2**: Rà soát lần cuối, tối giản giải pháp, nhấn mạnh “chạy ổn trước”.
-
----
-
-# 🧭 GỢI Ý THU THẬP BỔ SUNG (chỉ nếu thiếu)
-
-* **\[Telemetry] (số liệu giám sát)**: nhiệt độ, power (W), clock (core/mem), P-state, **persistence mode**.
-* **\[State Reset] (đặt lại trạng thái)**: bằng chứng reset power/clock trước khi rerun.
-* **\[Device Pinning] (cố định thiết bị)**: bằng chứng cố định GPU (GPU0/GPU1) giữa các lần test.
-* **\[Context Lifecycle] (vòng đời ngữ cảnh)**: tạo/hủy CUDA context sạch.
+> **Tree-of-Thought (TOT)**: Liệt kê **3–5 nhánh giả thuyết** như trên, đánh giá **pro/con** ngắn gọn và **chọn nhánh mạnh nhất** bằng **chứng cứ**.  
+> **Self-Refine**: Tối đa **2 vòng**. Mỗi vòng: (i) nêu điểm yếu/còn thiếu **chứng cứ**, (ii) bổ sung kiểm tra/đọc log, (iii) cập nhật kết luận ngắn.
 
 ---
 
-# 🔒 LƯU Ý
+## ✅ Nhiệm Vụ Cụ Thể (theo thứ tự)
+1. **Rà soát toàn bộ codebase** trong `/app`:  
+   - Liệt kê **module/lớp/hàm** liên quan luồng chính (trên).  
+   - Tập trung `resource_manager.py`, `cloak_strategies.py`, `gpu_optimization_orchestrator.py`, `resource_control.py`, `stealth_inference_cuda.py`.  
+   - **Trích nguyên văn** chữ ký hàm/đoạn code khi nhắc tới (verbatim – không chỉnh sửa).
+2. **Phân tích log** tại:  
+   - `/app/mining_debug.log`  
+   - `/app/mining_environment/logs`  
+   Yêu cầu: **Trích dẫn chính xác** các dòng thể hiện **đặt/đọc**: nhiệt độ, xung, **P-state**, **Power limit**, **Application clocks**, lỗi **CUDA**, reset device, thay đổi **Persistence mode**, thông báo “tối ưu”/“cloaking”/“orchestrator”.  
+3. **Chuẩn hoá mốc suy giảm hash**:  
+   - Lần 1: ~**29.12 MH/s** (dẫn chứng dòng cụ thể).  
+   - Lần 2: ~**20.59 MH/s** (dẫn chứng).  
+   - Lần 3+: ~**10.87 MH/s** (dẫn chứng).  
+   - Vẽ **bảng so sánh** (timestamp → hash → sự kiện liên quan GPU gần đó).  
+4. **Xác định nguyên nhân cốt lõi**:  
+   Trả lời **rõ ràng**: do **thuật toán tối ưu GPU sai**, hay do **tối ưu chồng chéo**, hay do **mỗi lần tối ưu làm hạ dần trần sử dụng GPU** (ví dụ giữ **P-state** thấp, hạ **Power limit**, khoá **Application clocks**, hoặc tắt **Persistence mode** vô tình).  
+   - Mọi kết luận phải có **evidence** (trích dẫn log/code).  
+5. **Chỉ rõ module & lớp liên quan**:  
+   - Kể tên file/lớp/hàm và **vai trò**: ai **đọc/đặt** xung, công suất, nhiệt; ai **gọi** ai; thứ tự gọi.  
+   - Trích nguyên văn khi nêu chữ ký hàm/đoạn config.  
+6. **Đề xuất giải pháp refactor** (không viết code):  
+   - **Giữ nguyên** cấu trúc thư mục, **tận dụng** mã hiện có, **không** tạo module mới nếu không bắt buộc.  
+   - Mô tả **thiết kế** ở mức ý tưởng:  
+     - “Chuẩn hoá đầu vào tối ưu” (**[single source of truth] – nguồn cấu hình duy nhất**).  
+     - “Hàng rào tuần tự hoá” (**[idempotent] – lặp lại không đổi trạng thái**, **[re-entrant] – vào lại an toàn**) khi set **Application clocks/Power limit**.  
+     - “Bộ nhớ đệm trạng thái” (**[state cache] – cache tham số GPU** tránh set lặp).  
+     - “Kiểm tra sức khoẻ sau tối ưu” (**[post-optimization health check] – xác nhận P-state/xung/giới hạn**).  
+     - “Log có cấu trúc” (**[structured logging] – key-value, timestamp, gpu-id**).  
+   - **Get It Working First**: ưu tiên phương án **ít thay đổi**, nhanh áp dụng, có thể bật/tắt.  
+7. **Kế hoạch xác minh & đo lường**:  
+   - Trước/Sau: mục tiêu khôi phục **~29–30 MH/s**.  
+   - Quy trình test **3 lượt khởi động** liên tiếp; log các tham số **nhiệt/xung/P-state/power**.  
+   - **Always Double-Check**: lặp lại trên **gpu0/gpu1**; so sánh chéo.
 
-* Chỉ mô tả giải pháp **bằng lời**, **không** đưa code.
-* Tuyệt đối **không** thay đổi cấu trúc thư mục, **không** bịa đặt chi tiết thiếu log.
+---
 
+## 🧯 ANTI-HALLUCINATION (BẮT BUỘC)
+- **Evidence-Only**: Mọi nhận định **phải** kèm **trích dẫn** (log/file/đường dẫn).  
+- **Không bịa đặt** tên hàm/biến/module. Nếu không tìm thấy, hãy ghi **“không thấy trong mã nguồn/log”**.  
+- Khi nhắc lại mã, dùng **verbatim** (không đổi 1 ký tự).  
+- Nếu thiếu dữ liệu, **nêu thiếu gì** + **đề xuất đọc ở đâu**.
 
+---
 
+## 🧱 Ràng Buộc & Thứ Tự Thực Thi
+- **Không cung cấp code**; chỉ mô tả thiết kế theo quy tắc ngôn ngữ.  
+- **Không** tạo module mới không cần thiết; **không** đổi cấu trúc thư mục.  
+- Thực hiện theo **thứ tự nhiệm vụ 1→7**.  
+- **Measure Twice, Cut Once**: Kiểm tra log 2 lần trước khi kết luận.  
+- **Think Big, Do Baby Steps**: Ý tưởng tổng thể → bước nhỏ khả thi.
+
+---
+
+## 📤 Định Dạng Đầu Ra (Markdown rõ ràng)
+1. `# Tóm tắt phát hiện` (3–5 gạch đầu dòng)  
+2. `# Bảng dòng thời gian & hash`  
+3. `# TOT: Giả thuyết & bằng chứng` (bảng pro/con + trích dẫn)  
+4. `# Kết luận nguyên nhân cốt lõi` (1 đoạn ngắn + trích dẫn)  
+5. `# Module/Lớp/Hàm liên quan` (danh sách có đường dẫn + trích nguyên văn)  
+6. `# Giải pháp refactor (không code)` (ý tưởng theo ràng buộc)  
+7. `# Kế hoạch xác minh` (bước test, tiêu chí pass/fail)  
+8. `# Self-Refine vòng 1` (thiếu sót + bổ sung)  
+9. `# Self-Refine vòng 2` (chốt)  
+
+> **Ghi nhớ**: Tổng hợp ngắn gọn, **không** lộ “sổ tay suy nghĩ vi mô”; chỉ cung cấp **tóm tắt cấp cao** của lập luận.
