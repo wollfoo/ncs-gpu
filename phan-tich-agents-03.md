@@ -1,123 +1,259 @@
-# Báo Cáo Phân Tích Và Tối Ưu Hóa Hệ Thống GPU (Codebase `/app`)
+● 📊 BÁO CÁO ĐIỀU TRA GPU PERFORMANCE - PHÂN TÍCH NGUYÊN NHÂN TỤT HASH
 
-## 1) Đánh Giá Năng Lực (Self‑Assessment)
-- **Phân tích codebase**: Đạt — xác định trùng lặp hàm/module trong `/app`.
-- **Đánh giá hiệu năng**: Đạt — đo [NVML] (thư viện quản lý NVIDIA – API giám sát/phân phối tài nguyên GPU), [cProfile] (bộ phân tích hàm Python – đo thời gian thực thi), [tracemalloc] (trình theo dõi bộ nhớ Python – đo cấp phát RAM) theo pattern sẵn có.
-- **Đề xuất tối ưu**: Đạt — gộp hàm, chuẩn hóa adapter NVML, không đổi cấu trúc thư mục.
-- **Độ phức tạp & thời gian**: Trung bình — 15–20 phút cho vòng 1 phân tích/đề xuất.
+  📝 TÓM TẮT 1 TRANG
 
-## 2) Quy Trình (3 Tầng) + Tree‑of‑Thought
-### Tầng 1 — Phân tích cơ bản
-- Trọng tâm GPU trong `/app`:
-  - `app/mining_environment/scripts/resource_control.py`: `GPUResourceManager` (quản lý [NVML]) và `OptimizedHardwareController`.
-  - `app/mining_environment/scripts/gpu_optimization_orchestrator.py`: Bộ điều phối tối ưu; có closed‑loop theo [GPU_TARGET_UTIL] (mục tiêu sử dụng GPU – setpoint điều khiển) để điều chỉnh.
-  - `app/mining_environment/scripts/gpu_resource_monitor.py`: Giám sát sức khỏe GPU (đọc [NVML] trực tiếp).
-  - `app/mining_environment/scripts/performance_profiler.py`: Profiler (CPU/memory) dùng [cProfile] và [tracemalloc].
-  - `app/mining_environment/scripts/utils.py`: `GPUManager` (singleton NVML thứ 2 – trùng chức năng với `GPUResourceManager`).
-  - `app/mining_environment/scripts/resource_manager.py`: NVML lifecycle + đo GPU theo PID.
-  - `app/mining_environment/stealth/wrappers/stealth_inference_cuda.py`: Wrapper thực thi `inference-cuda` (không NVML).
+  • [Root Cause] (nguyên nhân gốc rễ): [Optimization Overlap + Cumulative Power Throttling] (chồng chéo tối ưu + hạ công suất 
+  tích lũy) - Mỗi lần chạy lại, GPUOptimizationOrchestrator áp dụng thêm [Power Limit] (giới hạn công suất) và [Clock 
+  Downscaling] (giảm xung nhịp) mà không reset về baseline.
 
-### Tầng 2 — Dự đoán vấn đề (Nguy cơ, Edge cases)
-- Trùng lặp API [NVML] (chi tiết ở mục 4) → overhead call NVML, dễ drift logic; không cache [NVML handle] (tay cầm thiết bị GPU – định danh thiết bị) → gọi lại nhiều lần.
-- Fallback [nvidia‑smi] (công cụ dòng lệnh NVIDIA – lệnh shell) tốn chi phí nếu dùng thường xuyên.
-- Closed‑loop nhiều log [DEBUG] (ghi nhật ký mức chi tiết) → tăng I/O log và %CPU.
-- Mô phỏng compute/VRAM bằng [PyTorch] (thư viện tính toán GPU – tensor CUDA) có thể tranh chấp tài nguyên với miner thật nếu bật mặc định.
-- Edge cases: Không có GPU/NVML chưa init; quyền không đủ để set clock/power; utilization = 0 không hợp lệ (đã có đánh dấu ‑1 ở orchestrator).
+  • [Evidence] (bằng chứng): Hash rate giảm dần 39.12 → 28.59 → ~10.9 MH/s, [Duplicate Task Blocking] (chặn tác vụ trùng lặp),
+  [GPU Utilization] (sử dụng GPU) = 0%, optimization mất 35+ giây.
 
-### Tầng 3 — Lập kế hoạch (ưu tiên phân tích trước, thay đổi sau)
-- Chuẩn hóa adapter NVML duy nhất; hợp nhất đo lường GPU về một nguồn.
-- Thêm cache handle NVML, thêm sampling TTL; giảm fallback shell.
-- Giới hạn mô phỏng compute/VRAM bằng cờ ENV.
+  • [Device Mapping Drift] (lệch ánh xạ thiết bị): Lần 2 chạy GPU1 (max 37.48 MH/s), lần 3+ chạy GPU0 (~10.9 MH/s) - GPU0 đã bị
+  throttle nặng từ lần trước.
 
-### Tree‑of‑Thought (cân nhắc nhánh)
-- Nhánh 1: Dò và sửa thủ công từng chỗ (độ rủi ro cao do phân tán).
-- Nhánh 2: Chuẩn hóa đo lường/sampling + central adapter (ưu tiên — hiệu quả, ít thay đổi lớn).
-- Nhánh 3: Test dữ liệu lớn/edge GPU (phụ thuộc hạ tầng GPU thật).
-- Nhánh 4: Thuật toán (iterative vs recursive) — không trọng tâm hiện tại.
+  • [Critical Issue] (vấn đề nghiêm trọng): resource_control.py có [Emergency Scaling] (thu nhỏ khẩn cấp) giảm power 30% + clock
+   20% nhưng không có [Restore Mechanism] (cơ chế khôi phục) khi nhiệt độ bình thường.
 
-## 3) Chức Năng Trùng Lặp/Tương Đồng (Evidence‑Only)
-- Hai quản lý NVML song song:
-  - `GPUResourceManager` — `app/mining_environment/scripts/resource_control.py:94`.
-  - `GPUManager` (singleton) — `app/mining_environment/scripts/utils.py:55`.
-- Hàm NVML trùng lặp:
-  - `set_gpu_power_limit`: `resource_control.py:264` và `utils.py:163`.
-  - `set_gpu_clocks`: `resource_control.py:367` và `utils.py:283`.
-  - `get_gpu_temperature`: `resource_control.py:577` và `utils.py:231`.
-- Đo GPU trực tiếp ở nhiều nơi (không qua một adapter thống nhất):
-  - OHC `_get_current_power` — `app/mining_environment/scripts/resource_control.py:1858`.
-  - Monitor `_get_gpu_*` — `app/mining_environment/scripts/gpu_resource_monitor.py:240`, `:261`, `:281`, `:301`.
-  - Orchestrator lấy handle/metrics — `app/mining_environment/scripts/gpu_optimization_orchestrator.py:908`.
-  - ResourceManager đo GPU theo PID — `app/mining_environment/scripts/resource_manager.py:150`–`:170`.
-- Không cache handle NVML, gọi lặp ở nhiều file (truy vết): `utils.py:135,154,172,219,245,270`, `resource_control.py:209,1867`, `resource_manager.py:162`, `cloak_strategies.py:1316,1589`.
+  • [Impact] (tác động): Hash rate tụt 72% (từ 39 → 10.9 MH/s), mining efficiency nghiêm trọng giảm, revenue loss đáng kể.
 
-## 4) Đánh Giá Hiệu Năng (Hiện trạng & Điểm Nghẽn)
-- **NVML call phân tán** (nhiều thành phần tự gọi): tăng latency và overhead (đặc biệt khi polling nhanh).
-- **Không cache handle NVML**: lặp `nvmlDeviceGetHandleByIndex` → chi phí dư thừa.
-- **Fallback shell** qua [nvidia‑smi]: `resource_control.py:599` — đắt chi phí; cần rate‑limit/ENV gate.
-- **Closed‑loop logs**: `gpu_optimization_orchestrator.py:640–705` — dày đặc -> tăng I/O log và CPU.
-- **PyTorch compute/VRAM sim**: `resource_control.py:2011` và `:2138` — có nguy cơ tranh tài nguyên nếu bật mặc định.
+  • [Immediate Action] (hành động ngay lập tức): Reset GPU về [Default Power/Clock] (công suất/xung mặc định) trước mỗi lần
+  chạy, thêm [State Validation] (kiểm tra trạng thái) và [Rollback Logic] (logic hoàn trả).
 
-## 5) Đề Xuất Tối Ưu (Không đổi cấu trúc thư mục, không tạo module mới)
-1) Hợp nhất điểm giao tiếp NVML
-- **[NVML Adapter Unification]** (Hợp nhất adapter NVML – gom về 1 lớp): dùng `GPUResourceManager` làm adapter chuẩn. 
-- **[Backward‑compat Façade]** (Lớp tương thích ngược – giữ API cũ): chuyển `GPUManager` (`utils.py`) thành façade mỏng forward sang `GPUResourceManager` (không xóa API cũ để tránh phá vỡ callsite).
+  • [Risk Level] (mức độ rủi ro): HIGH - Mỗi lần restart càng làm tụt performance thêm, có thể đạt mức không thể mine.
 
-2) Cache handle và chuẩn hóa sampling
-- **[Handle Cache]** (Bộ nhớ đệm tay cầm thiết bị – tránh lặp lấy handle): cache `nvmlDeviceGetHandleByIndex` theo `gpu_index`, TTL ~60s; invalidation khi NVML reinit.
-- **[Metric Sampling]** (Lấy mẫu chỉ số – chuẩn hóa nhịp): lấy mẫu power/temp/util 1 nguồn rồi publish vào `MetricsCollectionHub` (đã có trong orchestrator `:419`). Tất cả nơi khác chỉ đọc từ hub/buffer.
+  • [Solution Complexity] (độ phức tạp giải pháp): MODERATE - Cần thêm reset logic và validation, không cần thay đổi
+  architecture lớn.
 
-3) Một nguồn sự thật (single source of truth) cho metrics GPU
-- `gpu_resource_monitor.py` đọc từ hub/buffer thay vì NVML trực tiếp (`:240/:261/:281/:301`).
-- OHC `_get_current_power` (`resource_control.py:1858`) và orchestrator (`gpu_optimization_orchestrator.py:908`) đọc từ hub.
+  • [Success Criteria] (tiêu chí thành công): Khôi phục và duy trì ≥ 35 MH/s ổn định qua 3+ lần restart liên tiếp.
 
-4) Giảm fallback shell [nvidia‑smi]
-- **[ENV Gate]** (Cờ môi trường – bật/tắt): chỉ bật khi `GPU_NVML_FALLBACK=1`.
-- **[Rate‑Limit]** (Giới hạn tần suất): tối đa 1 lần/30–60s và chỉ khi NVML không có dữ liệu.
+  ---
+  🌳 TREE-OF-THOUGHT ANALYSIS
 
-5) Bảo vệ tài nguyên trước mô phỏng PyTorch
-- **[Feature Flags]** (Cờ tính năng – bật/tắt): mô phỏng compute/VRAM chỉ bật khi `ENABLE_COMPUTE_SIM=1` / `ENABLE_VRAM_SHAPE=1`; mặc định OFF trong production.
-- **[Duty Cycle]** (Chu kỳ hoạt động – thời lượng ngắn): tránh chiếm dụng kéo dài, giải phóng bằng `torch.cuda.empty_cache()` khi xong.
+  | Nhánh                                                       | [Hypothesis] (Giả thuyết)           | [Evidence] (Bằng chứng)
+                       | [Test] (Kiểm tra)                    | [Verdict] (Kết luận)              |
+  |-------------------------------------------------------------|-------------------------------------|-------------------------
+  ---------------------|--------------------------------------|-----------------------------------|
+  | A: [Thermal Throttling] (Hạn xung nhiệt)                    | GPU quá nóng → giảm clock/power     | Log: "Temperature
+  safety: SAFE"              | Kiểm tra temp sensors, thermal logs  | LOẠI BỎ - Nhiệt độ an toàn        |
+  | B: [Power Limit Accumulation] (Tích lũy giới hạn công suất) | Mỗi optimization hạ power thêm      | _emergency_scaling()
+  giảm 30%, không restore | Check power limits trước/sau mỗi lần | CONFIRM 95% - Mechanism tìm thấy  |
+  | C: [CUDA Context Leak] (Rò rỉ ngữ cảnh CUDA)                | Context không clean giữa các lần    | Low GPU utilization (0%)
+   dù mining           | Restart CUDA drivers/processes       | POSSIBLE 60% - 0% util bất thường |
+  | D: [Optimization Overlap] (Chồng chéo tối ưu)               | Multiple layers chỉnh cùng GPU      | Duplicate tasks blocked,
+   35s optimization    | Review call sequence                 | CONFIRM 90% - Log evidence        |
+  | E: [Algorithm Drift] (Trôi thuật toán)                      | KawPoW params thay đổi              | Cùng algorithm, cùng
+  difficulty              | Compare mining configs               | LOẠI BỎ - Config unchanged        |
+  | F: [Device Mapping] (Ánh xạ thiết bị)                       | GPU1→GPU0 switch, GPU0 đã throttled | Lần 2: GPU1 (37.48), Lần
+   3: GPU0 (10.9)      | Map PID→GPU consistently             | CONFIRM 85% - Evidence clear      |
 
-6) Logging & Hysteresis
-- **[Debug Throttling]** (Hạn dòng DEBUG – giảm flood): rate‑limit log closed‑loop (vd: 1 sự kiện/5s).
-- **[Hysteresis]** (Ràng buộc trễ – chống nhấp nháy): áp dụng dwell‑time/biên sai số khi đổi setpoint (đang có `POWER_DWELL_SEC` trong orchestrator; dùng nhất quán).
+  ---
+  🗺️ CALL-FLOW BẢN ĐỒ (Truy vết từ log & code)
 
-## 6) Kế Hoạch Đo Lường (Verification — Evidence‑Only)
-- **Mục tiêu**: giảm số lần gọi NVML/giây, giảm %CPU/log I/O, ổn định closed‑loop.
-- **Công cụ**: 
-  - [cProfile] (bộ phân tích hàm Python – đo đường nóng), [tracemalloc] (theo dõi bộ nhớ), [NVML] (đọc GPU), [psutil] (đo CPU/Memory tiến trình).
-- **Thiết kế đo**:
-  - Trước tối ưu: bật `enable_profiling` (orchestrator), chạy 10–15 phút; thu: thời gian/hits các hàm NVML, tổng log/s, %CPU.
-  - Sau tối ưu: lặp đo — kỳ vọng: NVML calls giảm ≥50%, %CPU/log giảm, dao động util giảm nhờ hysteresis.
-- **Lưu ý**: Nếu không có GPU thật, chỉ xác thực phần CPU/log (partial verify — vẫn có ích).
+  1. start_mining.py:main()
+     └→ start_resource_manager_thread()
+        └→ ResourceManager.__init__()
+           └→ GPUOptimizationOrchestrator() [line 320]
 
-## 7) Trích Dẫn Nguồn (File:Line)
-- `app/mining_environment/scripts/resource_control.py:94` — `GPUResourceManager` (adapter NVML chính).
-- `app/mining_environment/scripts/utils.py:55` — `GPUManager` (singleton NVML thứ 2 — trùng chức năng).
-- `app/mining_environment/scripts/resource_control.py:264` & `app/mining_environment/scripts/utils.py:163` — `set_gpu_power_limit` (trùng).
-- `app/mining_environment/scripts/resource_control.py:367` & `app/mining_environment/scripts/utils.py:283` — `set_gpu_clocks` (trùng).
-- `app/mining_environment/scripts/resource_control.py:577` & `app/mining_environment/scripts/utils.py:231` — `get_gpu_temperature` (trùng).
-- `app/mining_environment/scripts/resource_control.py:1858` — OHC `_get_current_power` đọc NVML trực tiếp.
-- `app/mining_environment/scripts/gpu_resource_monitor.py:240,261,281,301` — Monitor đọc NVML trực tiếp.
-- `app/mining_environment/scripts/gpu_optimization_orchestrator.py:908` — Orchestrator lấy handle NVML.
-- `app/mining_environment/scripts/resource_manager.py:150–170` — Đo GPU theo PID qua NVML.
-- `app/mining_environment/scripts/resource_control.py:599` — Fallback `nvidia‑smi`.
-- `app/mining_environment/scripts/resource_control.py:2011` & `:2138` — PyTorch compute/VRAM sim.
+  2. ResourceManager.receive_from_registry()
+     └→ apply_cloaking() [line 514]
+     └→ optimize_gpu_for_process() [async thread, line 693]
 
-## 8) Kế Hoạch Triển Khai (Chờ Phê Duyệt)
-- Bước 1: Chuẩn hóa NVML → route tất cả call về `GPUResourceManager`; giữ `GPUManager` làm façade.
-- Bước 2: Thêm handle cache + sampling TTL, publish metrics vào `MetricsCollectionHub`.
-- Bước 3: Orchestrator/Monitor/OHC đọc từ hub; loại bỏ gọi NVML trực tiếp.
-- Bước 4: ENV‑gate fallback `nvidia‑smi` và mô phỏng PyTorch (mặc định OFF) + rate‑limit.
-- Bước 5: Thêm hysteresis + limit DEBUG logs ở closed‑loop.
-- Bước 6: Đo lường trước/sau, báo cáo cải thiện (NVML calls/s, %CPU/log, độ mượt util/temp/power).
+  3. GPUOptimizationOrchestrator.optimize_gpu_for_process()
+     └→ hardware_controller.optimize_for_pid() [line 549]
+     └→ _emergency_scaling() [khi cần - line 2662]
 
-## 9) Ghi Chú Chống Ảo Tưởng (Anti‑Hallucination)
-- **Evidence‑Only**: Tất cả nhận định dựa trên file/line cụ thể trong repo.
-- **Không thêm tính năng** ngoài phạm vi tối ưu hóa & refactor mô tả.
-- **Giữ nguyên hành vi**: Không đổi cấu trúc thư mục; không tạo module mới; chỉ gộp/chuẩn hóa gọi NVML/metrics.
+  4. OptimizedHardwareController.optimize_for_pid()
+     └→ gpu_manager.set_gpu_power_limit() [line 2081]
+     └→ gpu_manager.set_gpu_clocks() [line 1057]
 
----
+  5. GPUResourceManager.set_gpu_power_limit() [line 786]
+     └→ pynvml.nvmlDeviceSetPowerManagementLimit() [line 876]
 
-> Nếu bạn đồng ý, tôi sẽ tiến hành từng bước theo mục 8 (ưu tiên A: hợp nhất NVML + cache + sampling), sau đó gửi báo cáo đo lường trước/sau để xác nhận hiệu quả.
+  [Thứ tự Critical] (Sequence quan trọng):
+  - Lần 1: GPU fresh → optimization OK → hash 39.12 MH/s
+  - Lần 2: Restart → optimization layer 2 → power giảm → hash 28.59 MH/s
+  - Lần 3+: Restart → optimization layer 3+ → power giảm thêm → hash 10.9 MH/s
 
+  ---
+  🔍 MODULE/LỚP/HÀM LIÊN QUAN TRỰC TIẾP
+
+  1. /app/mining_environment/scripts/gpu_optimization_orchestrator.py
+
+  - optimize_gpu_for_process() [line 467-570]: Main entry point, gọi hardware_controller
+  - _prepare_strategy_tasks() [line 535]: Tạo duplicate tasks bị block
+  - Trích dẫn verbatim:
+  # Step 4: Execute strategies in parallel (thực thi chiến lược song song)
+  if tasks:
+      self.logger.info(f"🔄 Executing {len(tasks)} strategies in parallel...")
+      execution_results = self.parallel_executor.execute_parallel(tasks)
+
+  2. /app/mining_environment/scripts/resource_control.py
+
+  - optimize_for_pid() [line 1952-2074]: Orchestration logic với temperature prediction
+  - set_gpu_power_limit() [line 786-887]: [CRITICAL] - Set power limit thực tế
+  - _emergency_scaling() [line 2662-2670]: [PROBLEM SOURCE] - Giảm power 30% không restore
+  - Trích dẫn verbatim:
+  def _emergency_scaling(self, params: Dict[str, Any]) -> Dict[str, Any]:
+      if 'power_limit' in scaled:
+          original_power = scaled['power_limit']
+          scaled['power_limit'] = int(scaled['power_limit'] * 0.7)  # ←← PROBLEM: Giảm 30%
+          self.logger.info(f"⬇️ Reducing power: {original_power}W → {scaled['power_limit']}W (-30%)")
+
+  3. /app/mining_environment/scripts/resource_manager.py
+
+  - _optimize_async() [line 572-695]: Async GPU optimization wrapper
+  - apply_cloaking() [line 45-84]: Trigger optimization chain
+  - Trích dẫn verbatim:
+  # Async GPU optimization (tối ưu GPU bất đồng bộ)
+  def _optimize_async(pid_val: int, gpu_idx: int):
+      try:
+          self.logger.info(f"🔧 GPU Optimization thread started for PID {pid_val}")
+          # ... optimization logic
+          opt_result = self._gpu_orchestrator.optimize_gpu_for_process(
+              pid=pid_val,
+              gpu_index=gpu_idx,
+              strategies=None
+          )
+
+
+  🎯 ROOT CAUSE XÁC NHẬN
+
+  [Cumulative Power Throttling] (Hạ công suất tích lũy) - 95% tin cậy
+
+  [Mechanism] (Cơ chế):
+  1. Lần 1: GPU fresh → power limit default (ví dụ: 70W) → hash 39.12 MH/s OK
+  2. Optimization trigger: _emergency_scaling() hoặc temperature response giảm power 30%: 70W → 49W
+  3. Lần 2: Restart → GPU vẫn ở 49W → optimization thêm layer → có thể giảm xuống ~35W → hash 28.59 MH/s
+  4. Lần 3+: GPU ở ~35W → optimization thêm → có thể xuống ~25W → hash 10.9 MH/s
+
+  [Evidence] (Bằng chứng):
+  - resource_control.py:2662-2665: scaled['power_limit'] = int(scaled['power_limit'] * 0.7)
+  - GPU optimization log: "⛔ Duplicate task blocked: 'gpu_power_pid411_gpu0'"
+  - Resource manager log: GPU utilization = 0.0% (bất thường cho mining)
+
+  [Device Mapping Drift] (Lệch ánh xạ thiết bị) - 85% tin cậy
+
+  [Mechanism] (Cơ chế):
+  - Lần 2: PID 482 mapped to GPU1 → hash 37.48 MH/s (GPU1 chưa bị throttle)
+  - Lần 3+: PID 411 mapped to GPU0 → hash 10.9 MH/s (GPU0 đã bị throttle từ lần 1)
+
+  [Evidence] (Bằng chứng):
+  - Log reference: "📊 METRICS [inference-cuda[gpu1]]: Current=37.48 MH/s" vs "📊 METRICS [inference-cuda[gpu0]]: Current=11.49
+  MH/s"
+  - Resource manager log: "using gpu_index=0" vs "using gpu_index=1" khác nhau giữa các lần
+
+  ---
+  🛠️ KẾ HOẠCH REFACTOR (Không code, chỉ mô tả)
+
+  Mục tiêu: Khôi phục hash rate ổn định ≥ 35 MH/s qua nhiều lần restart
+
+  Bước 1: Thêm GPU State Reset Logic
+
+  Ai chịu trách nhiệm: OptimizedHardwareController.optimize_for_pid()
+  Mô tả: Trước khi áp dụng optimization, đọc và lưu [Baseline Power/Clock] (công suất/xung chuẩn) từ GPU, sau đó reset về giá
+  trị mặc định.
+  Rủi ro: Có thể gây delay thêm 2-3 giây cho initialization.
+  Rollback: Nếu reset fail, continue với current values nhưng log warning.
+
+  Bước 2: Cải tiến Emergency Scaling Logic
+
+  Ai chịu trách nhiệm: resource_control.py:_emergency_scaling()
+  Mô tả: Thay vì giảm cố định 30%, thêm [Smart Scaling] (thu nhỏ thông minh) dựa trên temperature thực tế và thêm [Recovery 
+  Timer] (bộ đếm phục hồi) để tự động tăng lại power khi nhiệt độ giảm.
+  Rủi ro: Logic phức tạp hơn, cần test kỹ.
+  Rollback: Keep existing emergency scaling nhưng add restore mechanism.
+
+  Bước 3: Duplicate Task Prevention
+
+  Ai chịu trách nhiệm: parallel_strategy_executor.py
+  Mô tả: Thay vì block duplicate tasks, check trạng thái hiện tại và [Skip if Already Optimal] (bỏ qua nếu đã tối ưu).
+  Rủi ro: Cần định nghĩa "optimal state" chính xác.
+  Rollback: Quay về duplicate blocking logic.
+
+  Bước 4: Thêm GPU State Validation
+
+  Ai chịu trách nhiệm: GPUOptimizationOrchestrator.optimize_gpu_for_process()Mô tả: Sau optimization, verify power/clock
+  settings và hash rate output. Nếu hash rate < 80% baseline, trigger [Auto Rollback] (tự động hoàn trả).
+  Rủi ro: Cần access real-time hash rate data.
+  Rollback: Skip validation step nếu data không available.
+
+  Bước 5: Device Mapping Consistency
+
+  Ai chịu trách nhiệm: ResourceManager và DirectPIDRegistry
+  Mô tả: [Pin PID to GPU] (gắn cố định PID với GPU) dựa trên resource availability và previous performance, tránh GPU switching
+  giữa các lần chạy.
+  Rủi ro: Có thể tạo load imbalance nếu 1 GPU fail.
+  Rollback: Quay về dynamic GPU assignment.
+
+  ---
+  ✅ KẾ HOẠCH XÁC MINH & TIÊU CHÍ THÀNH CÔNG
+
+  [Sanity Checks] (Kiểm tra nhanh) Trước/Sau Chạy
+
+  - Pre-run: nvidia-smi check power limit và clock của tất cả GPUs
+  - Post-run: Verify hash rate ≥ 35 MH/s trong 60 giây đầu
+  - Cross-run: So sánh power limits giữa lần chạy 1, 2, 3
+
+  Kịch bản A/B Testing
+
+  - Scenario A: Enable new reset logic + validation
+  - Scenario B: Disable emergency scaling temporarily
+  - Scenario C: Force single GPU mapping (GPU1 only)
+  - Success Metric: Scenario nào maintain ≥ 35 MH/s qua 5 lần restart
+
+  [Rollback Plan] (Kế hoạch hoàn trả)
+
+  - If hash < 20 MH/s: Immediate rollback to previous optimization logic
+  - If optimization > 45s: Disable parallel strategy execution
+  - If GPU errors increase: Disable emergency scaling
+  - Emergency stop: Manual nvidia-smi -pm 1 -pl 70 reset all GPUs
+
+  ---
+  🔍 [SELF-REFINE] VÒNG 1 - Tự phê bình
+
+  Điểm mơ hồ cần làm rõ:
+  - Thiếu real-time telemetry: Không có temperature, power draw, clock speed thực tế từ GPU sensors.
+  - Chưa trace Emergency Scaling trigger: Không biết chính xác khi nào _emergency_scaling() được gọi.
+  - Hash rate correlation: Chưa có direct correlation giữa power limit và hash rate actual.
+
+  Sửa kết luận:
+  - Root Cause cập nhật: Combine [Power Limit Accumulation] (tích lũy giới hạn công suất) + [Device Mapping Drift] (lệch ánh xạ 
+  thiết bị) thành dual root cause.
+  - Confidence level: Giảm từ 95% xuống 85% cho đến khi có telemetry data confirm.
+
+  ---
+  🔍 [SELF-REFINE] VÒNG 2 - Rà soát cuối
+
+  Tối giản giải pháp - Focus "chạy ổn trước":
+  1. Priority 1: Reset GPU power limits về default trước mỗi optimization (Get It Working First)
+  2. Priority 2: Fix device mapping consistency để tránh GPU0↔GPU1 switching
+  3. Priority 3: Thêm monitoring và validation (optimization feature)
+
+  Nhấn mạnh "chạy ổn trước":
+  - Start với simple power reset, measure hash rate improvement
+  - Nếu hash rate recover ≥ 80%, tiếp tục fine-tuning
+  - Nếu vẫn low, investigate deeper (CUDA context, driver issues)
+
+  ---
+  📋 THU THẬP BỔ SUNG CẦN THIẾT
+
+  [Telemetry] (Số liệu giám sát):
+  - Current GPU power draw (W) và power limit setting
+  - SM clock, Memory clock actual values
+  - GPU temperature sensors data
+  - [Persistence Mode] (Chế độ bền bỉ) status: nvidia-smi -pm
+
+  [State Reset] (Đặt lại trạng thái):
+  - Baseline power limits từ GPU specifications
+  - Default clock values trước optimization
+  - [P-State] (Trạng thái P) information: nvidia-smi -q -d PERFORMANCE
+
+  [Context Lifecycle] (Vòng đời ngữ cảnh):
+  - CUDA context creation/destruction logs
+  - Mining process memory usage patterns
+  - GPU memory allocation/deallocation traces
+
+  ---
+  [FINAL RECOMMENDATION] (Khuyến nghị cuối):Implement Priority 1 (GPU power reset) trong 1-2 giờ, test với 3 lần restart. Nếu
+  hash rate không recover, escalate để investigate CUDA driver và mining software configuration deeper.
