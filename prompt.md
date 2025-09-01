@@ -172,6 +172,8 @@ Chọn **1 hướng tốt nhất** dựa **log** (giải thích vì sao) + **bư
 
 ## 🧪 OUTPUT FORMAT (Markdown rõ ràng, dễ đọc)
 
+**lưu kết quả thành một file `report.md` trong thư mục `/app/reports`**
+
 ### 1) Tóm tắt hiện trạng
 
 * Dòng thời gian & con số **MH/s** theo từng lần, trích log nguồn.
@@ -204,4 +206,3 @@ Chọn **1 hướng tốt nhất** dựa **log** (giải thích vì sao) + **bư
 * Tác động phụ khả dĩ + cách hoàn nguyên ngay (bằng quy trình reset đã mô tả).
 
 > **Luôn “Always Double-Check”**: mọi kết luận phải đi kèm **trích dẫn log/file**. Nếu thiếu: “Không đủ chứng cứ”.
-

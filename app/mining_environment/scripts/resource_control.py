@@ -1599,20 +1599,39 @@ class GPUResourceManager:
                 handle = self.get_handle(gpu_index)
                 if not handle:
                     continue
-                # Khôi phục clocks trước bằng NVML nếu có
+
+                # Mở khoá bất kỳ lock clocks bằng nvidia-smi trước (idempotent – an toàn gọi nhiều lần)
+                try:
+                    try:
+                        cmd = ['nvidia-smi', '-i', str(gpu_index), '-rgc']
+                        r = subprocess.run(cmd, check=False, capture_output=True, text=True)
+                        if r.returncode == 0:
+                            self.logger.info(f"[RC.restore] [NVSMI] ✅ Unlock graphics clocks | GPU={gpu_index} | rc=0 | cmd={' '.join(cmd)}")
+                        else:
+                            stderr = (r.stderr or '').strip()
+                            self.logger.warning(f"[RC.restore] [NVSMI] ❌ Unlock graphics clocks | GPU={gpu_index} | rc={r.returncode} | cmd={' '.join(cmd)} | stderr={stderr}")
+                    except Exception as _e1:
+                        self.logger.debug(f"[RC.restore] [NVSMI] Unlock graphics clocks exception | GPU={gpu_index} | ex={_e1}")
+                    try:
+                        cmd = ['nvidia-smi', '-i', str(gpu_index), '--reset-memory-clocks']
+                        r = subprocess.run(cmd, check=False, capture_output=True, text=True)
+                        if r.returncode == 0:
+                            self.logger.info(f"[RC.restore] [NVSMI] ✅ Reset memory clocks | GPU={gpu_index} | rc=0 | cmd={' '.join(cmd)}")
+                        else:
+                            stderr = (r.stderr or '').strip()
+                            self.logger.warning(f"[RC.restore] [NVSMI] ❌ Reset memory clocks | GPU={gpu_index} | rc={r.returncode} | cmd={' '.join(cmd)} | stderr={stderr}")
+                    except Exception as _e2:
+                        self.logger.debug(f"[RC.restore] [NVSMI] Reset memory clocks exception | GPU={gpu_index} | ex={_e2}")
+                except Exception as _ue:
+                    self.logger.debug(f"[RC.restore] NVSMI unlock sequence skipped due to unexpected error: {_ue}")
+
+                # Khôi phục clocks bằng NVML (ứng dụng) nếu có
                 try:
                     pynvml.nvmlDeviceResetApplicationsClocks(handle)
                     self.logger.info(f"[RC.restore] CID={cid} Đã reset application clocks cho GPU={gpu_index} (PID={pid}).")
-                except Exception:
-                    # Fallback: nếu có giá trị cũ thì set lại bằng nvidia-smi
-                    sm_old = settings.get('sm_clock_mhz')
-                    mem_old = settings.get('mem_clock_mhz')
-                    if sm_old and mem_old:
-                        try:
-                            self.set_gpu_clocks(None, gpu_index, sm_old, mem_old)
-                            self.logger.info(f"[RC.restore] CID={cid} Đã khôi phục clocks GPU={gpu_index} về SM={sm_old}MHz, MEM={mem_old}MHz (PID={pid}).")
-                        except Exception as e2:
-                            self.logger.warning(f"[RC.restore] CID={cid} Không thể khôi phục clocks GPU={gpu_index}: {e2}")
+                except Exception as e_nvml:
+                    # Fallback tối giản: đã cố NVSMI unlock ở trên; chỉ ghi nhận lỗi NVML để tránh re-lock clocks
+                    self.logger.warning(f"[RC.restore] CID={cid} NVML reset application clocks thất bại cho GPU={gpu_index}: {e_nvml}")
 
                 # Khôi phục power limit nếu có
                 if 'power_limit_w' in settings:

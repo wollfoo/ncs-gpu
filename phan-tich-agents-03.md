@@ -1,113 +1,112 @@
-# GPU Hash Rate Drop Analysis Report
-## Investigation và Root Cause Analysis
+# 🔍 **BÁO CÁO ĐIỀU TRA TỤT HASH RATE GPU** — **VÀ ĐỀ XUẤT PHƯƠNG ÁN KHẮC PHỤC**
 
-**Date**: 2025-09-01  
-**Objective**: Investigate GPU hash rate drops after mining stop/start cycles  
-**Status**: Root causes identified ✅
-
----
-
-## Executive Summary
-
-Sau khi phân tích toàn diện codebase và logs, đã xác định được **5 nguyên nhân chính** gây hash rate drop sau mining stop/start cycles:
-
-1. **Power Limit Reset Issues** - GPU power limits bị reset về giá trị rất thấp (37W-53W)
-2. **Restore Cancellation Race Conditions** - Restore operations bị cancel trước khi thực thi
-3. **Slow Optimization Process** - GPU optimization mất 35-36 giây
-4. **Cross-PID Restore Conflicts** - Multiple processes cạnh tranh trên cùng GPU
-5. **Low GPU Utilization During Recovery** - GPU utilization 0-3% trong closed-loop control
+**Ngày (Date – ngày)**: 2025-09-01  
+**Mục tiêu (Objective – mục tiêu)**: Điều tra sụt giảm hash rate (tốc độ băm) của GPU sau các chu kỳ dừng/khởi động (mining stop/start cycles)  
+**Trạng thái (Status – trạng thái)**: Đã xác định nguyên nhân gốc ✅
 
 ---
 
-## Detailed Findings
+## Tóm tắt điều hành (Executive Summary – tóm tắt cấp quản trị)
 
-### 1. Power Limit Reset Issues ⚡
+Sau khi phân tích toàn diện codebase và logs, đã xác định được **5 nguyên nhân chính** gây sụt giảm hash rate (tốc độ băm) sau chu kỳ dừng/khởi động (mining stop/start cycles):
 
-**Evidence từ logs:**
+1. **Vấn đề reset giới hạn công suất (Power Limit Reset Issues)** - GPU power limits bị reset về giá trị rất thấp (37W-53W)
+2. **Tình huống race condition hủy restore (Restore Cancellation Race Conditions)** - Restore operations bị cancel trước khi thực thi
+3. **Quy trình tối ưu hóa chậm (Slow Optimization Process)** - GPU optimization mất 35-36 giây
+4. **Xung đột restore giữa PID (Cross-PID Restore Conflicts)** - Multiple processes cạnh tranh trên cùng GPU
+5. **Mức sử dụng GPU thấp khi phục hồi (Low GPU Utilization During Recovery)** - GPU utilization 0-3% trong closed-loop control (điều khiển vòng kín)
+
+---
+
+## Phát hiện chi tiết (Detailed Findings – kết quả phân tích chi tiết)
+
+### 1. Vấn đề reset giới hạn công suất (Power Limit Reset Issues) ⚡
+
+**Bằng chứng (Evidence – bằng chứng) từ logs:**
 ```
 Power limit 53W dưới mức tối thiểu 100W, điều chỉnh lên 100W
 Power limit 51W dưới mức tối thiểu 100W, điều chỉnh lên 100W  
 Power limit 37W dưới mức tối thiểu 100W, điều chỉnh lên 100W
 ```
 
-**Root Cause:**
+**Nguyên nhân gốc (Root Cause – nguyên nhân cốt lõi):**
 - Sau stop/start cycle, GPU power limits bị reset về default values rất thấp
 - System phải detect và adjust lên minimum 100W, nhưng có delay
 - Trong thời gian power limit thấp, hash rate bị ảnh hưởng nghiêm trọng
 
-**Impact**: Hash rate drop 70-80% trong transition period
+**Tác động (Impact – ảnh hưởng)**: Hash rate giảm 70-80% trong giai đoạn chuyển tiếp
 
-### 2. Restore Cancellation Race Conditions 🔄
+### 2. Tình huống race condition hủy restore (Restore Cancellation Race Conditions) 🔄
 
-**Evidence từ logs:**
+**Bằng chứng (Evidence – bằng chứng) từ logs:**
 ```
 🛑 [OHC._schedule_restore] CID=db3dcc16... Restore canceled for PID=248, GPU=0 before execution
 🛑 [OHC._schedule_restore] CID=d3f3e7f3... Restore canceled for PID=248, GPU=0 before execution
 🧹 [OHC._schedule_restore] Canceled previous restore for key=(248, 0)
 ```
 
-**Root Cause:**
+**Nguyên nhân gốc (Root Cause – nguyên nhân cốt lõi):**
 - Multiple restore operations được schedule cho cùng PID/GPU
 - New operations cancel previous pending restores
 - `CANCEL_CROSS_PID_RESTORE_BY_GPU=1` flag gây cancel aggressive
 - GPU state không được restore properly, stuck ở suboptimal settings
 
-**Impact**: GPU không recover về optimal state, hash rate thấp permanent
+**Tác động (Impact – ảnh hưởng)**: GPU không recover về trạng thái tối ưu, hash rate thấp kéo dài
 
-### 3. Slow Optimization Process ⏱️
+### 3. Quy trình tối ưu hóa chậm (Slow Optimization Process) ⏱️
 
-**Evidence từ logs:**
+**Bằng chứng (Evidence – bằng chứng) từ logs:**
 ```
 ⚠️ **Slow function** mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 35.679s
 ⚠️ **Slow function** mining_environment.scripts.gpu_optimization_orchestrator.optimize_gpu_for_process took 36.362s
 ```
 
-**Root Cause:**
+**Nguyên nhân gốc (Root Cause – nguyên nhân cốt lõi):**
 - Optimization process quá phức tạp với nhiều steps
 - Closed-loop control iterations mất nhiều thời gian
-- DAG synchronization và VRAM allocation adds overhead
-- Duplicate task blocking không efficient
+- Đồng bộ DAG (Directed Acyclic Graph – đồ thị có hướng không chu trình) và cấp phát VRAM (Video RAM – bộ nhớ đồ họa) làm tăng overhead
+- Chặn nhiệm vụ trùng lặp (duplicate task blocking) không hiệu quả
 
-**Impact**: 35-36 seconds downtime mỗi optimization cycle
+**Tác động (Impact – ảnh hưởng)**: 35-36 giây downtime cho mỗi vòng tối ưu hóa
 
-### 4. Cross-PID Restore Conflicts 🔀
+### 4. Xung đột restore giữa PID (Cross-PID Restore Conflicts) 🔀
 
-**Evidence từ logs:**
+**Bằng chứng (Evidence – bằng chứng) từ logs:**
 ```
 🧹 [OHC] Canceled 1 pending restore(s) on GPU 0 (except=(336, 0))
 [OHC._schedule_restore] Cross-PID cancel flag CANCEL_CROSS_PID_RESTORE_BY_GPU=1
 ```
 
-**Root Cause:**
+**Nguyên nhân gốc (Root Cause – nguyên nhân cốt lõi):**
 - Multiple mining processes (PID 248, 336) compete cho same GPU
 - Cross-PID cancellation policy quá aggressive
 - Không có proper coordination giữa processes
 - Race conditions trong GPU resource allocation
 
-**Impact**: Inconsistent GPU state, random hash rate fluctuations
+**Tác động (Impact – ảnh hưởng)**: Trạng thái GPU không nhất quán, dao động hash rate ngẫu nhiên
 
-### 5. Low GPU Utilization During Recovery 📉
+### 5. Mức sử dụng GPU thấp trong giai đoạn phục hồi (Low GPU Utilization During Recovery) 📉
 
-**Evidence từ logs:**
+**Bằng chứng (Evidence – bằng chứng) từ logs:**
 ```
 [OHC.set_target_utilization] Iter 1: util=0.000, target=0.800, error=0.800
 [OHC.set_target_utilization] Iter 2: util=0.000, target=0.800, error=0.800
 [OHC.set_target_utilization] GPU util too low (0.0% < 10.0%), maintaining baseline clocks
 ```
 
-**Root Cause:**
+**Nguyên nhân gốc (Root Cause – nguyên nhân cốt lõi):**
 - Closed-loop control không thể raise GPU utilization
 - Mining process không actually using GPU during optimization
 - Baseline clocks maintained nhưng không effective
 - Target utilization 80% không achievable
 
-**Impact**: Extended recovery time, hash rate remains at 0
+**Tác động (Impact – ảnh hưởng)**: Thời gian phục hồi kéo dài, hash rate duy trì ở 0
 
 ---
 
-## Architecture Analysis
+## Phân tích kiến trúc (Architecture Analysis – phân tích kiến trúc)
 
-### Key Components Involved:
+### Thành phần chính liên quan (Key Components Involved – các thành phần liên quan):
 
 1. **resource_control.py**
    - `restore_gpu_settings_for_pid()` - Restore GPU state
@@ -131,13 +130,13 @@ Power limit 37W dưới mức tối thiểu 100W, điều chỉnh lên 100W
 
 ---
 
-## Proposed Solutions
+## Giải pháp đề xuất (Proposed Solutions – giải pháp đề xuất)
 
-### Solution 1: Idempotent GPU Reset Implementation 🎯
+### Giải pháp 1: Triển khai reset GPU idempotent (Idempotent GPU Reset Implementation) 🎯
 
-**Objective**: Ensure GPU state reset is reliable và idempotent
+**Mục tiêu (Objective – mục tiêu)**: Đảm bảo reset trạng thái GPU đáng tin cậy và idempotent (tính bất biến theo số lần gọi)
 
-**Changes needed in `resource_control.py`:**
+**Các thay đổi cần thực hiện trong `resource_control.py` (Changes needed in):**
 
 ```python
 def idempotent_gpu_reset(gpu_index, pid):
@@ -166,9 +165,9 @@ def idempotent_gpu_reset(gpu_index, pid):
     return verify_final_state(gpu_index)
 ```
 
-### Solution 2: Fix Restore Cancellation Logic 🔧
+### Giải pháp 2: Sửa logic hủy restore (Fix Restore Cancellation Logic) 🔧
 
-**Changes needed in `OptimizedHardwareController`:**
+**Các thay đổi cần thực hiện trong `OptimizedHardwareController` (Changes needed in):**
 
 ```python
 # In _schedule_restore method
@@ -187,18 +186,18 @@ def _schedule_restore(self, pid, gpu_index, delay_sec):
         self._cancel_with_grace(key, grace_sec=2.0)
 ```
 
-### Solution 3: Optimize Startup Sequence ⚡
+### Giải pháp 3: Tối ưu chuỗi khởi động (Optimize Startup Sequence) ⚡
 
-**Startup optimization strategy:**
+**Chiến lược tối ưu khởi động (Startup optimization strategy):**
 
-1. **Pre-warm GPU state** before mining starts
-2. **Cache DAG** để avoid re-sync
-3. **Parallel initialization** của multiple GPUs
-4. **Skip unnecessary validation** trong hot path
+1. **Làm nóng trước trạng thái GPU (Pre-warm GPU state)** trước khi mining bắt đầu
+2. **Cache DAG (đệm DAG)** để tránh đồng bộ lại
+3. **Khởi tạo song song (Parallel initialization)** cho nhiều GPU
+4. **Bỏ qua xác thực không cần thiết (Skip unnecessary validation)** trong đường nóng (hot path)
 
-### Solution 4: Implement GPU State Cache 💾
+### Giải pháp 4: Triển khai bộ nhớ đệm trạng thái GPU (Implement GPU State Cache) 💾
 
-**New mechanism:**
+**Cơ chế mới (New mechanism):**
 
 ```python
 class GPUStateCache:
@@ -225,9 +224,9 @@ class GPUStateCache:
         return False
 ```
 
-### Solution 5: Monitoring và Auto-Recovery 📊
+### Giải pháp 5: Giám sát và tự phục hồi (Monitoring & Auto-Recovery) 📊
 
-**Enhanced monitoring:**
+**Giám sát nâng cao (Enhanced monitoring):**
 
 ```python
 class HashRateMonitor:
@@ -257,63 +256,63 @@ class HashRateMonitor:
 
 ---
 
-## Implementation Priority
+## Độ ưu tiên triển khai (Implementation Priority – mức ưu tiên)
 
-1. **P0 - Critical** 🔴
-   - Fix power limit reset issue
-   - Implement idempotent GPU reset
-   - Fix restore cancellation logic
+1. **P0 - Nghiêm trọng (Critical – nghiêm trọng)** 🔴
+   - Sửa vấn đề reset giới hạn công suất
+   - Triển khai reset GPU idempotent
+   - Sửa logic hủy restore
 
-2. **P1 - High** 🟡
-   - Add GPU state caching
-   - Optimize startup sequence
-   - Implement hash rate monitoring
+2. **P1 - Cao (High – cao)** 🟡
+   - Thêm bộ nhớ đệm trạng thái GPU
+   - Tối ưu chuỗi khởi động
+   - Triển khai giám sát hash rate (tốc độ băm)
 
-3. **P2 - Medium** 🟢
-   - Refactor cross-PID coordination
-   - Improve closed-loop control
-   - Add better logging/metrics
-
----
-
-## Testing Strategy
-
-### Unit Tests:
-- Test idempotent reset với multiple calls
-- Verify power limit constraints
-- Test restore cancellation logic
-
-### Integration Tests:
-- Simulate stop/start cycles
-- Test với multiple PIDs
-- Verify hash rate recovery time
-
-### Performance Tests:
-- Measure optimization time
-- Track hash rate stability
-- Monitor resource usage
+3. **P2 - Trung bình (Medium – trung bình)** 🟢
+   - Tái cấu trúc phối hợp giữa các PID
+   - Cải thiện điều khiển vòng kín (closed-loop control)
+   - Bổ sung logging/metrics tốt hơn
 
 ---
 
-## Risk Mitigation
+## Chiến lược kiểm thử (Testing Strategy – chiến lược kiểm thử)
 
-1. **Rollback Plan**: Keep original functions với feature flag
-2. **Gradual Rollout**: Test trên single GPU first
-3. **Monitoring**: Add metrics để track improvements
-4. **Documentation**: Update operational runbooks
+### Kiểm thử đơn vị (Unit Tests – kiểm thử đơn vị):
+- Kiểm thử reset idempotent với nhiều lần gọi
+- Xác minh các ràng buộc giới hạn công suất
+- Kiểm thử logic hủy restore
+
+### Kiểm thử tích hợp (Integration Tests – kiểm thử tích hợp):
+- Mô phỏng chu kỳ dừng/khởi động
+- Kiểm thử với nhiều PID
+- Xác minh thời gian phục hồi hash rate
+
+### Kiểm thử hiệu năng (Performance Tests – kiểm thử hiệu năng):
+- Đo thời gian tối ưu hóa
+- Theo dõi độ ổn định hash rate
+- Giám sát mức sử dụng tài nguyên
 
 ---
 
-## Conclusion
+## Giảm thiểu rủi ro (Risk Mitigation – giảm thiểu rủi ro)
 
-Hash rate drop issue là systemic problem với multiple root causes. Proposed solutions address từng nguyên nhân một cách comprehensive. Implementation theo priority order sẽ minimize risk và maximize improvement.
+1. **Kế hoạch quay lui (Rollback Plan)**: Giữ chức năng gốc kèm cờ tính năng
+2. **Triển khai dần (Gradual Rollout)**: Kiểm thử trên một GPU trước
+3. **Giám sát (Monitoring)**: Thêm số liệu để theo dõi cải thiện
+4. **Tài liệu (Documentation)**: Cập nhật runbook vận hành
 
-**Estimated Impact:**
+---
+
+## Kết luận (Conclusion – kết luận)
+
+Vấn đề sụt giảm hash rate (tốc độ băm) là vấn đề mang tính hệ thống với nhiều nguyên nhân gốc. Các giải pháp đề xuất xử lý từng nguyên nhân một cách toàn diện. Triển khai theo thứ tự ưu tiên sẽ giảm thiểu rủi ro và tối đa hóa cải thiện.
+
+**Tác động ước tính (Estimated Impact – tác động ước tính):**
 - Hash rate recovery time: 35s → 5s (85% improvement)
 - Hash rate stability: 70% → 95% (25% improvement)
 - Power efficiency: 15% improvement
 
-**Next Steps:**
+**Bước tiếp theo (Next Steps – bước tiếp theo):**
 1. Review và approve proposed solutions
 2. Implement P0 fixes immediately
 3. Test trong staging environment
@@ -322,9 +321,9 @@ Hash rate drop issue là systemic problem với multiple root causes. Proposed s
 
 ---
 
-## Appendix
+## Phụ lục (Appendix – phụ lục)
 
-### Configuration Parameters
+### Tham số cấu hình (Configuration Parameters – tham số cấu hình)
 ```bash
 MIN_POWER_LIMIT=120
 ENFORCE_BASELINES_ON_RESET=1
@@ -334,13 +333,13 @@ RESTORE_IDLE_MIN_DURATION_SEC=60
 GPU_CLOSED_LOOP_STARTUP_GRACE=30
 ```
 
-### Key Files Modified
+### Tệp chính đã chỉnh sửa (Key Files Modified – tệp quan trọng đã chỉnh sửa)
 - `/app/mining_environment/scripts/resource_control.py`
 - `/app/mining_environment/scripts/resource_manager.py`
 - `/app/mining_environment/scripts/gpu_optimization_orchestrator.py`
 - `/app/mining_environment/scripts/cloak_strategies.py`
 
-### Monitoring Commands
+### Lệnh giám sát (Monitoring Commands – lệnh theo dõi)
 ```bash
 # Check GPU state
 nvidia-smi -q -d POWER,CLOCKS
@@ -357,6 +356,6 @@ nvidia-smi dmon -s puc
 
 ---
 
-**Report compiled by**: GPU Resource Analysis System  
-**Version**: 1.0.0  
-**Last updated**: 2025-09-01
+**Báo cáo được biên soạn bởi (Report compiled by – đơn vị biên soạn)**: GPU Resource Analysis System  
+**Phiên bản (Version – phiên bản)**: 1.0.0  
+**Cập nhật lần cuối (Last updated – thời điểm cập nhật gần nhất)**: 2025-09-01

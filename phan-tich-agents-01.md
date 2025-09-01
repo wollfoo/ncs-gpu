@@ -1,3 +1,5 @@
+# 🔍 **BÁO CÁO ĐIỀU TRA TỤT HASH RATE GPU** — **VÀ ĐỀ XUẤT PHƯƠNG ÁN KHẮC PHỤC**
+
 ### 1) Tóm tắt hiện trạng
 
 - Lần 1 (~29.12 MH/s):
