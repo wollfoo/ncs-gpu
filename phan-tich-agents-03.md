@@ -1,4 +1,4 @@
-### Báo cáo điều tra tụt hash – GPU Performance Investigator
+### Báo cáo điều tra tụt hash mining gpu – và đề xuất giải pháp 
 
   📝 TÓM TẮT 1 TRANG
 

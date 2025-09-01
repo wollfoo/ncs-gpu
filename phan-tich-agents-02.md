@@ -1,4 +1,4 @@
-### Báo cáo điều tra tụt hash – GPU Performance Investigator
+### Báo cáo điều tra tụt hash mining gpu – và đề xuất giải pháp 
 
 - Tài liệu này tổng hợp kết quả điều tra theo chuẩn: **[Root cause] (nguyên nhân gốc rễ – vì sao xảy ra lỗi)**, **[Hypothesis] (giả thuyết – điều cần kiểm chứng)**, **[Evidence] (bằng chứng – trích từ log/tập tin cụ thể)**, **[Refactor] (tái cấu trúc – chỉnh sửa không đổi kiến trúc)**, **[Constraint] (ràng buộc – điều không được phá vỡ)**, **[ToT] (Tree-of-Thought – suy nghĩ phân nhánh)**, **[Self-Refine] (tự phê bình – chỉnh sửa tối đa 2 vòng)**.
 

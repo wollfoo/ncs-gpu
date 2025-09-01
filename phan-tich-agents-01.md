@@ -1,5 +1,5 @@
 
-# Báo cáo điều tra tụt hashrate mining (Hashrate drop investigation – tổng hợp phân tích)
+### Báo cáo điều tra tụt hash mining gpu – và đề xuất giải pháp 
 
 
 Tìm thấy **[Root Cause] (nguyên nhân gốc rễ)** rõ ràng từ bằng chứng log!
