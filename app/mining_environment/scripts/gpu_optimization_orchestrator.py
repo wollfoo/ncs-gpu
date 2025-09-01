@@ -717,7 +717,15 @@ class GPUOptimizationOrchestrator:
                                 min_interval_sec=0.75,
                                 step_power_watts=step_w,
                                 step_sm_clock_mhz=step_clk,
-                                window_sec=int(os.getenv('POWER_DWELL_SEC', '30'))
+                                window_sec=(
+                                    (lambda: (
+                                        # Dynamic window selection based on workload profile
+                                        (lambda mmode: (
+                                            int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MINING', '0'))) if mmode in ('gpu','mining','mining-only')
+                                            else int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED', os.getenv('POWER_DWELL_SEC', '30'))))
+                                        ))(os.getenv('MINING_MODE', 'gpu').lower())
+                                    ))()
+                                )
                             )
                             self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
                         except Exception as _cl_err:

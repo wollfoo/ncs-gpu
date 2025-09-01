@@ -3418,6 +3418,17 @@ except Exception as e:
         # Cancellable restore of device-wide settings after time window (per-PID simulation window)
         try:
             key = (int(pid), int(gpu_index))
+            # Early skip if window_sec <= 0 (nothing to schedule)
+            try:
+                if int(float(window_sec)) <= 0:
+                    try:
+                        self.logger.debug(f"⏭️ [OHC._schedule_restore] Skip scheduling restore for PID {pid} (GPU {gpu_index}) because window_sec={window_sec}")
+                    except Exception:
+                        pass
+                    return
+            except Exception:
+                # If parsing fails, continue with scheduling as before
+                pass
             # Nếu caller không đưa vào event, tạo mới; đồng thời hủy restore cũ nếu còn tồn tại
             prev_event = self.restore_cancel_events.get(key)
             if cancel_event is None:
@@ -3465,11 +3476,50 @@ except Exception as e:
                             self.logger.info(f"🛑 [OHC._schedule_restore] CID={correlation_id} Restore canceled for PID={pid}, GPU={gpu_index} before execution")
                             return
                         time.sleep(min(poll_interval, max(0.0, deadline - time.time())))
-                    # Đã hết thời gian và chưa bị hủy → thực hiện restore
-                    # Guard cuối: nếu vừa bị hủy ngay sau vòng chờ, bỏ qua restore
+                    # Đã hết thời gian và chưa bị hủy → tiếp tục qua pha idle-gate (nếu được bật)
+                    # Guard cuối trước idle-gate
                     if ev.is_set():
                         self.logger.info(f"🛑 [OHC._schedule_restore] CID={correlation_id} Restore canceled for PID={pid}, GPU={gpu_index} right before execution")
                         return
+                    # Idle-gated restore: yêu cầu GPU idle dưới ngưỡng trong khoảng thời gian cấu hình
+                    try:
+                        thr_env = os.getenv('RESTORE_IDLE_UTIL_THRESHOLD', '0.10')
+                        idle_thr = float(thr_env)
+                        if idle_thr > 1.0:
+                            idle_thr = idle_thr / 100.0
+                    except Exception:
+                        idle_thr = 0.10
+                    try:
+                        min_idle_dur = float(os.getenv('RESTORE_IDLE_MIN_DURATION_SEC', '60'))
+                    except Exception:
+                        min_idle_dur = 60.0
+                    if min_idle_dur > 0.0:
+                        try:
+                            self.logger.debug(f"[OHC._schedule_restore] CID={correlation_id} Idle-gated restore enabled: thr={idle_thr:.2f}, dur={min_idle_dur:.1f}s, poll={poll_interval}s")
+                        except Exception:
+                            pass
+                        idle_until = time.time() + max(0.0, float(min_idle_dur))
+                        while time.time() < idle_until:
+                            if ev.is_set():
+                                self.logger.info(f"🛑 [OHC._schedule_restore] CID={correlation_id} Restore canceled for PID={pid}, GPU={gpu_index} during idle-gate")
+                                return
+                            util = 0.0
+                            try:
+                                util = float(self._get_utilization_percent(gpu_index))
+                            except Exception as _ue:
+                                try:
+                                    self.logger.debug(f"[OHC._schedule_restore] CID={correlation_id} Cannot read GPU util for idle-gate: {_ue}")
+                                except Exception:
+                                    pass
+                            # Nếu GPU hoạt động vượt ngưỡng trong thời gian idle-gate → bỏ qua restore
+                            if util > idle_thr:
+                                try:
+                                    self.logger.info(f"⛔ [OHC._schedule_restore] CID={correlation_id} Active GPU detected (util={util:.2f} > thr={idle_thr:.2f}) → skipping restore")
+                                except Exception:
+                                    pass
+                                return
+                            time.sleep(poll_interval)
+                    # Qua idle-gate (hoặc idle-gate bị vô hiệu hóa) → thực hiện restore
                     self.logger.info(f"🔄 [OHC._schedule_restore] CID={correlation_id} Restoring GPU settings for PID {pid}")
                     self.gpu_manager.restore_gpu_settings_for_pid(pid, correlation_id=correlation_id)
                     # Clean up simulation processes

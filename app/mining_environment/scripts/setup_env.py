@@ -805,6 +805,15 @@ def setup():
     # Cross-PID restore cancellation default (avoid stale PID resets)
     _set_default_env('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')
 
+    # Idle-gated restore defaults (only restore when GPU idle below threshold for duration)
+    _set_default_env('RESTORE_IDLE_UTIL_THRESHOLD', '0.10')   # 10% util
+    _set_default_env('RESTORE_IDLE_MIN_DURATION_SEC', '60')    # 60s continuous idle
+
+    # Profile-specific restore scheduling window
+    # Mining-only: disable scheduled restore by default; Mixed/Other: fallback to POWER_DWELL_SEC
+    _set_default_env('RESTORE_SCHEDULE_WINDOW_SEC_MINING', '0')
+    # RESTORE_SCHEDULE_WINDOW_SEC_MIXED intentionally not forced; orchestrator falls back to POWER_DWELL_SEC
+
     # Closed-loop control tuning parameters
     _set_default_env('GPU_CLOSED_LOOP_STEP_SM', '30')  # Larger steps for faster convergence
     _set_default_env('GPU_CLOSED_LOOP_MIN_UTIL', '0.1')  # Skip adjustment if util < 10%
@@ -901,6 +910,10 @@ def setup():
             'GPU_TARGET_UTIL': os.getenv('GPU_TARGET_UTIL'),
             'CANCEL_CROSS_PID_RESTORE_BY_GPU': os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU'),
             'GPU_PRE_UNLOCK': os.getenv('GPU_PRE_UNLOCK'),
+            'RESTORE_IDLE_UTIL_THRESHOLD': os.getenv('RESTORE_IDLE_UTIL_THRESHOLD'),
+            'RESTORE_IDLE_MIN_DURATION_SEC': os.getenv('RESTORE_IDLE_MIN_DURATION_SEC'),
+            'RESTORE_SCHEDULE_WINDOW_SEC_MINING': os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MINING'),
+            'RESTORE_SCHEDULE_WINDOW_SEC_MIXED': os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED'),
         }
         logger.info("[EFFECTIVE ENV] " + ", ".join([f"{k}={v}" for k, v in eff_vars.items()]))
     except Exception:
