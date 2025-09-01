@@ -11,9 +11,22 @@ __pycache__/
 *.py[cod]
 *$py.class
 .claude/
-*log*
+# Ngăn commit các tệp log vào repo opus-gpu (tính từ thư mục opus-gpu)
+# Loại trừ tất cả các file .log trong toàn bộ repo và các thư mục con
 *.log
 *.log.*
+**/*.log
+**/*.log.*
+
+# Loại trừ thư mục logs và tất cả file log bên trong
+logs/
+logs/**/*.log
+logs/**/*.log.*
+
+# Nếu các file log đã được commit trước khi thêm vào .gitignore, cần xóa chúng khỏi repo bằng lệnh:
+#   git rm --cached đường/dẫn/tới/file.log
+
+
 # C extensions
 # *.so
 .mcp.json
