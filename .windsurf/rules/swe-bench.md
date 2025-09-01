@@ -1,12 +1,12 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 ---
 type: capability_prompt
 scope: project
 priority: normal
-activation: always_on
+activation: manual
 ---
 
 # SWE-BENCH – VERIFIED DEVELOPER INSTRUCTIONS
