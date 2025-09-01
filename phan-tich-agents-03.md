@@ -1,4 +1,4 @@
-● 📊 BÁO CÁO ĐIỀU TRA GPU PERFORMANCE - PHÂN TÍCH NGUYÊN NHÂN TỤT HASH
+### Báo cáo điều tra tụt hash – GPU Performance Investigator
 
   📝 TÓM TẮT 1 TRANG
 

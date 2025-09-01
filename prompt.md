@@ -204,3 +204,6 @@ Yêu cầu: Với mỗi nhánh, nêu **\[Hypothesis]**, **\[Evidence]**, **\[Tes
 
 * Chỉ mô tả giải pháp **bằng lời**, **không** đưa code.
 * Tuyệt đối **không** thay đổi cấu trúc thư mục, **không** bịa đặt chi tiết thiếu log.
+
+
+
