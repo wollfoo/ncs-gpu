@@ -986,6 +986,142 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi set clocks GPU={gpu_index}: {e}")
             return False
 
+    def reset_app_clocks_nvml(self, gpu_index: int) -> bool:
+        """
+        Reset ứng dụng clocks (Applications Clocks) theo NVML-first.
+
+        - Ưu tiên NVML: nvmlDeviceResetApplicationsClocks(handle)
+        - Trả về True nếu NVML báo thành công, False nếu lỗi/không hỗ trợ
+        """
+        try:
+            if not self.gpu_initialized:
+                self.logger.error("[RC.reset] NVML chưa khởi tạo – không thể reset applications clocks.")
+                return False
+            handle = self.get_handle(gpu_index)
+            if handle is None:
+                self.logger.error(f"[RC.reset] Không lấy được handle cho GPU={gpu_index}.")
+                return False
+            pynvml.nvmlDeviceResetApplicationsClocks(handle)
+            self.logger.info(f"[RC.reset] ✅ NVML nvmlDeviceResetApplicationsClocks thành công | GPU={gpu_index}")
+            return True
+        except pynvml.NVMLError as e:
+            self.logger.warning(f"[RC.reset] NVML reset applications clocks không hỗ trợ/failed | GPU={gpu_index} | err={e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"[RC.reset] Exception khi NVML reset applications clocks | GPU={gpu_index} | err={e}")
+            return False
+
+    def reset_gpu_clocks_cli(self, gpu_index: int) -> bool:
+        """
+        Reset clocks bằng nvidia-smi (CLI fallback – phương án dự phòng):
+        - Thứ tự cố gắng: -rac (reset applications clocks) → -rgc (reset gpu clocks) → --reset-memory-clocks/-rmc
+        - Thành công nếu ít nhất một lệnh chạy ok.
+        """
+        attempts: List[List[str]] = [
+            ['nvidia-smi', '-i', str(gpu_index), '-rac'],
+            ['nvidia-smi', '-i', str(gpu_index), '-rgc'],
+            ['nvidia-smi', '-i', str(gpu_index), '--reset-memory-clocks'],
+            ['nvidia-smi', '-i', str(gpu_index), '-rmc'],  # alias nếu bản CLI hỗ trợ
+        ]
+        success_any = False
+        for cmd in attempts:
+            try:
+                subprocess.run(cmd, check=True, timeout=10)
+                success_any = True
+                self.logger.info(f"[RC.reset] ✅ CLI success: {' '.join(cmd)}")
+            except subprocess.TimeoutExpired as e:
+                self.logger.warning(f"[RC.reset] ⏱️ CLI timeout: {' '.join(cmd)} | err={e}")
+            except subprocess.CalledProcessError as e:
+                self.logger.warning(f"[RC.reset] CLI failed: {' '.join(cmd)} | err={e}")
+            except FileNotFoundError as e:
+                self.logger.error(f"[RC.reset] nvidia-smi không tồn tại trong PATH | err={e}")
+                break
+            except Exception as e:
+                self.logger.error(f"[RC.reset] CLI exception: {' '.join(cmd)} | err={e}")
+        if not success_any:
+            self.logger.warning(f"[RC.reset] ❌ Không reset được clocks bằng CLI cho GPU={gpu_index}")
+        return success_any
+
+    def verify_gpu_clock_state(self, gpu_index: int) -> bool:
+        """
+        Verify trạng thái sau reset bằng nvidia-smi:
+        - Kỳ vọng: clocks.applications.graphics/memory ở trạng thái không khoá (N/A)
+        - Ghi nhận: clocks.current.*, pstate, power.draw để quan sát
+        Trả về True nếu nhìn thấy trạng thái "unlocked"; False nếu còn giá trị khoá rõ ràng.
+        """
+        try:
+            cmd = [
+                'nvidia-smi', '-i', str(gpu_index),
+                '--query-gpu=clocks.applications.graphics,clocks.applications.memory,clocks.current.graphics,clocks.current.memory,pstate,power.draw',
+                '--format=csv,noheader,nounits'
+            ]
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=8)
+            line = out.strip().splitlines()[0] if out else ''
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 6:
+                self.logger.warning(f"[RC.verify] Output bất thường từ nvidia-smi: '{line}'")
+                return True  # best-effort
+
+            apps_g, apps_m, cur_g, cur_m, pstate, power = parts[:6]
+
+            def _is_numeric(v: str) -> bool:
+                try:
+                    t = str(v).strip().lower()
+                    if t in ('', 'n/a', 'na', 'nan'):
+                        return False
+                    float(t)
+                    return True
+                except Exception:
+                    return False
+
+            locked_g = _is_numeric(apps_g)
+            locked_m = _is_numeric(apps_m)
+            unlocked = not (locked_g or locked_m)
+            try:
+                self.logger.info(
+                    f"[RC.verify] GPU={gpu_index} | apps(g,m)=({apps_g},{apps_m}) | current(g,m)=({cur_g},{cur_m}) | pstate={pstate} | power={power}W | unlocked={unlocked}"
+                )
+            except Exception:
+                pass
+            return unlocked
+        except subprocess.TimeoutExpired as e:
+            self.logger.warning(f"[RC.verify] ⏱️ Timeout khi gọi nvidia-smi verify | GPU={gpu_index} | err={e}")
+            return True  # best-effort
+        except Exception as e:
+            self.logger.warning(f"[RC.verify] Không thể verify bằng nvidia-smi | GPU={gpu_index} | err={e}")
+            return True  # best-effort
+
+    def reset_gpu_clocks_and_verify(self, gpu_index: int, post_sleep_sec: Optional[float] = None) -> bool:
+        """
+        Orchestrator: NVML-first reset → CLI fallback → Verify.
+
+        - post_sleep_sec: ngủ rất ngắn sau reset để phần cứng cập nhật trạng thái (mặc định 0.2s, tối đa 2s)
+        - Trả về True nếu reset (NVML hoặc CLI) và verify thành công.
+        """
+        ok = False
+        try:
+            ok = self.reset_app_clocks_nvml(gpu_index)
+            if not ok:
+                ok = self.reset_gpu_clocks_cli(gpu_index)
+
+            # Ngủ ngắn để phần cứng/phần mềm cập nhật trạng thái
+            try:
+                if post_sleep_sec is None:
+                    post_sleep_sec = float(os.getenv('POST_RESET_SLEEP_SEC', '0.2'))
+            except Exception:
+                post_sleep_sec = 0.2
+            post_sleep_sec = max(0.0, min(2.0, float(post_sleep_sec)))
+            if post_sleep_sec > 0:
+                time.sleep(post_sleep_sec)
+
+            verified = self.verify_gpu_clock_state(gpu_index)
+            if not verified:
+                self.logger.warning(f"[RC.reset] Reset ok nhưng verify không đạt | GPU={gpu_index}")
+            return bool(ok and verified)
+        except Exception as e:
+            self.logger.error(f"[RC.reset] Lỗi trong reset_gpu_clocks_and_verify | GPU={gpu_index} | err={e}")
+            return False
+
     def limit_temperature(self, pid: Optional[int], gpu_index: int, temperature_threshold: float, fan_speed_increase: float) -> bool:
         """
         Quản lý nhiệt độ GPU bằng cách điều chỉnh quạt, công suất, và xung nhịp.

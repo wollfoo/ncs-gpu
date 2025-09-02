@@ -32,6 +32,10 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - Use when the goal is to understand project architecture or module boundaries.
 - Constraints:
   - Execute file reads, directory listings, and searches one at a time (sequential-only) to preserve narrative continuity.
+  - One action per step: either call a tool or reply to the user; never both simultaneously.
+  - Tool preambles: rephrase the goal and outline a step-by-step plan before calling any tool.
+  - Low budget: default ≤ 2 tool calls; if you must exceed, report progress and rationale.
+  - Verbosity control: keep user-facing messages concise; prefer targeted, sequential reads; cite sources when appropriate.
 
 - Workflow:
   1) Global overview (high-level):
@@ -42,7 +46,6 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
      - Use import/require/use edges and config wiring as signals; adjust order if conflicts appear.
   3) Module pass (per module, still high-level):
      - Read public API (exports/types), configs, side-effects, external IO (DB, HTTP, FS), and responsibilities; avoid deep function-level dives.
-     - Record invariants, contracts, and cross-module touchpoints.
   4) Function/class deep dive (detailed):
      - After module context is stable, dive into internal functions/classes of each module in the established order (most central/high-risk first).
      - Verify invariants and contracts; add notes for edge cases and error handling.
@@ -69,11 +72,17 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
 - Loop:
   - Sequential search passes → minimal plan → complete task.
   - Search again only if validation fails or new unknowns appear. Prefer acting over more searching.
+
+- Deliverables:
+  - Architecture summary and key touchpoints.
+  - List of target files/symbols and the expected change scope.
+  - Tool plan and call count used; note any budget exceedance and rationale.
 </context_gathering>
 
 <context_gathering>
 - Search depth: very low
 - Bias strongly towards providing a correct answer as quickly as possible, even if it might not be fully correct.
-- Usually, this means an absolute maximum of 2 tool calls.
+- Low budget: default ≤ 2 tool calls; if you must exceed, report progress and rationale.
+- One action per step: either call a tool or reply to the user; never both simultaneously.
 - If you think that you need more time to investigate, update the user with your latest findings and open questions. You can proceed if the user confirms.
 </context_gathering>
