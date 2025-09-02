@@ -5,7 +5,6 @@ trigger: always_on
 ---
 trigger: always_on
 ---
-
 ---
 type: capability_prompt
 scope: project
@@ -53,4 +52,41 @@ activation: always_on
 - Accessibility: Use semantic HTML and ARIA roles where appropriate. Favor pre-built Radix/shadcn components, which have accessibility baked in.
 </ui_ux_best_practices>
 
-<code_editing_rules>
+<procedure>
+1) Preamble & plan:
+   - Restate the objective and acceptance criteria.
+   - Outline a sequential plan ensuring exactly one tool call per step.
+2) Context scan:
+   - Identify target files/symbols and scope of change using `workflows/context-scan.md`.
+   - Start broad then narrow; early-stop once you can name the exact content to change.
+3) Minimal diff design:
+   - Prefer reuse; factor shared UI patterns into components; avoid duplication.
+4) Implementation (apply_patch – V4A):
+   - Always modify files via apply_patch using standard V4A diff format.
+   - Each hunk must include ≥3 lines of context before and after; ensure uniqueness.
+   - Edit only one file per call; split unrelated changes into separate hunks.
+   - Break very large edits into multiple smaller patches.
+   - Imports must be at the top of the file. If adding imports mid-file, add a separate hunk to move them to the top.
+   - Ensure code is immediately runnable: add required imports/dependencies/config/endpoints; include README/requirements when creating new projects.
+   - Never include extremely long hashes or non-textual code/binaries.
+5) Verification:
+   - Add focused logs/tests as needed to validate behavior; remove temporary logs after verification.
+   - Optionally run quick build/test commands to catch syntax/type errors.
+6) Summary:
+   - Provide a brief change summary (files, scope, rationale, UI/UX impact).
+</procedure>
+
+<constraints>
+- Sequential-only tool execution: one tool call per step; no parallel calls.
+- One action per step: either call a tool or reply to the user, never both.
+- Final instructions: always use apply_patch (V4A); never edit files manually in the editor.
+- Keep user-facing messages concise; keep patches detailed and easy to review.
+- Read the file before editing; avoid proposing changes without evidence.
+</constraints>
+
+<deliverables>
+- V4A patch(es) implementing the changes.
+- Brief post-edit summary of modifications and rationale.
+</deliverables>
+
+</code_editing_rules>

@@ -36,16 +36,13 @@
 # 🎭 VAI TRÒ (Role)
 
 Bạn là **\[Meta-Synthesis Lead] (trưởng nhóm tổng hợp giải pháp – hợp nhất phân tích của nhiều tác nhân AI để chọn phương án tối ưu)**.
-Mục tiêu: Đọc kỹ 4 tài liệu điều tra từ các **AI Agent**, **đánh giá định lượng**, sau đó **ghép các điểm mạnh** để tạo ra **giải pháp tối ưu duy nhất** khắc phục tụt hashrate sau mỗi lần reset mining.
+Mục tiêu: Đọc kỹ 4 tài liệu điều tra từ các **AI Agent**, **đánh giá định lượng**, sau đó **ghép các điểm mạnh** để tạo ra **giải pháp tối ưu duy nhất** khắc phục tụt hashrate sau mỗi lần reset mining. 
 
 ---
 
 # 📚 NGUỒN TÀI LIỆU PHẢI ĐỌC (Input Documents)
-
-* `@phan-tich-agents-01.md`
-* `@phan-tich-agents-02.md`
-* `@phan-tich-agents-03.md`
-* `@phan-tich-agents-04.md`
+* `refactor-plan-01`
+* `refactor-plan-02`
 
 **Yêu cầu trích dẫn**: Mọi kết luận đều phải dẫn nguồn **rõ file + trích đoạn verbatim** (đoạn ngắn đủ ý). Giữ nguyên format của tài liệu khi trích.
 
@@ -117,7 +114,7 @@ Tối thiểu **5 nhánh** gợi ý (ví dụ):
 
 # 🧪 ANTI-HALLUCINATION (BẮT BUỘC)
 
-* **Evidence-Only Principle**: Chỉ kết luận khi có **trích dẫn rõ ràng** từ `@report-*.md` hoặc từ đường dẫn/log được các tài liệu này nêu.
+* **Evidence-Only Principle**: Chỉ kết luận khi có **trích dẫn rõ ràng** từ `@refactor-plan*.md` hoặc từ đường dẫn/log được các tài liệu này nêu.
 * **No Creative Assumptions**: Không bịa đặt thông số/nhật ký/đường dẫn.
 * **Factual Vietnamese Communication**: Ngắn gọn, chính xác, không mập mờ.
 * **Explicit Source Citation**: Sau mỗi kết luận quan trọng, ghi **Tên file → trích đoạn verbatim ngắn**.
