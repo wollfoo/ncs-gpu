@@ -31,7 +31,6 @@ from mining_environment.scripts.module_loggers import (
     log_gpu_plugin_operation
 )
 from mining_environment.scripts import setup_env
-from mining_environment.scripts import gpu_unrestrict
 from mining_environment.scripts.resource_manager import ResourceManager
 from mining_environment.scripts.auxiliary_modules.models import ConfigModel
 from mining_environment.scripts.privileged_operations import get_privileged_manager
@@ -248,12 +247,6 @@ def initialize_environment():
         logger.info("ℹ️ **eBPF GPU telemetry** (giám sát GPU qua eBPF – theo dõi hiệu suất GPU) đã được DISABLE để tránh **memory conflicts** (xung đột bộ nhớ – lỗi tranh chấp RAM)")
 
         logger.info("🌍 Chạy **centralized environment setup** (thiết lập môi trường tập trung – cấu hình chung cho hệ thống)...")
-        # Preflight GPU reset (best-effort) to avoid low-clock trap before environment setup
-        try:
-            logger.info("🔓 [INIT] Preflight GPU reset before setup_env.setup()")
-            gpu_unrestrict.reset_gpu_state(logger)
-        except Exception as e:
-            logger.debug(f"[INIT] Preflight GPU reset skipped: {e}")
         setup_env.setup()
         logger.info("✅ Thiết lập môi trường thành công.")
         

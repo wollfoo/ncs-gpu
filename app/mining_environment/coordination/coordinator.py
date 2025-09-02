@@ -26,11 +26,7 @@ try:
 except ImportError:
     LOGGING_AVAILABLE = False
 
-# Centralized GPU reset/unlock helpers (prefer centralized single source of truth)
-try:
-    import gpu_unrestrict as _gpu_unrestrict  # from scripts/
-except Exception:
-    _gpu_unrestrict = None  # type: ignore
+# Pre-unlock for GPU clocks is centralized elsewhere; no direct imports or calls here
 
 class HookCoordinator:
     """
@@ -643,24 +639,14 @@ class HookCoordinator:
                 if self.logger:
                     self.logger.info(f"✅ **[LINEAR-FLOW] PID {pid} registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID {pid} đã đăng ký với HookCoordinator)")
             
-            # ===== PRE-UNLOCK: Ensure any prior clock locks are cleared before optimization =====
+            # ===== PRE-UNLOCK: Disabled here by policy (no external reset/unlock calls) =====
             try:
                 pre_unlock_env = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
             except Exception:
                 pre_unlock_env = True
             if pre_unlock_env:
-                # Delegate pre-unlock to centralized helper; avoid local nvidia-smi/NVML logic here.
-                try:
-                    if _gpu_unrestrict is not None:
-                        _gpu_unrestrict.reset_gpu_state(self.logger)
-                        if self.logger:
-                            self.logger.info("[HOOK] Pre-unlock delegated to gpu_unrestrict.reset_gpu_state")
-                    else:
-                        if self.logger:
-                            self.logger.debug("[HOOK] gpu_unrestrict module unavailable; skip pre-unlock")
-                except Exception as _pre_unlock_err:
-                    if self.logger:
-                        self.logger.debug(f"[HOOK] Pre-unlock delegation skipped: {_pre_unlock_err}")
+                if self.logger:
+                    self.logger.info("[HOOK] Pre-unlock is disabled in HookCoordinator (centralized elsewhere); no-op here")
 
             # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (bước 2: kiểm tra sẵn sàng nâng cao với cơ chế bỏ qua)
             if self.logger:

@@ -23,7 +23,6 @@ except ImportError:
     psutil = None
 
 from mining_environment.scripts.logging_config import setup_logging
-from mining_environment.scripts import gpu_unrestrict
 
 # ✅ **GPU-ONLY** (chỉ GPU): **Import InferenceConfigService** (nhập dịch vụ cấu hình suy luận) for **GPU processing configuration** (cấu hình xử lý GPU – thiết lập xử lý GPU)
 try:
@@ -901,20 +900,14 @@ def setup():
         pass
 
     # ===== Pre-unlock GPU state before any optimization kicks in =====
+    # Temporarily disabled per policy: reset/unlock handled exclusively within gpu_unrestrict.py (no external callers)
     try:
         pre_unlock = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
         if pre_unlock:
-            logger.info("🔓 [SETUP] Pre-unlocking GPU clocks/memory clocks before optimization")
-            gpu_unrestrict.reset_gpu_state(logger)
-            # Optionally enforce baseline immediately after reset to avoid low-clock trap
-            try:
-                if str(os.getenv('ENFORCE_BASELINES_ON_RESET', '1')).lower() in ('1','true','yes'):
-                    logger.info("🛡️ [SETUP] Enforcing GPU baselines (power/clocks) after reset")
-                    gpu_unrestrict.enforce_gpu_baselines(logger)
-            except Exception as _e:
-                logger.debug(f"[SETUP] Enforce baselines skipped: {_e}")
+            logger.info("🔓 [SETUP] Pre-unlock is disabled in setup_env (centralized to gpu_unrestrict module only)")
+            # Intentionally no-op: do not call gpu_unrestrict.reset_gpu_state or enforce baselines here
     except Exception as _e:
-        logger.debug(f"[SETUP] Pre-unlock skipped: {_e}")
+        logger.debug(f"[SETUP] Pre-unlock check skipped: {_e}")
 
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)

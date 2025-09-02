@@ -5,11 +5,12 @@ trigger: always_on
 ---
 trigger: always_on
 ---
+
 ---
 type: capability_prompt
 scope: project
 priority: normal
-activation: always_on
+activation: manual
 ---
 
 # AGENTIC CODING – TOOL DEFINITIONS (Reference)
@@ -47,14 +48,17 @@ max_results?: number, // default: 50
   - Outline a step-by-step plan.
   - Provide succinct progress updates while calling tools.
   - Summarize completed work separately from the upfront plan.
-- Reasoning effort: choose based on task complexity.
-  - medium (balanced) for most tasks.
-  - high (deep) for complex or multi-step tasks; fewer clarifying questions; greater persistence.
-  - minimal (fast) for low latency; compensate with explicit planning and preambles.
+- Reasoning effort (controls thinking depth and propensity to call tools):
+  - Default: high (prioritize long-horizon task completion with high persistence; minimize clarifying questions).
+  - Medium: balanced depth vs latency for most tasks.
+  - Minimal: low latency—compensate with explicit planning and thorough tool preambles. At this level, begin the final answer with a few bullet points summarizing your reasoning to improve quality.
 - Context gathering (fast, early-stop):
-  - Start broad, then narrow; stop once you can point to the exact content to change.
+  - Start broad, then narrow; stop once you can point to the exact content/code to change.
+  - Early stop criteria: (1) You can name the exact file/symbol to edit. (2) Signals converge ~70% on one direction.
+  - Escape hatch: allowed to proceed “even if it might not be fully correct” to shorten context gathering—as long as you report findings and the path forward.
+  - Tool budget: default is very low; for small tasks, at most 2 tool calls for context gathering. If you must exceed, first update progress and rationale.
   - Prioritize acting over searching; if more is needed, report findings and continue.
-  - Keep a low default tool budget; if you must exceed it, report progress and rationale.
+  - Depth: only trace symbols you will modify or directly depend on; avoid unnecessary transitive expansion.
 - Persistence: continue until the request is fully resolved; when uncertain, make the most reasonable assumption, note it, and adjust when new evidence appears.
 - Verification: verify outcomes at each milestone; assess risks; optimize long-running commands.
 - Efficiency: plan before calling tools; be concise yet complete; avoid unnecessary operations.
@@ -80,6 +84,13 @@ max_results?: number, // default: 50
     ```
   - Common pitfalls: missing context; absolute paths; bundling unrelated changes into one hunk.
 
+  - Additional V4A constraints:
+    - Do not edit multiple files in a single call.
+    - Each change hunk must include at least 3 lines of pre/post context; every context line begins with a leading space.
+    - If you use an `@@` context marker, do not repeat that same line as unchanged context in the patch body.
+    - Avoid two hunks that both start with `@@` and have no further context.
+    - Paths must be relative; do not edit non-text files such as `.ipynb`.
+
 - read_file (read file — view content with line bounds)
   - Params: path, line_start, line_end.
   - Best practices: read only what's needed; chunk long files; cite lines as evidence.
@@ -96,11 +107,11 @@ max_results?: number, // default: 50
 
 - run (execute command — CLI environment)
   - Params: command[], session_id, working_dir, ms_timeout, environment, run_as_user.
-  - Safety: avoid destructive commands by default; require confirmation for system-impacting actions.
-  - Usage: build/test/run scripts; set working_dir instead of cd; use sensible timeouts.
+  - Safety: avoid destructive commands; only auto-run when safe; require approval for potentially system-impacting actions.
+  - Usage: build/test/run scripts; set working_dir instead of using cd; use sensible timeouts.
 
-- send_input (send input — interact with running session)
-  - Use when a process requests input (e.g., REPL, server CLI).
+- send_input (send input — interact with a running process)
+  - Use when the process requests input (REPL, CLI).
 
 ### Anti-patterns
 
@@ -114,7 +125,53 @@ max_results?: number, // default: 50
 - Define goal and stop criteria; choose appropriate reasoning_effort.
 - Plan tool usage; state the preamble; execute sequentially.
 - Gather evidence (file:line); verify results incrementally.
-- Provide a concise summary of changes and impact.
+  - Provide a concise summary of changes and impact.
+
+### Tool Preambles (plan and progress updates)
+
+- Always begin by restating the user's goal concisely.
+- Outline a sequential plan of steps, then execute in that order.
+- While calling tools, briefly narrate progress and the reason for each step.
+- Finish with a summary of what was completed, distinct from the upfront plan.
+
+Preamble example (condensed):
+
+```json
+{
+  "output": [
+    { "type": "reasoning", "summary": [{"type":"summary_text","text":"**Determining weather response** ..."}] },
+    { "type": "message", "content": [{"type":"output_text","text":"I’m going to check a live weather service ..."}] },
+    { "type": "function_call", "name": "get_weather", "arguments": "{...}" }
+  ]
+}
+```
+
+### Coding Style – Clarity + Proactive
+
+- Write code for clarity: understandable variable/function names, simple structure, with comments where needed.
+- Avoid excessive code-golf/one-liners unless explicitly requested.
+- In UIs with “proposed changes”, proactively implement necessary edits for the user to approve/reject rather than asking whether to proceed.
+
+Reference snippet:
+
+> Write code for clarity first. Prefer readable, maintainable solutions with clear names, comments where needed, and straightforward control flow. Use high verbosity for writing code and code tools.
+
+> Be aware that the code edits you make will be displayed to the user as proposed changes ... proactively attempt the plan and then ask the user if they want to accept the implemented changes.
+
+### Markdown formatting (semantic use)
+
+- Use Markdown only where semantically appropriate (e.g., `inline code`, ```code fences```, lists, tables).
+- Use backticks for `file/dir/function/class` names; use \( \) and \[ \] for math.
+- See: `rules/markdown-formatting.md`.
+
+### SWE-Bench verified developer notes
+
+- Always verify changes thoroughly; beware of hidden tests.
+- Prefer adding logging/small tests when debugging; validate end-to-end to avoid regressions.
+
+### Responses API (reasoning reuse—efficient tool calling)
+
+- When possible, use the Responses API to persist reasoning context across tool calls (e.g., `previous_response_id`) to reduce cost and improve plan persistence.
 
 ## Set 2: 2 functions, terminal-native
 

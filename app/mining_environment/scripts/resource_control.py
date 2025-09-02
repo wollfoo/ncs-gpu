@@ -76,14 +76,7 @@ except ImportError:
         get_dag_synchronizer = None
         DAGState = None
 
-# Import centralized GPU unrestrict helpers (relative first, then absolute fallback)
-try:
-    from . import gpu_unrestrict
-except Exception:  # pragma: no cover
-    try:
-        import gpu_unrestrict  # type: ignore
-    except Exception:
-        gpu_unrestrict = None  # type: ignore
+# GPU reset/unlock is centralized elsewhere; no imports or direct calls here
 
 # ✅ STANDARDIZED: Unified logger for OHC and module-level
 resource_logger = get_resource_control_logger()
@@ -997,56 +990,47 @@ class GPUResourceManager:
 
     def reset_app_clocks_nvml(self, gpu_index: int) -> bool:
         """
-        Ủy quyền reset applications clocks sang gpu_unrestrict (NVML-first trong module tập trung).
-        Giữ API ổn định, không tự can thiệp trực tiếp tại đây.
+        No-op stub per policy: external reset/unlock disabled outside gpu_unrestrict.py.
+        Returns True to preserve flow.
         """
         try:
-            if gpu_unrestrict is None:
-                self.logger.warning("[RC.reset] gpu_unrestrict module unavailable; skip NVML reset.")
-                return False
-            return bool(gpu_unrestrict.reset_app_clocks_nvml(self, gpu_index))
-        except Exception as e:
-            self.logger.debug(f"[RC.reset] Delegation reset_app_clocks_nvml failed | GPU={gpu_index} | err={e}")
-            return False
+            self.logger.info(f"[RC.reset] (no-op) NVML app clocks reset disabled here | GPU={gpu_index}")
+        except Exception:
+            pass
+        return True
 
     def reset_gpu_clocks_cli(self, gpu_index: int) -> bool:
         """
-        Ủy quyền reset clocks bằng CLI sang gpu_unrestrict. Không thực thi trực tiếp ở đây.
+        No-op stub per policy: external reset/unlock disabled outside gpu_unrestrict.py.
+        Returns True to preserve flow.
         """
         try:
-            if gpu_unrestrict is None:
-                self.logger.warning("[RC.reset] gpu_unrestrict module unavailable; skip CLI reset.")
-                return False
-            return bool(gpu_unrestrict.reset_gpu_clocks_cli(self.logger, gpu_index))
-        except Exception as e:
-            self.logger.debug(f"[RC.reset] Delegation reset_gpu_clocks_cli failed | GPU={gpu_index} | err={e}")
-            return False
+            self.logger.info(f"[RC.reset] (no-op) CLI clocks reset disabled here | GPU={gpu_index}")
+        except Exception:
+            pass
+        return True
 
     def verify_gpu_clock_state(self, gpu_index: int) -> bool:
         """
-        Ủy quyền verify trạng thái clock sang gpu_unrestrict. Không tự query trực tiếp.
+        No-op stub per policy: external verification disabled here. Assume OK.
+        Returns True to preserve flow.
         """
         try:
-            if gpu_unrestrict is None:
-                self.logger.warning("[RC.verify] gpu_unrestrict module unavailable; assume ok.")
-                return True
-            return bool(gpu_unrestrict.verify_gpu_clock_state(self.logger, gpu_index))
-        except Exception as e:
-            self.logger.debug(f"[RC.verify] Delegation verify_gpu_clock_state failed | GPU={gpu_index} | err={e}")
-            return True
+            self.logger.info(f"[RC.verify] (no-op) assuming GPU clock state OK | GPU={gpu_index}")
+        except Exception:
+            pass
+        return True
 
     def reset_gpu_clocks_and_verify(self, gpu_index: int, post_sleep_sec: Optional[float] = None) -> bool:
         """
-        Ủy quyền orchestrator reset→verify sang gpu_unrestrict để tập trung hoá.
+        No-op stub per policy: external reset+verify disabled here. Centralized logic only within gpu_unrestrict.py.
+        Returns True to preserve flow.
         """
         try:
-            if gpu_unrestrict is None:
-                self.logger.warning("[RC.reset] gpu_unrestrict module unavailable; skip reset.")
-                return False
-            return bool(gpu_unrestrict.reset_gpu_clocks_and_verify(self, self.logger, gpu_index, post_sleep_sec))
-        except Exception as e:
-            self.logger.debug(f"[RC.reset] Delegation reset_gpu_clocks_and_verify failed | GPU={gpu_index} | err={e}")
-            return False
+            self.logger.info(f"[RC.reset] (no-op) reset+verify disabled here | GPU={gpu_index}, sleep={post_sleep_sec}")
+        except Exception:
+            pass
+        return True
 
     def limit_temperature(self, pid: Optional[int], gpu_index: int, temperature_threshold: float, fan_speed_increase: float) -> bool:
         """

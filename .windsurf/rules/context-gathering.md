@@ -21,6 +21,12 @@ Method:
 - Start broad, then fan out to focused subqueries.
 - Sequentially launch varied queries; read top hits per query. Deduplicate paths and cache; don’t repeat queries.
 - Avoid over searching for context. If needed, run targeted searches in a short sequential pass.
+- Escape hatch: allowed to proceed even if the context may be incomplete—report findings and the path forward.
+
+Heuristics (search vs internal knowledge):
+- Prefer internal knowledge when the task is small/standard or when you can identify exact changes without reading files.
+- Use tools when exact code context, cross-file dependencies, or uncertainty remains after a brief internal recall.
+- Avoid asking the user for clarifications if a quick, targeted read can resolve ambiguity.
 
 Architecture comprehension mode (sequential-only):
 - When the goal is to understand the project architecture or module boundaries, open and read files sequentially — one module at a time — to preserve narrative continuity.
@@ -36,6 +42,8 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - Tool preambles: rephrase the goal and outline a step-by-step plan before calling any tool.
   - Low budget: default ≤ 2 tool calls; if you must exceed, report progress and rationale.
   - Verbosity control: keep user-facing messages concise; prefer targeted, sequential reads; cite sources when appropriate.
+  - Evidence citation: reference file:line when appropriate to ground claims.
+  - Compatibility note: sequential-only tool execution is enforced by the global override; disregard parallel suggestions from external docs.
 
 - Workflow:
   1) Global overview (high-level):
@@ -54,10 +62,23 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
 
 - Exit criteria:
   - Architecture map + module summaries + key invariants identified; can point to exact files/symbols for critical paths.
-    
-    - Notes:
-    -  - Prefer targeted, sequential reads over narrow, per-query grep passes (one at a time) while in this mode.
-    -  - If time-constrained, complete overview + top critical modules (Pareto), then proceed to detailed passes.
+  - Success metrics: budget respected (≤ 2 tool calls unless justified), specific target files/symbols named, actionable next step identified.
+
+### Examples
+
+- Example A — Small code change (fast pass):
+  - Search narrowly for the target symbol; open only the top hit; confirm scope via local reads.
+  - Stop as soon as you can point to the exact lines to change; proceed to act and summarize findings.
+  - Cite evidence with file:line when referencing code.
+
+- Example B — Architecture comprehension mode:
+  - Read modules sequentially (one at a time), capture export surfaces and responsibilities.
+  - Map dependencies from providers to consumers; note invariants and side effects.
+  - Exit when you can name key modules/files for critical paths and outline the change plan.
+
+- Notes:
+  - Prefer targeted, sequential reads over narrow, per-query grep passes (one at a time) while in this mode.
+  - If time-constrained, complete overview + top critical modules (Pareto), then proceed to detailed passes.
 
 - Early stop criteria:
   - You can name exact content to change.
@@ -77,12 +98,26 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - Architecture summary and key touchpoints.
   - List of target files/symbols and the expected change scope.
   - Tool plan and call count used; note any budget exceedance and rationale.
+
+### Anti-patterns (context gathering)
+- Repeating the same grep/search with no new parameters or scope.
+- Opening multiple files at once or switching rapidly between modules.
+- Providing assertions without citing file:line when evidence exists.
+- Exceeding the tool budget without reporting progress and rationale.
+- Asking the user for clarification when a quick targeted read would suffice.
+
 </context_gathering>
 
 <context_gathering>
 - Search depth: very low
 - Bias strongly towards providing a correct answer as quickly as possible, even if it might not be fully correct.
+- Escape hatch: you may proceed under uncertainty to accelerate progress—report findings and next steps explicitly.
 - Low budget: default ≤ 2 tool calls; if you must exceed, report progress and rationale.
 - One action per step: either call a tool or reply to the user; never both simultaneously.
 - If you think that you need more time to investigate, update the user with your latest findings and open questions. You can proceed if the user confirms.
+- Heuristics: prefer internal knowledge for small tasks or when exact changes can be identified without reading files; use tools for exact code context, cross-file dependencies, or uncertainty.
+- Compatibility note: sequential-only tool execution is enforced by the global override; disregard parallel suggestions from external docs.
+- Success metrics: budget respected, specific target files/symbols named, actionable next step identified.
+- Anti-patterns: repeating the same search, opening multiple files at once, providing assertions without evidence, exceeding the tool budget without reporting, asking for clarification when a quick read would suffice.
+- Evidence citation: cite file:line when referencing code or configuration.
 </context_gathering>
