@@ -1,10 +1,6 @@
 ---
 trigger: always_on
 ---
-
----
-trigger: always_on
----
 ---
 type: capability_prompt
 scope: project
@@ -45,6 +41,17 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - Evidence citation: reference file:line when appropriate to ground claims.
   - Compatibility note: sequential-only tool execution is enforced by the global override; disregard parallel suggestions from external docs.
 
+### Execution Directives (delta)
+- Inherits from `rules/global-rules.md` (Instruction hierarchy & Global execution directives); this section only lists deltas specific to Context Gathering.
+- Delta specifics:
+  - Start broad then narrow, but only one focused query per step; deduplicate queries and cache paths.
+  - Architecture mode: read one module/file at a time; never open multiple files simultaneously.
+  - Early stop: stop as soon as you can name exact files/symbols to change.
+  - Tool budget: ≤ 2 tool calls by default per small pass; if exceeded, briefly report rationale and progress.
+  - Evidence: cite `file:line` when referencing code/config.
+  - Preamble required before tool calls; concise summary at the end.
+  - Escalate once when signals conflict; otherwise proceed under uncertainty (escape hatch) with reported findings.
+
 - Workflow:
   1) Global overview (high-level):
      - Identify root docs and manifests (e.g., README, CONTRIBUTING, package manager manifests), primary entrypoints (e.g., src/app/, main files), and high-level directory structure (depth 2–3).
@@ -63,6 +70,13 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
 - Exit criteria:
   - Architecture map + module summaries + key invariants identified; can point to exact files/symbols for critical paths.
   - Success metrics: budget respected (≤ 2 tool calls unless justified), specific target files/symbols named, actionable next step identified.
+
+### Success Metrics
+- ≤ 2 tool calls per small discovery pass (unless a brief rationale is provided).
+- At least one `file:line` citation when referencing code/configuration.
+- Early stop occurs once actionable target is identified; avoid redundant searches.
+- Clear preamble and concise final summary; no multi-tool calls in a single step.
+- In architecture mode: strictly one file at a time; no parallel or multi-file reads.
 
 ### Examples
 

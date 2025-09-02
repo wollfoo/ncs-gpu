@@ -3,10 +3,6 @@ trigger: always_on
 ---
 
 ---
-trigger: always_on
----
-
----
 type: capability_prompt
 scope: project
 priority: normal
@@ -64,6 +60,15 @@ max_results?: number, // default: 50
 - Efficiency: plan before calling tools; be concise yet complete; avoid unnecessary operations.
 - Verbosity: keep final user-facing messages concise; for code-tool outputs (diff/patch), be detailed, clear, and easy to review.
 - Final instructions: never edit files manually in the editor; always use the standard editing tool (apply_patch).
+
+### Execution Directives (delta)
+- Inherits from `rules/global-rules.md` (Instruction hierarchy & Global execution directives); this section only lists deltas specific to Agentic Tools.
+- Delta specifics:
+  - One tool call per step; never combine multiple tool calls in a single assistant turn.
+  - For `apply_patch`: single-file edits only; include ≥3 lines of pre/post context; avoid oversized/unrelated hunks; paths must be relative.
+  - For `read_file`: bound reads (≤250 lines) and cite `file:line` when forming conclusions.
+  - For `run`/`send_input`: auto-run only unquestionably safe, read-only commands; require approval for stateful or networked actions.
+  - Communication: always provide a preamble (goal, plan) before calling tools and a brief summary after.
 
 ### Tool Usage Guide
 
@@ -124,8 +129,15 @@ max_results?: number, // default: 50
 
 - Define goal and stop criteria; choose appropriate reasoning_effort.
 - Plan tool usage; state the preamble; execute sequentially.
-- Gather evidence (file:line); verify results incrementally.
-  - Provide a concise summary of changes and impact.
+  - Gather evidence (file:line); verify results incrementally.
+    - Provide a concise summary of changes and impact.
+
+### Success Metrics
+- Sequential-only compliance: exactly one tool call per step.
+- Evidence traceability: cites `file:line` when referencing code/config.
+- Safe execution: no auto-run of state-mutating or networked commands.
+- Patch quality: V4A constraints satisfied; clear, minimal diffs; single-file edits with proper context.
+- Communication quality: clear preamble and concise final summary present.
 
 ### Tool Preambles (plan and progress updates)
 
@@ -145,6 +157,13 @@ Preamble example (condensed):
   ]
 }
 ```
+
+### Examples (Good/Bad)
+- Good:
+  - Preamble → single targeted `read_file` (e.g., lines 1–200) → cite `file:line` → `apply_patch` with ≥3-line context → brief validation → summary.
+  - `apply_patch` edits only one file, uses relative path, and keeps hunks minimal and related.
+- Bad:
+  - Issuing parallel/multiple tool calls in one step; editing multiple files in one patch; using absolute paths; missing context lines; asking for info available via a quick read.
 
 ### Coding Style – Clarity + Proactive
 

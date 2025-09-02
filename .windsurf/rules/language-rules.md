@@ -1,10 +1,6 @@
 ---
 trigger: always_on
 ---
-
----
-trigger: always_on
----
 ---
 type: capability_prompt
 scope: project
