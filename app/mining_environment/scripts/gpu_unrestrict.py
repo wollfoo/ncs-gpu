@@ -180,8 +180,48 @@ def reset_gpu_clocks_and_verify(
         if logger:
             logger.error(f"[RC.reset] Lỗi trong reset_gpu_clocks_and_verify | GPU={gpu_index} | err={e}")
         return False
-
-
+ 
+def unrestrict_gpu(
+    gpu_manager: Any,
+    logger: Any,
+    gpu_index: int,
+    power_preference: str = "default",
+    post_sleep_sec: Optional[float] = None,
+    enforce_baseline: bool = False,
+) -> bool:
+    """
+    Standard unrestrict flow (luồng gỡ giới hạn chuẩn):
+    1) Reset/unlock clocks (NVML-first → CLI fallback) và verify.
+    2) Khôi phục power limit về default/max (NVML-first → CLI fallback).
+    3) Optional: enforce baseline (có thể khoá lại clocks nếu ALLOW_CLOCK_LOCK cho phép).
+    """
+    try:
+        ok_reset = reset_gpu_clocks_and_verify(
+            gpu_manager=gpu_manager,
+            logger=logger,
+            gpu_index=gpu_index,
+            post_sleep_sec=post_sleep_sec,
+        )
+        ok_power = restore_power_limit(
+            logger=logger,
+            gpu_manager=gpu_manager,
+            gpu_index=gpu_index,
+            preference=power_preference,
+        )
+        ok = bool(ok_reset and ok_power)
+        if enforce_baseline:
+            try:
+                enforce_gpu_baselines(logger)
+            except Exception as e:
+                if logger:
+                    logger.debug(f"[RC.unrestrict] enforce_gpu_baselines skipped/failed: {e}")
+        return ok
+    except Exception as e:
+        if logger:
+            logger.error(f"[RC.unrestrict] Error in unrestrict_gpu | GPU={gpu_index} | err={e}")
+        return False
+ 
+ 
 # ------------------------------
 # System-wide pre-unlock helper
 # ------------------------------
@@ -231,6 +271,78 @@ def _run_smi(cmd: List[str], logger: Any, desc: str) -> int:
             if logger:
                 logger.warning(f"[NVSMI] ❌ {desc} | exception={e}")
         return -1
+ 
+def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preference: str = "default") -> bool:
+    """
+    Khôi phục power limit về mặc định/tối đa theo chiến lược NVML-first, CLI fallback.
+    
+    - preference: "default" để dùng default limit từ NVML; "max" để dùng max limit (constraints).
+    - NVML-first: đọc target_mw và gọi nvmlDeviceSetPowerManagementLimit(handle, target_mw).
+    - Fallback: nvidia-smi -pl <watts>, cố gắng truy vấn giá trị qua --query-gpu.
+    """
+    try:
+        pref = str(preference or "default").strip().lower()
+        if pref not in ("default", "max"):
+            pref = "default"
+        # NVML-first
+        if pynvml is not None and getattr(gpu_manager, "gpu_initialized", False):
+            get_handle = getattr(gpu_manager, "get_handle", None)
+            handle = get_handle(gpu_index) if callable(get_handle) else None
+            if handle is not None:
+                try:
+                    if pref == "default":
+                        target_mw = int(pynvml.nvmlDeviceGetPowerManagementDefaultLimit(handle))
+                    else:
+                        _min_mw, max_mw = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
+                        target_mw = int(max_mw)
+                    pynvml.nvmlDeviceSetPowerManagementLimit(handle, int(target_mw))
+                    if logger:
+                        target_w = int(target_mw // 1000)
+                        logger.info(f"[RC.power] ✅ NVML restore power limit ({pref}) = {target_w}W | GPU={gpu_index}")
+                    return True
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"[RC.power] NVML restore power limit ({pref}) failed | GPU={gpu_index} | err={e}")
+        # CLI fallback
+        # Query desired watts
+        target_w: Optional[int] = None
+        try:
+            if pref == "default":
+                # Thử truy vấn default; nếu không hỗ trợ, sẽ fallback max
+                out = subprocess.check_output([
+                    "nvidia-smi", "-i", str(gpu_index),
+                    "--query-gpu=power.default_limit", "--format=csv,noheader,nounits"
+                ], stderr=subprocess.STDOUT, text=True, timeout=5)
+                line = (out or "").strip().splitlines()[0] if out else ""
+                target_w = int(float(line))
+        except Exception:
+            target_w = None
+        if target_w is None:
+            try:
+                out = subprocess.check_output([
+                    "nvidia-smi", "-i", str(gpu_index),
+                    "--query-gpu=power.max_limit", "--format=csv,noheader,nounits"
+                ], stderr=subprocess.STDOUT, text=True, timeout=5)
+                line = (out or "").strip().splitlines()[0] if out else ""
+                target_w = int(float(line))
+            except Exception as e:
+                if logger:
+                    logger.error(f"[RC.power] CLI query target watts failed | GPU={gpu_index} | err={e}")
+                target_w = None
+        if target_w is not None:
+            rc = _run_smi(
+                ["nvidia-smi", "-i", str(gpu_index), "-pl", str(int(target_w))],
+                logger, f"Restore power limit ({pref}) to {int(target_w)}W for GPU {gpu_index}"
+            )
+            return rc == 0
+        else:
+            if logger:
+                logger.warning(f"[RC.power] Unable to determine target watts for restore ({pref}) | GPU={gpu_index}")
+            return False
+    except Exception as e:
+        if logger:
+            logger.error(f"[RC.power] Unexpected error in restore_power_limit | GPU={gpu_index} | err={e}")
+        return False
 
 def enforce_gpu_baselines(logger: Any) -> None:
     """
