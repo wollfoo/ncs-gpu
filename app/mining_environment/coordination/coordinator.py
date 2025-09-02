@@ -26,6 +26,12 @@ try:
 except ImportError:
     LOGGING_AVAILABLE = False
 
+# Centralized GPU reset/unlock helpers (prefer centralized single source of truth)
+try:
+    import gpu_unrestrict as _gpu_unrestrict  # from scripts/
+except Exception:
+    _gpu_unrestrict = None  # type: ignore
+
 class HookCoordinator:
     """
     **Hook Coordinator Class** (lớp điều phối hook)
@@ -643,29 +649,18 @@ class HookCoordinator:
             except Exception:
                 pre_unlock_env = True
             if pre_unlock_env:
+                # Delegate pre-unlock to centralized helper; avoid local nvidia-smi/NVML logic here.
                 try:
-                    import subprocess as _subp
-                    try:
-                        # Detect GPU count via nvidia-smi to avoid NVML dependency
-                        _out = _subp.check_output(['nvidia-smi', '--list-gpus'], stderr=_subp.DEVNULL, text=True)
-                        _cnt = len([_ln for _ln in _out.splitlines() if _ln.strip()])
-                    except Exception as _e:
-                        _cnt = 0
+                    if _gpu_unrestrict is not None:
+                        _gpu_unrestrict.reset_gpu_state(self.logger)
                         if self.logger:
-                            self.logger.debug(f"[HOOK] nvidia-smi --list-gpus failed or unavailable: {_e}")
-                    _cnt = max(1, int(_cnt))
-                    for _idx in range(_cnt):
-                        try:
-                            _subp.run(['nvidia-smi','-i',str(_idx),'-rgc'], check=False)
-                            _subp.run(['nvidia-smi','-i',str(_idx),'--reset-memory-clocks'], check=False)
-                            if self.logger:
-                                self.logger.info(f"[HOOK] Unlocked clocks via nvidia-smi for GPU {_idx}")
-                        except Exception as _smi_e:
-                            if self.logger:
-                                self.logger.debug(f"[HOOK] nvidia-smi unlock failed for GPU {_idx}: {_smi_e}")
+                            self.logger.info("[HOOK] Pre-unlock delegated to gpu_unrestrict.reset_gpu_state")
+                    else:
+                        if self.logger:
+                            self.logger.debug("[HOOK] gpu_unrestrict module unavailable; skip pre-unlock")
                 except Exception as _pre_unlock_err:
                     if self.logger:
-                        self.logger.debug(f"[HOOK] Pre-unlock skipped: {_pre_unlock_err}")
+                        self.logger.debug(f"[HOOK] Pre-unlock delegation skipped: {_pre_unlock_err}")
 
             # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (bước 2: kiểm tra sẵn sàng nâng cao với cơ chế bỏ qua)
             if self.logger:

@@ -188,3 +188,102 @@ Cập nhật: 2025-09-02T07:58:00Z
 - Per-GPU ≥ 24 MH/s ổn định ≥ 15 phút; phục hồi ≤ 90s sau restart; 3/3 lần restart đạt cùng mức ±2%; không stuck 412 MHz/75W.
 - Không còn `applications.clocks.*` sau reset; P-state/perf-cap phù hợp; 0 NVML exceptions bị nuốt; logs đủ ngữ cảnh để truy vết root cause trong ≤ 10 phút.
 - Báo cáo A/B đạt Pass; quyết định rollout; tài liệu hoá đầy đủ baseline A, dữ liệu đo, báo cáo A/B, nhật ký triển khai.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Đề xuất kỹ thuật gỡ mọi giới hạn “ẩn” tầng driver/phần cứng
+Mục tiêu: giảm tối đa “sticky limits” (giới hạn cứng nhắc) còn sót lại sau reset/unlock clocks, bao phủ Power, SM clock, VRAM/memory clock, P‑state/perf‑cap, Temperature.
+
+Dẫn chiếu các hàm hiện có:
+- [reset_app_clocks_nvml()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:988:4-1011:24) NVML-first (reset app clocks) — `resource_control.py:989–1007`
+- [reset_gpu_clocks_cli()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1013:4-1042:26) CLI fallback (-rac/-rgc/--reset-memory-clocks) — `resource_control.py:1014–1043`
+- [verify_gpu_clock_state()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1044:4-1091:38) xác minh apps.* → N/A — `resource_control.py:1045–1093`
+- Orchestrator [reset_gpu_clocks_and_verify()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1093:4-1122:24) — `resource_control.py:1094–1097`
+- Restore theo PID (unlock + NVML reset + khôi phục PL nếu có snapshot) — `resource_control.py:1719–1820`
+- Pre-unlock hệ thống setup — `setup_env.py:293–333`
+- Kế hoạch Phase 0/1 (Preflight Reset, Readiness Gate, Cleanup) — `app/reports/unified-solution-plan.md:64–86`
+
+## Kỹ thuật đề xuất (thêm vào pipeline Preflight/Readiness Gate)
+
+- __[Power Limit – reset về mặc định NVML]__
+  - Ý tưởng: Lấy “default power limit” qua NVML rồi đặt lại (nếu PL hiện tại thấp bất thường).  
+    - NVML default power (giới hạn mặc định – nhà sản xuất); đặt lại bằng NVML (cần quyền admin).  
+  - Tích hợp: thêm `reset_power_limit_to_default(gpu_index)` và gọi trong Preflight trước verify clocks.
+  - Lợi ích: gỡ “PL thấp bị bám” do lần trước set không có snapshot.
+
+- __[Perf-cap Gating – đọc throttle reasons và tự điều chỉnh]__
+  - Ý tưởng: Đọc “clocks throttle reasons” (lý do bóp xung – power/thermal/idle/other).  
+    - Nếu “Power” (bị giới hạn bởi công suất): tăng PL trong phạm vi an toàn (từng bước), rồi re-verify.  
+    - Nếu “Thermal”: chặn khởi động, cooldown (đợi nhiệt giảm), rồi re-verify.  
+    - Nếu “Idle”: thực hiện warm‑up ngắn để kéo lên P0 (xem mục Warm‑up).
+  - Tích hợp: thêm `read_throttle_reasons(gpu_index) -> bitmask/enum` và logic điều chỉnh trong Readiness Gate.
+
+- __[Thermal Cooldown Gate + (tuỳ chọn) Fan control]__
+  - Ý tưởng: Nếu nhiệt độ > ngưỡng, dừng, đợi cooldown tới threshold an toàn; sau đó mới lock/khởi chạy.  
+  - Tuỳ chọn fan: nếu môi trường hỗ trợ NV-CONTROL/X và quyền phù hợp, dùng `nvidia-settings` để set fan target (điều khiển quạt – chỉ khi khả dụng). Nếu không, chỉ cooldown + giảm PL tạm thời.  
+  - Tích hợp: `thermal_cooldown_block(gpu_index, max_temp)` và hook vào Readiness Gate.
+
+- __[Persistence Mode – đảm bảo và (tuỳ chọn) toggle để “clear state”]__
+  - Ý tưởng: Bật persistence mode trước pipeline (`nvidia-smi -pm 1`) để driver giữ state ổn định; trong một số trường hợp “sticky”, có thể toggle off→on (có canh thời gian) để dọn trạng thái.  
+  - Tích hợp: xác nhận/bật trong Preflight; chỉ toggle khi cần (có guard).
+
+- __[Warm‑up để kéo P‑state lên P0 trước verify/lock]__
+  - Ý tưởng: Chạy tải tổng hợp ngắn (warm‑up) để GPU rời P8/P2 và ổn định P0 trước khi đo/lock; tránh “đo dưới tải 0” dẫn đến hiểu nhầm là còn bị giới hạn.  
+  - Tích hợp: `warmup_to_P0(gpu_index, duration_s)` chạy nhanh (vài giây), sau đó gọi [verify_gpu_clock_state()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:1044:4-1091:38) lại.
+
+- __[GPU Hardware Reset – biện pháp cuối]__
+  - Ý tưởng: `nvidia-smi --gpu-reset -i N` nếu card hỗ trợ và __không có tiến trình đang bám thiết bị__.  
+  - Guard: kiểm tra không có process, timeout, log đầy đủ; chỉ dùng khi các bước trên thất bại.  
+  - Tích hợp: `gpu_reset_last_resort(gpu_index)` trong Readiness Gate với điều kiện an toàn nghiêm ngặt.
+
+- __[Auto‑Boost Clocks (nếu GPU/driver hỗ trợ)]__
+  - Ý tưởng: Với một số SKU, trạng thái Auto‑Boost ảnh hưởng trần xung; có thể cân nhắc bật/tắt (nếu NVML/driver cho phép) để về hành vi mặc định mong muốn.  
+  - Lưu ý: tính khả dụng phụ thuộc driver/SKU; implement theo hướng optional-capability detection.
+
+## Cách lồng vào pipeline (ngắn gọn)
+- Preflight (per‑GPU):  
+  1) Pre‑unlock (CLI) → NVML reset app clocks → sleep ngắn → verify apps.* = N/A.  
+  2) Ensure persistence mode (bật nếu tắt).  
+  3) Reset PL về NVML default (nếu PL hiện tại < default − epsilon).  
+  4) Thermal Gate: nếu temp > threshold → cooldown/(tuỳ chọn) fan → re-verify.  
+  5) Perf‑cap Gate: đọc throttle reasons → nếu Power → tăng PL trong giới hạn → re‑verify; nếu Idle → Warm‑up → re‑verify.  
+  6) Nếu còn “sticky” → cân nhắc GPU hardware reset (last resort, no‐proc).  
+- Readiness Gate: chỉ pass khi:  
+  - `applications.clocks.*` = N/A, `pstate`/`power.draw` phù hợp dưới tải; `temperature` dưới ngưỡng; không có throttle reason “Power/Thermal” đang active.  
+- Cleanup on exit: unlock clocks + (tuỳ chọn) đặt PL về default; log snapshot before/after.
+
+## Rủi ro & bảo hộ (Risk/Mitigation)
+- __Quyền hạn__: Đặt PL/fan/GPU reset cần quyền admin; kiểm tra quyền trước khi thao tác.  
+- __Fan control__: Thường không khả dụng trên server headless; fallback cooldown + PL giảm tạm.  
+- __GPU reset__: Có thể làm gián đoạn workloads khác; chỉ dùng khi không còn tiến trình bám GPU.  
+- __Compatibility__: Auto‑Boost/constraints phụ thuộc SKU/driver; kiểm tra capability trước khi bật/tắt.
+
+## Mapping vào TODO (đã cập nhật)
+- __p1_reset_pl_default__: Reset PL về mặc định NVML (get default → set) + CLI quan sát.  
+- __p1_perf_cap_gate__: Đọc throttle reasons; tự điều chỉnh PL/thermal và re‑verify.  
+- __p1_thermal_cooldown_fan__: Cooldown + (tuỳ chọn) fan control; gate khi > ngưỡng.  
+- __p1_persistence_toggle__: Bật/toggle persistence mode trong preflight.  
+- __p1_gpu_reset_last_resort__: Fallback `--gpu-reset` với guard không có tiến trình.  
+- __p1_warmup_pstate__: Warm‑up ngắn để kéo về P0 trước verify/lock.
+
+## Hành động tiếp theo đề xuất
+- Tôi có thể:  
+  - Thêm các hàm mới vào [GPUResourceManager](cci:2://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/resource_control.py:122:0-1683:24) cho PL default/perf‑cap/thermal cooldown/warm‑up và lồng chúng vào Readiness Gate.  
+  - Tích hợp Preflight vào [app/start_mining.py](cci:7://file:///home/azureuser/opus-gpu/app/start_mining.py:0:0-0:0) (pending `p0_integrate_preflight`) và thêm Readiness Gate (`p0_readiness_gate`).  
+Bạn muốn tôi triển khai ngay các hàm “PL default + perf‑cap gate + thermal cooldown” trước chứ? Tôi sẽ giữ patch nhỏ, log rõ ràng và có guard an toàn. 
+
+Tóm tắt: Những kỹ thuật trên không “xóa” luật an toàn phần cứng, nhưng giúp hệ thống đạt trạng thái sẵn sàng ổn định, chủ động gỡ “sticky” do PL/thermal/perf‑cap và xác minh lại trước khi bắt đầu khai thác, đúng tinh thần Phase 0/1 (unified-solution-plan.md:64–86).
