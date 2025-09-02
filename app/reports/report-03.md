@@ -50,14 +50,14 @@ Key Components:
 
 ---
 
-## 3. ⏰ **Evidence Timeline** *(Dòng thời gian bằng chứng)*
+## 3. ⏰ **Dòng thời gian bằng chứng (Evidence Timeline)**
 
-### **🔍 Investigation Process** *(Quy trình điều tra)*
+### **🔍 Quy trình điều tra (Investigation Process)**
 
-#### **Phase 1: Codebase Architecture Analysis** 
-*Sub-Agent: **codebase-research-analyst***
+#### **Giai đoạn 1: Phân tích kiến trúc mã nguồn (Phase 1: Codebase Architecture Analysis)** 
+*Tác nhân phụ (Sub-Agent): **codebase-research-analyst***
 
-**KEY DISCOVERIES** *(Khám phá chính)*:
+**Khám phá chính (KEY DISCOVERIES)**:
 ```
 ✅ Mapped complete call graph: start_mining.py → NVML APIs
 ✅ Identified 40 Python files across modular architecture  
@@ -66,7 +66,7 @@ Key Components:
 ✅ Detected race conditions in threaded restore logic
 ```
 
-**CRITICAL PATH IDENTIFIED** *(Đường dẫn quan trọng đã xác định)*:
+**Đường dẫn quan trọng đã xác định (CRITICAL PATH IDENTIFIED)**:
 ```
 [app/start_mining.py] → [stealth_inference_cuda.py] → [inference-cuda]
 → [coordinator.py] → [direct_registry.py]  
@@ -75,10 +75,10 @@ Key Components:
 → [app/start_mining.py] (loop)
 ```
 
-#### **Phase 2: Performance Bottleneck Analysis**
-*Sub-Agent: **performance-engineer***
+#### **Giai đoạn 2: Phân tích nút thắt hiệu năng (Phase 2: Performance Bottleneck Analysis)**
+*Tác nhân phụ (Sub-Agent): **performance-engineer***
 
-**IMMEDIATE ISSUE RESOLVED** *(Vấn đề cấp thiết đã giải quyết)*:
+**Vấn đề cấp thiết đã giải quyết (IMMEDIATE ISSUE RESOLVED)**:
 - **Missing binary**: `inference-cuda` executable không tìm thấy → **Đã khôi phục**
 - **GPU clocks restored**: 412 MHz → 1245 MHz ✅
 - **Power draw normalized**: 37W → Ready for 150-200W ✅
