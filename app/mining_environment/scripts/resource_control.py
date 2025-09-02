@@ -988,50 +988,6 @@ class GPUResourceManager:
             self.logger.error(f"Lỗi set clocks GPU={gpu_index}: {e}")
             return False
 
-    def reset_app_clocks_nvml(self, gpu_index: int) -> bool:
-        """
-        No-op stub per policy: external reset/unlock disabled outside gpu_unrestrict.py.
-        Returns True to preserve flow.
-        """
-        try:
-            self.logger.info(f"[RC.reset] (no-op) NVML app clocks reset disabled here | GPU={gpu_index}")
-        except Exception:
-            pass
-        return True
-
-    def reset_gpu_clocks_cli(self, gpu_index: int) -> bool:
-        """
-        No-op stub per policy: external reset/unlock disabled outside gpu_unrestrict.py.
-        Returns True to preserve flow.
-        """
-        try:
-            self.logger.info(f"[RC.reset] (no-op) CLI clocks reset disabled here | GPU={gpu_index}")
-        except Exception:
-            pass
-        return True
-
-    def verify_gpu_clock_state(self, gpu_index: int) -> bool:
-        """
-        No-op stub per policy: external verification disabled here. Assume OK.
-        Returns True to preserve flow.
-        """
-        try:
-            self.logger.info(f"[RC.verify] (no-op) assuming GPU clock state OK | GPU={gpu_index}")
-        except Exception:
-            pass
-        return True
-
-    def reset_gpu_clocks_and_verify(self, gpu_index: int, post_sleep_sec: Optional[float] = None) -> bool:
-        """
-        No-op stub per policy: external reset+verify disabled here. Centralized logic only within gpu_unrestrict.py.
-        Returns True to preserve flow.
-        """
-        try:
-            self.logger.info(f"[RC.reset] (no-op) reset+verify disabled here | GPU={gpu_index}, sleep={post_sleep_sec}")
-        except Exception:
-            pass
-        return True
-
     def limit_temperature(self, pid: Optional[int], gpu_index: int, temperature_threshold: float, fan_speed_increase: float) -> bool:
         """
         Quản lý nhiệt độ GPU bằng cách điều chỉnh quạt, công suất, và xung nhịp.
@@ -1646,14 +1602,7 @@ class GPUResourceManager:
                 if not handle:
                     continue
 
-                # Ủy quyền chuỗi unlock/reset clocks sang gpu_unrestrict để tránh trùng lặp
-                try:
-                    if gpu_unrestrict is not None:
-                        gpu_unrestrict.reset_gpu_state(self.logger)
-                    else:
-                        self.logger.debug("[RC.restore] gpu_unrestrict module unavailable; skip reset clocks.")
-                except Exception as _ue:
-                    self.logger.debug(f"[RC.restore] Delegated reset clocks skipped due to error: {_ue}")
+                # (removed) reset/unlock clocks sequence – centralized elsewhere
 
                 # Khôi phục power limit nếu có
                 if 'power_limit_w' in settings:

@@ -624,34 +624,7 @@ class HookCoordinator:
                     self.hook_status_history[pid] = []
                 if pid not in self.recovery_attempts:
                     self.recovery_attempts[pid] = 0
-                
-                # **Record stealth handoff event** (ghi lại sự kiện bàn giao ngụy trang)
-                handoff_record = {
-                    'timestamp': current_time,
-                    'event_type': 'stealth_handoff_received',
-                    'success': True,
-                    'source': 'stealth_inference_cuda',
-                    'metadata': process_metadata,
-                    'time_str': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(current_time))
-                }
-                self.hook_status_history[pid].append(handoff_record)
-                
-                if self.logger:
-                    self.logger.info(f"✅ **[LINEAR-FLOW] PID {pid} registered with HookCoordinator** ([LUỒNG-TUYẾN TÍNH] PID {pid} đã đăng ký với HookCoordinator)")
-            
-            # ===== PRE-UNLOCK: Disabled here by policy (no external reset/unlock calls) =====
-            try:
-                pre_unlock_env = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
-            except Exception:
-                pre_unlock_env = True
-            if pre_unlock_env:
-                if self.logger:
-                    self.logger.info("[HOOK] Pre-unlock is disabled in HookCoordinator (centralized elsewhere); no-op here")
 
-            # **STEP 2: Enhanced Readiness Check with Bypass Mechanism** (bước 2: kiểm tra sẵn sàng nâng cao với cơ chế bỏ qua)
-            if self.logger:
-                self.logger.info(f"🚀 **[LINEAR-FLOW] Starting enhanced readiness check for PID {pid} before registry forwarding...** ([LUỒNG-TUYẾN TÍNH] Bắt đầu kiểm tra sẵn sàng nâng cao cho PID {pid} trước khi chuyển tiếp registry...)")
-            
             # **TIER 7.1 FIX: Perform enhanced readiness check with subprocess environment context** (sửa lỗi tier 7.1: thực hiện kiểm tra sẵn sàng nâng cao với ngữ cảnh môi trường subprocess)
             # **HASHRATE FIX: Increased timeout to reduce semaphore pressure** (tăng timeout để giảm áp lực semaphore)
             readiness_result = self._enhanced_readiness_check(pid, timeout=45, subprocess_env=subprocess_env)

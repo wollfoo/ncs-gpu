@@ -899,16 +899,6 @@ def setup():
     except Exception:
         pass
 
-    # ===== Pre-unlock GPU state before any optimization kicks in =====
-    # Temporarily disabled per policy: reset/unlock handled exclusively within gpu_unrestrict.py (no external callers)
-    try:
-        pre_unlock = os.getenv('GPU_PRE_UNLOCK', '1').lower() in ('1','true','yes')
-        if pre_unlock:
-            logger.info("🔓 [SETUP] Pre-unlock is disabled in setup_env (centralized to gpu_unrestrict module only)")
-            # Intentionally no-op: do not call gpu_unrestrict.reset_gpu_state or enforce baselines here
-    except Exception as _e:
-        logger.debug(f"[SETUP] Pre-unlock check skipped: {_e}")
-
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)
 
