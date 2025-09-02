@@ -228,5 +228,134 @@ CUDA_VISIBLE_DEVICES=1 numactl --cpunodebind=0 --membind=0 <cmd_gpu1>
   - MIG không áp dụng cho V100 PCIe.
   - Các thao tác có `sudo` là side‑effect; thực hiện ngoài giờ tải và đo trước/sau theo mục 4.
  
+ ## 12) Nút gạt nâng cao (BIOS/OS/IRQ…)
+ - __BIOS/Platform__ (thiết lập nền tảng – Above 4G Decoding/PCIe Native Control/tắt ASPM): đảm bảo không downtrain PCIe và hỗ trợ BAR lớn.
+   ```bash
+   # Kiểm tra sau khi boot (xem Gen/Width, LnkSta/LnkCap)
+   sudo lspci -vv -s <BUS_ID> | grep -E "LnkSta|LnkCap"
+   ```
+   - Lưu ý: cấu hình trong BIOS; thao tác theo vendor, cần bảo trì ngoài giờ.
+ 
+ - __BMC/IPMI Fan Profile__ (hồ sơ quạt – Performance/Full Speed): tăng lưu lượng gió, hạ nhiệt, giảm nguy cơ throttling.
+   ```bash
+   # Ví dụ (tuỳ vendor; có thể thao tác qua giao diện BMC)
+   ipmitool raw ...
+   ```
+   - Lưu ý: V100 PCIe thường không điều khiển quạt trực tiếp qua `nvidia-smi`.
+ 
+ - __CPU Power Governor__ (chế độ tần số CPU – performance) và __tuned-adm__ (bộ cấu hình hiệu năng – latency-performance): giảm jitter/độ trễ host↔GPU.
+   ```bash
+   sudo cpupower frequency-set -g performance
+   # hoặc nếu có tuned-adm
+   sudo tuned-adm profile latency-performance
+   ```
+ 
+ - __IRQ Affinity__ (ghim ngắt NVIDIA về core "local" – giảm jitter):
+   ```bash
+   grep -i nvidia /proc/interrupts
+   echo <MASK_HEX> | sudo tee /proc/irq/<IRQ>/smp_affinity
+   ```
+   - Lưu ý: chọn mask đúng theo sơ đồ core/NUMA; thử nghiệm và rollback rõ ràng.
+ 
+ - __IOMMU/ACS__ (cấu hình cô lập I/O – tăng P2P/độ trễ tốt hơn trong vài cấu hình):
+   - Tuỳ môi trường: kernel params như `intel_iommu=off|on,pt` hoặc điều chỉnh ACS có rủi ro bảo mật; chỉ làm khi hiểu rõ topology.
+ 
+ - __PCIe MRRS/MPS__ (Max Read Request Size/Max Payload Size – tinh chỉnh PCIe nâng cao):
+   ```bash
+   # Cần hiểu root port và device; ví dụ dùng setpci (advanced)
+   sudo setpci -s <BUS_ID> 68.B=xx   # MRRS
+   sudo setpci -s <BUS_ID> 64.B=yy   # MPS
+   ```
+   - Lưu ý: advanced; cần quy trình đo/rollback chặt chẽ.
+ 
+ - __THP/HugePages__ (Transparent Huge Pages – điều khiển trang bộ nhớ để giảm jitter):
+   ```bash
+   # Thử cấu hình thận trọng (quan sát trước/sau)
+   echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+   # Hoàn nguyên: echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+   ```
+ 
+ - __NUMA nâng cao__ (cô lập core cho tiến trình GPU; điều phối irqbalance):
+   ```bash
+   taskset -c <cores> numactl --cpunodebind=<n> --membind=<n> <cmd>
+   # cấu hình irqbalance để không đẩy IRQ vào core của tiến trình
+   ```
+ 
+ - __DCGM Policies/Health__ (giám sát & policy – dcgmi):
+   ```bash
+   # Cài DCGM rồi sử dụng
+   dcgmi discovery -l
+   dcgmi policy --set ...
+   ```
+ 
+ - __GPU Reset__ (đặt lại GPU khi không có tiến trình sử dụng – làm sạch trạng thái lạ):
+   ```bash
+   sudo nvidia-smi --gpu-reset -i <GPU_ID>
+   ```
+ 
+ - __Tự động hoá sau reboot (systemd)__ (áp cấu hình đã chốt – power limit, persistence, compute mode, clocks):
+   ```bash
+   # /etc/systemd/system/gpu-tune.service (ví dụ)
+   [Unit]
+   Description=Apply GPU tuning at boot
+   After=multi-user.target
+   
+   [Service]
+   Type=oneshot
+   ExecStart=/usr/bin/nvidia-smi -pm 1
+   ExecStart=/usr/bin/nvidia-smi -i 0 -c EXCLUSIVE_PROCESS
+   ExecStart=/usr/bin/nvidia-smi -i 1 -c EXCLUSIVE_PROCESS
+   # ExecStart=/usr/bin/nvidia-smi -i 0 -pl <W>
+   # ExecStart=/usr/bin/nvidia-smi -i 1 -pl <W>
+   # ExecStart=/usr/bin/nvidia-smi -i 0 -ac <mem,sm>
+   # ExecStart=/usr/bin/nvidia-smi -i 1 -ac <mem,sm>
+   RemainAfterExit=yes
+   
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   - Kích hoạt: `sudo systemctl enable --now gpu-tune` (sau khi chỉnh tham số phù hợp).
+ 
+ __Cảnh báo__: Các nút gạt nâng cao phụ thuộc vendor (BIOS/BMC) và có rủi ro; luôn đo trước/sau, có kế hoạch rollback, và thực hiện ngoài giờ tải.
+ 
  ---
  Tài liệu này là runbook thao tác nhanh để chuẩn hoá đo, áp dụng, và khôi phục cấu hình tối ưu GPU. Vui lòng chạy các lệnh có `sudo` ngoài giờ tải và xác nhận dải hợp lệ trước khi áp dụng.
+
+
+
+
+
+
+
+
+
+# Cập nhật runbook: hợp nhất “nút gạt” cơ bản + nâng cao
+
+## Nội dung chính đã hợp nhất
+
+- __[Cơ bản]__ `## 11` (`176–229`)
+  - __Power Limit__ (giới hạn công suất – tối ưu power/Wh, giảm throttling)
+  - __Application Clocks__ (khóa xung SM/Memory – ổn định xung, giảm jitter)
+  - __Compute Mode__ (EXCLUSIVE_PROCESS – giảm tranh chấp ngữ cảnh)
+  - __Persistence Mode__ (duy trì ngữ cảnh – giảm latency khởi tạo)
+  - __ECC__ (sửa lỗi bộ nhớ – cân bằng độ tin cậy vs hiệu năng)
+  - __CUDA MPS__ (dịch vụ đa tiến trình – nâng lấp đầy GPU)
+  - __NUMA/CPU Affinity__ (ghép CPU/memory với GPU)
+  - __PCIe Link Gen/Width__ (xác thực tránh downtrain)
+  - __P2P/Topology__ (đánh giá lợi ích liên‑GPU)
+  - Lưu ý MIG không áp dụng cho V100
+
+- __[Nâng cao]__ `## 12` (`231–323`)
+  - __BIOS/Platform__ (Above 4G Decoding/PCIe Native Control/tắt ASPM – chống downtrain)
+  - __BMC/IPMI Fan Profile__ (Performance/Full Speed – tăng airflow, hạ nhiệt)
+  - __CPU Power Governor__ (performance) + __tuned-adm__ (latency-performance)
+  - __IRQ Affinity__ (ghim IRQ NVIDIA về core phù hợp – giảm jitter)
+  - __IOMMU/ACS__ (tinh chỉnh cô lập I/O – thận trọng về bảo mật)
+  - __PCIe MRRS/MPS__ (Max Read Request Size/Max Payload Size – advanced)
+  - __THP/HugePages__ (Transparent Huge Pages – giảm jitter)
+  - __NUMA nâng cao__ (cô lập core, điều phối irqbalance)
+  - __DCGM Policies/Health__ (giám sát/chính sách throttling)
+  - __GPU Reset__ (làm sạch trạng thái lạ khi rảnh)
+  - __Systemd auto-apply__ (tự động áp cấu hình sau reboot)
+  - Cảnh báo an toàn, đo/rollback rõ ràng
+
