@@ -13,14 +13,14 @@
 ### **🚨 Phát hiện quan trọng (CRITICAL FINDINGS)**
 - **Vấn đề chính (Primary Issue)**: **Trạng thái GPU bền vững (GPU state persistence)** giữa mining sessions do **dọn dẹp không hoàn chỉnh (incomplete cleanup)**
 - **Tác động đến hashrate (Hashrate Impact)**: Giảm từ **24.96 MH/s** → **20.31 MH/s** (**18.6% performance loss**)
-- **Nguyên nhân gốc rễ (Root Cause)**: **5 critical bugs** trong **quản lý trạng thái GPU (GPU state management)**
+- **Nguyên nhân gốc rễ (Root Cause)**: **5 lỗi nghiêm trọng (critical bugs)** trong **quản lý trạng thái GPU (GPU state management)**
 - **Mức độ rủi ro (Risk Level)**: 🔴 **HIGH** - GPU có thể bị **giới hạn vĩnh viễn (permanently throttled)**
 
 ### **🎯 Hành động cần thiết ngay lập tức (IMMEDIATE ACTION REQUIRED)**
-1. **Signal handler cleanup** - Sửa lỗi GPU reset logic trong exit handling
-2. **Silent exception elimination** - Ngừng mask lỗi NVML  
-3. **Thread synchronization** - Sửa lỗi race conditions trong GPU optimization
-4. **Cross-PID resource conflicts** - Thực hiện proper resource locking
+1. **Dọn dẹp signal handler (Signal handler cleanup)** - Sửa logic GPU reset trong xử lý thoát *(exit handling)*
+2. **Loại bỏ ngoại lệ im lặng (Silent exception elimination)** - Ngừng che giấu *(mask)* lỗi NVML  
+3. **Đồng bộ hoá luồng (Thread synchronization)** - Sửa lỗi điều kiện tranh chấp *(race conditions)* trong tối ưu hoá GPU
+4. **Xung đột tài nguyên giữa PID (Cross-PID resource conflicts)** - Thực hiện khoá tài nguyên đúng chuẩn *(proper resource locking)*
 
 ---
 
@@ -33,14 +33,14 @@ GPUs: 2x NVIDIA (mining configuration)
 Main Process: /app/start_mining.py
 Core Modules: 40 Python files, modular architecture
 Key Components:
-  - resource_manager.py: GPU resource orchestration
-  - gpu_optimization_orchestrator.py: Performance tuning
-  - resource_control.py: Direct NVML/nvidia-smi interface
-  - cloak_strategies.py: Stealth optimization
+  - resource_manager.py: Quản lý tài nguyên GPU (GPU resource orchestration)
+  - gpu_optimization_orchestrator.py: Tối ưu hiệu suất (Performance tuning)
+  - resource_control.py: Giao diện NVML/nvidia-smi trực tiếp (Direct NVML/nvidia-smi interface)
+  - cloak_strategies.py: Tối ưu hóa lén lút (Stealth optimization)
 ```
 
 ### **📊 Đường chuẩn hiệu năng (Performance Baseline)**
-| **Metric** | **Optimal** | **Current Issue** | **Impact** |
+| **Chỉ số (Metric)** | **Tối ưu (Optimal)** | **Vấn đề hiện tại (Current Issue)** | **Tác động (Impact)** |
 |------------|-------------|-------------------|------------|
 | **Hashrate** | 24.96 MH/s | 20.31 MH/s | -18.6% |
 | **GPU Clocks** | 1245/877 MHz | 412/877 MHz | Core clock capped |
@@ -84,7 +84,7 @@ Key Components:
 - **Power draw normalized**: 37W → Ready for 150-200W ✅
 - **Mining process**: Ready to resume ✅
 
-**PERFORMANCE METRICS VALIDATION** *(Xác thực chỉ số hiệu năng)*:
+**Xác thực chỉ số hiệu năng (PERFORMANCE METRICS VALIDATION)**:
 ```bash
 # Before Fix
 nvidia   #0 00:00.0  75W 38C 412/877 MHz  
@@ -97,24 +97,24 @@ nvidia   #1 00:00.0  37W 38C 1245/877 MHz (restored)
 Status: Ready for mining (binary replacement needed)
 ```
 
-#### **Phase 3: Systematic Bug Analysis**
-*Sub-Agent: **debug-specialist***
+#### **Giai đoạn 3: Phân tích lỗi có hệ thống (Phase 3: Systematic Bug Analysis)**
+*Tác nhân phụ (Sub-Agent): **debug-specialist***
 
-**🚨 5 CRITICAL BUGS IDENTIFIED** *(5 lỗi quan trọng đã xác định)*:
+**5 lỗi quan trọng đã xác định (5 CRITICAL BUGS IDENTIFIED)**:
 
 ---
 
-## 4. 🔬 **Root Cause Analysis** *(Phân tích nguyên nhân gốc rễ)*
+## 4. 🔬 **Phân tích nguyên nhân gốc rễ (Root Cause Analysis)**
 
-### **🎯 DEFINITIVE ROOT CAUSE** *(Nguyên nhân gốc rễ dứt khoát)*
+### **Nguyên nhân gốc rễ dứt khoát (DEFINITIVE ROOT CAUSE)**
 
-**PRIMARY**: **GPU State Management Failures** *(Lỗi quản lý trạng thái GPU)*
+**Chính (PRIMARY)**: **Lỗi quản lý trạng thái GPU (GPU State Management Failures)**
 
-> **CONCLUSION**: GPU hashrate degradation caused by **incomplete cleanup** của **application clocks**, **power limits**, và **persistence mode** settings giữa mining sessions, do **5 systematic bugs** trong state management code.
+> **Kết luận (CONCLUSION)**: GPU hashrate degradation caused by **incomplete cleanup** của **application clocks**, **power limits**, và **persistence mode** settings giữa mining sessions, do **5 systematic bugs** trong state management code.
 
-### **🚨 CRITICAL BUG BREAKDOWN** *(Phân tích lỗi quan trọng)*
+### **Phân tích lỗi quan trọng (CRITICAL BUG BREAKDOWN)**
 
-#### **Bug #1: Signal Handler Missing GPU Cleanup**
+#### **Lỗi #1: Signal handler thiếu dọn dẹp GPU (Bug #1: Signal Handler Missing GPU Cleanup)**
 ```python
 # EVIDENCE: /app/start_mining.py:204-221
 def signal_handler(signum, frame):
@@ -122,17 +122,17 @@ def signal_handler(signum, frame):
     process_manager.graceful_shutdown()  
     # ❌ MISSING: GPU state restoration!
 ```
-**IMPACT**: **Application clocks** và **power limits** persist sau khi mining process killed
+**Tác động (IMPACT)**: **Application clocks** và **power limits** bị giữ nguyên *(persist)* sau khi mining process bị dừng *(killed)*
 
-#### **Bug #2: Thread Management Race Conditions**  
+#### **Lỗi #2: Điều kiện tranh chấp trong quản lý luồng (Bug #2: Thread Management Race Conditions)**  
 ```python
 # EVIDENCE: gpu_optimization_orchestrator.py:1188-1200
 # ❌ Non-thread-safe dictionary modifications
 self._continuous_threads[device_id] = thread  # Race condition!
 ```
-**IMPACT**: GPU optimization threads không cleanup properly, deixando GPU trong **intermediate states**
+**Tác động (IMPACT)**: Các luồng tối ưu hoá GPU không dọn dẹp đúng cách, để GPU ở **trạng thái trung gian (intermediate states)**
 
-#### **Bug #3: ResourceManager Cleanup NOT Registered**
+#### **Lỗi #3: Chưa đăng ký dọn dẹp ResourceManager (Bug #3: ResourceManager Cleanup NOT Registered)**
 ```python
 # EVIDENCE: /app/start_mining.py:116-133  
 # ❌ ResourceManager.shutdown() not in signal callbacks
@@ -140,17 +140,17 @@ signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler) 
 # Missing: ResourceManager GPU restoration registration
 ```
-**IMPACT**: NVML resources leak, GPU settings persist giữa sessions
+**Tác động (IMPACT)**: Rò rỉ tài nguyên NVML, thiết lập GPU bị giữ giữa các phiên
 
-#### **Bug #4: Cross-PID SharedResourceManager Conflicts**
+#### **Lỗi #4: Xung đột SharedResourceManager giữa tiến trình (Cross-PID) (Bug #4: Cross-PID SharedResourceManager Conflicts)**
 ```python
 # EVIDENCE: resource_manager.py:276-421
 # ❌ Multiple processes create separate SharedResourceManager instances  
 # Per-instance locking insufficient for cross-process coordination
 ```
-**IMPACT**: GPU state conflicts khi multiple mining processes hoặc restarts
+**Tác động (IMPACT)**: Xung đột trạng thái GPU khi có nhiều tiến trình mining hoặc khi restart
 
-#### **Bug #5: Silent Exception Handling**
+#### **Lỗi #5: Xử lý ngoại lệ im lặng (Silent Exception Handling)**
 ```python
 # EVIDENCE: gpu_optimization_orchestrator.py (30+ locations)
 try:
@@ -158,15 +158,15 @@ try:
 except Exception:
     pass  # ❌ CRITICAL: NVML errors swallowed silently!
 ```
-**IMPACT**: **Impossible debugging** - GPU state corruption errors không được detect
+**Tác động (IMPACT)**: **Không thể gỡ lỗi (impossible debugging)** - lỗi hỏng trạng thái GPU không được phát hiện
 
 ---
 
-## 5. 🌳 **Tree-of-Thought Analysis** *(Phân tích cây suy nghĩ)*
+## 5. 🌳 **Phân tích cây suy nghĩ (Tree-of-Thought Analysis)**
 
-### **🔍 HYPOTHESIS EVALUATION** *(Đánh giá giả thuyết)*
+### **🔍 Đánh giá giả thuyết (HYPOTHESIS EVALUATION)**
 
-| **Hypothesis** | **Evidence** | **Impact** | **Likelihood** | **Priority** |
+| **Giả thuyết (Hypothesis)** | **Bằng chứng (Evidence)** | **Tác động (Impact)** | **Khả năng (Likelihood)** | **Ưu tiên (Priority)** |
 |----------------|--------------|------------|----------------|--------------|
 | **🥇 Application Clocks Persistence** | Signal handler missing GPU cleanup | 🔴 HIGH | 95% | **P0** |
 | **🥈 Silent NVML Error Masking** | 30+ `except: pass` locations | 🔴 HIGH | 90% | **P0** |
@@ -174,19 +174,19 @@ except Exception:
 | **4️⃣ Cross-PID Resource Conflicts** | SharedResourceManager design flaw | 🟠 MED | 80% | **P1** |
 | **5️⃣ Power Limit Stickiness** | Missing power restore in exit | 🟡 LOW | 70% | **P2** |
 
-### **🎯 SELECTED FOCUS** *(Lựa chọn trọng tâm)*
+### **🎯 Lựa chọn trọng tâm (SELECTED FOCUS)**
 **Primary**: **Application Clocks Persistence** + **Silent Error Masking**  
 **Secondary**: **Thread Race Conditions** + **Cross-PID Conflicts**
 
-**REASONING** *(Lý do)*: Bugs #1 và #5 directly explain **why GPU clocks stuck at 412 MHz** và **why debugging was impossible**. Fixed these 2 bugs sẽ immediately improve hashrate và enable proper error reporting.
+**Lý do (REASONING)**: Bugs #1 và #5 directly explain **why GPU clocks stuck at 412 MHz** và **why debugging was impossible**. Fixed these 2 bugs sẽ immediately improve hashrate và enable proper error reporting.
 
 ---
 
-## 6. 🚀 **Recommendations** *(Khuyến nghị)*
+## 6. 🚀 **Khuyến nghị (Recommendations)**
 
-### **🆘 QUICK WINS** *(Thắng nhanh)* - **Get It Working First**
+### **🆘 Thắng nhanh (Quick Wins)** - **Làm cho chạy trước (Get It Working First)**
 
-#### **Priority P0 - Immediate Fixes** *(Sửa chữa ngay lập tức)*
+#### **Ưu tiên P0 - Sửa chữa ngay lập tức (Priority P0 - Immediate Fixes)**
 
 **1. Signal Handler GPU Cleanup Registration**
 ```python
@@ -227,9 +227,9 @@ def reset_gpu_state():
         log.error(f"GPU reset failed: {e}")
 ```
 
-### **🏗️ HARDENING** *(Củng cố)* - **Measure Twice, Cut Once**
+### **🏗️ Củng cố (HARDENING)** - **Đo hai lần, cắt một lần (Measure Twice, Cut Once)**
 
-#### **Priority P1 - Structural Improvements** *(Cải thiện cấu trúc)*
+#### **Ưu tiên P1 - Cải thiện cấu trúc (Priority P1 - Structural Improvements)**
 
 **4. Single Source of Truth for GPU State**
 - **Target Module**: `resource_control.py` (existing)
@@ -263,18 +263,18 @@ class SharedResourceManager:
 
 ---
 
-## 7. 🔧 **Refactor Plan** *(Kế hoạch tái cấu trúc)*
+## 7. 🔧 **Kế hoạch tái cấu trúc (Refactor Plan)**
 
-### **🎯 DESIGN PRINCIPLES** *(Nguyên tắc thiết kế)*
+### **🎯 Nguyên tắc thiết kế (DESIGN PRINCIPLES)**
 - ✅ **Tận dụng mã nguồn hiện có** - Extend existing modules
 - ✅ **Không tạo module mới không cần thiết** - Work within current structure  
 - ✅ **Không thay đổi cấu trúc thư mục** - Maintain directory layout
 - ✅ **Idempotent operations** - Safe to run multiple times
 - ✅ **Observable state changes** - All GPU operations logged
 
-### **📋 REFACTOR SEQUENCE** *(Trình tự tái cấu trúc)*
+### **📋 Trình tự tái cấu trúc (REFACTOR SEQUENCE)**
 
-#### **Phase 1: Foundation** *(Nền tảng)* - **SAFETY FIRST**
+#### **Giai đoạn 1: Nền tảng (Phase 1: Foundation)** - **An toàn là trên hết (SAFETY FIRST)**
 1. **Preflight Reset Implementation** in `start_mining.py`
    - Reset GPU state before any mining operations
    - Log before/after state for comparison
@@ -282,10 +282,10 @@ class SharedResourceManager:
 
 2. **Signal Handler Enhancement** in `start_mining.py`  
    - Register GPU cleanup in signal handlers
-   - Ensure **deterministic order**: Stop processes → Reset GPU → Exit
+   - Đảm bảo **thứ tự tất định (deterministic order)**: Stop processes → Reset GPU → Exit
    - Add error handling với detailed logging
 
-#### **Phase 2: Error Visibility** *(Hiện thị lỗi)* - **SEE THE PROBLEMS**
+#### **Giai đoạn 2: Hiển thị lỗi (Phase 2: Error Visibility)** - **Thấy vấn đề (SEE THE PROBLEMS)**
 3. **Silent Exception Elimination** across all modules
    - Replace `except Exception: pass` with proper logging
    - Categorize errors: **WARNING** (non-critical) vs **ERROR** (critical)
@@ -296,7 +296,7 @@ class SharedResourceManager:
    - Include **power**, **clocks**, **temperature**, **P-state**, **perf cap reasons**
    - **Structured format** for automated analysis
 
-#### **Phase 3: State Management** *(Quản lý trạng thái)* - **SINGLE SOURCE OF TRUTH**
+#### **Giai đoạn 3: Quản lý trạng thái (Phase 3: State Management)** - **Nguồn chân lý duy nhất (SINGLE SOURCE OF TRUTH)**
 5. **Centralized GPU Control** enhancement in `resource_control.py`
    - Route ALL GPU operations through single interface
    - Implement **state mirror** in memory to avoid duplicate calls
@@ -307,7 +307,7 @@ class SharedResourceManager:
    - Fix race conditions trong thread dictionaries  
    - Implement proper **shutdown sequence** với timeout
 
-#### **Phase 4: Reliability** *(Độ tin cậy)* - **BULLETPROOF OPERATIONS**
+#### **Giai đoạn 4: Độ tin cậy (Phase 4: Reliability)** - **Vận hành 'chống đạn' (BULLETPROOF OPERATIONS)**
 7. **Cross-PID Coordination** enhancement in `resource_manager.py`
    - Implement file-based process locking
    - Add **PID tracking** để detect conflicting processes
@@ -318,7 +318,7 @@ class SharedResourceManager:
    - **Automatic rollback** if any operation fails
    - **Health checks** to validate GPU state consistency
 
-### **🔄 DETERMINISTIC ORDER** *(Thứ tự tất định)*
+### **🔄 Thứ tự tất định (DETERMINISTIC ORDER)**
 ```
 Startup: Backup Initial State → Reset GPU → Apply Base Settings → Start Mining
 Runtime: Monitor State → Log Changes → Validate Consistency  
@@ -328,20 +328,20 @@ Error: Stop Operations → Rollback Changes → Log Error → Restore Safe State
 
 ---
 
-## 8. ⚠️ **Risks & Rollback** *(Rủi ro & Hoàn nguyên)*
+## 8. ⚠️ **Rủi ro & Hoàn nguyên (Risks & Rollback)**
 
-### **🚨 IMPLEMENTATION RISKS** *(Rủi ro triển khai)*
+### **🚨 Rủi ro triển khai (IMPLEMENTATION RISKS)**
 
-| **Risk** | **Likelihood** | **Impact** | **Mitigation** |
+| **Rủi ro (Risk)** | **Khả năng (Likelihood)** | **Tác động (Impact)** | **Giảm thiểu (Mitigation)** |
 |----------|----------------|------------|----------------|
 | **GPU stuck trong bad state** | MED | HIGH | **Preflight reset** + **automatic rollback** |
 | **Thread deadlocks** | LOW | HIGH | **Timeout mechanisms** + **health checks** |  
 | **Performance regression** | LOW | MED | **Benchmarking** + **rollback capability** |
 | **Process startup failures** | MED | MED | **Validation checks** + **error logging** |
 
-### **🔄 ROLLBACK STRATEGIES** *(Chiến lược hoàn nguyên)*
+### **🔄 Chiến lược hoàn nguyên (ROLLBACK STRATEGIES)**
 
-#### **Immediate Rollback** *(Hoàn nguyên ngay lập tức)*
+#### **Hoàn nguyên ngay lập tức (Immediate Rollback)**
 ```bash
 # Manual GPU reset nếu system stuck:
 sudo nvidia-smi --reset-applications-clocks
@@ -350,7 +350,7 @@ sudo nvidia-smi --persistence-mode=0
 sudo systemctl restart mining-service
 ```
 
-#### **Safe Mode Operation** *(Hoạt động chế độ an toàn)*
+#### **Hoạt động chế độ an toàn (Safe Mode Operation)**
 ```python
 # Add safe mode flag to start_mining.py:
 if args.safe_mode:
@@ -359,7 +359,7 @@ if args.safe_mode:
     # Enhanced logging enabled
 ```
 
-### **🛡️ GUARDRAILS** *(Lan can bảo vệ)*
+### **🛡️ Lan can bảo vệ (GUARDRAILS)**
 - **Health checks** every 30 seconds to validate GPU state
 - **Automatic rollback** if hashrate drops >10% unexpectedly  
 - **Process monitoring** để detect hung threads hoặc processes
@@ -367,44 +367,44 @@ if args.safe_mode:
 
 ---
 
-## 9. ❓ **Open Questions** *(Câu hỏi mở)* - **Thiếu chứng cứ cần bổ sung**
+## 9. ❓ **Câu hỏi mở (Open Questions)** - **Thiếu chứng cứ cần bổ sung**
 
-### **🔍 EVIDENCE GAPS** *(Khoảng trống bằng chứng)*
+### **🔍 Khoảng trống bằng chứng (EVIDENCE GAPS)**
 
-#### **1. Performance Capability Reasons** *(Lý do giới hạn hiệu năng)*
-**MISSING**: **Perf cap reasons** trong logs
+#### **1. Lý do giới hạn hiệu năng (Performance Capability Reasons)**
+**Thiếu (MISSING)**: **Perf cap reasons** trong logs
 ```bash
-# NEEDED: Run this command và analyze output:
+# Cần (NEEDED): Run this command và analyze output:
 nvidia-smi --query-gpu=performance.state,clocks_throttle_reasons.* --format=csv
 ```
-**PURPOSE**: Determine exact throttling mechanism (Pwr/Thrm/VRel/VOp/Util)
+**Mục đích (PURPOSE)**: Determine exact throttling mechanism (Pwr/Thrm/VRel/VOp/Util)
 
-#### **2. Historical State Changes** *(Thay đổi trạng thái lịch sử)*  
-**MISSING**: **Before/during/after** GPU state comparison
+#### **2. Thay đổi trạng thái lịch sử (Historical State Changes)**  
+**Thiếu (MISSING)**: **Before/during/after** GPU state comparison
 ```bash
-# NEEDED: Capture full GPU state during problem reproduction:
+# Cần (NEEDED): Capture full GPU state during problem reproduction:
 nvidia-smi --query-gpu=power.draw,clocks.* --format=csv --loop=1 > gpu_timeline.csv
 ```
-**PURPOSE**: Create definitive timeline của GPU state degradation
+**Mục đích (PURPOSE)**: Create definitive timeline của GPU state degradation
 
-#### **3. NVML Error Details** *(Chi tiết lỗi NVML)*
-**MISSING**: **Actual NVML error messages** (hidden by silent exceptions)
+#### **3. Chi tiết lỗi NVML (NVML Error Details)**
+**Thiếu (MISSING)**: **Actual NVML error messages** (hidden by silent exceptions)
 ```python
-# NEEDED: Temporarily replace silent exceptions with:
+# Cần (NEEDED): Temporarily replace silent exceptions with:
 except Exception as e:
     logger.error(f"NVML Error: {e}")  # Capture real errors
 ```
-**PURPOSE**: Identify specific NVML API failures
+**Mục đích (PURPOSE)**: Identify specific NVML API failures
 
-#### **4. Persistence Mode Behavior** *(Hành vi chế độ bền vững)*
-**MISSING**: **Persistence mode state** during problem periods
+#### **4. Hành vi chế độ bền vững (Persistence Mode Behavior)**
+**Thiếu (MISSING)**: **Persistence mode state** during problem periods
 ```bash
-# NEEDED: Check persistence mode status:
+# Cần (NEEDED): Check persistence mode status:
 nvidia-smi --query-gpu=persistence_mode --format=csv
 ```
-**PURPOSE**: Verify if persistence mode causing state retention
+**Mục đích (PURPOSE)**: Verify if persistence mode causing state retention
 
-### **📋 VALIDATION CHECKLIST** *(Danh sách xác thực)*
+### **📋 Danh sách xác thực (VALIDATION CHECKLIST)**
 - [ ] **GPU clocks** restore to >1200 MHz sau restart
 - [ ] **Power draw** achieves 150-200W under mining load
 - [ ] **Hashrate** sustains >24 MH/s for >15 minutes  
@@ -414,11 +414,11 @@ nvidia-smi --query-gpu=persistence_mode --format=csv
 
 ---
 
-## 10. 📎 **Appendix: Evidence** *(Phụ lục: Bằng chứng)*
+## 10. 📎 **Phụ lục: Bằng chứng (Appendix: Evidence)**
 
-### **CODE EVIDENCE** *(Bằng chứng mã nguồn)*
+### **Bằng chứng mã nguồn (CODE EVIDENCE)**
 
-#### **A1. Signal Handler Gap** *(Khoảng trống signal handler)*
+#### **A1. Khoảng trống signal handler (Signal Handler Gap)**
 ```python
 # [EVIDENCE] /app/start_mining.py:204-221
 def signal_handler(signum, frame):
@@ -433,7 +433,7 @@ def signal_handler(signum, frame):
     # ❌ MISSING: GPU state restoration before exit!
 ```
 
-#### **A2. Silent Exception Pattern** *(Mẫu exception im lặng)*
+#### **A2. Mẫu exception im lặng (Silent Exception Pattern)**
 ```python  
 # [EVIDENCE] gpu_optimization_orchestrator.py:234, 158, 164, etc. (30+ occurrences)
 try:
@@ -443,7 +443,7 @@ except Exception:
     pass  # ❌ CRITICAL: Thread cleanup errors hidden
 ```
 
-#### **A3. Thread Race Condition** *(Điều kiện chạy đua thread)*
+#### **A3. Điều kiện chạy đua thread (Thread Race Condition)**
 ```python
 # [EVIDENCE] gpu_optimization_orchestrator.py:1188-1200  
 def _start_continuous_optimization(self, device_id):
@@ -452,9 +452,9 @@ def _start_continuous_optimization(self, device_id):
     self._continuous_stop_events[device_id] = stop_event
 ```
 
-### **LOG EVIDENCE** *(Bằng chứng log)*
+### **Bằng chứng log (LOG EVIDENCE)**
 
-#### **A4. Performance Degradation Timeline**
+#### **A4. Dòng thời gian suy giảm hiệu năng (Performance Degradation Timeline)**
 ```
 # [EVIDENCE] Performance timeline từ sub-agent analysis:
 [BEFORE] 24.96 MH/s @ 1245/877 MHz, 150-200W  
@@ -462,7 +462,7 @@ def _start_continuous_optimization(self, device_id):
 [AFTER FIX] Ready for mining @ 1245/877 MHz, 37W (idle)
 ```
 
-#### **A5. GPU State Evidence**  
+#### **A5. Bằng chứng trạng thái GPU (GPU State Evidence)**  
 ```bash
 # [EVIDENCE] GPU state during problem period:
 [2025-09-01 17:37:01.524]  nvidia   #0 00:00.0  75W 38C 412/877 MHz
@@ -470,9 +470,9 @@ def _start_continuous_optimization(self, device_id):
 [2025-09-01 17:37:01.544]  miner    speed 10s/60s/15m 20.31 n/a n/a MH/s max 24.96 MH/s
 ```
 
-### **TECHNICAL SPECIFICATIONS** *(Đặc tả kỹ thuật)*
+### **Đặc tả kỹ thuật (TECHNICAL SPECIFICATIONS)**
 
-#### **A6. Module Responsibility Matrix** 
+#### **A6. Ma trận trách nhiệm module (Module Responsibility Matrix)** 
 | **Module** | **GPU Control Functions** | **State Management** | **Bug Priority** |
 |------------|---------------------------|---------------------|------------------|
 | **start_mining.py** | Signal handlers, process lifecycle | Entry/exit cleanup | **P0** |
@@ -493,9 +493,9 @@ def _start_continuous_optimization(self, device_id):
 
 **🔧 SOLUTION MAPPED** *(Giải pháp đã lập bản đồ)*: **5 critical fixes** với **clear implementation path**
 
-**⚡ QUICK WINS IDENTIFIED** *(Thắng nhanh đã xác định)*: **Signal handler** + **Silent exception** fixes sẽ immediately restore hashrate
+**Thắng nhanh đã xác định (QUICK WINS IDENTIFIED)**: **Signal handler** + **Silent exception** fixes sẽ immediately restore hashrate
 
-**🏗️ LONG-TERM STRATEGY** *(Chiến lược dài hạn)*: **Systematic refactor** của state management để **bulletproof reliability**
+**Chiến lược dài hạn (LONG-TERM STRATEGY)**: **Systematic refactor** của state management để **bulletproof reliability**
 
 ### **🚀 Bước tiếp theo (NEXT STEPS)**
 1. **Implement P0 fixes** (Signal handler + Exception handling)  
@@ -503,7 +503,7 @@ def _start_continuous_optimization(self, device_id):
 3. **Deploy P1 improvements** (Thread safety + Cross-PID coordination)
 4. **Establish monitoring** (Continuous GPU state validation)
 
-> **SUCCESS CRITERIA** *(Tiêu chí thành công)*: **Hashrate ≥24 MH/s sustained** + **No GPU state persistence giữa restarts** + **Full error visibility** + **Zero race conditions**
+> **Tiêu chí thành công (SUCCESS CRITERIA)**: **Hashrate ≥24 MH/s sustained** + **No GPU state persistence giữa restarts** + **Full error visibility** + **Zero race conditions**
 
 ---
 

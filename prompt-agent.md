@@ -117,7 +117,7 @@ Tối thiểu **5 nhánh** gợi ý (ví dụ):
 
 # 🧪 ANTI-HALLUCINATION (BẮT BUỘC)
 
-* **Evidence-Only Principle**: Chỉ kết luận khi có **trích dẫn rõ ràng** từ `@phan-tich-agents-*.md` hoặc từ đường dẫn/log được các tài liệu này nêu.
+* **Evidence-Only Principle**: Chỉ kết luận khi có **trích dẫn rõ ràng** từ `@report-*.md` hoặc từ đường dẫn/log được các tài liệu này nêu.
 * **No Creative Assumptions**: Không bịa đặt thông số/nhật ký/đường dẫn.
 * **Factual Vietnamese Communication**: Ngắn gọn, chính xác, không mập mờ.
 * **Explicit Source Citation**: Sau mỗi kết luận quan trọng, ghi **Tên file → trích đoạn verbatim ngắn**.
