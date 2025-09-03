@@ -57,6 +57,10 @@ gpu_plugin_logger = setup_logging('gpu_plugin', str(Path(LOGS_DIR) / 'gpu_plugin
 
 stop_event = threading.Event()
 
+# **GPU Reset Flags** (cờ trạng thái reset GPU – đồng bộ trình tự khởi động)
+GPU_RESET_COMPLETED = threading.Event()
+GPU_RESET_SUCCESS = threading.Event()
+
 # **Enhanced lock-free process manager** (trình quản lý tiến trình không khóa nâng cao – quản lý quy trình không xung đột)
 import weakref
 
@@ -1007,6 +1011,68 @@ def start_multi_gpu_mining(privileged_manager=None):
 
 # GPU mining management integrated into main() for linear flow architecture
 
+def perform_hard_gpu_reset(logger) -> bool:
+    """
+    Pre-flight HARD GPU device reset with guardrails, sequentially for all GPUs.
+    - Controlled by ENV ENABLE_GPU_RESET_ON_START (default truthy → enabled)
+    - Returns True if all GPUs passed guards or reset succeeded; False on any hard failure
+    """
+    # ENV gate (default enabled)
+    try:
+        enabled = str(os.getenv('ENABLE_GPU_RESET_ON_START', '1')).lower() in ('1', 'true', 'yes')
+    except Exception:
+        enabled = True
+    if not enabled:
+        if logger:
+            logger.info("⏭️ [GPU-RESET] Skipped by ENABLE_GPU_RESET_ON_START=0")
+        return True
+
+    # Lazy import to avoid module-level dependencies
+    try:
+        from mining_environment.scripts.gpu_unrestrict import safe_gpu_reset, _detect_gpu_count, enforce_gpu_baselines
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ [GPU-RESET] Cannot import reset helpers: {e}")
+        return False
+
+    ok = True
+    try:
+        # Detect GPU count (nvidia-smi based)
+        try:
+            count = _detect_gpu_count(logger)
+        except Exception:
+            count = 0
+        total = int(count) if isinstance(count, int) else 0
+
+        if total <= 0:
+            if logger:
+                logger.warning("ℹ️ [GPU-RESET] No NVIDIA GPUs detected; skipping device reset")
+            return True
+
+        # Sequential device reset per GPU with guards
+        for idx in range(total):
+            try:
+                if not safe_gpu_reset(logger, idx):
+                    ok = False
+            except Exception as e:
+                ok = False
+                if logger:
+                    logger.debug(f"[GPU-RESET] GPU {idx} reset error: {e}")
+
+        # Re-apply baseline after reset (best-effort)
+        try:
+            enforce_gpu_baselines(logger)
+        except Exception as e:
+            if logger:
+                logger.debug(f"[GPU-BASELINE] Enforcement skipped: {e}")
+
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ [GPU-RESET] Unexpected failure in preflight reset: {e}")
+        ok = False
+
+    return ok
+
 def start_resource_manager_thread():
     """
     **Enhanced ResourceManager Startup Thread** (luồng khởi động ResourceManager nâng cao)
@@ -1120,6 +1186,27 @@ def main():
     """**Simplified Sequential Architecture Main Function** (hàm chính kiến trúc tuần tự đơn giản) với **DirectPIDRegistry coordination** (phối hợp DirectPIDRegistry)"""
     logger.info("===== Bắt đầu hoạt động khai thác tiền điện tử (Simplified Sequential Architecture) =====")
     
+    # ------------------------------------------------------------------
+    # 0️⃣ PRE-FLIGHT: GPU hard reset gating (chặn khởi động cho đến khi reset GPU xong)
+    # ------------------------------------------------------------------
+    try:
+        logger.info("🧪 [GPU-RESET] Pre-flight GPU reset bắt đầu...")
+        if perform_hard_gpu_reset(logger):
+            GPU_RESET_SUCCESS.set()
+            logger.info("✅ [GPU-RESET] Pre-flight GPU reset thành công hoặc được bỏ qua an toàn")
+        else:
+            logger.error("❌ [GPU-RESET] Pre-flight GPU reset thất bại - hủy khởi động để tránh trạng thái GPU không ổn định")
+            stop_event.set()
+            GPU_RESET_COMPLETED.set()
+            return
+    except Exception as _preflight_err:
+        logger.error(f"❌ [GPU-RESET] Lỗi bất ngờ trong pre-flight reset: {_preflight_err}")
+        stop_event.set()
+        GPU_RESET_COMPLETED.set()
+        return
+    finally:
+        GPU_RESET_COMPLETED.set()
+
     # 0️⃣ Log rotation do hệ thống đảm nhiệm qua logrotate (khởi chạy từ entrypoint)
 
     # ------------------------------------------------------------------
