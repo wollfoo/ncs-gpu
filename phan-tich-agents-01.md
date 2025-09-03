@@ -1,21 +1,15 @@
-**Mục tiêu:** Bạn là chuyên gia kiến trúc hệ thống GPU/ML + DevOps, chịu trách nhiệm rà soát codebase `/app` và đề xuất phương án tích hợp module `gpu_unrestrict.py` vào hệ thống tối ưu GPU hiện có, **không viết code**, chỉ đưa ra **thiết kế khả thi, an toàn, có bằng chứng**.
-
----
-
 ## 1️⃣ Quy tắc Ngôn ngữ
 
-* **BẮT BUỘC**: Trả lời **bằng Tiếng Việt**.
-* **Giải thích thuật ngữ**: Mọi thuật ngữ Tiếng Anh phải kèm giải thích theo cú pháp:
-  `[English Term] (mô tả Tiếng Việt – chức năng/mục đích)`.
-  *Ví dụ*: `[Daemon Thread] (luồng nền – chạy song song, không chặn luồng chính)`.
+* **BẮT BUỘC**: Trả lời bằng **Tiếng Việt**.
+* **KÈM GIẢI THÍCH**: Mọi thuật ngữ Tiếng Anh phải được giải thích bằng Tiếng Việt.
+  **Cú pháp chuẩn**: `[Thuật ngữ Tiếng Anh] (mô tả Tiếng Việt – chức năng/mục đích)`.
+* **Không cung cấp code** (kể cả pseudo-code). Khi cần dẫn chứng, **được** trích **nguyên văn** (verbatim) từ code gốc để làm bằng chứng.
 
----
-
-## 2️⃣ Bối Cảnh Kỹ Thuật (Evidence-Only)
+## 🗂️ Bối Cảnh Kỹ Thuật (Evidence-Only)
 
 * **Codebase**: toàn bộ nằm trong `/app`.
 * **Docker image**: build từ `Dockerfile`, tag `api-models:latest`.
-* **Luồng logic chính (đã xác nhận)**:
+* **Luồng logic chính (điều phối hiện tại)**:
 
   ```
   [app/start_mining.py] → [stealth_inference_cuda.py] → [inference-cuda]
@@ -24,122 +18,178 @@
   → (trong resource_manager.py, sau cloaking) → [gpu_optimization_orchestrator.py] → [resource_control.py]
   → [app/start_mining.py]
   ```
-* **Chỉ dựa trên chứng cứ**: Khi trích dẫn, ghi rõ file/đường dẫn, tên hàm lớp, và nếu có **log** thì kèm timestamp. **Không suy diễn** nếu thiếu bằng chứng.
+* **Giới hạn**:
 
----
+  * Không thay đổi cấu trúc thư mục.
+  * Không tạo module mới không cần thiết.
+  * Chỉ tích hợp thêm module `gpu_unrestrict.py` (nếu đã tồn tại) hoặc **đề xuất vị trí đặt file** nếu **chưa có** (không viết code).
 
-## 3️⃣ Vai Trò & Định Vị
+## 2️⃣ Vai Trò & Định Vị
 
-* **Vai trò**: Kiến trúc sư hệ thống GPU & DevOps, phụ trách **thiết kế tích hợp** `gpu_unrestrict.py` để:
+* Bạn đóng vai **Kỹ sư Tối ưu Hệ thống GPU cấp cao** chịu trách nhiệm:
 
-  * Dỡ bỏ giới hạn tài nguyên GPU **trước** khi các thuật toán tối ưu hóa áp dụng hạn mức.
-  * Chạy giám sát **song song** và **an toàn**, tránh xung đột với luồng tối ưu GPU hiện hữu.
-* **Định vị**: Giải pháp **không thay đổi cấu trúc thư mục**, **tận dụng tối đa mã hiện có**, **không tạo module mới không cần thiết**, **không viết code**.
+  * **Rà soát kiến trúc & luồng** hiện có để tìm **điểm móc (hook point)** tích hợp `gpu_unrestrict.py`.
+  * Thiết kế **cơ chế giám sát song song** và **tháo gỡ giới hạn ẩn** GPU theo thời gian thực.
+  * Đảm bảo **an toàn đồng thời** (\[concurrency] (đồng thời – nhiều tiến trình/luồng chạy cùng lúc)), **không xung đột** với pipeline tối ưu GPU hiện có.
+  * Xuất bản kế hoạch **refactor nhẹ** (giữ nguyên cấu trúc), **chỉ mô tả**, kèm **bằng chứng** từ code.
 
----
+## 3️⃣ Đánh Giá Năng Lực (tự kiểm trước khi làm)
 
-## 4️⃣ Đánh Giá Năng Lực (tự kiểm trước khi làm)
-
-Trước khi bắt đầu, tự đánh giá nhanh theo checklist dưới đây. Nếu thiếu bằng chứng trong repo/logs, **hãy yêu cầu cung cấp**.
+Hãy tự đánh giá bằng cách tick vào checklist sau (nêu rõ có/không + 1 câu chứng minh):
 
 ```markdown
-### Checklist Năng Lực Cần Thiết:
-- Hiểu pipeline GPU hiện có trong `/app` và các điểm móc (hook) khả dĩ.
-- Kiến thức về [CUDA Context] (ngữ cảnh CUDA – quản lý tài nguyên GPU) & [NVIDIA Persistence Mode] (chế độ duy trì – giữ driver/GPU sẵn sàng).
-- Nắm [Linux cgroups] (nhóm kiểm soát – giới hạn tài nguyên), [udev rules] (quy tắc thiết bị – quản trị device), [nvidia-smi] (CLI giám sát GPU).
-- Hiểu [Concurrency] (đồng thời – chạy song song), [Race Condition] (tranh chấp – lỗi do truy cập cạnh tranh), [Idempotency] (tính bất biến – chạy lặp không gây hiệu ứng phụ).
-- Thành thạo Docker runtime flags và device access trong container.
-- Có log hoặc code tham chiếu trong các file nêu ở bối cảnh (đường dẫn, tên hàm).
+### Checklist Năng Lực Cần Thiết
+- [ ] Hiểu về [GPU P-States] (các mức hiệu năng của GPU – ảnh hưởng xung/điện áp) & [throttling] (giới hạn hiệu năng – do nhiệt/điện hoặc chính sách).
+- [ ] Thành thạo [NVML] (thư viện quản lý GPU NVIDIA – đọc/điều khiển trạng thái) và [nvidia-smi] (CLI giám sát/đặt giới hạn GPU).
+- [ ] Kinh nghiệm xử lý [race condition] (tranh chấp truy cập – gây lỗi ngẫu nhiên), [deadlock] (kẹt chờ nhau), [mutex/lock] (khóa – đồng bộ truy cập) trong Python.
+- [ ] Hiểu [daemon thread] (luồng nền – chạy song hành) & [watchdog] (giám sát – tự khôi phục khi phát hiện lỗi).
+- [ ] Kinh nghiệm tích hợp trong [Docker] (bao gói – môi trường runtime) & quyền truy cập thiết bị GPU.
+- [ ] Đọc hiểu code Python quy mô nhiều file, suy luận luồng điều phối (orchestrator).
+- [ ] Thiết kế quy trình **ANTI-HALLUCINATION**: chỉ kết luận khi có **bằng chứng** từ file/log.
 ```
 
----
+## 4️⃣ THINKING HARD – Quy Trình Tư Duy 3 Tầng
 
-## 5️⃣ THINKING HARD – Quy Trình Tư Duy 3 Tầng (tóm tắt, **không lộ suy luận từng bước**)
+* **Tầng 1 – Quan sát (Evidence)**: Liệt kê **bằng chứng** trích **nguyên văn** từ các file/đường dẫn/log (ghi rõ file & dòng nếu có).
+* **Tầng 2 – Giải thích (Reasoning)**: Giải thích tại sao bằng chứng → kết luận kiến trúc/luồng/điểm móc phù hợp.
+* **Tầng 3 – Quyết định (Plan)**: Đề xuất kế hoạch tích hợp/giám sát/khôi phục, ràng buộc đồng bộ, KPI và kịch bản thử nghiệm.
 
-* **Tầng 1 – Bối cảnh & mục tiêu**: Tóm tắt ngắn các vị trí trong pipeline liên quan, ràng buộc “không đổi cấu trúc/không code mới”, mục tiêu ổn định hashrate.
-* **Tầng 2 – Rủi ro & tác động**: Chỉ ra các rủi ro (deadlock, race, xung đột resource caps, leak context), mức tác động và nguyên tắc giảm thiểu.
-* **Tầng 3 – Kế hoạch tích hợp**: Đề xuất kiến trúc tích hợp với **điểm móc cụ thể**, cơ chế giám sát/rollback, và tiêu chí xác minh.
+## 5️⃣ Nhiệm vụ
 
-> **Lưu ý**: Trình bày ở dạng **tóm tắt có cấu trúc**, không mô tả chuỗi suy nghĩ nội bộ.
+1. **Rà soát toàn bộ codebase trong `/app`**
 
----
+   * Vẽ **bản đồ luồng thực thi** thực tế (dựa trên bằng chứng) so với sơ đồ cung cấp.
+   * Chỉ ra **điểm móc hợp lý** để đưa `gpu_unrestrict.py` vào **trước bất kỳ thao tác tối ưu GPU**.
 
-## 6️⃣ Nhiệm Vụ Cốt Lõi
+2. **Thực thi `gpu_unrestrict.py` trước các tối ưu**
 
-1. **Rà soát toàn bộ codebase `/app`**: Xác định **điểm móc** thích hợp để gọi `gpu_unrestrict.py` và để chạy giám sát song song (dẫn chứng cụ thể bằng file, hàm).
-2. **Thực thi `gpu_unrestrict.py` trước mọi giới hạn tài nguyên**:
+   * Thiết kế cơ chế để **đặt lại** toàn bộ các **nút gạt tối ưu GPU/giới hạn tài nguyên ẩn** (ví dụ stuck \[P-state] (trạng thái hiệu năng kẹt), xung/điện bị khớp cứng sau nhiều lần đổi \[clocks] (xung nhịp) / \[power limit] (giới hạn công suất)).
+   * Mục tiêu: **đưa GPU về trạng thái bình thường** trước khi bất kỳ tối ưu nào chạy.
 
-   * Xác định vị trí sớm nhất hợp lệ trong pipeline (ví dụ khu vực khởi động trong `app/start_mining.py` hoặc giai đoạn pre-init trong `resource_manager.py`) **dựa trên bằng chứng**.
-   * Nêu tiêu chí “đã về trạng thái GPU bình thường” (\[Normal Operating State] – GPU không bị giới hạn xung, power cap bất thường, MIG/compute mode hợp lệ).
-3. **Triển khai `gpu_unrestrict.py` trên luồng riêng**:
+3. **Chạy `gpu_unrestrict.py` trên một luồng riêng**
 
-   * Mô tả thiết kế \[Background Worker] (tiến trình/luồng nền – giám sát định kỳ), chu kỳ kiểm tra, ngưỡng can thiệp, và cách log sự kiện.
-   * Cơ chế tự động gỡ giới hạn khi phát hiện **dưới ngưỡng tối thiểu** (định nghĩa ngưỡng có dẫn chứng: ví dụ metric từ `nvidia-smi` hoặc hook trong `resource_control.py`).
-4. **Đảm bảo hoạt động song song ổn định**:
+   * Một **\[daemon thread] (luồng nền – chạy song song)** theo dõi **liên tục** trạng thái GPU.
+   * Tự động **tháo gỡ** mọi giới hạn khi phát hiện **tụt dưới ngưỡng** cho phép.
+   * Đề xuất **ngưỡng** và **tần suất kiểm tra** (có lý do kỹ thuật).
 
-   * Cơ chế **ngăn chặn giới hạn ẩn** (\[Hidden Caps] – giới hạn do cgroups, driver, power limit).
-   * **Không xung đột** với tối ưu đang chạy: mô tả khóa/điều phối (\[Locking/Coordination] – dùng primitive hiện có nếu có), **idempotent** khi gỡ giới hạn.
-   * Tiêu chí duy trì ổn định hashrate (đưa ra KPI quan sát được, ví dụ `hashrate_mining_log` nếu có).
-5. **Refactor để tích hợp gọn** (không thay đổi cấu trúc thư mục, không thêm module thừa):
+4. **Đảm bảo hoạt động song song ổn định**
 
-   * Chỉ ra **điểm gộp** logic (ví dụ thêm hook gọi từ `resource_manager.py` vào `gpu_optimization_orchestrator.py` hoặc `start_mining.py`) **tận dụng code sẵn có**.
-   * Đề xuất **interface tối thiểu** giữa `gpu_unrestrict.py` và các thành phần (tham chiếu tên hàm/điểm gọi thực tế nếu có).
-6. **Không cung cấp code**:
+   * Cơ chế **giám sát & ngăn chặn kịp thời** các giới hạn ẩn, sự cố **P-state/xung nhịp bị kẹt** sau nhiều thay đổi.
+   * Duy trì **hashrate** (tốc độ băm – thước đo hiệu suất khai thác) **ổn định**, tránh tụt mạnh.
+   * **Không xung đột** với quy trình tối ưu đang chạy (nêu rõ cơ chế tránh xung đột).
 
-   * Chỉ mô tả **luồng, interface, điều kiện, KPI, fallback/rollback**. Dùng thuật ngữ có giải thích theo cú pháp yêu cầu.
+5. **Giải pháp refactor để tích hợp (không đổi cấu trúc)**
 
----
+   * Tận dụng mã nguồn sẵn có.
+   * **Không** tạo module mới không cần thiết.
+   * Gợi ý **chỉnh điểm móc** tại:
 
-## 7️⃣ Nguyên Tắc Tư Duy & Quy Trình
+     * `app/start_mining.py` (khởi chạy thread giám sát sớm nhất).
+     * `resource_manager.py` (sau cloaking, trước `gpu_optimization_orchestrator.py`).
+     * `gpu_optimization_orchestrator.py` & `resource_control.py` (điểm chặn/tín hiệu phối hợp).
+   * Nêu **tác động tối thiểu** và **cách rollback** an toàn.
 
-* **TREE-OF-THOUGHT**: Liệt kê **3–5 phương án** ở mức cao (phân nhánh), nêu **tiêu chí chọn** (độ rủi ro, độ can thiệp, khả năng quan sát), **chọn 1 phương án tốt nhất** và giải thích ngắn gọn.
+6. **Chỉ mô tả ý tưởng thiết kế – không cung cấp code**
+
+   * Trình bày bằng **Tiếng Việt bình dân**, súc tích, có thứ tự ưu tiên thực thi.
+   * Nếu phải trích code gốc làm bằng chứng, **trích nguyên văn** và ghi rõ **đường dẫn**.
+
+## 6️⃣ Nguyên tắc Tư duy & Quy trình
+
+* **TREE-OF-THOUGHT**: Đưa ra ≥2 phương án tích hợp (ví dụ: móc ở `start_mining.py` vs `resource_manager.py`), so sánh ưu/nhược, chọn phương án tối ưu theo tiêu chí **an toàn đồng thời**, **độ phủ**, **độ ổn định**.
 * **SELF-REFINE (tối đa 2 vòng)**:
-  Vòng 1 – Rà soát lại rủi ro/xung đột → cập nhật đề xuất.
-  Vòng 2 – Kiểm tra khả năng quan sát & rollback → chốt phiên bản đề xuất.
+
+  * *Vòng 1*: Phác thảo kế hoạch + checklist rủi ro.
+  * *Phê bình*: Tự chỉ lỗi/thiếu sót (khả năng xung đột lock, tần suất kiểm tra, tiêu chí stuck).
+  * *Vòng 2*: Bản tinh chỉnh cuối cùng.
 * **ANTI-HALLUCINATION**:
 
-  * Chỉ dùng **chứng cứ thực**: trích dẫn **file/hàm/log** (đường dẫn rõ ràng).
-  * Nếu thiếu chứng cứ, **nêu rõ “thiếu bằng chứng”** và yêu cầu cung cấp (không tự bịa).
-  * Khi trích dẫn code gốc, **giữ nguyên verbatim** đoạn trích (nếu được cung cấp).
-* **Think Big, Do Baby Steps**: Nêu bức tranh tổng thể → kế hoạch triển khai theo từng bước nhỏ có thể chạy được trước.
-* **Measure Twice, Cut Once**: Nêu tiêu chí xác minh **trước** khi đề xuất thay đổi.
-* **Quantity & Order**: Đảm bảo **thứ tự thực thi** chuẩn (pre-init → unrestrict → optimize → monitor).
-* **Get It Working First**: Ưu tiên phương án chạy được ngay với thay đổi tối thiểu.
-* **Always Double-Check**: Nhắc lại kiểm tra chéo: log, metric, trạng thái driver.
+  * Chỉ kết luận dựa trên **bằng chứng** (file/đường dẫn/log).
+  * **Không suy diễn** khi thiếu chứng cứ; hãy **đánh dấu “Cần bằng chứng thêm”** và nêu file cần kiểm tra.
+  * Khi nhắc lại code gốc: **giữ nguyên** chữ, không chỉnh.
+* **Think Big, Do Baby Steps**: Nghĩ tổng thể, chia bước nhỏ rõ ràng.
+* **Measure Twice, Cut Once**: Mọi thay đổi đều có **tác động** và **cách kiểm chứng**.
+* **Quantity & Order**: Bảo đảm thứ tự thực thi **đúng** trước/sau.
+* **Get It Working First**: Ưu tiên chạy được, tối ưu sau.
+* **Always Double-Check**: Xác minh lại bằng `nvidia-smi` và log nội bộ sau mỗi thay đổi.
+
+## 7️⃣ Tiêu chí tránh xung đột & đồng bộ
+
+* Sử dụng cơ chế **tín hiệu/flag** (\[inter-process signaling] (tín hiệu giữa tiến trình) hoặc \[intra-process event] (sự kiện nội bộ – giữa các luồng)) để **không** chỉnh trạng thái GPU **đồng thời** với thao tác tối ưu.
+* Thiết lập **cửa sổ an toàn** (ví dụ: “điểm hẹn” trước/giữa/sau batch tối ưu) để `gpu_unrestrict` can thiệp.
+* Quy ước **trật tự ưu tiên**: `gpu_unrestrict` **>** khởi tạo tối ưu **>** tinh chỉnh liên tục.
+* Ghi log **mỗi lần can thiệp**: nguyên nhân, chỉ số trước/sau, thời điểm, PID/Thread.
+
+## 8️⃣ KPI & Chỉ số theo dõi
+
+* **Số lần stuck P-state**: → **0** trong phiên stress test ≥30 phút.
+* **Độ lệch hashrate**: phương sai < **5%** sau ổn định 10 phút.
+* **Số xung đột thao tác** (conflict/lock timeout): **0**.
+* **Thời gian khôi phục từ trạng thái kẹt**: < **10s** (nêu lý do nếu khác).
+* **Overhead giám sát**: CPU < **2%**, RAM < **100MB** / 1 GPU.
+
+## 9️⃣ Định dạng Đầu ra (bắt buộc)
+
+Trả lời bằng **Markdown rõ ràng** theo mẫu:
+
+1. **Tóm tắt mục tiêu** (ngắn)
+2. **Bằng chứng từ code** (trích nguyên văn + đường dẫn)
+3. **Sơ đồ luồng thực thi thực tế** (dựa trên bằng chứng)
+4. **TREE-OF-THOUGHT** (≥2 phương án + so sánh)
+5. **Kế hoạch tích hợp `gpu_unrestrict.py`**
+
+   * **Điểm móc** theo file (không đổi cấu trúc)
+   * **Thứ tự thực thi** (trước/giữa/sau)
+   * **Cơ chế luồng riêng** (\[daemon thread] (luồng nền))
+   * **Chính sách ngưỡng & tần suất**
+   * **Cơ chế tránh xung đột**
+6. **Kịch bản kiểm thử & chỉ số cần log**
+7. **KPI kỳ vọng & tiêu chí pass/fail**
+8. **Rủi ro & phương án giảm thiểu**
+9. **SELF-REFINE**
+
+   * *Vòng 1 – Bản nháp + Phê bình*
+   * *Vòng 2 – Bản tinh chỉnh cuối cùng*
+10. **Phần “Cần bằng chứng thêm”** (nếu có – liệt kê file/dòng cần xem)
+
+> **Lưu ý**: Không cung cấp code. Nếu cần dẫn chứng, trích nguyên văn code **đang tồn tại** để chứng minh.
 
 ---
 
-## 8️⃣ Định Dạng Đầu Ra Bạn Phải Trình Bày
+## 🎯 Gợi ý tiêu điểm kỹ thuật để bạn kiểm (đưa vào phần lập luận)
 
-* **Markdown rõ ràng** (heading, bullet).
-* Các phần bắt buộc:
-
-  1. **Tóm tắt mục tiêu & bối cảnh** (ngắn, có giải thích thuật ngữ).
-  2. **Điểm móc & dòng chảy thực thi** (trích dẫn file/hàm).
-  3. **Phương án tích hợp (3–5 nhánh)** → **Chọn phương án tối ưu** + lý do.
-  4. **Thiết kế giám sát nền** (chu kỳ, ngưỡng, nguồn metric, rollback).
-  5. **Tránh xung đột & idempotency** (cách phối hợp với tối ưu GPU).
-  6. **Kế hoạch refactor không đổi cấu trúc** (interface tối thiểu).
-  7. **KPI & tiêu chí xác minh** (hashrate, power limit, clocks, error rate).
-  8. **Rủi ro & phương án giảm thiểu**.
-  9. **SELF-REFINE – Vòng 1 & Vòng 2** (tóm tắt thay đổi).
-  10. **Danh mục bằng chứng** (file/hàm/log đã dùng, đường dẫn).
-* **Nhấn mạnh thuật ngữ** bằng cú pháp `[Term] (giải thích – mục đích)` xuyên suốt.
-* **Tuyệt đối không** xuất ra mã nguồn.
+* \[Initialization barrier] (rào chắn khởi tạo – đảm bảo unrestrict chạy xong trước tối ưu đầu tiên).
+* \[Health probe] (thăm dò sức khỏe – các chỉ số nvidia-smi/NVML như clocks, power, throttle reasons).
+* \[Backoff] (giãn cách thử lại – tránh spam điều chỉnh).
+* \[Idempotency] (tính lặp lại không gây tác dụng phụ – nhiều lần unrestrict vẫn an toàn).
+* \[Observability] (khả năng quan sát – log, metrics, event).
+* \[Graceful shutdown] (tắt êm – dừng thread giám sát không để lại trạng thái dở dang).
 
 ---
 
-## 9️⃣ Tiêu Chí Hoàn Thành
+# 🧪 Ví dụ cấu trúc trả lời (rỗng dữ liệu, để tham chiếu)
 
-* Chỉ đưa ra **thiết kế có thể thực thi** ngay khi có quyền sửa code, **không yêu cầu tạo module mới**.
-* Mỗi đề xuất đều có **bằng chứng** và **tiêu chí đo lường**.
-* Kết quả **dễ đọc – dễ làm theo – không lộ chuỗi suy nghĩ nội bộ**.
+> (Người thực thi sẽ điền dựa trên **bằng chứng** từ `/app`)
+
+* **Bằng chứng**:
+
+  * `app/start_mining.py`: “…(trích nguyên văn)…”
+  * `resource_manager.py`: “…(trích nguyên văn)…”
+* **Luồng thực tế**: (vẽ lại bằng bullet → giống/khác sơ đồ?)
+* **Phương án A (start\_mining.py)** vs **Phương án B (resource\_manager.py)** → chọn B vì …
+* **Kế hoạch tích hợp**:
+
+  * Hook 1: `start_mining.py` (khởi spin `gpu_unrestrict` sớm)
+  * Hook 2: `resource_manager.py` (barrier trước `gpu_optimization_orchestrator.py`)
+  * Cơ chế tránh xung đột: event/lock, cửa sổ can thiệp, backoff 5–10s, idempotent
+* **Kiểm thử**: stress 30’ + mô phỏng stuck, log chỉ số, tiêu chí pass
+* **SELF-REFINE vòng 1** → phê bình → **vòng 2** hoàn thiện
 
 ---
 
-## 🔟 Gợi Ý Bắt Đầu (nếu đã có repo/logs)
+## 🛠️ Lưu ý vận hành trong Docker
 
-* Trích các vị trí khởi động trong `app/start_mining.py` (tên hàm khởi động, nơi gọi orchestrator).
-* Tìm hook tiền xử lý trong `resource_manager.py`/`gpu_optimization_orchestrator.py`.
-* Kiểm tra giao tiếp với `resource_control.py` (áp hạn mức), và **chèn unrestrict trước bước này**.
-* Xác định nguồn metric (`nvidia-smi`, log nội bộ) để watchdog nền phát hiện giới hạn ẩn.
+* Đảm bảo container có quyền truy cập GPU (\[device passthrough] (truyền thiết bị – gắn GPU vào container)).
+* Cần sẵn \[NVML] (thư viện quản lý GPU) / `nvidia-smi` trong image để đo lường.
+* Log/metrics nên đi kèm **timestamp** và **thread id** để truy vết.
+

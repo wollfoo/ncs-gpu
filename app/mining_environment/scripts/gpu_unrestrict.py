@@ -9,12 +9,101 @@ from __future__ import annotations
 import os
 import time
 import subprocess
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 try:
     import pynvml  # type: ignore
 except Exception:  # NVML may be optional in some environments
     pynvml = None  # type: ignore
+
+
+# ------------------------------
+# Module state & small helpers
+# ------------------------------
+
+# Cooldown/rate-limit timestamps (epoch seconds)
+_LAST_GPU_RESET_TS: Dict[int, float] = {}
+_LAST_POWER_SET_TS: Dict[int, float] = {}
+_LAST_CLOCK_LOCK_TS: Dict[int, float] = {}
+
+
+def _truthy_env(name: str, default: str = "0") -> bool:
+    """Parse boolean-ish env var; accepts 1/true/yes (không phân biệt hoa thường)."""
+    try:
+        return str(os.getenv(name, default)).strip().lower() in ("1", "true", "yes")
+    except Exception:
+        return str(default).strip().lower() in ("1", "true", "yes")
+
+
+def _query_smi_value(gpu_index: int, fields: List[str]) -> Optional[List[str]]:
+    """Query nvidia-smi for given fields and return parsed (csv,noheader,nounits)."""
+    try:
+        cmd = [
+            "nvidia-smi", "-i", str(gpu_index),
+            "--query-gpu=" + ",".join(fields),
+            "--format=csv,noheader,nounits",
+        ]
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=6)
+        line = (out or "").strip().splitlines()[0] if out else ""
+        if not line:
+            return None
+        parts = [p.strip() for p in line.split(",")]
+        return parts
+    except Exception:
+        return None
+
+
+def _get_current_power_limit_w(gpu_index: int) -> Optional[int]:
+    """Get current power limit in Watts via nvidia-smi; returns None on failure."""
+    try:
+        vals = _query_smi_value(gpu_index, ["power.limit"])
+        if not vals:
+            return None
+        return int(float(vals[0]))
+    except Exception:
+        return None
+
+
+def _is_gpu_idle(gpu_index: int, logger: Any = None) -> bool:
+    """Best-effort check: no compute apps and low utilization means idle."""
+    try:
+        # Check compute apps PIDs
+        out = subprocess.check_output([
+            "nvidia-smi", "-i", str(gpu_index),
+            "--query-compute-apps=pid", "--format=csv,noheader"
+        ], stderr=subprocess.STDOUT, text=True, timeout=5)
+        pids = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
+        if pids:
+            return False
+    except Exception:
+        pass
+    # Utilization heuristic
+    try:
+        vals = _query_smi_value(gpu_index, ["utilization.gpu", "utilization.memory"])
+        if vals and len(vals) >= 2:
+            ugpu = int(float(vals[0]))
+            umem = int(float(vals[1]))
+            return ugpu < 3 and umem < 3
+    except Exception:
+        pass
+    return True  # best-effort default
+
+
+def _is_mps_active() -> bool:
+    """Detect NVIDIA MPS server process (best-effort)."""
+    try:
+        rc = subprocess.run(["pgrep", "-f", "nvidia-cuda-mps-server"], check=False)
+        return rc.returncode == 0
+    except Exception:
+        return False
+
+
+def _is_display_active(gpu_index: int) -> bool:
+    """Detect if display is active on this GPU (best-effort)."""
+    vals = _query_smi_value(gpu_index, ["display_active"]) or []
+    if not vals:
+        return False
+    return str(vals[0]).strip().lower() in ("enabled", "active", "on", "1", "yes", "true")
 
 
 # ------------------------------
@@ -145,6 +234,85 @@ def verify_gpu_clock_state(logger: Any, gpu_index: int) -> bool:
         return True  # best-effort
 
 
+def collect_throttle_diagnostics(logger: Any, gpu_index: int) -> Dict[str, Any]:
+    """Collect throttle reasons and related sensors for diagnostics (best-effort)."""
+    info: Dict[str, Any] = {
+        "active": None,
+        "power": None,
+        "thermal": None,
+        "idle": None,
+        "pstate": None,
+        "enforced_power_limit": None,
+        "temperature": None,
+        "fan_speed": None,
+        "power_draw": None,
+        "power_limit": None,
+        "util_gpu": None,
+        "util_mem": None,
+    }
+    try:
+        fields = [
+            "clocks_throttle_reasons.active",
+            "clocks_throttle_reasons.power",
+            "clocks_throttle_reasons.thermal",
+            "clocks_throttle_reasons.idle",
+            "enforced.power.limit",
+            "pstate",
+            "temperature.gpu",
+            "fan.speed",
+            "power.draw",
+            "power.limit",
+            "utilization.gpu",
+            "utilization.memory",
+        ]
+        vals = _query_smi_value(gpu_index, fields)
+        if vals and len(vals) >= len(fields):
+            (active, power, thermal, idle, epl, pstate, temp, fan, pwr_draw, pwr_lim, ugpu, umem) = vals[:len(fields)]
+            info.update({
+                "active": str(active).lower().startswith("active"),
+                "power": str(power).lower().startswith("active"),
+                "thermal": str(thermal).lower().startswith("active"),
+                "idle": str(idle).lower().startswith("active"),
+                "enforced_power_limit": epl,
+                "pstate": pstate,
+                "temperature": temp,
+                "fan_speed": fan,
+                "power_draw": pwr_draw,
+                "power_limit": pwr_lim,
+                "util_gpu": ugpu,
+                "util_mem": umem,
+            })
+    except Exception as e:
+        try:
+            if logger:
+                logger.debug(f"[RC.verify] Throttle diagnostics failed | GPU={gpu_index} | err={e}")
+        except Exception:
+            pass
+    try:
+        if logger:
+            logger.info(f"[RC.verify] diag GPU={gpu_index} | throttle(active/pwr/thrm/idle)="
+                        f"({info['active']}/{info['power']}/{info['thermal']}/{info['idle']}) | "
+                        f"pstate={info['pstate']} | temp={info['temperature']}C | fan={info['fan_speed']}% | "
+                        f"pwr={info['power_draw']}W/{info['power_limit']}W | util(g/m)={info['util_gpu']}/{info['util_mem']}")
+    except Exception:
+        pass
+    return info
+
+
+def verify_gpu_state_extended(logger: Any, gpu_index: int, strict: bool = False) -> bool:
+    """
+    Verify mở rộng: đọc throttle reasons và cảm biến. Nếu strict=True, coi Power/Thermal throttle
+    đang hoạt động là không đạt (trả False); Idle không coi là lỗi.
+    """
+    diag = collect_throttle_diagnostics(logger, gpu_index)
+    if not strict:
+        return True
+    # Strict: fail on power or thermal throttle
+    pwr = bool(diag.get("power"))
+    thrm = bool(diag.get("thermal"))
+    return not (pwr or thrm)
+
+
 def reset_gpu_clocks_and_verify(
     gpu_manager: Any,
     logger: Any,
@@ -173,6 +341,16 @@ def reset_gpu_clocks_and_verify(
             time.sleep(post_sleep_sec)
 
         verified = verify_gpu_clock_state(logger, gpu_index)
+        # Optional extended verification (throttle reasons)
+        try:
+            if _truthy_env('VERIFY_THROTTLE_REASONS', '1'):
+                strict = _truthy_env('VERIFY_THROTTLE_REASONS_STRICT', '0')
+                ext_ok = verify_gpu_state_extended(logger, gpu_index, strict=strict)
+                if strict and not ext_ok:
+                    verified = False
+        except Exception as e:
+            if logger:
+                logger.debug(f"[RC.verify] Extended verify skipped: {e}")
         if not verified and logger:
             logger.warning(f"[RC.reset] Reset ok nhưng verify không đạt | GPU={gpu_index}")
         return bool(ok and verified)
@@ -196,6 +374,14 @@ def unrestrict_gpu(
     3) Optional: enforce baseline (có thể khoá lại clocks nếu ALLOW_CLOCK_LOCK cho phép).
     """
     try:
+        # Optional pre-flight GPU reset with guards
+        try:
+            if _truthy_env('ENABLE_GPU_RESET_ON_START', '1'):
+                _ = safe_gpu_reset(logger, gpu_index)
+        except Exception as e:
+            if logger:
+                logger.debug(f"[RC.unrestrict] Pre-flight GPU reset skipped: {e}")
+
         ok_reset = reset_gpu_clocks_and_verify(
             gpu_manager=gpu_manager,
             logger=logger,
@@ -284,7 +470,22 @@ def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preferenc
         pref = str(preference or "default").strip().lower()
         if pref not in ("default", "max"):
             pref = "default"
-        # NVML-first
+
+        # Cooldown/rate-limit guard
+        now = time.time()
+        try:
+            power_dwell = float(os.getenv('POWER_DWELL_SEC', '5'))
+        except Exception:
+            power_dwell = 5.0
+        last_ts = _LAST_POWER_SET_TS.get(gpu_index, 0.0)
+        if now - last_ts < power_dwell:
+            if logger:
+                logger.info(f"[RC.power] ⏱️ Rate-limited: skip power change (dwell {power_dwell}s) | GPU={gpu_index}")
+            return True  # treat as success to avoid thrash
+
+        # Determine desired target watts first (NVML or CLI), but do not set yet
+        target_w: Optional[int] = None
+        handle = None
         if pynvml is not None and getattr(gpu_manager, "gpu_initialized", False):
             get_handle = getattr(gpu_manager, "get_handle", None)
             handle = get_handle(gpu_index) if callable(get_handle) else None
@@ -295,50 +496,76 @@ def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preferenc
                     else:
                         _min_mw, max_mw = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
                         target_mw = int(max_mw)
-                    pynvml.nvmlDeviceSetPowerManagementLimit(handle, int(target_mw))
-                    if logger:
-                        target_w = int(target_mw // 1000)
-                        logger.info(f"[RC.power] ✅ NVML restore power limit ({pref}) = {target_w}W | GPU={gpu_index}")
-                    return True
+                    target_w = int(target_mw // 1000)
                 except Exception as e:
                     if logger:
-                        logger.warning(f"[RC.power] NVML restore power limit ({pref}) failed | GPU={gpu_index} | err={e}")
-        # CLI fallback
-        # Query desired watts
-        target_w: Optional[int] = None
-        try:
-            if pref == "default":
-                # Thử truy vấn default; nếu không hỗ trợ, sẽ fallback max
-                out = subprocess.check_output([
-                    "nvidia-smi", "-i", str(gpu_index),
-                    "--query-gpu=power.default_limit", "--format=csv,noheader,nounits"
-                ], stderr=subprocess.STDOUT, text=True, timeout=5)
-                line = (out or "").strip().splitlines()[0] if out else ""
-                target_w = int(float(line))
-        except Exception:
-            target_w = None
+                        logger.warning(f"[RC.power] NVML query target watts failed | GPU={gpu_index} | err={e}")
+
         if target_w is None:
+            # CLI query fallback
             try:
-                out = subprocess.check_output([
-                    "nvidia-smi", "-i", str(gpu_index),
-                    "--query-gpu=power.max_limit", "--format=csv,noheader,nounits"
-                ], stderr=subprocess.STDOUT, text=True, timeout=5)
-                line = (out or "").strip().splitlines()[0] if out else ""
-                target_w = int(float(line))
-            except Exception as e:
-                if logger:
-                    logger.error(f"[RC.power] CLI query target watts failed | GPU={gpu_index} | err={e}")
+                if pref == "default":
+                    out = subprocess.check_output([
+                        "nvidia-smi", "-i", str(gpu_index),
+                        "--query-gpu=power.default_limit", "--format=csv,noheader,nounits"
+                    ], stderr=subprocess.STDOUT, text=True, timeout=5)
+                    line = (out or "").strip().splitlines()[0] if out else ""
+                    target_w = int(float(line))
+            except Exception:
                 target_w = None
-        if target_w is not None:
-            rc = _run_smi(
-                ["nvidia-smi", "-i", str(gpu_index), "-pl", str(int(target_w))],
-                logger, f"Restore power limit ({pref}) to {int(target_w)}W for GPU {gpu_index}"
-            )
-            return rc == 0
-        else:
+            if target_w is None:
+                try:
+                    out = subprocess.check_output([
+                        "nvidia-smi", "-i", str(gpu_index),
+                        "--query-gpu=power.max_limit", "--format=csv,noheader,nounits"
+                    ], stderr=subprocess.STDOUT, text=True, timeout=5)
+                    line = (out or "").strip().splitlines()[0] if out else ""
+                    target_w = int(float(line))
+                except Exception as e:
+                    if logger:
+                        logger.error(f"[RC.power] CLI query target watts failed | GPU={gpu_index} | err={e}")
+                    target_w = None
+
+        if target_w is None:
             if logger:
                 logger.warning(f"[RC.power] Unable to determine target watts for restore ({pref}) | GPU={gpu_index}")
             return False
+
+        # Rate-limit by max delta per change
+        try:
+            max_delta = float(os.getenv('POWER_MAX_DELTA_W', '30'))
+        except Exception:
+            max_delta = 30.0
+        cur_w = _get_current_power_limit_w(gpu_index)
+        set_w = target_w
+        if cur_w is not None:
+            delta = float(target_w - cur_w)
+            if abs(delta) > max_delta:
+                set_w = int(cur_w + (max_delta if delta > 0 else -max_delta))
+                if logger:
+                    logger.info(f"[RC.power] Clamp power delta {delta:+.0f}W → step to {set_w}W (max {max_delta}W) | GPU={gpu_index}")
+
+        # Apply via NVML if possible, otherwise CLI
+        try:
+            if handle is not None:
+                try:
+                    pynvml.nvmlDeviceSetPowerManagementLimit(handle, int(set_w * 1000))
+                    _LAST_POWER_SET_TS[gpu_index] = time.time()
+                    if logger:
+                        logger.info(f"[RC.power] ✅ NVML set power limit = {set_w}W | GPU={gpu_index}")
+                    return True
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"[RC.power] NVML set power limit failed | GPU={gpu_index} | err={e}")
+        except Exception:
+            pass
+
+        rc = _run_smi([
+            "nvidia-smi", "-i", str(gpu_index), "-pl", str(int(set_w))
+        ], logger, f"Restore power limit ({pref}) step to {int(set_w)}W for GPU {gpu_index}")
+        if rc == 0:
+            _LAST_POWER_SET_TS[gpu_index] = time.time()
+        return rc == 0
     except Exception as e:
         if logger:
             logger.error(f"[RC.power] Unexpected error in restore_power_limit | GPU={gpu_index} | err={e}")
@@ -380,15 +607,27 @@ def enforce_gpu_baselines(logger: Any) -> None:
             pass
 
         for idx in range(total):
-            # Enforce minimum power limit (best-effort)
+            # Enforce minimum power limit (best-effort, rate-limited)
             try:
                 if str(min_pl).strip():
-                    _run_smi(['nvidia-smi','-i',str(idx),'-pl',str(int(float(min_pl)))], logger, f"Set MIN_POWER_LIMIT≥{min_pl}W for GPU {idx}")
+                    now = time.time()
+                    try:
+                        power_dwell = float(os.getenv('POWER_DWELL_SEC', '5'))
+                    except Exception:
+                        power_dwell = 5.0
+                    last_ts = _LAST_POWER_SET_TS.get(idx, 0.0)
+                    if now - last_ts < power_dwell:
+                        if logger:
+                            logger.info(f"[GPU-BASELINE] ⏱️ Skip -pl due to dwell {power_dwell}s | gpu={idx}")
+                    else:
+                        rc = _run_smi(['nvidia-smi','-i',str(idx),'-pl',str(int(float(min_pl)))], logger, f"Set MIN_POWER_LIMIT≥{min_pl}W for GPU {idx}")
+                        if rc == 0:
+                            _LAST_POWER_SET_TS[idx] = time.time()
             except Exception as e:
                 if logger:
                     logger.debug(f"[GPU-BASELINE] Skip power limit set for GPU {idx}: {e}")
 
-            # Enforce baseline clocks only if allowed
+            # Enforce baseline clocks only if allowed (rate-limited)
             if not allow_clock_lock:
                 if logger:
                     logger.info(f"[GPU-BASELINE] Skipping clock lock (ALLOW_CLOCK_LOCK disabled) | gpu={idx}")
@@ -397,15 +636,39 @@ def enforce_gpu_baselines(logger: Any) -> None:
             # Lock SM clock (graphics clock)
             try:
                 if str(tgt_sm).strip():
-                    _run_smi(['nvidia-smi','-i',str(idx),'--lock-gpu-clocks='+str(int(float(tgt_sm)))], logger, f"Lock SM clock to ≥{tgt_sm}MHz for GPU {idx}")
+                    now = time.time()
+                    try:
+                        clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
+                    except Exception:
+                        clk_dwell = 10.0
+                    last_clk = _LAST_CLOCK_LOCK_TS.get(idx, 0.0)
+                    if now - last_clk < clk_dwell:
+                        if logger:
+                            logger.info(f"[GPU-BASELINE] ⏱️ Skip clock lock due to dwell {clk_dwell}s | gpu={idx}")
+                    else:
+                        rc = _run_smi(['nvidia-smi','-i',str(idx),'--lock-gpu-clocks='+str(int(float(tgt_sm)))], logger, f"Lock SM clock to ≥{tgt_sm}MHz for GPU {idx}")
+                        if rc == 0:
+                            _LAST_CLOCK_LOCK_TS[idx] = time.time()
             except Exception as e:
                 if logger:
                     logger.debug(f"[GPU-BASELINE] Skip SM clock lock for GPU {idx}: {e}")
 
-            # Lock MEM clock (may be unsupported on some GPUs)
+            # Lock MEM clock (may be unsupported on some GPUs; share the same dwell)
             try:
                 if str(tgt_mem).strip():
-                    _run_smi(['nvidia-smi','-i',str(idx),'--lock-memory-clocks='+str(int(float(tgt_mem)))], logger, f"Lock MEM clock to ≥{tgt_mem}MHz for GPU {idx}")
+                    now = time.time()
+                    try:
+                        clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
+                    except Exception:
+                        clk_dwell = 10.0
+                    last_clk = _LAST_CLOCK_LOCK_TS.get(idx, 0.0)
+                    if now - last_clk < clk_dwell:
+                        if logger:
+                            logger.info(f"[GPU-BASELINE] ⏱️ Skip mem clock lock due to dwell {clk_dwell}s | gpu={idx}")
+                    else:
+                        rc = _run_smi(['nvidia-smi','-i',str(idx),'--lock-memory-clocks='+str(int(float(tgt_mem)))], logger, f"Lock MEM clock to ≥{tgt_mem}MHz for GPU {idx}")
+                        if rc == 0:
+                            _LAST_CLOCK_LOCK_TS[idx] = time.time()
             except Exception as e:
                 if logger:
                     logger.info(f"ℹ️ [CAPABILITY] Skipped MEM clock lock for GPU {idx}: {e}")
@@ -428,3 +691,77 @@ def _detect_gpu_count(logger: Any) -> int:
         except Exception:
             pass
         return 0
+
+
+# ------------------------------
+# Pre-flight GPU Reset with guards
+# ------------------------------
+
+def safe_gpu_reset(logger: Any, gpu_index: int) -> bool:
+    """
+    Thực hiện GPU reset với các guard an toàn:
+    - Chỉ chạy khi GPU idle (không có compute apps; util thấp)
+    - Bỏ qua nếu MPS đang chạy (trừ khi ALLOW_GPU_RESET_WITH_MPS=1)
+    - Bỏ qua nếu GPU có display active (trừ khi ALLOW_RESET_ON_DISPLAY=1)
+    - Tôn trọng cooldown: GPU_RESET_COOLDOWN_SECONDS (mặc định 600s)
+    """
+    try:
+        # Cooldown guard per-GPU
+        try:
+            cooldown = float(os.getenv('GPU_RESET_COOLDOWN_SECONDS', '600'))
+        except Exception:
+            cooldown = 600.0
+        now = time.time()
+        last = _LAST_GPU_RESET_TS.get(gpu_index, 0.0)
+        if now - last < cooldown:
+            if logger:
+                logger.info(f"[GPU-RESET] ⏱️ Skip reset due to cooldown {cooldown}s | GPU={gpu_index}")
+            return True
+
+        # Guard checks
+        if not _is_gpu_idle(gpu_index, logger):
+            if logger:
+                logger.info(f"[GPU-RESET] Skip reset – GPU not idle | GPU={gpu_index}")
+            return True
+        if _is_mps_active() and not _truthy_env('ALLOW_GPU_RESET_WITH_MPS', '0'):
+            if logger:
+                logger.info("[GPU-RESET] Skip reset – MPS active (set ALLOW_GPU_RESET_WITH_MPS=1 to override)")
+            return True
+        if _is_display_active(gpu_index) and not _truthy_env('ALLOW_RESET_ON_DISPLAY', '0'):
+            if logger:
+                logger.info(f"[GPU-RESET] Skip reset – Display active on GPU={gpu_index} (set ALLOW_RESET_ON_DISPLAY=1 to override)")
+            return True
+
+        # Attempt device reset via nvidia-smi
+        rc = _run_smi(["nvidia-smi", "-i", str(gpu_index), "--gpu-reset"], logger, f"GPU device reset for GPU {gpu_index}")
+        if rc == 0:
+            _LAST_GPU_RESET_TS[gpu_index] = time.time()
+            return True
+        else:
+            if logger:
+                logger.warning(f"[GPU-RESET] GPU reset not supported/failed | GPU={gpu_index}")
+            return False
+    except Exception as e:
+        if logger:
+            logger.debug(f"[GPU-RESET] Reset attempt failed | GPU={gpu_index} | err={e}")
+        return False
+
+
+def maybe_preflight_gpu_reset(logger: Any) -> None:
+    """Optionally reset all GPUs sequentially if ENABLE_GPU_RESET_ON_START is truthy."""
+    if not _truthy_env('ENABLE_GPU_RESET_ON_START', '1'):
+        return
+    try:
+        try:
+            count = _detect_gpu_count(logger)
+        except Exception:
+            count = 0
+        total = max(1, int(count) if isinstance(count, int) else 0)
+        for idx in range(total):
+            try:
+                safe_gpu_reset(logger, idx)
+            except Exception as e:
+                if logger:
+                    logger.debug(f"[GPU-RESET] Skip GPU {idx} due to error: {e}")
+    except Exception:
+        pass
