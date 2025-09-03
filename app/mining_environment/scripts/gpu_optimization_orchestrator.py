@@ -20,6 +20,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 import threading
+import queue
 
 # **Import core modules** (nhập module lõi)
 try:
@@ -208,6 +209,33 @@ class GPUOptimizationOrchestrator:
 
         # Load interval choices from ENV (supports per-tier override or full JSON)
         self._interval_choices: List[Optional[Tuple[int, int]]] = self._load_interval_choices_from_env()
+        
+        # ===== Unrestrict Supervisor (daemon) =====
+        # Read-only monitor that enqueues intents for single-writer sections in the per-GPU loop
+        try:
+            # Per-GPU command queues and last enqueue timestamps (to avoid flooding)
+            self._hw_cmd_queues = {}
+            self._last_supervisor_enqueue_ts = {}
+            # Stop signal and thread handle
+            self._unrestrict_supervisor_stop = threading.Event()
+            self._unrestrict_supervisor_thread = None
+            if str(os.getenv('UNRESTRICT_SUPERVISOR_ENABLED', '1')).lower() in ('1', 'true', 'yes'):
+                t = threading.Thread(
+                    target=self._unrestrict_supervisor_loop,
+                    name='UnrestrictSupervisor',
+                    daemon=True,
+                )
+                self._unrestrict_supervisor_thread = t
+                t.start()
+                try:
+                    self.logger.info("[Supervisor] UnrestrictSupervisor started")
+                except Exception:
+                    pass
+        except Exception as _se:
+            try:
+                self.logger.debug(f"[Supervisor] start failed: {_se}")
+            except Exception:
+                pass
     
     @trace_all
     @trace_all
@@ -485,6 +513,80 @@ class GPUOptimizationOrchestrator:
                 pass
             return None
 
+    def _get_hw_cmd_queue(self, gidx: int):
+        """Get or create a thread-safe command queue for a GPU index."""
+        try:
+            q = self._hw_cmd_queues.get(gidx)
+        except Exception:
+            self._hw_cmd_queues = {}
+            q = None
+        if q is None:
+            q = queue.Queue()
+            self._hw_cmd_queues[gidx] = q
+        return q
+
+    def _unrestrict_supervisor_loop(self) -> None:
+        """Background monitor: verify GPU state and enqueue unrestrict intents (read-only path)."""
+        try:
+            base_interval = float(os.getenv('UNRESTRICT_SUP_INTERVAL_SEC', '10'))
+        except Exception:
+            base_interval = 10.0
+        while not getattr(self, '_unrestrict_supervisor_stop', threading.Event()).is_set():
+            try:
+                # Determine GPU indices to scan
+                try:
+                    indices = self._get_available_gpu_indices()
+                    if not indices:
+                        indices = [0]
+                except Exception:
+                    indices = [0]
+                for gidx in list(indices):
+                    # Verify clock state; if locked or forced, enqueue an unrestrict intent
+                    try:
+                        unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                    except Exception:
+                        unlocked = False
+                    always = str(os.getenv('UNRESTRICT_SUPERVISOR_ALWAYS', '0')).lower() in ('1', 'true', 'yes')
+                    if (not unlocked) or always:
+                        now = time.time()
+                        try:
+                            dwell = float(os.getenv('UNRESTRICT_SUPERVISOR_DWELL_SEC', '10'))
+                        except Exception:
+                            dwell = 10.0
+                        last = self._last_supervisor_enqueue_ts.get(gidx, 0.0)
+                        if now - last >= dwell:
+                            q = self._get_hw_cmd_queue(gidx)
+                            try:
+                                power_pref = str(os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default'))
+                                post_sleep = float(os.getenv('UNRESTRICT_POST_SLEEP_SEC', '0.2'))
+                            except Exception:
+                                post_sleep = None
+                                power_pref = str(os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default'))
+                            enforce_baseline = str(os.getenv('UNRESTRICT_ENFORCE_BASELINE', '0')).lower() in ('1', 'true', 'yes')
+                            q.put({
+                                'type': 'unrestrict',
+                                'power_preference': power_pref,
+                                'post_sleep_sec': post_sleep,
+                                'enforce_baseline': enforce_baseline,
+                            })
+                            self._last_supervisor_enqueue_ts[gidx] = now
+                            try:
+                                self.logger.info(f"[Supervisor] Enqueued unrestrict command | gpu={gidx}")
+                            except Exception:
+                                pass
+            except Exception as e:
+                try:
+                    self.logger.debug(f"[Supervisor] loop error: {e}")
+                except Exception:
+                    pass
+            # Sleep with small jitter to avoid phase alignment
+            try:
+                jitter = 0.1
+                sleep_sec = base_interval * (1.0 + (random.random() - 0.5) * jitter)
+            except Exception:
+                sleep_sec = base_interval
+            getattr(self, '_unrestrict_supervisor_stop', threading.Event()).wait(timeout=max(0.5, min(30.0, sleep_sec)))
+
     @profile_function(track_memory=True)
     @trace_all
     def optimize_gpu_for_process(self, 
@@ -686,6 +788,19 @@ class GPUOptimizationOrchestrator:
                         if lock is None:
                             lock = threading.Lock()
                             self._hw_locks[gidx] = lock
+                        # Drain supervisor commands (if any); presence triggers unrestrict once under lock
+                        has_cmd = False
+                        try:
+                            q = self._hw_cmd_queues.get(gidx) if hasattr(self, '_hw_cmd_queues') else None
+                            if q is not None:
+                                while True:
+                                    try:
+                                        _cmd = q.get_nowait()
+                                        has_cmd = True
+                                    except queue.Empty:
+                                        break
+                        except Exception:
+                            pass
                         need_unrestrict = False
                         try:
                             unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
@@ -694,7 +809,7 @@ class GPUOptimizationOrchestrator:
                             # Best-effort: if verify fails, prefer attempting unrestrict guarded by its own dwell/cooldowns
                             need_unrestrict = True
                         always_unrestrict = str(os.getenv('UNRESTRICT_ALWAYS', '0')).lower() in ('1','true','yes')
-                        if need_unrestrict or always_unrestrict:
+                        if need_unrestrict or always_unrestrict or has_cmd:
                             with lock:
                                 grm = self._get_grm()
                                 power_pref = str(os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default'))
@@ -1280,6 +1395,16 @@ class GPUOptimizationOrchestrator:
                         pass
         except Exception as _e:
             self.logger.warning(f"⚠️ Error while stopping continuous loop: {_e}")
+        
+        # Stop unrestrict supervisor
+        try:
+            if hasattr(self, '_unrestrict_supervisor_stop'):
+                self._unrestrict_supervisor_stop.set()
+            t = getattr(self, '_unrestrict_supervisor_thread', None)
+            if t and t.is_alive():
+                t.join(timeout=5)
+        except Exception as _e:
+            self.logger.warning(f"⚠️ Error while stopping unrestrict supervisor: {_e}")
         
         # Stop coordinator
         if self.coordinator:
