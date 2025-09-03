@@ -188,16 +188,13 @@ class EnhancedLogManager:
         self._loggers: Dict[str, logging.Logger] = {}
         self._handlers: Dict[str, logging.Handler] = {}
         
-        # ✅ **LOG DIRECTORY** (thư mục log – nơi lưu nhật ký): **Centralized log location** (vị trí log tập trung – thư mục nhật ký chung)  
-        try:
-            self.log_dir = Path('/app/mining_environment/logs')
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-        except PermissionError:
-            # **Fallback** (dự phòng – phương án thay thế) sang **local directory** (thư mục cục bộ) nếu **/app** không **accessible** (truy cập được – có quyền vào)
-            self.log_dir = Path('./logs')
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            print(f"⚠️ [**EnhancedLogging** (ghi log nâng cao)] Sử dụng **fallback log directory** (thư mục log dự phòng – thư mục nhật ký thay thế): {self.log_dir.absolute()}")
-
+        # ✅ **LOG DIRECTORY** (thư mục log – nơi lưu nhật ký): **Centralized log location** (vị trí log tập trung – thư mục nhật ký chung)
+        # Ưu tiên thư mục logs tương đối theo vị trí module để dùng được cả trong container (/app/...) và môi trường local
+        # logging_config.py nằm tại .../app/mining_environment/scripts/logging_config.py → parents[1] = .../app/mining_environment
+        base_dir = Path(__file__).resolve().parents[1]
+        self.log_dir = base_dir / 'logs'
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        
         # ✅ **ENCRYPTION CONFIG** (cấu hình mã hoá – bật/tắt lớp mã hoá logging)
         self.encryption_enabled: bool = str(os.getenv('LOG_ENCRYPTION_ENABLED', '0')).lower() in ('1', 'true', 'yes')
         self.encryption_max_bytes: int = int(os.getenv('LOG_ENCRYPTION_MAX_MB', '50')) * 1024 * 1024
