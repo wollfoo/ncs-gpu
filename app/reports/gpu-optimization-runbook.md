@@ -27,7 +27,7 @@ Ngày: 2025-09-02 18:50:38Z
   5) Áp lại cấu hình tối thiểu: `-pm 1`, `-c EXCLUSIVE_PROCESS` (tùy chọn: `-pl`, `-ac` theo mục 11/4.3).
   6) Ghi log/xác minh: `date && nvidia-smi`, `nvidia-smi dmon -s pucmt -d 1 -c 3`.
   7) Cooldown: đóng dấu thời gian vào `GPU_RESET_STAMP_PATH`; bỏ qua nếu chưa đủ `GPU_RESET_COOLDOWN_MIN` phút.
-- Vị trí tích hợp: `app/entrypoint.sh` – hàm `preflight_gpu_reset()` được gọi __sau__ `check_gpu_environment` và __trước__ khởi động monitoring.
+- Vị trí tích hợp: `app/start_mining.py` – khối PRE-FLIGHT GPU hard reset được gọi ở đầu `main()` qua `perform_hard_gpu_reset(logger)` với gating bằng các event `GPU_RESET_COMPLETED`/`GPU_RESET_SUCCESS`; reset diễn ra đúng một lần khi khởi động.
 - Ví dụ cấu hình ENV:
   ```bash
   # Mặc định bật
