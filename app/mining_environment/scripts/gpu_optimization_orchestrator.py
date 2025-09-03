@@ -556,6 +556,20 @@ class GPUOptimizationOrchestrator:
                         last = self._last_supervisor_enqueue_ts.get(gidx, 0.0)
                         if now - last >= dwell:
                             q = self._get_hw_cmd_queue(gidx)
+                            # Enriched logging for enqueue intent
+                            try:
+                                th = threading.current_thread()
+                                th_name = getattr(th, 'name', 'unknown')
+                                th_id = threading.get_ident()
+                                ts_iso = datetime.now().isoformat()
+                                qsize_before = 0
+                                try:
+                                    qsize_before = int(q.qsize())
+                                except Exception:
+                                    qsize_before = 0
+                                self.logger.info(f"[Supervisor] intent prepare | ts={ts_iso} | thread={th_name}#{th_id} | gpu={gidx} | unlocked={unlocked} | qsize_before={qsize_before}")
+                            except Exception:
+                                pass
                             try:
                                 power_pref = str(os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default'))
                                 post_sleep = float(os.getenv('UNRESTRICT_POST_SLEEP_SEC', '0.2'))
@@ -571,7 +585,12 @@ class GPUOptimizationOrchestrator:
                             })
                             self._last_supervisor_enqueue_ts[gidx] = now
                             try:
-                                self.logger.info(f"[Supervisor] Enqueued unrestrict command | gpu={gidx}")
+                                qsize_after = 0
+                                try:
+                                    qsize_after = int(q.qsize())
+                                except Exception:
+                                    qsize_after = 0
+                                self.logger.info(f"[Supervisor] enqueued | ts={datetime.now().isoformat()} | thread={th_name}#{th_id} | gpu={gidx} | qsize_after={qsize_after} | power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep}")
                             except Exception:
                                 pass
             except Exception as e:
@@ -818,6 +837,25 @@ class GPUOptimizationOrchestrator:
                                 except Exception:
                                     post_sleep = None
                                 enforce_baseline = str(os.getenv('UNRESTRICT_ENFORCE_BASELINE', '0')).lower() in ('1','true','yes')
+                                # Pre/post verify + duration logging
+                                try:
+                                    th = threading.current_thread()
+                                    th_name = getattr(th, 'name', 'unknown')
+                                    th_id = threading.get_ident()
+                                except Exception:
+                                    th_name, th_id = 'unknown', -1
+                                ts_start = datetime.now().isoformat()
+                                t0 = time.time()
+                                try:
+                                    pre_unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                                except Exception:
+                                    pre_unlocked = False
+                                try:
+                                    self.logger.info(
+                                        f"[C-LOOP] unrestrict.begin | ts={ts_start} | thread={th_name}#{th_id} | gpu={gidx} | pre_unlocked={pre_unlocked} | power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep} | has_cmd={has_cmd}"
+                                    )
+                                except Exception:
+                                    pass
                                 ok_unr = bool(
                                     unrestrict_gpu(
                                         gpu_manager=grm,
@@ -828,6 +866,19 @@ class GPUOptimizationOrchestrator:
                                         enforce_baseline=enforce_baseline,
                                     )
                                 )
+                                t1 = time.time()
+                                ts_end = datetime.now().isoformat()
+                                dur = max(0.0, t1 - t0)
+                                try:
+                                    post_unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                                except Exception:
+                                    post_unlocked = False
+                                try:
+                                    self.logger.info(
+                                        f"[C-LOOP] unrestrict.end | ts={ts_end} | thread={th_name}#{th_id} | gpu={gidx} | ok={ok_unr} | duration={dur:.3f}s | pre_unlocked={pre_unlocked} | post_unlocked={post_unlocked}"
+                                    )
+                                except Exception:
+                                    pass
                                 if ok_unr:
                                     # Allow hardware state to settle; skip optimization this tick to avoid racing
                                     try:
