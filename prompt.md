@@ -183,21 +183,6 @@ Tái cấu trúc module `gpu_unrestrict.py` với các yêu cầu sau:
 
 
 
-đề xuất phương án tích hợp 
-module `gpu_unrestrict.py` vào hệ thống tối ưu gpu 
-mục tiêu : 
-- Trước khi các chức năng tối ưu gpu giới hạn tài nguyên thì chạy `gpu_unrestrict` để đưa trạng thái gpu về bình thường 
-- chạy module `gpu_unrestrict.py` ở một luồng riêng để kiểm tra liên tục để gỡ bỏ giới hạn tài nguyên gpu khi gpu bị giới hạn dưới mức thấp nhất
-- Hoạt động song song với hệ thống tối ưu gpu , đảm bảo gpu không bị giới hạn ẩn làm tụt hashrate nghiêm trọng 
-
-
-
-
-
-
-
-
-
 
 
 
