@@ -85,4 +85,19 @@ Get-Content -TotalCount 200 .\\path\\to\\file.txt
 - Dumping huge outputs without bounds; ignoring the 10KB/256-line cap.
 - Exposing secrets in logs or outputs.
 
+## Stop criteria
+- The immediate objective is achieved with bounded outputs and traceable evidence; or
+- The action would require network/out-of-workspace writes without explicit escalation/approval; or
+- More data/confirmation is required from the user to proceed safely.
+
+## Consistency & Precedence
+- Follow `rules/rule-precedence.md` (System > Developer > AGENTS > Domain).
+- Respect sequential-only tool calls per `rules/tool-calling-override.md`.
+- Align with `rules/context-gathering.md`, `rules/context-understanding.md`, `rules/tool-preambles.md`, and `rules/reasoning-effort.md`.
+
+## Data Safety & Privacy
+- Avoid printing PII and secrets; redact sensitive values in logs.
+- Minimize data exposure in outputs; cite only necessary `file:line`.
+- Comply with organizational policies and local regulations when handling data.
+
 </environment_profile>

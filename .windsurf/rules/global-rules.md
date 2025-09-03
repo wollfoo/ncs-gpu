@@ -1,5 +1,12 @@
 ---
-trigger: manual
+trigger: always_on
+---
+
+---
+type: capability_prompt
+scope: project
+priority: normal
+activation: always_on
 ---
 
 ## 🎯 GOLDEN RULES

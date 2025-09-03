@@ -3,10 +3,6 @@ trigger: always_on
 ---
 
 ---
-trigger: always_on
----
-
----
 type: capability_prompt
 scope: project
 priority: normal
@@ -17,6 +13,17 @@ activation: always_on
 
 <context_gathering>
 Goal: Get enough context fast. Sequence discovery step-by-step and stop as soon as you can act.
+
+Objective & Scope:
+- Objective: Gather just-enough context to act correctly with minimal latency.
+- Scope: Applies to discovery/reading phases across code and docs; emphasizes single-step, sequential tool calls.
+- Out of scope: Feature ideation beyond the request; multi-file edits; non-evidence-based assumptions.
+
+Principles:
+- Search depth: very low; prefer narrow, targeted reads.
+- Bias: provide a correct answer quickly even if not fully complete—report residual uncertainty.
+- Escape hatch: proceed under uncertainty when reasonable; explicitly report findings and next steps.
+- Preamble required before tool calls; concise final summary after.
 
 Method:
 - Start broad, then fan out to focused subqueries.
@@ -95,6 +102,18 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - Map dependencies from providers to consumers; note invariants and side effects.
   - Exit when you can name key modules/files for critical paths and outline the change plan.
 
+- Mini flow — Small discovery pass (≤ 2 tool calls):
+   1) Preamble & plan
+      - Restate the goal and acceptance; outline a sequential plan; commit to ≤ 2 tool calls.
+   2) Single narrow search
+      - Query for the target symbol in a scoped path; avoid repeats; select the top hit.
+   3) Read top hit
+      - Open the file around the symbol; cite evidence (e.g., `src/utils/math.ts:42`).
+   4) Early stop
+      - Stop once exact lines are known; record the next action (e.g., apply_patch) outside this discovery pass.
+   5) Summary
+      - Summarize findings, file:line, tool calls used, risks, and the next step.
+
 - Notes:
   - Prefer targeted, sequential reads over narrow, per-query grep passes (one at a time) while in this mode.
   - If time-constrained, complete overview + top critical modules (Pareto), then proceed to detailed passes.
@@ -118,6 +137,22 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
   - List of target files/symbols and the expected change scope.
   - Tool plan and call count used; note any budget exceedance and rationale.
 
+### Consistency & Precedence
+- Follow order: System > Developer > AGENTS > Domain.
+- Keep consistent with: `rules/global-rules.md`, `rules/tool-calling-override.md`, `rules/environment-profile.md`,
+  `rules/context-understanding.md`, `rules/reasoning-effort.md`, `rules/persistence.md`, `rules/memory_tool_usage_guide.md`.
+
+### Stop Criteria
+- Early stop once you can name exact file/symbol/lines to change.
+- Success metrics satisfied; citations present; ≤ 2 tool calls for a small pass; concise summary produced.
+
+### Decision Checklist
+- Restated objective and plan before any tool call?
+- ≤ 2 tool calls for this discovery pass (unless briefly justified)?
+- Cited `file:line` when referencing code/config?
+- Stopped early once actionable targets were found?
+- Documented residual uncertainty and next steps?
+
 ### Anti-patterns (context gathering)
 - Repeating the same grep/search with no new parameters or scope.
 - Opening multiple files at once or switching rapidly between modules.
@@ -125,18 +160,4 @@ Sequential codebase context analysis (overview-to-detail; sequential-only):
 - Exceeding the tool budget without reporting progress and rationale.
 - Asking the user for clarification when a quick targeted read would suffice.
 
-</context_gathering>
-
-<context_gathering>
-- Search depth: very low
-- Bias strongly towards providing a correct answer as quickly as possible, even if it might not be fully correct.
-- Escape hatch: you may proceed under uncertainty to accelerate progress—report findings and next steps explicitly.
-- Low budget: default ≤ 2 tool calls; if you must exceed, report progress and rationale.
-- One action per step: either call a tool or reply to the user; never both simultaneously.
-- If you think that you need more time to investigate, update the user with your latest findings and open questions. You can proceed if the user confirms.
-- Heuristics: prefer internal knowledge for small tasks or when exact changes can be identified without reading files; use tools for exact code context, cross-file dependencies, or uncertainty.
-- Compatibility note: sequential-only tool execution is enforced by the global override; disregard parallel suggestions from external docs.
-- Success metrics: budget respected, specific target files/symbols named, actionable next step identified.
-- Anti-patterns: repeating the same search, opening multiple files at once, providing assertions without evidence, exceeding the tool budget without reporting, asking for clarification when a quick read would suffice.
-- Evidence citation: cite file:line when referencing code or configuration.
 </context_gathering>

@@ -32,6 +32,7 @@ References:
 ## Constraints
 - Avoid verbosity; keep it concise yet complete.
 - Follow sequential-only tool flow.
+- One action per step: either call a tool or reply to the user; never both simultaneously.
 
 ## Deliverables
 - Vietnamese response with brief explanations for any English terms that appear.

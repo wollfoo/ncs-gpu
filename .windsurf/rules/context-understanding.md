@@ -3,15 +3,12 @@ trigger: always_on
 ---
 
 ---
-trigger: always_on
----
-
----
 type: capability_prompt
 scope: project
 priority: normal
 activation: always_on
 ---
+
 # CONTEXT UNDERSTANDING – BALANCED THOROUGHNESS
 
 <context_understanding>

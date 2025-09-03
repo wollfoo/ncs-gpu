@@ -1,7 +1,11 @@
 ---
 alwaysApply: true
 ---
-
+---
+description: 
+globs: 
+alwaysApply: true
+---
 # Memory Tool Usage Guide
 
 ## ⚠️ CRITICAL: MEMORY TOOLS ARE MANDATORY ⚠️
@@ -26,6 +30,23 @@ KEY TRIGGER PHRASES requiring immediate `search_keys` or `search_memory`:
 
 ## Overview
 This guide explains how to effectively use the memory tools for storing, retrieving, and utilizing conversation context in agent mode.
+
+### Execution Directives (delta)
+- Inherits from `rules/global-rules.md` (Instruction hierarchy & Global execution directives); this section only lists deltas specific to Memory Tools.
+- Delta specifics:
+  - Search when context might be missing; stop early once you can act (early stop).
+  - Prefer update over create to avoid duplicates; check existing memories first.
+  - Never store full conversations or secrets/PII; store concise summaries with key facts only.
+  - Include `Title`, `Tags`, `CorpusNames`, and clear `Content`; set `UserTriggered=true` only if the user explicitly asked you to store.
+  - Cite evidence (`file:line`) inside stored content when applicable.
+  - Respect tool budget ≤ 2 for search/store per small task; if exceeded, briefly report rationale.
+
+### Tool Mapping (this repo)
+- Search memories: `mcp2_search_nodes` (semantic search in the knowledge graph).
+- Open specific memories/nodes: `mcp2_open_nodes`.
+- Read entire graph: `mcp2_read_graph`.
+- Create/Update/Delete memory: `create_memory` (Action: `create` | `update` | `delete`; requires exact `CorpusNames`, `Title`, `Content`; optional `Tags`, `Id`; `UserTriggered` flag).
+- Advanced graph ops: `mcp2_add_observations`, `mcp2_create_entities`, `mcp2_create_relations`, `mcp2_delete_*` when needed.
 
 ## Memory Operations
 
@@ -121,11 +142,58 @@ Integrate memory seamlessly:
 - Incorporate context naturally in your response
 - Use memory to enhance responses without distracting
 
-## Example Workflow
+## Success Metrics
+- 100% of tasks with missing context include ≥1 memory search before the final answer.
+- ≤ 2 memory-tool calls (search/store) per small task; if exceeded, briefly report rationale.
+- 0 storage of PII/secrets; redact sensitive data proactively (tokens, passwords, access keys, email/phone, addresses).
+- 100% stored items include `Title`, `Tags`, `CorpusNames`, concise `Content`; `UserTriggered=true` only when the USER explicitly asks to store.
+- ≤ 1 duplicate per 50 stored items; prefer `update` over `create` when semantically related memory exists.
+- Evidence citations (`file:line`) present when referencing repository artifacts.
+- Retrieval helpfulness: subsequent search hit-rate for stored items within the session ≥ 0.8.
 
-1. User asks a question
-2. EVALUATE if you might need additional context to answer properly
-3. IF IN DOUBT, SEARCH memory for relevant context using `search_keys` or `search_memory`
+## Anti-patterns
+- Storing full conversations verbatim or raw logs.
+- Saving secrets/tokens or PII; storing URLs with query strings containing identifiers.
+- Creating multiple near-duplicates instead of updating existing memory.
+- Vague, opinionated, or non-actionable memory content.
+- Using `create_memory` without checking for existing related memories first.
+- Setting `UserTriggered=true` without explicit user instruction.
+- Omitting `CorpusNames`/`Tags`, making retrieval difficult.
+- Ignoring tool budget and running long memory operations mid-critical path without rationale.
+
+## Examples (Good/Bad)
+- Good: After updating `rules/context-understanding.md` with a boilerplate delta, store a concise summary with file evidence.
+  - Title: "Updated context-understanding rule — boilerplate delta"
+  - Tags: ["rules", "context-understanding", "delta", "success-metrics"]
+  - CorpusNames: ["/rules/"]
+  - Content: 2–4 bullets summarizing what changed and why, with citations like `rules/context-understanding.md:34-65`.
+- Bad: "Saved conversation transcript"; or storing raw token/secret; or duplicating an existing summary without new info.
+
+## Consistency & Precedence
+- Inherit instruction hierarchy from `rules/global-rules.md`. Sequential-only tool execution; low tool budget (≤ 2) for small tasks; evidence citation (`file:line`).
+- Default `reasoning_effort` for this repo: high. You may switch to medium/minimal for latency-sensitive steps, but keep early-stop + escape-hatch and success metrics.
+- Tool preambles: keep brief and structured — plan, action, summary — per `global-rules.md` guidance.
+
+## Data Safety & Privacy
+- Redaction-first: never store tokens, passwords, API keys, access URLs with embedded credentials, customer PII. Prefer summaries; if needed, store non-reversible identifiers (hash with salt) instead of raw.
+- Consent gating: set `UserTriggered=true` only when the USER explicitly requests persistence.
+- Minimization: store the least amount of data required to be useful; avoid copying user content unless necessary for retrieval.
+- Retention hygiene: delete incorrect/outdated memories; prefer `update` over `create` for corrections.
+- Multi-tenant hygiene: scope via `project_name` and `session_name` to avoid cross-user contamination.
+
+## Triggers (Consolidated)
+- Integration mentions ("integrate with ...").
+- References to previous work ("I added X, now we need to ...").
+- Mentions of specific systems without context.
+- Requests that continue prior tasks or mention recent discussions.
+- Handoffs from prior sessions ("continue from yesterday", "resume").
+- Requests to summarize previous decisions or outputs.
+
+## Example Workflow
+  
+  1. User asks a question
+  2. EVALUATE if you might need additional context to answer properly
+  3. IF IN DOUBT, SEARCH memory for relevant context using `search_keys` or `search_memory`
 4. Process user request with available context
 5. Formulate response
 6. EVALUATE if response contains NEW information worth storing

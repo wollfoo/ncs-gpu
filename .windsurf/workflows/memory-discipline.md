@@ -25,6 +25,10 @@ References:
 5) Naming:
    - Follow the schema: project_name/session_name/sequence + metadata (when appropriate).
 
+## Constraints
+- Sequential-only: one tool call per step when performing memory lookup/store.
+- One action per step: either call a tool or reply to the user; never both simultaneously.
+
 ## Stop criteria
 - You have performed a lookup when context might be missing.
 - You store only when there is new value; standard naming; no duplication.

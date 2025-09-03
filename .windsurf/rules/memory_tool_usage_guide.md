@@ -3,9 +3,6 @@ trigger: always_on
 ---
 
 ---
-alwaysApply: true
----
----
 description: 
 globs: 
 alwaysApply: true

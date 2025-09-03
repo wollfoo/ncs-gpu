@@ -2,6 +2,13 @@
 trigger: always_on
 ---
 
+---
+type: capability_prompt
+scope: project
+priority: normal
+activation: always_on
+---
+
 # Working Principles and Guidelines
 
 ## Introduction
@@ -121,7 +128,74 @@ This is the ultimate principle of caution and verification, with the core mindse
 -   **Check environment variables**: Use `env` or `echo "$VAR_NAME"` to confirm that environment variables are set correctly before running scripts that depend on them.
 -   **Check tool versions**: Run `tool --version` (e.g., `node --version`, `php --version`) to ensure you are using the required version.
 
+#### 5.3.1 Windows / PowerShell Equivalents
+
+- Prefer ripgrep `rg` (high performance search) when available; otherwise use `Select-String`.
+- `ls` → `Get-ChildItem` (alias: `gci`).
+- `grep -r "pattern" .` → `rg "pattern"` or `Get-ChildItem -Recurse | Select-String -Pattern "pattern"`.
+- `pwd` → `Get-Location`.
+- `env` / `echo "$VAR_NAME"` → `$env:VAR_NAME` or `Get-ChildItem Env:`.
+- Permissions/Execution → `Get-ExecutionPolicy`, `Unblock-File`, `Set-ExecutionPolicy` (admin may be required).
+- Time → `Get-Date` (or use runtime-provided time source when mandated by the environment policy).
+
 ### 5.4. With Time
 
--   **Mandatory System Time Fetching**: Before logging any timestamp information (e.g., `Mod by...`, `timestamp`, log), the AI MUST run the `date` command in the terminal to get the actual time.
--   **No Forgery**: Absolutely do not manually enter a timestamp that has not been verified by a command-line call. This is considered forgery and is unacceptable.
+ -   **Mandatory System Time Source**: Before logging any timestamp information (e.g., `Mod by...`, `timestamp`, log), use an authoritative source: the runtime-provided time if mandated by environment policy; otherwise run `date`/`Get-Date` in the terminal to fetch the actual time.
+ -   **No Forgery**: Absolutely do not manually enter a timestamp that has not been verified by a command-line call. This is considered forgery and is unacceptable.
+
+---
+
+## Objective & Scope
+
+Define actionable principles that govern daily execution to maximize performance, quality, safety, and reproducibility. This rule operationalizes the five core principles into concrete steps compatible with the overall agent framework.
+
+## Execution Directives (delta)
+
+- Think Big, Do Baby Steps → Prefer smallest viable changes: small diffs, isolated hunks, short runs, bounded outputs.
+- Measure Twice, Cut Once → Read before edit; verify impact; dry-run if available; log assumptions; add guards.
+- Quantity & Order → Count inputs/outputs; process in dependency order: prerequisites → critical → Pareto 20% → simple.
+- Get It Working First → Make it work → make it right → make it fast; only optimize with data.
+- Always Double-Check → Validate pre/post-conditions; cite evidence with `path:line`; confirm environment constraints.
+- Windows/PowerShell compliance → Follow `rules/environment-profile.md`; set Cwd, avoid `cd`, keep outputs bounded.
+- Sequential-only execution → One tool per step; no tool+reply same step; see `rules/tool-calling-override.md`.
+
+## Workflow
+
+1) Frame objective, scope, constraints; define success/stop criteria.
+2) Plan by dependency and risk; choose the smallest next action.
+3) Observe → Act → Verify loop: read evidence; apply minimal change; validate; log next step.
+4) Maintain traceability: reference `file:line`; summarize deltas and outcomes.
+5) Escalate if ambiguity/high risk; adopt escape hatch for progress with explicit notes.
+
+## Decision Checklist
+
+- Objective clear? Scope and constraints listed? Success/stop criteria defined?
+- Dependencies resolved and order planned? Inputs/outputs counted?
+- Evidence gathered with `file:line` citations?
+- Action is the smallest viable step? Safe vs unsafe considered?
+- Verification plan defined (tests/logs/inspection)? Rollback available?
+
+## Examples (Good/Bad)
+
+- Good: Read `rules/environment-profile.md:1-20` → apply a small patch to `rules/tool-calling-override.md` → verify references → summarize.
+- Bad: Apply a large refactor without prior reads, no citations, no verification.
+
+## Success Metrics
+
+- Changes are small, verifiable, and reversible.
+- Evidence cited consistently; outputs bounded; no unsafe auto-operations.
+- Sequencing respected; reproducible results with clear summaries.
+
+## Anti-patterns
+
+- Skipping reads before edits; oversized unreviewable diffs; missing citations.
+- Parallel tool calls or mixing tool call and reply in one step.
+- Unbounded outputs or environment-agnostic commands.
+
+## Consistency & Precedence
+
+Align with: `rules/global-rules.md`, `rules/tool-calling-override.md`, `rules/environment-profile.md`, `rules/agentic-tools.md`, `rules/context-gathering.md`, `rules/context-understanding.md`, `rules/reasoning-effort.md`, `rules/persistence.md`, `rules/markdown-formatting.md`, `rules/memory_tool_usage_guide.md`. Follow `rules/rule-precedence.md` when conflicts arise.
+
+## Stop Criteria
+
+Stop when success criteria are met, evidence is cited, and verification passes; or when further action requires new context or approvals beyond scope.

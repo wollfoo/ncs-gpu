@@ -3,16 +3,11 @@ trigger: always_on
 ---
 
 ---
-trigger: always_on
----
-
----
 type: capability_prompt
 scope: project
 priority: normal
 activation: always_on
 ---
-
 
 # AGENTIC CODING – TOOL DEFINITIONS (Reference)
 
@@ -196,6 +191,17 @@ Reference snippet:
 ### Responses API (reasoning reuse—efficient tool calling)
 
 - When possible, use the Responses API to persist reasoning context across tool calls (e.g., `previous_response_id`) to reduce cost and improve plan persistence.
+
+### Consistency & Precedence
+
+- Align with: `rules/global-rules.md`, `rules/tool-calling-override.md`, `rules/environment-profile.md`, `rules/markdown-formatting.md`, `rules/context-gathering.md`, `rules/context-understanding.md`, `rules/reasoning-effort.md`, `rules/persistence.md`, `rules/memory_tool_usage_guide.md`.
+- Follow `rules/rule-precedence.md` when conflicts arise (System > Developer > AGENTS > Domain).
+- Compatibility note: sequential-only override governs all tasks; disregard any suggestion to parallelize tool calls.
+
+### Stop Criteria
+
+- Stop when: (a) you can name the exact file/symbol to change and the next action is actionable; or (b) success metrics are satisfied and results are verified; or (c) further actions require approvals/network beyond current scope.
+- Report remaining uncertainty and the proposed next step when stopping early under the escape-hatch policy.
 
 ## Set 2: 2 functions, terminal-native
 
