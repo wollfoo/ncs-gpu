@@ -9,6 +9,83 @@ auto_execution_mode: 3
 
 These are the core principles that guide all actions and decisions during the work process. Adhering to these principles helps ensure performance, quality, and risk mitigation.
 
+Goal: Operationalize these five principles into an executable workflow that guides agent behavior end-to-end.
+
+References:
+- `rules/global-rules.md`, `rules/rule-precedence.md`
+- `rules/tool-calling-override.md`, `rules/tool-preambles.md`
+- `rules/agentic-tools.md`, `rules/code-editing-rule.md`
+- `rules/context-gathering.md`, `rules/context-understanding.md`
+- `rules/environment-profile.md`, `rules/reasoning-effort.md`, `rules/markdown-formatting.md`
+
+## Preconditions
+- Define objective, scope, constraints, and success/stop criteria.
+- Set `reasoning_effort` appropriately (default high for complex/multi-step tasks).
+- Plan sequential-only steps; one tool per step; no tool+reply in the same step.
+- Tool budget for small tasks ≤ 2; if exceeding, briefly state rationale.
+- Evidence-first: cite `file:line` when referencing repo artifacts; bound outputs.
+- Environment: Windows/PowerShell; set Cwd; no inline `cd`; restricted network; auto-run only read-only, safe actions.
+
+## When to use
+- For all tasks as guiding doctrine; escalate rigor for ambiguous/high-risk/large-impact work.
+- When you need a deterministic, safe, and efficient execution pattern across multi-step tasks.
+
+## Procedure
+1) Frame objective & scope
+    - State objective, scope, constraints, and success/stop criteria.
+2) Plan by dependency & risk (Quantity & Order)
+    - Execute in order: prerequisites → critical → 80/20 → simple.
+    - Count inputs/outputs to ensure integrity; use checksums where appropriate.
+3) Think Big, Do Baby Steps
+    - Implement the smallest viable change; keep diffs minimal and reversible.
+4) Measure Twice, Cut Once
+    - Read before edit; verify assumptions; prefer dry-run previews where available.
+5) Get It Working First → Make it Right → Make it Fast
+    - Make it work; then refactor for correctness/clarity; optimize only with data.
+6) Always Double-Check
+    - Validate pre/post-conditions; add focused logs/tests where needed.
+7) Verification loop
+    - Re-read changed regions or run safe checks; confirm no unintended side-effects.
+8) Summary
+    - Report changes, rationale, evidence `file:line`, verification results, and next steps.
+
+## Safety & Environment (gate)
+- Follow `rules/environment-profile.md`: set Cwd; no inline `cd`; bounded outputs; restricted network.
+- Treat installs/network/deletes/state mutations as unsafe; require explicit approval.
+
+## Constraints
+- Sequential-only tool execution: one tool per step; no tool+reply in the same step.
+- Code edits: V4A patches; ≥3 lines pre/post context; imports at top; single file per patch.
+- Reading/searching: one file or one query per step; use early stop and low tool budget.
+- Evidence-first with `file:line`; output caps respected.
+
+## Success metrics
+- Minimal, correct diffs; verification passes; evidence cited.
+- Sequential-only honored; small-task tool budget (≤ 2) respected unless justified.
+- No unsafe auto-actions; environment constraints followed.
+
+## Anti-patterns
+- Broad, unscoped refactors; parallel/batched tool calls; mid-file imports.
+- Assertions without `file:line`; missing context lines in patches; ignoring output caps.
+- Early handback without meeting stop criteria.
+
+## Examples
+- Good: Define goal/plan → narrow search → open top file → apply minimal V4A patch (one file) → verify → summarize with `file:line`.
+- Bad: Run multiple tools in one step; patch multiple files; no citations; network install without approval.
+
+## Stop criteria
+- Success criteria met with verification and evidence; or
+- Action requires approval/out-of-scope—stop and escalate with clear next step.
+
+## Consistency & Precedence
+- Resolve conflicts per `rules/rule-precedence.md` (System > Developer > AGENTS > Domain).
+- Defer to `rules/tool-calling-override.md` for sequential-only policy.
+
+## Deliverables
+- Preamble (goal + plan), step-by-step progress updates, and final summary.
+- Reviewable V4A patches when modifying code; imports at top; unique context; single-file patches.
+- Evidence citations (`file:line`) and, when relevant, tool plan/call count.
+
 ## List of 05 Principles
 
 1.  **Think Big, Do Baby Steps**: Think big, but implement in small steps.
