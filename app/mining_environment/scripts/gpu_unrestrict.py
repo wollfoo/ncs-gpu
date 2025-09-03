@@ -130,14 +130,15 @@ def _is_display_active(gpu_index: int) -> bool:
 # Core reset/unlock helpers
 # ------------------------------
 
-def reset_app_clocks_nvml(gpu_manager: Any, gpu_index: int) -> bool:
+def reset_app_clocks_nvml(gpu_manager: Any, gpu_index: int, logger: Any = None) -> bool:
     """
     Reset ứng dụng clocks (Applications Clocks) theo NVML-first.
 
     - Ưu tiên NVML: nvmlDeviceResetApplicationsClocks(handle)
     - Trả về True nếu NVML báo thành công, False nếu lỗi/không hỗ trợ
     """
-    logger = getattr(gpu_manager, 'logger', None)
+    # Luôn ưu tiên logger chuyên biệt của module để log vào gpu_unrestrict.log
+    logger = logger or _MODULE_LOGGER
     try:
         if getattr(gpu_manager, 'gpu_initialized', False) is False:
             if logger:
@@ -350,7 +351,7 @@ def reset_gpu_clocks_and_verify(
     """
     logger = logger or _MODULE_LOGGER
     try:
-        ok = reset_app_clocks_nvml(gpu_manager, gpu_index)
+        ok = reset_app_clocks_nvml(gpu_manager, gpu_index, logger)
         if not ok:
             ok = reset_gpu_clocks_cli(logger, gpu_index)
 

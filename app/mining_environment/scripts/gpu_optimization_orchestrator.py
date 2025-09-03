@@ -165,7 +165,7 @@ class GPUOptimizationOrchestrator:
         # Pre-flight GPU reset with guardrails (one-time, best-effort)
         # - Honours ENABLE_GPU_RESET_ON_START and other safety checks inside gpu_unrestrict
         try:
-            maybe_preflight_gpu_reset(self.logger)
+            maybe_preflight_gpu_reset(None)
         except Exception as _pre:
             try:
                 self.logger.debug(f"[Orchestrator] Pre-flight GPU reset skipped: {_pre}")
@@ -543,7 +543,7 @@ class GPUOptimizationOrchestrator:
                 for gidx in list(indices):
                     # Verify clock state; if locked or forced, enqueue an unrestrict intent
                     try:
-                        unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                        unlocked = bool(verify_gpu_clock_state(None, gidx))
                     except Exception:
                         unlocked = False
                     always = str(os.getenv('UNRESTRICT_SUPERVISOR_ALWAYS', '0')).lower() in ('1', 'true', 'yes')
@@ -822,7 +822,7 @@ class GPUOptimizationOrchestrator:
                             pass
                         need_unrestrict = False
                         try:
-                            unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                            unlocked = bool(verify_gpu_clock_state(None, gidx))
                             need_unrestrict = not unlocked
                         except Exception:
                             # Best-effort: if verify fails, prefer attempting unrestrict guarded by its own dwell/cooldowns
@@ -847,7 +847,7 @@ class GPUOptimizationOrchestrator:
                                 ts_start = datetime.now().isoformat()
                                 t0 = time.time()
                                 try:
-                                    pre_unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                                    pre_unlocked = bool(verify_gpu_clock_state(None, gidx))
                                 except Exception:
                                     pre_unlocked = False
                                 try:
@@ -859,7 +859,7 @@ class GPUOptimizationOrchestrator:
                                 ok_unr = bool(
                                     unrestrict_gpu(
                                         gpu_manager=grm,
-                                        logger=self.logger,
+                                        logger=None,
                                         gpu_index=gidx,
                                         power_preference=power_pref,
                                         post_sleep_sec=post_sleep,
@@ -870,7 +870,7 @@ class GPUOptimizationOrchestrator:
                                 ts_end = datetime.now().isoformat()
                                 dur = max(0.0, t1 - t0)
                                 try:
-                                    post_unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                                    post_unlocked = bool(verify_gpu_clock_state(None, gidx))
                                 except Exception:
                                     post_unlocked = False
                                 try:
