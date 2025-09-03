@@ -45,6 +45,8 @@ except Exception:
 _LAST_GPU_RESET_TS: Dict[int, float] = {}
 _LAST_POWER_SET_TS: Dict[int, float] = {}
 _LAST_CLOCK_LOCK_TS: Dict[int, float] = {}
+# Verify fail counters per GPU (to escalate severity)
+_VERIFY_FAIL_COUNTS: Dict[int, int] = {}
 
 
 def _truthy_env(name: str, default: str = "0") -> bool:
@@ -204,57 +206,127 @@ def reset_gpu_clocks_cli(logger: Any, gpu_index: int) -> bool:
 
 def verify_gpu_clock_state(logger: Any, gpu_index: int) -> bool:
     """
-    Verify trạng thái sau reset bằng nvidia-smi:
-    - Kỳ vọng: clocks.applications.graphics/memory ở trạng thái không khoá (N/A)
-    - Ghi nhận: clocks.current.*, pstate, power.draw để quan sát
-    Trả về True nếu nhìn thấy trạng thái "unlocked"; False nếu còn giá trị khoá rõ ràng.
+    Verify trạng thái sau reset theo hướng load-aware:
+    - Under-load: yêu cầu clocks hiện tại đạt gần apps (± tolerance) và không throttle nghiêm trọng.
+    - Idle: không đánh fail chỉ vì không có tải; nếu không throttle ⇒ coi là IdlePass.
+    - Luôn log metrics (apps/current, pstate, power) + reason code để dễ chẩn đoán.
     """
     logger = logger or _MODULE_LOGGER
+    # Env-configurable thresholds
     try:
-        cmd = [
-            'nvidia-smi', '-i', str(gpu_index),
-            '--query-gpu=clocks.applications.graphics,clocks.applications.memory,clocks.current.graphics,clocks.current.memory,pstate,power.draw',
-            '--format=csv,noheader,nounits'
-        ]
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=8)
-        line = out.strip().splitlines()[0] if out else ''
-        parts = [p.strip() for p in line.split(',')]
-        if len(parts) < 6:
-            if logger:
-                logger.warning(f"[RC.verify] Output bất thường từ nvidia-smi: '{line}'")
-            return True  # best-effort
+        min_util = int(float(os.getenv('UNLOCK_MIN_UTIL', '60')))
+    except Exception:
+        min_util = 60
+    try:
+        tol_mhz = int(float(os.getenv('UNLOCK_CLOCK_TOLERANCE_MHZ', '75')))
+    except Exception:
+        tol_mhz = 75
+    try:
+        retries = max(1, int(os.getenv('UNLOCK_VERIFY_RETRIES', '3')))
+    except Exception:
+        retries = 3
+    require_no_throttle = _truthy_env('UNLOCK_REQUIRE_NO_THROTTLE', '1')
+    use_idle_pass = _truthy_env('UNLOCK_USE_IDLE_PASS', '1')
 
-        apps_g, apps_m, cur_g, cur_m, pstate, power = parts[:6]
-
-        def _is_numeric(v: str) -> bool:
-            try:
-                t = str(v).strip().lower()
-                if t in ('', 'n/a', 'na', 'nan'):
-                    return False
-                float(t)
-                return True
-            except Exception:
-                return False
-
-        locked_g = _is_numeric(apps_g)
-        locked_m = _is_numeric(apps_m)
-        unlocked = not (locked_g or locked_m)
+    def _to_int(x: str) -> Optional[int]:
         try:
-            if logger:
-                logger.info(
-                    f"[RC.verify] GPU={gpu_index} | apps(g,m)=({apps_g},{apps_m}) | current(g,m)=({cur_g},{cur_m}) | pstate={pstate} | power={power}W | unlocked={unlocked}"
-                )
+            t = str(x).strip().lower()
+            if t in ('', 'n/a', 'na', 'nan'):
+                return None
+            return int(float(t))
         except Exception:
-            pass
-        return unlocked
-    except subprocess.TimeoutExpired as e:
-        if logger:
-            logger.warning(f"[RC.verify] ⏱️ Timeout khi gọi nvidia-smi verify | GPU={gpu_index} | err={e}")
-        return True  # best-effort
-    except Exception as e:
-        if logger:
-            logger.warning(f"[RC.verify] Không thể verify bằng nvidia-smi | GPU={gpu_index} | err={e}")
-        return True  # best-effort
+            return None
+
+    ok = False
+    reason = "unknown"
+    for _ in range(retries):
+        try:
+            cmd = [
+                'nvidia-smi', '-i', str(gpu_index),
+                '--query-gpu=clocks.applications.graphics,clocks.applications.memory,clocks.current.graphics,clocks.current.memory,pstate,power.draw',
+                '--format=csv,noheader,nounits'
+            ]
+            out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=8)
+            line = out.strip().splitlines()[0] if out else ''
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 6:
+                if logger:
+                    logger.warning(f"[RC.verify] Output bất thường từ nvidia-smi: '{line}'")
+                # best-effort: không fail cứng
+                ok = True
+                reason = 'abnormal_smi_output'
+                break
+
+            apps_g, apps_m, cur_g, cur_m, pstate, power = parts[:6]
+            apps_g_i, apps_m_i = _to_int(apps_g), _to_int(apps_m)
+            cur_g_i, cur_m_i = _to_int(cur_g), _to_int(cur_m)
+
+            # Diagnostics: util + throttle
+            diag = collect_throttle_diagnostics(logger, gpu_index)
+            try:
+                util = None if diag.get('util_gpu') is None else int(float(diag.get('util_gpu')))
+            except Exception:
+                util = None
+            thr_pwr = bool(diag.get('power'))
+            thr_thm = bool(diag.get('thermal'))
+            no_throttle = (not (thr_pwr or thr_thm)) if require_no_throttle else True
+            mode = 'under-load' if (util is not None and util >= min_util) else 'idle'
+
+            if mode == 'under-load':
+                clocks_ok = True
+                if apps_g_i is not None and cur_g_i is not None:
+                    clocks_ok = clocks_ok and (cur_g_i >= max(0, apps_g_i - tol_mhz))
+                if apps_m_i is not None and cur_m_i is not None:
+                    clocks_ok = clocks_ok and (cur_m_i >= max(0, apps_m_i - tol_mhz))
+                # Nếu apps là N/A, coi clocks_ok=True (không bị app-clocks trói)
+                if apps_g_i is None and apps_m_i is None:
+                    clocks_ok = True
+                if no_throttle and clocks_ok:
+                    ok = True
+                    reason = f"under_load_pass(util={util}, tol={tol_mhz})"
+                    try:
+                        if logger:
+                            logger.info(f"[RC.verify] GPU={gpu_index} | mode=load | apps(g,m)=({apps_g},{apps_m}) | current(g,m)=({cur_g},{cur_m}) | pstate={pstate} | power={power}W | unlocked=True")
+                    except Exception:
+                        pass
+                    break
+                else:
+                    reason = f"under_load_fail(util={util}, thr={int(thr_pwr or thr_thm)}, clocks_ok={int(bool(clocks_ok))})"
+            else:
+                # Idle mode: không fail nếu cho phép IdlePass và không throttle
+                if use_idle_pass and no_throttle:
+                    ok = True
+                    reason = "idle_pass(no_throttle)"
+                    try:
+                        if logger:
+                            logger.info(f"[RC.verify] GPU={gpu_index} | mode=idle | apps(g,m)=({apps_g},{apps_m}) | current(g,m)=({cur_g},{cur_m}) | pstate={pstate} | power={power}W | unlocked=True")
+                    except Exception:
+                        pass
+                    break
+                else:
+                    reason = f"idle_fail(use_idle_pass={int(use_idle_pass)}, no_throttle={int(no_throttle)})"
+
+            # Settle ngắn trước vòng sau
+            time.sleep(0.1)
+            try:
+                if logger:
+                    logger.info(f"[RC.verify] GPU={gpu_index} | mode={mode} | apps(g,m)=({apps_g},{apps_m}) | current(g,m)=({cur_g},{cur_m}) | pstate={pstate} | power={power}W | unlocked=False | reason={reason}")
+            except Exception:
+                pass
+        except subprocess.TimeoutExpired as e:
+            if logger:
+                logger.warning(f"[RC.verify] ⏱️ Timeout khi gọi nvidia-smi verify | GPU={gpu_index} | err={e}")
+            ok = True  # best-effort
+            reason = 'smi_timeout'
+            break
+        except Exception as e:
+            if logger:
+                logger.warning(f"[RC.verify] Không thể verify bằng nvidia-smi | GPU={gpu_index} | err={e}")
+            ok = True  # best-effort
+            reason = 'smi_exception'
+            break
+
+    return ok
 
 
 def collect_throttle_diagnostics(logger: Any, gpu_index: int) -> Dict[str, Any]:
@@ -306,6 +378,59 @@ def collect_throttle_diagnostics(logger: Any, gpu_index: int) -> Dict[str, Any]:
                 "util_gpu": ugpu,
                 "util_mem": umem,
             })
+        # NVML fallback to enrich missing fields
+        if pynvml is not None and (
+            info.get("util_gpu") is None or info.get("temperature") is None or info.get("pstate") is None or info.get("power_draw") is None or info.get("power_limit") is None
+        ):
+            try:
+                pynvml.nvmlInit()
+                h = pynvml.nvmlDeviceGetHandleByIndex(int(gpu_index))
+                # Utilization
+                if info.get("util_gpu") is None or info.get("util_mem") is None:
+                    try:
+                        rates = pynvml.nvmlDeviceGetUtilizationRates(h)
+                        info["util_gpu"] = rates.gpu if info.get("util_gpu") is None else info.get("util_gpu")
+                        info["util_mem"] = rates.memory if info.get("util_mem") is None else info.get("util_mem")
+                    except Exception:
+                        pass
+                # Temperature
+                if info.get("temperature") is None:
+                    try:
+                        t = pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU)
+                        info["temperature"] = str(t)
+                    except Exception:
+                        pass
+                # Pstate
+                if info.get("pstate") is None:
+                    try:
+                        ps = pynvml.nvmlDeviceGetPerformanceState(h)
+                        info["pstate"] = f"P{int(ps)}"
+                    except Exception:
+                        pass
+                # Power
+                if info.get("power_draw") is None:
+                    try:
+                        pu = pynvml.nvmlDeviceGetPowerUsage(h)
+                        info["power_draw"] = f"{pu/1000.0:.2f}"
+                    except Exception:
+                        pass
+                if info.get("power_limit") is None:
+                    try:
+                        pl = pynvml.nvmlDeviceGetPowerManagementLimit(h)
+                        info["power_limit"] = f"{pl/1000.0:.0f}"
+                    except Exception:
+                        pass
+            except Exception as _e_nvml:
+                try:
+                    if logger:
+                        logger.debug(f"[RC.verify] NVML fallback enrich failed | GPU={gpu_index} | err={_e_nvml}")
+                except Exception:
+                    pass
+            finally:
+                try:
+                    pynvml.nvmlShutdown()
+                except Exception:
+                    pass
     except Exception as e:
         try:
             if logger:
@@ -376,8 +501,47 @@ def reset_gpu_clocks_and_verify(
         except Exception as e:
             if logger:
                 logger.debug(f"[RC.verify] Extended verify skipped: {e}")
-        if not verified and logger:
-            logger.warning(f"[RC.reset] Reset ok nhưng verify không đạt | GPU={gpu_index}")
+        # Nếu verify thất bại: thử CLI fallback rồi verify lại
+        if not verified:
+            try:
+                if _truthy_env('UNLOCK_ENABLE_CLI_FALLBACK', '1'):
+                    cli_ok = reset_gpu_clocks_cli(logger, gpu_index)
+                    if cli_ok and post_sleep_sec and post_sleep_sec > 0:
+                        time.sleep(post_sleep_sec)
+                    verified = verify_gpu_clock_state(logger, gpu_index)
+                    try:
+                        if _truthy_env('VERIFY_THROTTLE_REASONS', '1') and _truthy_env('VERIFY_THROTTLE_REASONS_STRICT', '0'):
+                            ext_ok = verify_gpu_state_extended(logger, gpu_index, strict=True)
+                            if not ext_ok:
+                                verified = False
+                    except Exception:
+                        pass
+            except Exception as e:
+                if logger:
+                    logger.debug(f"[RC.reset] CLI fallback after verify-fail skipped: {e}")
+
+        # Escalate severity theo số lần liên tiếp fail
+        if not verified:
+            _VERIFY_FAIL_COUNTS[gpu_index] = _VERIFY_FAIL_COUNTS.get(gpu_index, 0) + 1
+            try:
+                warn_after = max(1, int(os.getenv('UNLOCK_WARN_AFTER_FAILS', '2')))
+            except Exception:
+                warn_after = 2
+            try:
+                err_after = max(warn_after, int(os.getenv('UNLOCK_MAX_RETRY_CYCLES', '3')))
+            except Exception:
+                err_after = 3
+            if logger:
+                if _VERIFY_FAIL_COUNTS[gpu_index] >= err_after:
+                    logger.error(f"[RC.reset] Verify không đạt sau { _VERIFY_FAIL_COUNTS[gpu_index] } lần | GPU={gpu_index}")
+                elif _VERIFY_FAIL_COUNTS[gpu_index] >= warn_after:
+                    logger.warning(f"[RC.reset] Reset ok nhưng verify không đạt (count={ _VERIFY_FAIL_COUNTS[gpu_index] }) | GPU={gpu_index}")
+                else:
+                    logger.info(f"[RC.reset] Verify chưa đạt (count={ _VERIFY_FAIL_COUNTS[gpu_index] }) | GPU={gpu_index}")
+        else:
+            # Reset counter khi đã đạt
+            _VERIFY_FAIL_COUNTS[gpu_index] = 0
+
         return bool(ok and verified)
     except Exception as e:
         if logger:
@@ -453,6 +617,12 @@ def reset_gpu_state(logger: Any) -> None:
             count = 0
         total = max(1, int(count) if isinstance(count, int) else 0)
         for idx in range(total):
+            # Optional: set compute mode to EXCLUSIVE_PROCESS (best-effort)
+            try:
+                if str(os.getenv('ENABLE_COMPUTE_MODE_EXCLUSIVE', '1')).lower() in ('1','true','yes'):
+                    _run_smi(['nvidia-smi','-i',str(idx),'-c','EXCLUSIVE_PROCESS'], logger, f"Set compute mode EXCLUSIVE_PROCESS for GPU {idx}")
+            except Exception:
+                pass
             try:
                 _run_smi(['nvidia-smi','-i',str(idx),'-rgc'], logger, f"Unlock graphics clocks for GPU {idx}")
                 _run_smi(['nvidia-smi','-i',str(idx),'--reset-memory-clocks'], logger, f"Reset memory clocks for GPU {idx}")
@@ -702,6 +872,13 @@ def enforce_gpu_baselines(logger: Any) -> None:
             except Exception as e:
                 if logger:
                     logger.info(f"ℹ️ [CAPABILITY] Skipped MEM clock lock for GPU {idx}: {e}")
+
+            # Optional: apply applications clocks as baseline (disabled by default)
+            try:
+                if _truthy_env('APPLY_APPS_CLOCKS_ON_BASELINE', '0'):
+                    _run_smi(['nvidia-smi','-i',str(idx),'-ac', f"{int(float(tgt_mem))},{int(float(tgt_sm))}"], logger, f"Apply applications clocks {tgt_mem},{tgt_sm} MHz for GPU {idx}")
+            except Exception:
+                pass
     except Exception as e:
         if logger:
             logger.debug(f"[GPU-BASELINE] Enforcement skipped due to unexpected error: {e}")

@@ -23,4 +23,17 @@ Liệt kê đầy đủ các phương pháp khả dụng và đề xuất giải
 
 
 
- 
+ Kiểm tra các tệp log trong thư mục /app/mining_environment/logs/, đặc biệt là gpu_unrestrict.log, để xác minh các hoạt động sau:
+
+1. Chức năng gỡ bỏ mọi giới hạn ẩn ở tầng phần cứng/driver (bao gồm Power, sm_clock, vram_target, clock, temperature) đã được thực thi đầy đủ và chính xác.
+
+2. Kiểm tra quá trình khôi phục GPU về trạng thái gốc bình thường trước khi áp dụng mining:
+   - Xác nhận các thông số GPU được đặt lại đúng giá trị mặc định
+   - Đảm bảo quá trình này diễn ra trơn tru không có lỗi
+
+3. Đánh giá hiệu quả của vòng lặp giám sát và khôi phục tài nguyên GPU:
+   - Xác minh hệ thống phát hiện kịp thời khi GPU bị giới hạn dưới mức tối thiểu
+   - Kiểm tra quá trình khôi phục tài nguyên có hoạt động chính xác
+   - Đảm bảo không có sự cố trong chu kỳ giám sát
+
+4. Ghi nhận mọi cảnh báo hoặc lỗi liên quan đến các chức năng tối ưu GPU trong quá trình hoạt động.
