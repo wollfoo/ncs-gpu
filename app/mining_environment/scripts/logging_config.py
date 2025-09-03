@@ -141,6 +141,12 @@ class EnhancedLogManager:
             'file': 'gpu_optimization.log',
             'description': '**GPU optimization orchestrator** (bộ điều phối tối ưu GPU – điều phối chiến lược tối ưu)'
         },
+        # Dedicated logger for gpu_unrestrict module: write to separate file for clarity
+        'mining_environment.scripts.gpu_unrestrict': {
+            'level': logging.DEBUG,
+            'file': 'gpu_unrestrict.log',
+            'description': '**GPU unrestrict helpers** (trợ thủ gỡ giới hạn GPU – reset/unlock/verify)'
+        },
         # Route component modules to unified gpu_optimization log
         'mining_environment.scripts.parallel_strategy_executor': {
             'level': logging.DEBUG,

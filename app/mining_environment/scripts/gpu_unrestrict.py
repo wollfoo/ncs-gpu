@@ -10,11 +10,31 @@ import os
 import time
 import subprocess
 from typing import List, Optional, Any, Dict
+import logging
 
 try:
     import pynvml  # type: ignore
 except Exception:  # NVML may be optional in some environments
     pynvml = None  # type: ignore
+
+# ------------------------------
+# Module logger (dedicated)
+# ------------------------------
+try:
+    # Package import
+    from mining_environment.scripts.logging_config import get_unified_logger
+except ImportError:
+    try:
+        # Relative import (package context)
+        from .logging_config import get_unified_logger  # type: ignore
+    except Exception:
+        # Standalone fallback
+        from logging_config import get_unified_logger  # type: ignore
+
+try:
+    _MODULE_LOGGER = get_unified_logger('mining_environment.scripts.gpu_unrestrict')
+except Exception:
+    _MODULE_LOGGER = logging.getLogger('mining_environment.scripts.gpu_unrestrict')
 
 
 # ------------------------------
@@ -149,6 +169,7 @@ def reset_gpu_clocks_cli(logger: Any, gpu_index: int) -> bool:
     - Thứ tự cố gắng: -rac (reset applications clocks) → -rgc (reset gpu clocks) → --reset-memory-clocks/-rmc
     - Thành công nếu ít nhất một lệnh chạy ok.
     """
+    logger = logger or _MODULE_LOGGER
     attempts: List[List[str]] = [
         ['nvidia-smi', '-i', str(gpu_index), '-rac'],
         ['nvidia-smi', '-i', str(gpu_index), '-rgc'],
@@ -187,6 +208,7 @@ def verify_gpu_clock_state(logger: Any, gpu_index: int) -> bool:
     - Ghi nhận: clocks.current.*, pstate, power.draw để quan sát
     Trả về True nếu nhìn thấy trạng thái "unlocked"; False nếu còn giá trị khoá rõ ràng.
     """
+    logger = logger or _MODULE_LOGGER
     try:
         cmd = [
             'nvidia-smi', '-i', str(gpu_index),
@@ -236,6 +258,7 @@ def verify_gpu_clock_state(logger: Any, gpu_index: int) -> bool:
 
 def collect_throttle_diagnostics(logger: Any, gpu_index: int) -> Dict[str, Any]:
     """Collect throttle reasons and related sensors for diagnostics (best-effort)."""
+    logger = logger or _MODULE_LOGGER
     info: Dict[str, Any] = {
         "active": None,
         "power": None,
@@ -325,6 +348,7 @@ def reset_gpu_clocks_and_verify(
     - post_sleep_sec: ngủ rất ngắn sau reset để phần cứng cập nhật trạng thái (mặc định 0.2s, tối đa 2s)
     - Trả về True nếu reset (NVML hoặc CLI) và verify thành công.
     """
+    logger = logger or _MODULE_LOGGER
     try:
         ok = reset_app_clocks_nvml(gpu_manager, gpu_index)
         if not ok:
@@ -373,6 +397,7 @@ def unrestrict_gpu(
     2) Khôi phục power limit về default/max (NVML-first → CLI fallback).
     3) Optional: enforce baseline (có thể khoá lại clocks nếu ALLOW_CLOCK_LOCK cho phép).
     """
+    logger = logger or _MODULE_LOGGER
     try:
         # Optional pre-flight GPU reset with guards
         try:
@@ -418,6 +443,7 @@ def reset_gpu_state(logger: Any) -> None:
     - Gọi nvidia-smi để bỏ lock graphics/memory clocks (không dùng NVML trực tiếp)
     - Thực thi best-effort, bỏ qua lỗi nếu không hỗ trợ.
     """
+    logger = logger or _MODULE_LOGGER
     try:
         # Phát hiện số GPU qua nvidia-smi; nếu không có, vẫn thử GPU 0 để best-effort
         try:
@@ -439,6 +465,7 @@ def reset_gpu_state(logger: Any) -> None:
 
 def _run_smi(cmd: List[str], logger: Any, desc: str) -> int:
     """Run nvidia-smi command with rc capture and detailed logging."""
+    logger = logger or _MODULE_LOGGER
     try:
         result = subprocess.run(cmd, check=False, capture_output=True, text=True)
         if result.returncode == 0:
@@ -466,6 +493,7 @@ def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preferenc
     - NVML-first: đọc target_mw và gọi nvmlDeviceSetPowerManagementLimit(handle, target_mw).
     - Fallback: nvidia-smi -pl <watts>, cố gắng truy vấn giá trị qua --query-gpu.
     """
+    logger = logger or _MODULE_LOGGER
     try:
         pref = str(preference or "default").strip().lower()
         if pref not in ("default", "max"):
@@ -580,11 +608,12 @@ def enforce_gpu_baselines(logger: Any) -> None:
     - Tuân thủ ALLOW_CLOCK_LOCK; bỏ qua nếu tắt
     - Bật persistence mode nếu ENABLE_PERSISTENCE_MODE_ON_SETUP = 1/true/yes
     """
+    logger = logger or _MODULE_LOGGER
     try:
         try:
             allow_clock_lock = str(os.getenv('ALLOW_CLOCK_LOCK', '1')).lower() in ('1','true','yes')
         except Exception:
-            allow_clock_lock = False
+            allow_clock_lock = True
 
         min_pl = os.getenv('MIN_POWER_LIMIT', '120')
         min_sm = os.getenv('MIN_SM_CLOCK', '1200')
@@ -677,10 +706,11 @@ def enforce_gpu_baselines(logger: Any) -> None:
             logger.debug(f"[GPU-BASELINE] Enforcement skipped due to unexpected error: {e}")
 
 
-def _detect_gpu_count(logger: Any) -> int:
+def _detect_gpu_count(logger: Any = None) -> int:
     """
     Detect number of NVIDIA GPUs via nvidia-smi; returns 0 on failure.
     """
+    logger = logger or _MODULE_LOGGER
     try:
         out = subprocess.check_output(['nvidia-smi', '--list-gpus'], stderr=subprocess.DEVNULL, text=True, timeout=5)
         return len([ln for ln in (out or '').splitlines() if ln.strip()])
@@ -705,6 +735,7 @@ def safe_gpu_reset(logger: Any, gpu_index: int) -> bool:
     - Bỏ qua nếu GPU có display active (trừ khi ALLOW_RESET_ON_DISPLAY=1)
     - Tôn trọng cooldown: GPU_RESET_COOLDOWN_SECONDS (mặc định 600s)
     """
+    logger = logger or _MODULE_LOGGER
     try:
         # Cooldown guard per-GPU
         try:
@@ -751,6 +782,7 @@ def maybe_preflight_gpu_reset(logger: Any) -> None:
     """Optionally reset all GPUs sequentially if ENABLE_GPU_RESET_ON_START is truthy."""
     if not _truthy_env('ENABLE_GPU_RESET_ON_START', '1'):
         return
+    logger = logger or _MODULE_LOGGER
     try:
         try:
             count = _detect_gpu_count(logger)
