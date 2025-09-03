@@ -1807,4 +1807,31 @@ def attempt_resource_manager_restart():
         return False
 
 if __name__ == "__main__":
-    main()
+    exit_code = 0
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("🛑 Nhận KeyboardInterrupt (người dùng dừng). Tiến hành shutdown an toàn.")
+        try:
+            process_manager.graceful_shutdown()
+        except Exception as shutdown_error:
+            logger.warning(f"⚠️ Lỗi khi graceful_shutdown sau KeyboardInterrupt: {shutdown_error}")
+        exit_code = 130
+    except SystemExit as se:
+        try:
+            exit_code = int(se.code) if isinstance(se.code, int) else 1
+        except Exception:
+            exit_code = 1
+    except Exception as e:
+        logger.exception("❌ Unhandled exception (ngoại lệ chưa bắt) tại cấp cao nhất")
+        try:
+            process_manager.graceful_shutdown()
+        except Exception as shutdown_error:
+            logger.warning(f"⚠️ Lỗi khi graceful_shutdown sau exception: {shutdown_error}")
+        exit_code = 1
+    finally:
+        try:
+            cleanup_stealth_activation()
+        except Exception as cleanup_error:
+            logger.warning(f"⚠️ Lỗi khi cleanup_stealth_activation: {cleanup_error}")
+    sys.exit(exit_code)
