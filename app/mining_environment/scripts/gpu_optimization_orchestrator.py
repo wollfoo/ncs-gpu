@@ -30,6 +30,13 @@ try:
     from .performance_profiler import get_profiler, profile_function
     from .module_loggers import get_gpu_optimization_orchestrator_logger
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
+    # Unrestrict helpers (NVML-first + CLI fallback)
+    from .gpu_unrestrict import (
+        maybe_preflight_gpu_reset,
+        verify_gpu_clock_state,
+        verify_gpu_state_extended,
+        unrestrict_gpu,
+    )
 except ImportError as e:
     # Fallback for standalone testing - use absolute imports
     import sys
@@ -41,9 +48,15 @@ except ImportError as e:
     from mining_environment.scripts.resource_control import OptimizedHardwareController, GPUResourceManager
     from mining_environment.scripts.cross_process_coordination import CrossProcessCoordinator, ResourceType
     from mining_environment.scripts.parallel_strategy_executor import ParallelStrategyExecutor, StrategyTask
-    from mining_environment.scripts.performance_profiler import PerformanceProfiler, profile_function
+    from mining_environment.scripts.performance_profiler import get_profiler, profile_function
     from mining_environment.scripts.module_loggers import get_gpu_optimization_orchestrator_logger
     from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity
+    from mining_environment.scripts.gpu_unrestrict import (
+        maybe_preflight_gpu_reset,
+        verify_gpu_clock_state,
+        verify_gpu_state_extended,
+        unrestrict_gpu,
+    )
 
 # **Logger setup** (thiết lập logger)
 logger = get_gpu_optimization_orchestrator_logger()
@@ -147,6 +160,16 @@ class GPUOptimizationOrchestrator:
         
         self.logger.info("🚀 **GPU Optimization Orchestrator initialized** "
                         "(bộ điều phối tối ưu GPU đã khởi tạo)")
+
+        # Pre-flight GPU reset with guardrails (one-time, best-effort)
+        # - Honours ENABLE_GPU_RESET_ON_START and other safety checks inside gpu_unrestrict
+        try:
+            maybe_preflight_gpu_reset(self.logger)
+        except Exception as _pre:
+            try:
+                self.logger.debug(f"[Orchestrator] Pre-flight GPU reset skipped: {_pre}")
+            except Exception:
+                pass
 
         # ===== Continuous optimization configuration =====
         # Allow ENV overrides for enable/interval
@@ -651,6 +674,63 @@ class GPUOptimizationOrchestrator:
                     self.logger.debug(f"[C-LOOP] tick start | gpu={gidx}")
                 except Exception:
                     pass
+                # Pre-phase: optionally unrestrict GPU state before optimization to recover from stuck clocks/pstate
+                try:
+                    if str(os.getenv('UNRESTRICT_BEFORE_OPTIMIZE', '1')).lower() in ('1','true','yes'):
+                        # Ensure per-GPU lock exists (minimal contention control for hardware operations)
+                        try:
+                            _ = self._hw_locks
+                        except AttributeError:
+                            self._hw_locks: Dict[int, threading.Lock] = {}
+                        lock = self._hw_locks.get(gidx)
+                        if lock is None:
+                            lock = threading.Lock()
+                            self._hw_locks[gidx] = lock
+                        need_unrestrict = False
+                        try:
+                            unlocked = bool(verify_gpu_clock_state(self.logger, gidx))
+                            need_unrestrict = not unlocked
+                        except Exception:
+                            # Best-effort: if verify fails, prefer attempting unrestrict guarded by its own dwell/cooldowns
+                            need_unrestrict = True
+                        always_unrestrict = str(os.getenv('UNRESTRICT_ALWAYS', '0')).lower() in ('1','true','yes')
+                        if need_unrestrict or always_unrestrict:
+                            with lock:
+                                grm = self._get_grm()
+                                power_pref = str(os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default'))
+                                try:
+                                    post_sleep = float(os.getenv('UNRESTRICT_POST_SLEEP_SEC', '0.2'))
+                                except Exception:
+                                    post_sleep = None
+                                enforce_baseline = str(os.getenv('UNRESTRICT_ENFORCE_BASELINE', '0')).lower() in ('1','true','yes')
+                                ok_unr = bool(
+                                    unrestrict_gpu(
+                                        gpu_manager=grm,
+                                        logger=self.logger,
+                                        gpu_index=gidx,
+                                        power_preference=power_pref,
+                                        post_sleep_sec=post_sleep,
+                                        enforce_baseline=enforce_baseline,
+                                    )
+                                )
+                                if ok_unr:
+                                    # Allow hardware state to settle; skip optimization this tick to avoid racing
+                                    try:
+                                        settle = float(os.getenv('UNRESTRICT_SETTLE_SEC', '0.5'))
+                                    except Exception:
+                                        settle = 0.5
+                                    if settle > 0:
+                                        time.sleep(max(0.0, min(2.0, settle)))
+                                    try:
+                                        self.logger.info(f"[C-LOOP] Unrestrict applied → skipping optimization this tick | gpu={gidx}")
+                                    except Exception:
+                                        pass
+                                    continue
+                except Exception as _ue:
+                    try:
+                        self.logger.debug(f"[C-LOOP] Unrestrict pre-phase skipped: {_ue}")
+                    except Exception:
+                        pass
                 try:
                     results = self.optimize_gpu_for_process(pid=pid, gpu_index=gidx, strategies=strategies)
                 except Exception as e:
