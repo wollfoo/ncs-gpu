@@ -33,7 +33,6 @@ try:
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
     # Unrestrict helpers (NVML-first + CLI fallback)
     from .gpu_unrestrict import (
-        maybe_preflight_gpu_reset,
         verify_gpu_clock_state,
         verify_gpu_state_extended,
         unrestrict_gpu,
@@ -53,7 +52,6 @@ except ImportError as e:
     from mining_environment.scripts.module_loggers import get_gpu_optimization_orchestrator_logger
     from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity
     from mining_environment.scripts.gpu_unrestrict import (
-        maybe_preflight_gpu_reset,
         verify_gpu_clock_state,
         verify_gpu_state_extended,
         unrestrict_gpu,
@@ -161,16 +159,6 @@ class GPUOptimizationOrchestrator:
         
         self.logger.info("🚀 **GPU Optimization Orchestrator initialized** "
                         "(bộ điều phối tối ưu GPU đã khởi tạo)")
-
-        # Pre-flight GPU reset with guardrails (one-time, best-effort)
-        # - Honours ENABLE_GPU_RESET_ON_START and other safety checks inside gpu_unrestrict
-        try:
-            maybe_preflight_gpu_reset(None)
-        except Exception as _pre:
-            try:
-                self.logger.debug(f"[Orchestrator] Pre-flight GPU reset skipped: {_pre}")
-            except Exception:
-                pass
 
         # ===== Continuous optimization configuration =====
         # Allow ENV overrides for enable/interval
