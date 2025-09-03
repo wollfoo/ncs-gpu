@@ -1582,79 +1582,6 @@ class GPUResourceManager:
             self.logger.error(f"infer_gpu_index_for_pid lỗi: {e}")
             return None
 
-    def restore_gpu_settings_for_pid(self, pid: int, correlation_id: Optional[str] = None) -> bool:
-        """
-        Khôi phục lại thiết lập GPU đã thay đổi cho tiến trình pid (restore – trả về trạng thái trước đó).
-        correlation_id (mã tương quan – ID để liên kết log của cùng một phiên restore)
-        """
-        try:
-            cid = str(correlation_id) if correlation_id not in (None, '') else uuid.uuid4().hex
-            saved = self.process_gpu_settings.get(pid)
-            if not saved:
-                self.logger.debug(f"[RC.restore] CID={cid} Không có thiết lập GPU đã lưu cho PID={pid} để khôi phục.")
-                return True
-
-            self.logger.info(f"[RC.restore] CID={cid} Bắt đầu restore PID={pid} cho {len(saved)} GPU(s)")
-
-            for gpu_index, settings in saved.items():
-                self.logger.info(f"[RC.restore] CID={cid} → GPU={gpu_index}: bắt đầu khôi phục")
-                handle = self.get_handle(gpu_index)
-                if not handle:
-                    continue
-
-                # (removed) reset/unlock clocks sequence – centralized elsewhere
-
-                # Khôi phục power limit nếu có
-                if 'power_limit_w' in settings:
-                    try:
-                        self.set_gpu_power_limit(None, gpu_index, int(settings['power_limit_w']))
-                        self.logger.info(f"[RC.restore] CID={cid} Đã khôi phục power limit GPU={gpu_index} về {settings['power_limit_w']}W (PID={pid}).")
-                    except Exception as e3:
-                        self.logger.warning(f"[RC.restore] CID={cid} Không thể khôi phục power limit GPU={gpu_index}: {e3}")
-
-                # Hậu kiểm trạng thái sau restore (post-restore verification – chỉ log quan sát)
-                try:
-                    # Lấy trạng thái hiện tại
-                    cur_pl = self.get_gpu_power_limit(gpu_index)
-                    try:
-                        h = self.get_handle(gpu_index)
-                        cur_sm = pynvml.nvmlDeviceGetClockInfo(h, pynvml.NVML_CLOCK_SM) if h is not None else None
-                        cur_mem = pynvml.nvmlDeviceGetClockInfo(h, pynvml.NVML_CLOCK_MEM) if h is not None else None
-                    except Exception:
-                        cur_sm, cur_mem = None, None
-                    self.logger.info(
-                        f"[RC.restore] CID={cid} Post-restore status | PID={pid} GPU={gpu_index} | power_limit={cur_pl}W, SM={cur_sm}MHz, MEM={cur_mem}MHz"
-                    )
-                    # Gọi verify để đánh giá xu hướng hashrate + an toàn nhiệt (không khóa clock tại đây)
-                    try:
-                        vw = None
-                        envw = os.getenv('CLOCK_LOCK_VERIFY_WINDOW_SEC')
-                        if envw not in (None, ''):
-                            vw = int(envw)
-                    except Exception:
-                        vw = None
-                    ok = self.verify_clock_lock_conditions(pid=pid, gpu_index=gpu_index, window_sec=vw)
-                    self.logger.info(f"[RC.restore] CID={cid} Verification after restore | PID={pid} GPU={gpu_index} | result={ok}")
-                except Exception as _ve:
-                    self.logger.debug(f"[RC.restore] CID={cid} Post-restore verification error: {_ve}")
-
-            # Xoá cache sau khi khôi phục
-            try:
-                del self.process_gpu_settings[pid]
-            except Exception:
-                pass
-
-            self.logger.info(f"[RC.restore] CID={cid} Hoàn tất restore cho PID={pid}")
-            return True
-        except Exception as e:
-            try:
-                cid = str(correlation_id) if correlation_id not in (None, '') else 'unknown'
-            except Exception:
-                cid = 'unknown'
-            self.logger.error(f"[RC.restore] CID={cid} restore_gpu_settings_for_pid lỗi: {e}")
-            return False
-
-
 ###############################################################################
 #                      SIMPLIFIED HARDWARE CONTROLLER                         #
 ###############################################################################
@@ -2327,9 +2254,12 @@ class OptimizedHardwareController:
             
             # Step 4: (đã gom về nhánh verification_interval ở trên để tránh gọi trùng)
 
-            # Step 5: Hẹn giờ khôi phục (mô phỏng per-PID theo cửa sổ thời gian)
+            # Step 5: Hẹn giờ khôi phục (đÃ tắt hoàn toàn)
             if window_sec and window_sec > 0:
-                self._schedule_restore(pid, gpu_index, window_sec)
+                try:
+                    self.logger.debug("⏭️ [OHC.apply_optimization] Restore scheduling disabled → skipping (_schedule_restore)")
+                except Exception:
+                    pass
             
             # Lưu lại trạng thái chi tiết của lần apply gần nhất để quyết định closed-loop
             try:
@@ -2378,7 +2308,7 @@ class OptimizedHardwareController:
         step_power_watts: int = 5,
         step_sm_clock_mhz: int = 15,
         window_sec: int = 0
-    ) -> Dict[str, Any]:
+        ) -> Dict[str, Any]:
         """
         Closed-loop NVML setpoint to track a target GPU utilization.
         - Measures utilization, then adjusts power limit and/or SM clock in small steps
@@ -2460,29 +2390,11 @@ class OptimizedHardwareController:
         except Exception:
             current_sm_clock, current_mem_clock = 1000, 877
 
-        # Thiết lập Event hủy vòng lặp đóng và TTL sớm
-        # Hủy restore pending (cùng PID/GPU) và cross-PID trước khi enforce baseline/tuning để tránh race
+        # Thiết lập Event hủy vòng lặp đóng và TTL sớm (không còn quản lý restore pending)
         try:
-            try:
-                key = (int(pid), int(gpu_index))
-            except Exception:
-                key = (pid, gpu_index if gpu_index is not None else 0)
             loop_cancel_event = threading.Event()
-            prev_evt = self.restore_cancel_events.get(key)
-            if prev_evt:
-                try:
-                    prev_evt.set()
-                    self.logger.debug(f"🧹 [OHC.set_target_utilization] Canceled previous pending restore for key={key}")
-                except Exception:
-                    pass
-            self.restore_cancel_events[key] = loop_cancel_event
-            # Hủy mọi restore pending khác trên cùng GPU từ PID khác để tránh restore muộn
-            try:
-                _ = self._cancel_pending_restores_for_gpu(gpu_index, except_key=key)
-            except Exception:
-                pass
         except Exception:
-            pass
+            loop_cancel_event = threading.Event()
 
         # Enforce baseline power/clock trước khi vào vòng điều khiển (đảm bảo trạng thái an toàn/tối thiểu)
         try:
@@ -2522,9 +2434,9 @@ class OptimizedHardwareController:
         except Exception as _e_bc:
             self.logger.debug(f"[OHC.set_target_utilization] Baseline clock enforcement error: {_e_bc}")
 
-        # Hủy mọi restore pending khác trên cùng GPU từ PID khác để tránh restore muộn
+        # Không còn cơ chế cross-PID restore pending sau khi vô hiệu hóa scheduling
         try:
-            _ = self._cancel_pending_restores_for_gpu(gpu_index, except_key=key)
+            self.logger.debug("[OHC.set_target_utilization] Restore scheduling disabled → no cross-PID cancel")
         except Exception:
             pass
 
@@ -2666,10 +2578,10 @@ class OptimizedHardwareController:
         achieved = self._get_utilization_percent(gpu_index)
         duration = time.time() - start_time
 
-        # Optional restore scheduling
+        # Optional restore scheduling (đÃ tắt hoàn toàn)
         if window_sec and window_sec > 0:
             try:
-                self._schedule_restore(pid, gpu_index, window_sec, cancel_event=loop_cancel_event)
+                self.logger.debug("⏭️ [OHC.set_target_utilization] Restore scheduling disabled → skipping (_schedule_restore)")
             except Exception:
                 pass
 
@@ -3377,10 +3289,15 @@ except Exception as e:
         từ PID cũ (trên cùng GPU) có thể gây reset device-wide (NVML reset clocks),
         làm tụt hashrate của phiên mới. Hàm này chủ động hủy các restore pending khác.
         """
+        # [disabled] Restore scheduling pipeline removed → no-op
+        return 0
         # Cho phép opt-out qua ENV nếu cần thử nghiệm
         try:
-            if str(os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')).lower() in ('0', 'false', 'no'):
-                return 0
+            try:
+                if str(os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU', '1')).lower() in ('0', 'false', 'no'):
+                    return 0
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -3427,6 +3344,11 @@ except Exception as e:
     def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int, cancel_event: Optional[threading.Event] = None):
         # Cancellable restore of device-wide settings after time window (per-PID simulation window)
         try:
+            try:
+                self.logger.debug("⏭️ [OHC._schedule_restore] Restore scheduling disabled → returning early")
+            except Exception:
+                pass
+            return
             key = (int(pid), int(gpu_index))
             # Early skip if window_sec <= 0 (nothing to schedule)
             try:
@@ -3529,12 +3451,14 @@ except Exception as e:
                                     pass
                                 return
                             time.sleep(poll_interval)
-                    # Qua idle-gate (hoặc idle-gate bị vô hiệu hóa) → thực hiện restore
-                    self.logger.info(f"🔄 [OHC._schedule_restore] CID={correlation_id} Restoring GPU settings for PID {pid}")
-                    self.gpu_manager.restore_gpu_settings_for_pid(pid, correlation_id=correlation_id)
+                    # Qua idle-gate (hoặc idle-gate bị vô hiệu hóa) → thực hiện restore nếu có routine phù hợp
+                    gm = getattr(self, 'gpu_manager', None)
+                    try:
+                        self.logger.info(f"ℹ️ [OHC._schedule_restore] CID={correlation_id} Restore routine removed → skipping restore for PID {pid}")
+                    except Exception:
+                        pass
                     # Clean up simulation processes
                     self.cleanup()
-                    self.logger.info(f"✅ [OHC._schedule_restore] CID={correlation_id} Restored GPU settings after {wait_seconds}s for PID={pid} (GPU={gpu_index})")
                 except Exception as e:
                     self.logger.warning(f"⚠️ [OHC._schedule_restore] CID={correlation_id} Error during auto-restore for PID={pid}: {e}")
                 finally:

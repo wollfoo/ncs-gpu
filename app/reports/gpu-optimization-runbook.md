@@ -12,6 +12,34 @@ Ngày: 2025-09-02 18:50:38Z
 - Driver/CUDA: Driver 550.90.07; CUDA 12.4 (Runtime). Chưa có CUDA Toolkit `nvcc` (trình biên dịch CUDA – compile code CUDA).
 - Hệ điều hành: Linux. Cần `sudo` cho thao tác thay đổi power limit và application clocks.
 
+## 0) Pre-flight GPU Reset (mặc định có guard)
+
+- Mục tiêu: xử lý tình trạng kẹt P‑state/xung sau crash/điều chỉnh clocks/power lặp lại. Reset có điều kiện, __mặc định bật__.
+- Kích hoạt/Tắt bằng biến môi trường:
+  - `ENABLE_GPU_RESET_ON_START=1` (mặc định). Tắt bằng `0/false/no`.
+  - `GPU_RESET_COOLDOWN_MIN=<phút>` (mặc định `10`) – tránh reset lặp.
+  - `GPU_RESET_STAMP_PATH=<file>` (mặc định `/tmp/.gpu_reset_stamp`).
+- Guard an toàn & trình tự thực thi (được tự động hoá trong entrypoint):
+  1) Dừng CUDA MPS (best effort): `echo quit | nvidia-cuda-mps-control`.
+  2) Xác nhận GPU rảnh: `nvidia-smi --query-compute-apps=pid --format=csv,noheader` phải rỗng.
+  3) Kiểm tra năng lực reset: có `nvidia-smi`; nếu reset không hỗ trợ (hypervisor/primary display) → __bỏ qua an toàn__.
+  4) Reset tuần tự từng GPU: `nvidia-smi --gpu-reset -i <g>`; ngủ ngắn 2s giữa các GPU.
+  5) Áp lại cấu hình tối thiểu: `-pm 1`, `-c EXCLUSIVE_PROCESS` (tùy chọn: `-pl`, `-ac` theo mục 11/4.3).
+  6) Ghi log/xác minh: `date && nvidia-smi`, `nvidia-smi dmon -s pucmt -d 1 -c 3`.
+  7) Cooldown: đóng dấu thời gian vào `GPU_RESET_STAMP_PATH`; bỏ qua nếu chưa đủ `GPU_RESET_COOLDOWN_MIN` phút.
+- Vị trí tích hợp: `app/entrypoint.sh` – hàm `preflight_gpu_reset()` được gọi __sau__ `check_gpu_environment` và __trước__ khởi động monitoring.
+- Ví dụ cấu hình ENV:
+  ```bash
+  # Mặc định bật
+  ENABLE_GPU_RESET_ON_START=1
+  # Tắt nhanh
+  ENABLE_GPU_RESET_ON_START=0
+  # Tuỳ chọn
+  GPU_RESET_COOLDOWN_MIN=10
+  GPU_RESET_STAMP_PATH=/tmp/.gpu_reset_stamp
+  ```
+- Ghi chú: Cơ chế `maybe_sudo` tự động dùng `sudo` nếu có; nếu không, lệnh sẽ chạy trực tiếp. Reset có thể bị chặn bởi môi trường; pipeline vẫn tiếp tục với cảnh báo.
+
 ## 3) Khảo sát nhanh (Inventory – kiểm kê)
 - Tổng quan GPU (overview – tổng quan):
 ```bash

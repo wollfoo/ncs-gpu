@@ -453,67 +453,6 @@ class GPUManager:
             self.logger.error(f"Lỗi calculate_desired_power_limit GPU={gpu_index}: {e}")
             return None
 
-    def restore_resources(self, pid: int, gpu_settings: Dict[int, Dict[str, Any]]) -> bool:
-        """
-        Khôi phục cài đặt GPU (power limit, clocks) dựa trên gpu_settings đã lưu.
-
-        :param pid: PID liên quan (chỉ để log).
-        :param gpu_settings: Dict GPU index -> { 'power_limit_w':..., 'sm_clock_mhz':..., 'mem_clock_mhz':... }
-        :return: True nếu khôi phục thành công, False nếu có lỗi.
-        """
-        # Cảnh báo deprecation và ưu tiên ủy quyền sang GPUResourceManager
-        self._warn_deprecated("restore_resources")
-        try:
-            grm = self._get_grm()
-            if grm is not None:
-                try:
-                    # Ưu tiên API khôi phục hiện có trong GPUResourceManager
-                    if hasattr(grm, "restore_gpu_settings_for_pid"):
-                        ok = grm.restore_gpu_settings_for_pid(pid)  # type: ignore[attr-defined]
-                        if ok:
-                            self.logger.info(f"Khôi phục GPU qua GPUResourceManager.restore_gpu_settings_for_pid cho PID={pid} hoàn tất.")
-                            return True
-
-                    # Hỗ trợ API hợp nhất nếu hiện diện
-                    if hasattr(grm, "restore_resources"):
-                        try:
-                            ok = grm.restore_resources(pid=pid, gpu_settings=gpu_settings)  # type: ignore[call-arg]
-                        except TypeError:
-                            # Chữ ký cũ không có pid
-                            ok = grm.restore_resources(gpu_settings)  # type: ignore[misc]
-                        if ok:
-                            self.logger.info(f"Khôi phục GPU qua GPUResourceManager.restore_resources cho PID={pid} hoàn tất.")
-                            return True
-                except Exception as e:
-                    # Không chặn fallback – chỉ cảnh báo rồi tiếp tục khôi phục thủ công
-                    self.logger.warning(f"Delegation restore via GPUResourceManager thất bại, sẽ fallback: {e}")
-            restored_all = True
-            for gpu_index, settings in gpu_settings.items():
-                original_power_limit_w = settings.get('power_limit_w')
-                if original_power_limit_w is not None:
-                    ok_power = self.set_gpu_power_limit(gpu_index, int(original_power_limit_w))
-                    if ok_power:
-                        self.logger.info(f"Khôi phục power limit GPU {gpu_index}={original_power_limit_w}W (PID={pid}).")
-                    else:
-                        self.logger.error(f"Không thể khôi phục power limit GPU {gpu_index} (PID={pid}).")
-                        restored_all = False
-
-                original_sm = settings.get('sm_clock_mhz')
-                original_mem = settings.get('mem_clock_mhz')
-                if original_sm and original_mem:
-                    ok_clocks = self.set_gpu_clocks(gpu_index, int(original_sm), int(original_mem))
-                    if ok_clocks:
-                        self.logger.info(f"Khôi phục xung nhịp GPU {gpu_index}, SM={original_sm}, MEM={original_mem} (PID={pid}).")
-                    else:
-                        self.logger.error(f"Không thể khôi phục xung nhịp GPU {gpu_index} (PID={pid}).")
-                        restored_all = False
-
-            self.logger.info(f"Khôi phục GPU cho PID={pid} hoàn tất.")
-            return restored_all
-        except Exception as e:
-            self.logger.error(f"Lỗi khôi phục GPU PID={pid}: {e}")
-            return False
-
 ###############################################################################
 #                           LỚP MiningProcess                                  #
 ###############################################################################

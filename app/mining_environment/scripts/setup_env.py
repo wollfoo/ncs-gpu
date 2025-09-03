@@ -153,7 +153,6 @@ def validate_memory_config(config, logger):
         logger.error(f"❌ [MEMORY VALIDATION] Validation failed: {e}")
         raise
 
-
 def detect_gpu_count(logger) -> int:
     """
     Detect number of NVIDIA GPUs available using nvidia-smi.
@@ -175,7 +174,6 @@ def detect_gpu_count(logger) -> int:
     except Exception as e:
         logger.warning(f"⚠️ Cannot detect GPU count (không thể phát hiện số GPU): {e}")
         return 0
-
 
 def apply_auto_defaults(resource_config: Dict[str, Any], environmental_limits: Dict[str, Any], logger) -> None:
     """
@@ -290,11 +288,9 @@ def configure_system(system_params, logger):
         logger.error(f"❌ **Locale setup error** (lỗi khi thiết lập locale – lỗi cấu hình ngôn ngữ): {e}")
         sys.exit(1)
 
-
 def _parse_bool_env(name: str, default: str = '0') -> bool:
     """Parse boolean-like environment variable (1/true/yes)."""
     return str(os.getenv(name, default)).lower() in ("1", "true", "yes")
-
 
 def monitor_websocat_health(websocat_process, websocat_args, websocat_env, logger):
     """

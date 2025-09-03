@@ -671,11 +671,8 @@ class ResourceManager(IResourceManager):
                                             try:
                                                 hc = getattr(self._gpu_orchestrator, 'hardware_controller', None)
                                                 gm = getattr(hc, 'gpu_manager', None) if hc else None
-                                                if gm and hasattr(gm, 'restore_gpu_settings_for_pid'):
-                                                    restored = gm.restore_gpu_settings_for_pid(pid_val)
-                                                    self.logger.info(f"[RM] ✅ **Rollback successful** (hoàn trả thành công – khôi phục xong) for PID {pid_val}: {restored}")
-                                                else:
-                                                    self.logger.warning(f"[RM] ⚠️ **No rollback method available** (không có phương thức hoàn trả – thiếu hàm khôi phục)")
+                                                # Routine khôi phục đã bị loại bỏ → bỏ qua restore
+                                                self.logger.info(f"[RM] ℹ️ **Rollback routine removed** (đã loại bỏ routine khôi phục) → skipping restore for PID {pid_val}")
                                             except Exception as rb_err:
                                                 self.logger.error(f"[RM] ❌ **Rollback failed** (hoàn trả thất bại – khôi phục lỗi) for PID {pid_val}: {rb_err}")
                                         else:
