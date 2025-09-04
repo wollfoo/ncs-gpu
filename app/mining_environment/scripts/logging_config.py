@@ -318,6 +318,7 @@ class EnhancedLogManager:
                     flushLevel=logging.INFO
                 )
                 formatter = logging.Formatter(self.ENHANCED_FORMAT, self.DATE_FORMAT)
+                file_handler.setFormatter(formatter)
                 memory_handler.setFormatter(formatter)
                 memory_handler.addFilter(CorrelationIdFilter())
             
@@ -381,7 +382,7 @@ class EnhancedLogManager:
                     max_file_size=self.encryption_max_bytes
                 )
                 file_handler.setLevel(safe_log_level)
-                file_formatter = logging.Formatter(self.STANDARD_FORMAT)
+                file_formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
                 file_handler.setFormatter(file_formatter)
                 file_handler.addFilter(CorrelationIdFilter())
 
@@ -400,7 +401,7 @@ class EnhancedLogManager:
                     encoding='utf-8'
                 )
                 file_handler.setLevel(safe_log_level)
-                formatter = logging.Formatter(self.STANDARD_FORMAT)
+                formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
                 file_handler.setFormatter(formatter)
                 file_handler.addFilter(CorrelationIdFilter())
 
@@ -417,7 +418,7 @@ class EnhancedLogManager:
             # ✅ STREAM HANDLER: Console với flush tự động
             stream_handler = logging.StreamHandler(sys.stdout)
             stream_handler.setLevel(safe_log_level)
-            stream_formatter = logging.Formatter(self.STANDARD_FORMAT)
+            stream_formatter = logging.Formatter(self.STANDARD_FORMAT, self.DATE_FORMAT)
             stream_handler.setFormatter(stream_formatter)
             stream_handler.addFilter(CorrelationIdFilter())
             logger.addHandler(stream_handler)
