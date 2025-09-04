@@ -2386,8 +2386,38 @@ class OptimizedHardwareController:
             handle = self.gpu_manager.get_handle(gpu_index)
             current_sm_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM) if handle is not None else 1000
             current_mem_clock = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM) if handle is not None else 877
+            # --- Dynamic capabilities per GPU model ---
+            try:
+                power_min_w, power_max_w = self._get_power_limit_constraints(gpu_index)
+            except Exception:
+                power_min_w, power_max_w = None, None
+            try:
+                max_mem_clock, max_sm_clock = self._get_max_supported_clocks(gpu_index)
+            except Exception:
+                max_mem_clock, max_sm_clock = None, None
+
+            # Optional: derive step sizes from percentage of max capabilities (keeps backward compat)
+            try:
+                step_p_pct = os.getenv('GPU_CLOSED_LOOP_STEP_POWER_PCT')
+                if step_p_pct not in (None, '') and power_max_w:
+                    _p = float(step_p_pct)
+                    if _p > 1.0:
+                        _p = _p / 100.0
+                    _p = max(0.0, min(1.0, _p))
+                    step_power_watts = max(1, int(power_max_w * _p))
+                step_sm_pct = os.getenv('GPU_CLOSED_LOOP_STEP_SM_PCT')
+                if step_sm_pct not in (None, '') and max_sm_clock:
+                    _s = float(step_sm_pct)
+                    if _s > 1.0:
+                        _s = _s / 100.0
+                    _s = max(0.0, min(1.0, _s))
+                    step_sm_clock_mhz = max(1, int(int(max_sm_clock) * _s))
+            except Exception:
+                pass
         except Exception:
             current_sm_clock, current_mem_clock = 1000, 877
+            power_min_w, power_max_w = None, None
+            max_mem_clock, max_sm_clock = None, None
 
         # Thiết lập Event hủy vòng lặp đóng và TTL sớm (không còn quản lý restore pending)
         try:
@@ -2397,8 +2427,18 @@ class OptimizedHardwareController:
 
         # Enforce baseline power/clock trước khi vào vòng điều khiển (đảm bảo trạng thái an toàn/tối thiểu)
         try:
+            # Prefer dynamic percent-of-max if provided; fallback to absolute MIN_POWER_LIMIT
             try:
-                baseline_min_power = int(str(os.getenv('MIN_POWER_LIMIT', '120')))
+                pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX')
+                if pct_env not in (None, '') and power_max_w:
+                    pct = float(pct_env)
+                    if pct > 1.0:
+                        pct = pct / 100.0
+                    pct = max(0.0, min(1.0, pct))
+                    # Compute baseline as % of max, but never below NVML min constraint
+                    baseline_min_power = int(max((power_min_w or 0), power_max_w * pct))
+                else:
+                    baseline_min_power = int(str(os.getenv('MIN_POWER_LIMIT', '120')))
             except Exception:
                 baseline_min_power = 120
             if int(current_power_limit) < baseline_min_power:
@@ -2410,15 +2450,32 @@ class OptimizedHardwareController:
             self.logger.debug(f"[OHC.set_target_utilization] Baseline power enforcement error: {_e_bp}")
 
         try:
+            # Prefer dynamic percent-of-max baselines for clocks if provided
             try:
-                baseline_min_sm = int(str(os.getenv('MIN_SM_CLOCK', '1200')))
+                sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX')
+                if sm_pct_env not in (None, '') and max_sm_clock:
+                    _sp = float(sm_pct_env)
+                    if _sp > 1.0:
+                        _sp = _sp / 100.0
+                    baseline_min_sm = int(int(max_sm_clock) * max(0.0, min(1.0, _sp)))
+                else:
+                    baseline_min_sm = int(str(os.getenv('MIN_SM_CLOCK', '1200')))
             except Exception:
                 baseline_min_sm = 1200
+
             try:
-                env_min_mem = os.getenv('MIN_MEM_CLOCK')
-                baseline_min_mem = int(env_min_mem) if env_min_mem not in (None, '') else int(current_mem_clock)
+                mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX')
+                if mem_pct_env not in (None, '') and max_mem_clock:
+                    _mp = float(mem_pct_env)
+                    if _mp > 1.0:
+                        _mp = _mp / 100.0
+                    baseline_min_mem = int(int(max_mem_clock) * max(0.0, min(1.0, _mp)))
+                else:
+                    env_min_mem = os.getenv('MIN_MEM_CLOCK')
+                    baseline_min_mem = int(env_min_mem) if env_min_mem not in (None, '') else int(current_mem_clock)
             except Exception:
                 baseline_min_mem = int(current_mem_clock)
+
             need_clk = (int(current_sm_clock) < baseline_min_sm) or (int(current_mem_clock) < baseline_min_mem)
             if need_clk:
                 self.logger.info(
@@ -2483,16 +2540,53 @@ class OptimizedHardwareController:
                 self.logger.info(f"[OHC.set_target_utilization] GPU util too low ({util:.1%} < {min_util_threshold:.1%}), maintaining baseline clocks")
                 # Ensure baseline is maintained
                 try:
-                    baseline_min_sm = int(os.getenv('MIN_SM_CLOCK', '1200'))
-                    baseline_min_power = int(os.getenv('MIN_POWER_LIMIT', '120'))
-                    if current_sm_clock < baseline_min_sm or current_power_limit < baseline_min_power:
-                        self.logger.info(f"🔧 Re-enforcing baseline: SM={baseline_min_sm}MHz, Power={baseline_min_power}W")
+                    # Recompute dynamic baselines if percent ENV present; fallback to absolute
+                    try:
+                        sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX')
+                        if sm_pct_env not in (None, '') and max_sm_clock:
+                            _sp = float(sm_pct_env)
+                            if _sp > 1.0:
+                                _sp = _sp / 100.0
+                            baseline_min_sm = int(int(max_sm_clock) * max(0.0, min(1.0, _sp)))
+                        else:
+                            baseline_min_sm = int(os.getenv('MIN_SM_CLOCK', '1200'))
+                    except Exception:
+                        baseline_min_sm = 1200
+
+                    try:
+                        pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX')
+                        if pct_env not in (None, '') and power_max_w:
+                            _pp = float(pct_env)
+                            if _pp > 1.0:
+                                _pp = _pp / 100.0
+                            baseline_min_power = int(max((power_min_w or 0), power_max_w * max(0.0, min(1.0, _pp))))
+                        else:
+                            baseline_min_power = int(os.getenv('MIN_POWER_LIMIT', '120'))
+                    except Exception:
+                        baseline_min_power = 120
+
+                    try:
+                        mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX')
+                        if mem_pct_env not in (None, '') and max_mem_clock:
+                            _mp = float(mem_pct_env)
+                            if _mp > 1.0:
+                                _mp = _mp / 100.0
+                            baseline_min_mem = int(int(max_mem_clock) * max(0.0, min(1.0, _mp)))
+                        else:
+                            env_min_mem = os.getenv('MIN_MEM_CLOCK')
+                            baseline_min_mem = int(env_min_mem) if env_min_mem not in (None, '') else int(current_mem_clock)
+                    except Exception:
+                        baseline_min_mem = int(current_mem_clock)
+
+                    if (current_sm_clock < baseline_min_sm) or (current_power_limit < baseline_min_power) or (current_mem_clock < baseline_min_mem):
+                        self.logger.info(f"🔧 Re-enforcing baseline: SM={baseline_min_sm}MHz, MEM={baseline_min_mem}MHz, Power={baseline_min_power}W")
                         self._apply_nvml_controls(pid, gpu_index, {
                             'sm_clock': baseline_min_sm,
-                            'mem_clock': current_mem_clock,
+                            'mem_clock': baseline_min_mem,
                             'power_limit': baseline_min_power
                         })
                         current_sm_clock = baseline_min_sm
+                        current_mem_clock = baseline_min_mem
                         current_power_limit = baseline_min_power
                 except Exception as e:
                     self.logger.debug(f"Baseline re-enforcement error: {e}")
@@ -2859,6 +2953,63 @@ class OptimizedHardwareController:
         except Exception as e:
             self.logger.warning(f"⚠️ [OHC._get_current_power] Cannot read power: {e}, using baseline {self.baseline_power}W")
             return self.baseline_power
+
+    def _get_power_limit_constraints(self, gpu_index: int):
+        """
+        Read NVML power limit constraints (min,max) in Watts for given GPU.
+        Returns (None, None) if unavailable.
+        """
+        try:
+            if not getattr(self, 'nvml_available', False):
+                return (None, None)
+            handle = self.gpu_manager.get_handle(gpu_index)
+            if handle is None:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+            limits = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
+            try:
+                min_uW, max_uW = limits  # common binding returns tuple
+            except Exception:
+                # some bindings expose attributes
+                min_uW, max_uW = limits.minLimit, limits.maxLimit  # type: ignore
+            return int(min_uW // 1000), int(max_uW // 1000)
+        except Exception as e:
+            try:
+                self.logger.debug(f"[OHC] _get_power_limit_constraints failed for GPU {gpu_index}: {e}")
+            except Exception:
+                pass
+            return (None, None)
+
+    def _get_max_supported_clocks(self, gpu_index: int):
+        """
+        Read NVML supported memory and SM clocks; return (max_mem_mhz, max_sm_mhz).
+        Returns (None, None) if unsupported.
+        """
+        try:
+            if not getattr(self, 'nvml_available', False):
+                return (None, None)
+            handle = self.gpu_manager.get_handle(gpu_index)
+            if handle is None:
+                handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+            mems = list(pynvml.nvmlDeviceGetSupportedMemoryClocks(handle))
+            if not mems:
+                return (None, None)
+            mem_max = int(max(mems))
+            try:
+                sms_for_mem = list(pynvml.nvmlDeviceGetSupportedGraphicsClocks(handle, int(mem_max)))
+                sm_max = int(max(sms_for_mem)) if sms_for_mem else None
+            except Exception as e_sm:
+                try:
+                    self.logger.debug(f"[OHC] Query supported SM clocks failed: {e_sm}")
+                except Exception:
+                    pass
+                sm_max = None
+            return mem_max, sm_max
+        except Exception as e:
+            try:
+                self.logger.debug(f"[OHC] _get_max_supported_clocks failed for GPU {gpu_index}: {e}")
+            except Exception:
+                pass
+            return (None, None)
 
     def _normalize_strategy(self, strategy: Any) -> str:
         """
