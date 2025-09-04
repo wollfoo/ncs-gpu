@@ -140,7 +140,11 @@ def reset_app_clocks_nvml(gpu_manager: Any, gpu_index: int, logger: Any = None) 
     - Trả về True nếu NVML báo thành công, False nếu lỗi/không hỗ trợ
     """
     # Luôn ưu tiên logger chuyên biệt của module để log vào gpu_unrestrict.log
-    logger = logger or _MODULE_LOGGER
+    if not logger:
+        try:
+            logger = _MODULE_LOGGER  # type: ignore[name-defined]
+        except NameError:
+            logger = None
     try:
         if getattr(gpu_manager, 'gpu_initialized', False) is False:
             # Lazy-init NVML ngay tại chỗ (graceful): thử initialize_nvml() nếu có
@@ -462,18 +466,179 @@ def collect_throttle_diagnostics(logger: Any, gpu_index: int) -> Dict[str, Any]:
     return info
 
 
-def verify_gpu_state_extended(logger: Any, gpu_index: int, strict: bool = False) -> bool:
+def verify_gpu_state_extended(logger: Any, gpu_index: int, strict: bool = False) -> Dict[str, Any]:
     """
-    Verify mở rộng: đọc throttle reasons và cảm biến. Nếu strict=True, coi Power/Thermal throttle
-    đang hoạt động là không đạt (trả False); Idle không coi là lỗi.
+    Verify mở rộng (có cấu trúc) – trả về thông tin chẩn đoán chi tiết để quyết định unrestrict/baseline.
+
+    Trả về dict với các trường:
+      - unlocked: bool – trạng thái "mở" (không bị throttle/cap theo tiêu chí)
+      - reasons: List[str] – danh sách lý do nếu không unlocked (ví dụ: ["power_throttle","low_sm_clock_vs_max",...])
+      - metrics_snapshot: Dict[str, Any] – snapshot metrics để log/chẩn đoán (util, clocks, power, temp, pstate, caps, percent)
+
+    Quy tắc:
+      - Ưu tiên cờ throttle từ driver (power/thermal/active) trước so sánh ngưỡng để giảm false-positive
+      - Idle-pass: nếu idle flag bật và utilization thấp → coi là unlocked (không ép cap dưới tải)
+      - Dưới tải: nếu bất kỳ Power/SM/MEM dưới ngưỡng tỉ lệ tối thiểu (mặc định 60% giá trị tối đa) → coi là bị giới hạn
+      - strict=False: giữ tương thích cũ – luôn trả unlocked=True nhưng vẫn trả về reasons/metrics để tham khảo
     """
-    diag = collect_throttle_diagnostics(logger, gpu_index)
+    logger = logger or _MODULE_LOGGER
+    diag = collect_throttle_diagnostics(logger, gpu_index) or {}
+
+    # --- Đọc clocks hiện tại (best-effort, dùng nvidia-smi) ---
+    cur_sm: Optional[float] = None
+    cur_mem: Optional[float] = None
+    cur_gr: Optional[float] = None
+    try:
+        vals = _query_smi_value(gpu_index, ["clocks.sm", "clocks.mem", "clocks.gr"]) or []
+        if len(vals) >= 1 and vals[0] not in (None, ""):
+            cur_sm = float(vals[0])
+        if len(vals) >= 2 and vals[1] not in (None, ""):
+            cur_mem = float(vals[1])
+        if len(vals) >= 3 and vals[2] not in (None, ""):
+            cur_gr = float(vals[2])
+    except Exception:
+        pass
+    if cur_gr is None:
+        try:
+            v2 = _query_smi_value(gpu_index, ["clocks.graphics"]) or []
+            if v2 and v2[0] not in (None, ""):
+                cur_gr = float(v2[0])
+        except Exception:
+            pass
+
+    # --- Lấy năng lực tối đa (caps) để so sánh tỉ lệ ---
+    try:
+        caps = discover_gpu_caps(logger, None, gpu_index) or {}
+    except Exception:
+        caps = {}
+    sm_max = caps.get("sm_max_mhz")
+    mem_max = caps.get("mem_max_mhz")
+    pwr_max = caps.get("power_max_w")
+    temp_slow = caps.get("temp_slowdown_c") or caps.get("temp_shutdown_c")
+
+    # --- Lấy metrics hiện tại từ diag ---
+    util_gpu = diag.get("util_gpu")
+    util_mem = diag.get("util_mem")
+    temperature = diag.get("temperature")
+    power_draw = diag.get("power_draw")
+    power_limit = diag.get("power_limit")
+    enforced_power_limit = diag.get("enforced_power_limit")
+    pstate = diag.get("pstate")
+    idle_flag = bool(diag.get("idle"))
+    power_throttle = bool(diag.get("power"))
+    thermal_throttle = bool(diag.get("thermal"))
+    active_throttle = bool(diag.get("active"))
+
+    def _pct(val: Any, max_val: Any) -> Optional[float]:
+        try:
+            v = float(val)
+            m = float(max_val)
+            if m <= 0:
+                return None
+            return v / m
+        except Exception:
+            return None
+
+    sm_pct = _pct(cur_sm, sm_max)
+    mem_pct = _pct(cur_mem, mem_max)
+    pwr_pct = _pct(power_draw, pwr_max)
+    temp_pct = _pct(temperature, temp_slow)
+
+    reasons: List[str] = []
+    # 1) Ưu tiên cờ throttle
+    if power_throttle:
+        reasons.append("power_throttle")
+    if thermal_throttle:
+        reasons.append("thermal_slowdown")
+    if active_throttle and not (power_throttle or thermal_throttle):
+        reasons.append("throttle_active")
+
+    # 2) Idle-pass: nếu idle và util thấp → coi như pass
+    try:
+        util_val = float(util_gpu) if util_gpu is not None else None
+    except Exception:
+        util_val = None
+    idle_util_thresh = 10.0
+    try:
+        idle_util_thresh = float(os.getenv('IDLE_UTIL_THRESHOLD', '10'))
+    except Exception:
+        pass
+    unlocked_idle_pass = bool(idle_flag and (util_val is not None) and (util_val < idle_util_thresh))
+
+    # 3) Dưới tải: kiểm tra tỉ lệ so với MAX (mặc định 60%)
+    load_util_thresh = 60.0
+    try:
+        load_util_thresh = float(os.getenv('LOAD_UTIL_THRESHOLD', '60'))
+    except Exception:
+        pass
+    min_ratio = 0.6
+    try:
+        min_ratio = float(os.getenv('UNLOCK_MIN_RATIO_OF_MAX', '0.6'))
+    except Exception:
+        pass
+    load_high = (util_val is not None) and (util_val >= load_util_thresh)
+    below_ratio_reasons: List[str] = []
+    if load_high:
+        if sm_pct is not None and sm_pct < min_ratio:
+            below_ratio_reasons.append("low_sm_clock_vs_max")
+        if mem_pct is not None and mem_pct < min_ratio:
+            below_ratio_reasons.append("low_mem_clock_vs_max")
+        if pwr_pct is not None and pwr_pct < min_ratio:
+            below_ratio_reasons.append("low_power_vs_max")
+        # P-state dưới tải nên là P0
+        try:
+            if isinstance(pstate, str) and str(pstate).strip().upper() != 'P0':
+                reasons.append("pstate_not_p0_under_load")
+        except Exception:
+            pass
+    reasons.extend(below_ratio_reasons)
+
+    # 4) Quyết định unlocked
     if not strict:
-        return True
-    # Strict: fail on power or thermal throttle
-    pwr = bool(diag.get("power"))
-    thrm = bool(diag.get("thermal"))
-    return not (pwr or thrm)
+        # Giữ tương thích: strict=False → luôn pass để không thay đổi hành vi cũ
+        unlocked = True
+    else:
+        unlocked = True
+        if power_throttle or thermal_throttle:
+            unlocked = False
+        elif below_ratio_reasons:
+            unlocked = False
+        elif (not unlocked_idle_pass) and ("throttle_active" in reasons):
+            unlocked = False
+
+    metrics_snapshot: Dict[str, Any] = {
+        "gpu_index": gpu_index,
+        "util_gpu": util_gpu,
+        "util_mem": util_mem,
+        "pstate": pstate,
+        "temperature": temperature,
+        "power_draw": power_draw,
+        "power_limit": power_limit,
+        "enforced_power_limit": enforced_power_limit,
+        "sm_clock_mhz": cur_sm,
+        "mem_clock_mhz": cur_mem,
+        "graphics_clock_mhz": cur_gr,
+        "sm_max_mhz": sm_max,
+        "mem_max_mhz": mem_max,
+        "power_max_w": pwr_max,
+        "temp_slowdown_c": temp_slow,
+        "sm_ratio_of_max": sm_pct,
+        "mem_ratio_of_max": mem_pct,
+        "power_ratio_of_max": pwr_pct,
+        "temp_ratio_of_slowdown": temp_pct,
+    }
+
+    try:
+        if logger:
+            logger.info(f"[RC.verify.ext] GPU={gpu_index} | unlocked={int(bool(unlocked or unlocked_idle_pass))} | reasons={reasons} | load_high={int(bool(load_high))}")
+    except Exception:
+        pass
+
+    return {
+        "unlocked": bool(unlocked or unlocked_idle_pass),
+        "reasons": reasons,
+        "metrics_snapshot": metrics_snapshot,
+    }
 
 
 def reset_gpu_clocks_and_verify(
@@ -509,7 +674,8 @@ def reset_gpu_clocks_and_verify(
         try:
             if _truthy_env('VERIFY_THROTTLE_REASONS', '1'):
                 strict = _truthy_env('VERIFY_THROTTLE_REASONS_STRICT', '0')
-                ext_ok = verify_gpu_state_extended(logger, gpu_index, strict=strict)
+                ext_res = verify_gpu_state_extended(logger, gpu_index, strict=strict)
+                ext_ok = bool(ext_res.get('unlocked')) if isinstance(ext_res, dict) else bool(ext_res)
                 if strict and not ext_ok:
                     verified = False
         except Exception as e:
@@ -525,7 +691,8 @@ def reset_gpu_clocks_and_verify(
                     verified = verify_gpu_clock_state(logger, gpu_index)
                     try:
                         if _truthy_env('VERIFY_THROTTLE_REASONS', '1') and _truthy_env('VERIFY_THROTTLE_REASONS_STRICT', '0'):
-                            ext_ok = verify_gpu_state_extended(logger, gpu_index, strict=True)
+                            ext_res = verify_gpu_state_extended(logger, gpu_index, strict=True)
+                            ext_ok = bool(ext_res.get('unlocked')) if isinstance(ext_res, dict) else bool(ext_res)
                             if not ext_ok:
                                 verified = False
                     except Exception:

@@ -531,11 +531,48 @@ class GPUOptimizationOrchestrator:
                 for gidx in list(indices):
                     # Verify GPU state (extended); if locked or forced, enqueue an unrestrict intent
                     try:
-                        unlocked = bool(verify_gpu_state_extended(None, gidx, True))
-                    except Exception:
+                        _ver = verify_gpu_state_extended(None, gidx, True)
+                        if isinstance(_ver, dict):
+                            unlocked = bool(_ver.get('unlocked'))
+                            reasons = _ver.get('reasons', [])
+                            metrics = _ver.get('metrics_snapshot') or {}
+                        else:
+                            unlocked = bool(_ver)
+                            reasons, metrics = [], {}
+                    except Exception as _vx:
                         unlocked = False
+                        reasons, metrics = ['verify_error'], {}
+                    # Optional hysteresis (per-GPU state)
+                    try:
+                        hyst_enabled = str(os.getenv('UNRESTRICT_SUP_HYST_ENABLED', '1')).lower() in ('1','true','yes')
+                        hyst_n = int(os.getenv('UNRESTRICT_SUP_HYST_N', '2'))
+                    except Exception:
+                        hyst_enabled, hyst_n = True, 2
+                    if not hasattr(self, '_sup_hyst'):
+                        self._sup_hyst = {}
+                    st = self._sup_hyst.get(gidx, {'locked_streak': 0})
+                    if unlocked:
+                        st['locked_streak'] = 0
+                    else:
+                        st['locked_streak'] = int(st.get('locked_streak', 0)) + 1
+                    self._sup_hyst[gidx] = st
+                    # Verify log with reasons/metrics snapshot (safe subset)
+                    try:
+                        ts_v = datetime.now().isoformat()
+                        self.logger.info(
+                            f"[Supervisor] verify | ts={ts_v} | gpu={gidx} | unlocked={unlocked} | reasons={reasons} | "
+                            f"hyst={st.get('locked_streak')}/{hyst_n} | util={metrics.get('util_gpu')} | pstate={metrics.get('pstate')} | "
+                            f"temp={metrics.get('temperature')}C | power={metrics.get('power_draw')}W | sm={metrics.get('sm_clock_mhz')}MHz | "
+                            f"mem={metrics.get('mem_clock_mhz')}MHz | ratios(sm/pwr)={metrics.get('sm_ratio_of_max')}/{metrics.get('power_ratio_of_max')}"
+                        )
+                    except Exception:
+                        pass
                     always = str(os.getenv('UNRESTRICT_SUPERVISOR_ALWAYS', '0')).lower() in ('1', 'true', 'yes')
-                    if (not unlocked) or always:
+                    # Hysteresis gate: require N consecutive locked detections unless always forcing
+                    enqueue_gate = (not unlocked)
+                    if hyst_enabled and not always:
+                        enqueue_gate = enqueue_gate and (st.get('locked_streak', 0) >= max(1, hyst_n))
+                    if enqueue_gate or always:
                         now = time.time()
                         try:
                             dwell = float(os.getenv('UNRESTRICT_SUPERVISOR_DWELL_SEC', '10'))
@@ -555,7 +592,12 @@ class GPUOptimizationOrchestrator:
                                     qsize_before = int(q.qsize())
                                 except Exception:
                                     qsize_before = 0
-                                self.logger.info(f"[Supervisor] intent prepare | ts={ts_iso} | thread={th_name}#{th_id} | gpu={gidx} | unlocked={unlocked} | qsize_before={qsize_before}")
+                                self.logger.info(
+                                    f"[Supervisor] intent prepare | ts={ts_iso} | thread={th_name}#{th_id} | gpu={gidx} | "
+                                    f"unlocked={unlocked} | streak={st.get('locked_streak')}/{hyst_n} | hyst_enabled={hyst_enabled} | always={always} | "
+                                    f"reasons={reasons} | util={metrics.get('util_gpu')} | pstate={metrics.get('pstate')} | temp={metrics.get('temperature')}C | "
+                                    f"power={metrics.get('power_draw')}W | sm={metrics.get('sm_clock_mhz')}MHz | mem={metrics.get('mem_clock_mhz')}MHz | qsize_before={qsize_before}"
+                                )
                             except Exception:
                                 pass
                             try:
@@ -572,15 +614,44 @@ class GPUOptimizationOrchestrator:
                                 'enforce_baseline': enforce_baseline,
                             })
                             self._last_supervisor_enqueue_ts[gidx] = now
+                            # Reset streak after enqueue to enforce fresh hysteresis next time
+                            try:
+                                st['locked_streak'] = 0
+                                self._sup_hyst[gidx] = st
+                            except Exception:
+                                pass
                             try:
                                 qsize_after = 0
                                 try:
                                     qsize_after = int(q.qsize())
                                 except Exception:
                                     qsize_after = 0
-                                self.logger.info(f"[Supervisor] enqueued | ts={datetime.now().isoformat()} | thread={th_name}#{th_id} | gpu={gidx} | qsize_after={qsize_after} | power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep}")
+                                self.logger.info(
+                                    f"[Supervisor] enqueued | ts={datetime.now().isoformat()} | thread={th_name}#{th_id} | gpu={gidx} | "
+                                    f"qsize_after={qsize_after} | power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep} | "
+                                    f"reasons={reasons} | util={metrics.get('util_gpu')} | pstate={metrics.get('pstate')} | temp={metrics.get('temperature')}C | "
+                                    f"power={metrics.get('power_draw')}W | sm={metrics.get('sm_clock_mhz')}MHz | mem={metrics.get('mem_clock_mhz')}MHz"
+                                )
                             except Exception:
                                 pass
+                        else:
+                            # Cooldown dwell active: log remaining seconds
+                            try:
+                                remaining = max(0.0, dwell - (now - last))
+                                self.logger.info(
+                                    f"[Supervisor] enqueue skipped due to cooldown | gpu={gidx} | remaining={remaining:.2f}s | dwell={dwell}s | last={last:.2f} | now={now:.2f}"
+                                )
+                            except Exception:
+                                pass
+                    else:
+                        # Hysteresis gate holds the enqueue (not enough consecutive locked detections)
+                        try:
+                            self.logger.info(
+                                f"[Supervisor] enqueue gated by hysteresis | gpu={gidx} | unlocked={unlocked} | streak={st.get('locked_streak')}/{hyst_n} | "
+                                f"hyst_enabled={hyst_enabled} | always={always} | reasons={reasons}"
+                            )
+                        except Exception:
+                            pass
             except Exception as e:
                 try:
                     self.logger.debug(f"[Supervisor] loop error: {e}")
@@ -810,7 +881,8 @@ class GPUOptimizationOrchestrator:
                             pass
                         need_unrestrict = False
                         try:
-                            unlocked = bool(verify_gpu_state_extended(None, gidx, True))
+                            _ver2 = verify_gpu_state_extended(None, gidx, True)
+                            unlocked = bool(_ver2.get('unlocked')) if isinstance(_ver2, dict) else bool(_ver2)
                             need_unrestrict = not unlocked
                         except Exception:
                             # Best-effort: if verify fails, prefer attempting unrestrict guarded by its own dwell/cooldowns
@@ -835,12 +907,23 @@ class GPUOptimizationOrchestrator:
                                 ts_start = datetime.now().isoformat()
                                 t0 = time.time()
                                 try:
-                                    pre_unlocked = bool(verify_gpu_state_extended(None, gidx, True))
+                                    _ver3 = verify_gpu_state_extended(None, gidx, True)
+                                    if isinstance(_ver3, dict):
+                                        pre_unlocked = bool(_ver3.get('unlocked'))
+                                        pre_reasons = _ver3.get('reasons', [])
+                                        pre_metrics = _ver3.get('metrics_snapshot') or {}
+                                    else:
+                                        pre_unlocked = bool(_ver3)
+                                        pre_reasons, pre_metrics = [], {}
                                 except Exception:
                                     pre_unlocked = False
+                                    pre_reasons, pre_metrics = ['verify_error'], {}
                                 try:
                                     self.logger.info(
-                                        f"[C-LOOP] unrestrict.begin | ts={ts_start} | thread={th_name}#{th_id} | gpu={gidx} | pre_unlocked={pre_unlocked} | power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep} | has_cmd={has_cmd}"
+                                        f"[C-LOOP] unrestrict.begin | ts={ts_start} | thread={th_name}#{th_id} | gpu={gidx} | "
+                                        f"pre_unlocked={pre_unlocked} | pre_reasons={pre_reasons} | pre_util={pre_metrics.get('util_gpu')} | pre_pstate={pre_metrics.get('pstate')} | "
+                                        f"pre_temp={pre_metrics.get('temperature')}C | pre_power={pre_metrics.get('power_draw')}W | pre_sm={pre_metrics.get('sm_clock_mhz')}MHz | pre_mem={pre_metrics.get('mem_clock_mhz')}MHz | "
+                                        f"power_pref={power_pref} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep} | has_cmd={has_cmd}"
                                     )
                                 except Exception:
                                     pass
@@ -874,12 +957,23 @@ class GPUOptimizationOrchestrator:
                                 ts_end = datetime.now().isoformat()
                                 dur = max(0.0, t1 - t0)
                                 try:
-                                    post_unlocked = bool(verify_gpu_state_extended(None, gidx, True))
+                                    _ver4 = verify_gpu_state_extended(None, gidx, True)
+                                    if isinstance(_ver4, dict):
+                                        post_unlocked = bool(_ver4.get('unlocked'))
+                                        post_reasons = _ver4.get('reasons', [])
+                                        post_metrics = _ver4.get('metrics_snapshot') or {}
+                                    else:
+                                        post_unlocked = bool(_ver4)
+                                        post_reasons, post_metrics = [], {}
                                 except Exception:
                                     post_unlocked = False
+                                    post_reasons, post_metrics = ['verify_error'], {}
                                 try:
                                     self.logger.info(
-                                        f"[C-LOOP] unrestrict.end | ts={ts_end} | thread={th_name}#{th_id} | gpu={gidx} | ok={ok_unr} | duration={dur:.3f}s | pre_unlocked={pre_unlocked} | post_unlocked={post_unlocked}"
+                                        f"[C-LOOP] unrestrict.end | ts={ts_end} | thread={th_name}#{th_id} | gpu={gidx} | ok={ok_unr} | duration={dur:.3f}s | "
+                                        f"pre_unlocked={pre_unlocked} | post_unlocked={post_unlocked} | post_reasons={post_reasons} | "
+                                        f"post_util={post_metrics.get('util_gpu')} | post_pstate={post_metrics.get('pstate')} | post_temp={post_metrics.get('temperature')}C | "
+                                        f"post_power={post_metrics.get('power_draw')}W | post_sm={post_metrics.get('sm_clock_mhz')}MHz | post_mem={post_metrics.get('mem_clock_mhz')}MHz"
                                     )
                                 except Exception:
                                     pass
