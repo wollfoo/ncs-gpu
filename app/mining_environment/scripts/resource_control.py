@@ -2137,41 +2137,147 @@ class OptimizedHardwareController:
                 status = getattr(self, '_last_apply_status', {})
                 nvml_ok = bool(status.get('nvml_ok', False))
                 if closed_loop_enabled and self.nvml_available and nvml_ok:
-                    if normalized_strategy in ('mining', 'aggressive', 'gpu'):
-                        # Đọc target và áp "floor" theo GPU_UTIL_MIN khi không cho phép under-80
-                        target_util = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
-                        allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', 'false')).lower() in ('1', 'true', 'yes')
-                        min_info = "n/a"
-                        if not allow_under_80:
-                            try:
-                                min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
-                                min_util = float(min_util_env)
-                            except Exception:
-                                min_util = 0.75
-                            if min_util > 1.0:
-                                # Cho phép nhập dạng % (ví dụ 80 → 0.80)
-                                min_util = min_util / 100.0
-                            target_util = max(min_util, target_util)
-                            min_info = f"{min_util:.2f}"
-                        mode = str(os.getenv('CLOSED_LOOP_MODE', 'power'))
-                        self.logger.info(
-                            f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}, "
-                            f"allow_under_80={allow_under_80}, min_floor={min_info}"
-                        )
-                        t_cl_start = time.time()
-                        cl = self.set_target_utilization(
-                            pid=pid,
-                            target_utilization=target_util,
-                            gpu_index=gpu_index,
-                            mode=mode,
-                            window_sec=self.per_pid_window_sec
-                        )
-                        results['operations_applied'].append('closed_loop_tracking')
-                        results['closed_loop'] = cl
+                    # Guards: cho phép bỏ qua closed-loop nếu NVML vừa thay đổi trạng thái hoặc trong thời gian cooldown/suspend
+                    # ENV flags
+                    try:
+                        skip_on_opt = str(os.getenv('GPU_CLOSED_LOOP_SKIP_ON_OPTIMIZATION', '1')).lower() in ('1','true','yes')
+                    except Exception:
+                        skip_on_opt = True
+                    try:
+                        cooldown_sec = float(os.getenv('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC', '2.5'))
+                    except Exception:
+                        cooldown_sec = 2.5
+                    try:
+                        auto_disable_strikes = int(os.getenv('GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES', '3'))
+                    except Exception:
+                        auto_disable_strikes = 3
+                    try:
+                        suspend_sec = float(os.getenv('GPU_CLOSED_LOOP_SUSPEND_SEC', '60'))
+                    except Exception:
+                        suspend_sec = 60.0
+                    # Lazy state containers per GPU
+                    if not hasattr(self, '_cl_cooldown_until'):
+                        self._cl_cooldown_until = {}
+                    if not hasattr(self, '_cl_strikes'):
+                        self._cl_strikes = {}
+                    if not hasattr(self, '_cl_suspended_until'):
+                        self._cl_suspended_until = {}
+                    now = time.time()
+                    cooldown_until = float(self._cl_cooldown_until.get(gpu_index, 0.0))
+                    suspended_until = float(self._cl_suspended_until.get(gpu_index, 0.0))
+                    # Check suspension first
+                    if suspended_until and now < suspended_until:
                         try:
-                            self.logger.info(f"⏱️ [OHC.optimize_for_pid] closed-loop took {time.time() - t_cl_start:.3f}s (iterations={cl.get('iterations')})")
+                            self.logger.info(
+                                f"⏸️ [OHC.optimize_for_pid] Closed-loop suspended until {datetime.fromtimestamp(suspended_until).isoformat()} | gpu={gpu_index}"
+                            )
                         except Exception:
                             pass
+                        try:
+                            results['operations_applied'].append('closed_loop_suspended')
+                        except Exception:
+                            pass
+                        # Skip closed-loop entirely this tick
+                    elif cooldown_until and now < cooldown_until:
+                        try:
+                            remain = max(0.0, cooldown_until - now)
+                            self.logger.info(
+                                f"⏳ [OHC.optimize_for_pid] Skip closed-loop due to cooldown | gpu={gpu_index} | remaining={remain:.2f}s"
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            results['operations_applied'].append('closed_loop_skipped_cooldown')
+                        except Exception:
+                            pass
+                        # Count strike when we actively skip by cooldown
+                        try:
+                            self._cl_strikes[gpu_index] = int(self._cl_strikes.get(gpu_index, 0)) + 1
+                            strikes = int(self._cl_strikes[gpu_index])
+                            if auto_disable_strikes > 0 and strikes >= auto_disable_strikes:
+                                self._cl_suspended_until[gpu_index] = now + max(0.0, suspend_sec)
+                                self._cl_strikes[gpu_index] = 0
+                                try:
+                                    self.logger.warning(
+                                        f"🚫 [OHC.optimize_for_pid] Auto-suspend closed-loop | gpu={gpu_index} | suspend_sec={suspend_sec}"
+                                    )
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    elif skip_on_opt:
+                        # NVML step succeeded this tick → set cooldown and skip closed-loop to avoid racing
+                        self._cl_cooldown_until[gpu_index] = now + max(0.0, cooldown_sec)
+                        try:
+                            self._cl_strikes[gpu_index] = int(self._cl_strikes.get(gpu_index, 0)) + 1
+                            strikes = int(self._cl_strikes[gpu_index])
+                        except Exception:
+                            strikes = 1
+                            self._cl_strikes[gpu_index] = 1
+                        try:
+                            self.logger.info(
+                                f"🛑 [OHC.optimize_for_pid] Skip closed-loop because NVML optimization just applied | gpu={gpu_index} | cooldown={cooldown_sec:.2f}s | strikes={strikes}/{auto_disable_strikes}"
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            results['operations_applied'].append('closed_loop_skipped_nvml')
+                        except Exception:
+                            pass
+                        if auto_disable_strikes > 0 and strikes >= auto_disable_strikes:
+                            try:
+                                self._cl_suspended_until[gpu_index] = now + max(0.0, suspend_sec)
+                                self._cl_strikes[gpu_index] = 0
+                                self.logger.warning(
+                                    f"🚫 [OHC.optimize_for_pid] Auto-suspend closed-loop due to repeated NVML changes | gpu={gpu_index} | suspend_sec={suspend_sec}"
+                                )
+                            except Exception:
+                                pass
+                    else:
+                        if normalized_strategy in ('mining', 'aggressive', 'gpu'):
+                            # Đọc target và áp "floor" theo GPU_UTIL_MIN khi không cho phép under-80
+                            target_util = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
+                            allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', 'false')).lower() in ('1', 'true', 'yes')
+                            min_info = "n/a"
+                            if not allow_under_80:
+                                try:
+                                    min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
+                                    min_util = float(min_util_env)
+                                except Exception:
+                                    min_util = 0.75
+                                if min_util > 1.0:
+                                    # Cho phép nhập dạng % (ví dụ 80 → 0.80)
+                                    min_util = min_util / 100.0
+                                target_util = max(min_util, target_util)
+                                min_info = f"{min_util:.2f}"
+                            mode = str(os.getenv('CLOSED_LOOP_MODE', 'power'))
+                            self.logger.info(
+                                f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}, "
+                                f"allow_under_80={allow_under_80}, min_floor={min_info}"
+                            )
+                            t_cl_start = time.time()
+                            cl = self.set_target_utilization(
+                                pid=pid,
+                                target_utilization=target_util,
+                                gpu_index=gpu_index,
+                                mode=mode,
+                                window_sec=self.per_pid_window_sec
+                            )
+                            results['operations_applied'].append('closed_loop_tracking')
+                            results['closed_loop'] = cl
+                            # Conflict detection: nếu NVML step OK và closed-loop vẫn phải áp thay đổi → cảnh báo khả năng tranh chấp
+                            try:
+                                ops = cl.get('operations') if isinstance(cl, dict) else None
+                                if nvml_ok and ops and len(ops) > 0:
+                                    self.logger.warning(
+                                        f"⚠️ [OHC.optimize_for_pid] Potential conflict: NVML optimization + closed-loop adjustments in same tick | gpu={gpu_index} | ops={ops}"
+                                    )
+                            except Exception:
+                                pass
+                            try:
+                                self.logger.info(f"⏱️ [OHC.optimize_for_pid] closed-loop took {time.time() - t_cl_start:.3f}s (iterations={cl.get('iterations')})")
+                            except Exception:
+                                pass
                 else:
                     if closed_loop_enabled and not nvml_ok:
                         self.logger.info("ℹ️ [OHC.optimize_for_pid] Skip closed-loop: NVML step did not succeed")
@@ -3491,8 +3597,6 @@ except Exception as e:
                 pass
         except Exception:
             pass
-
-        
 
     def _schedule_restore(self, pid: int, gpu_index: int, window_sec: int, cancel_event: Optional[threading.Event] = None):
         # Cancellable restore of device-wide settings after time window (per-PID simulation window)

@@ -7,6 +7,8 @@ có phương thức tự động nhận diện các chỉ số tối đa của G
 
 
 
+
+
 Thiết kế một hàm chức năng để giám sát và điều chỉnh các thông số GPU về trạng thái chuẩn trước khi bắt đầu quá trình mining vào module gpu_unrestrict.py. Hàm này cần thực hiện các nhiệm vụ sau:
 
 1. Theo dõi và ghi nhận các chỉ số tối đa của GPU bao gồm:
@@ -57,7 +59,7 @@ Liệt kê đầy đủ các phương pháp khả dụng và đề xuất giải
    - Đảm bảo quá trình này diễn ra trơn tru không có lỗi
 
 3. Đánh giá hiệu quả của vòng lặp giám sát và khôi phục tài nguyên GPU:
-   - Xác minh hệ thống phát hiện kịp thời khi GPU bị giới hạn dưới mức tối thiểu
+   - Xác minh hệ thống phát hiện kịp thời khi GPU bị giới hạn dưới mức tối thiểu 60%
    - Kiểm tra quá trình khôi phục tài nguyên có hoạt động chính xác
    - Đảm bảo không có sự cố trong chu kỳ giám sát
 

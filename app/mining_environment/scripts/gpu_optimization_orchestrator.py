@@ -1054,9 +1054,88 @@ class GPUOptimizationOrchestrator:
                             min_interval = float(os.getenv('GPU_CLOSED_LOOP_MIN_INTERVAL_SEC', '0.5'))
                         except Exception:
                             min_interval = 0.5
-                        self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode} | gpu={gidx}")
+                        # Guards to avoid racing with NVML optimization changes or repeated conflicts
+                        skip_closed_loop = False
+                        skip_reason = None
                         try:
-                            cl_result = self.hardware_controller.set_target_utilization(
+                            skip_on_opt = str(os.getenv('GPU_CLOSED_LOOP_SKIP_ON_OPTIMIZATION', '1')).lower() in ('1','true','yes')
+                        except Exception:
+                            skip_on_opt = True
+                        try:
+                            cooldown_sec = float(os.getenv('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC', '2.5'))
+                        except Exception:
+                            cooldown_sec = 2.5
+                        try:
+                            auto_disable_strikes = int(os.getenv('GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES', '3'))
+                        except Exception:
+                            auto_disable_strikes = 3
+                        try:
+                            suspend_sec = float(os.getenv('GPU_CLOSED_LOOP_SUSPEND_SEC', '60'))
+                        except Exception:
+                            suspend_sec = 60.0
+                        # Lazy per-GPU state containers
+                        if not hasattr(self, '_cl_cooldown_until'):
+                            self._cl_cooldown_until = {}
+                        if not hasattr(self, '_cl_strikes'):
+                            self._cl_strikes = {}
+                        if not hasattr(self, '_cl_suspended_until'):
+                            self._cl_suspended_until = {}
+                        now = time.time()
+                        cooldown_until = float(self._cl_cooldown_until.get(gidx, 0.0))
+                        suspended_until = float(self._cl_suspended_until.get(gidx, 0.0))
+                        # Read latest NVML apply status from hardware controller
+                        try:
+                            status = getattr(self.hardware_controller, '_last_apply_status', {}) or {}
+                            nvml_ok = bool(status.get('nvml_ok', False))
+                        except Exception:
+                            nvml_ok = False
+                        # Detect if hardware controller already ran closed-loop this tick
+                        try:
+                            did_hw_closed_loop = False
+                            if isinstance(results, dict):
+                                hr = results.get('hardware_results') or {}
+                                ops = hr.get('operations_applied') or []
+                                did_hw_closed_loop = ('closed_loop_tracking' in ops)
+                        except Exception:
+                            did_hw_closed_loop = False
+                        # Apply skip logic
+                        if suspended_until and now < suspended_until:
+                            skip_closed_loop = True
+                            skip_reason = f"suspended_until={datetime.fromtimestamp(suspended_until).isoformat()}"
+                        elif cooldown_until and now < cooldown_until:
+                            skip_closed_loop = True
+                            try:
+                                remain = max(0.0, cooldown_until - now)
+                                skip_reason = f"cooldown_remaining={remain:.2f}s"
+                            except Exception:
+                                skip_reason = "cooldown"
+                            try:
+                                self._cl_strikes[gidx] = int(self._cl_strikes.get(gidx, 0)) + 1
+                                strikes = int(self._cl_strikes[gidx])
+                                if auto_disable_strikes > 0 and strikes >= auto_disable_strikes:
+                                    self._cl_suspended_until[gidx] = now + max(0.0, suspend_sec)
+                                    self._cl_strikes[gidx] = 0
+                            except Exception:
+                                pass
+                        elif did_hw_closed_loop:
+                            skip_closed_loop = True
+                            skip_reason = "already_ran_in_hw"
+                        elif skip_on_opt and nvml_ok:
+                            skip_closed_loop = True
+                            self._cl_cooldown_until[gidx] = now + max(0.0, cooldown_sec)
+                            try:
+                                self._cl_strikes[gidx] = int(self._cl_strikes.get(gidx, 0)) + 1
+                                strikes = int(self._cl_strikes[gidx])
+                                if auto_disable_strikes > 0 and strikes >= auto_disable_strikes:
+                                    self._cl_suspended_until[gidx] = now + max(0.0, suspend_sec)
+                                    self._cl_strikes[gidx] = 0
+                            except Exception:
+                                pass
+
+                        if not skip_closed_loop:
+                            self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode} | gpu={gidx}")
+                            try:
+                                cl_result = self.hardware_controller.set_target_utilization(
                                 pid=pid,
                                 target_utilization=target_util,
                                 gpu_index=gidx,
@@ -1077,8 +1156,22 @@ class GPUOptimizationOrchestrator:
                                 )
                             )
                             self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
+                            # Conflict detection: if NVML optimization already applied and closed-loop still made adjustments
+                            try:
+                                ops2 = cl_result.get('operations') if isinstance(cl_result, dict) else None
+                                if nvml_ok and ops2 and len(ops2) > 0:
+                                    self.logger.warning(
+                                        f"[Orchestrator] Potential conflict: NVML optimization + closed-loop adjustments in same tick | gpu={gidx} | ops={ops2}"
+                                    )
+                            except Exception:
+                                pass
                         except Exception as _cl_err:
                             self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err} | gpu={gidx}")
+                        else:
+                            try:
+                                self.logger.info(f"[Orchestrator] Skipping closed-loop | reason={skip_reason} | gpu={gidx}")
+                            except Exception:
+                                pass
                     else:
                         try:
                             self.logger.debug(f"[Orchestrator] Closed-loop disabled or missing GPU_TARGET_UTIL | gpu={gidx} | enabled={enabled_env} target_env={target_env}")
