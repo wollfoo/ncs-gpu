@@ -23,7 +23,7 @@ except ImportError:
     psutil = None
 
 from mining_environment.scripts.logging_config import setup_logging
-from mining_environment.scripts.gpu_unrestrict import discover_and_enforce_baseline
+from mining_environment.scripts.gpu_unrestrict import discover_and_enforce_baseline, reset_gpu_state
 
 # ✅ **GPU-ONLY** (chỉ GPU): **Import InferenceConfigService** (nhập dịch vụ cấu hình suy luận) for **GPU processing configuration** (cấu hình xử lý GPU – thiết lập xử lý GPU)
 try:
@@ -908,6 +908,12 @@ def setup():
         if _parse_bool_env('GPU_PRE_UNLOCK', '1'):
             gcount = detect_gpu_count(logger)
             if gcount > 0:
+                # Pre-unlock: reset GPU state system-wide before per-GPU normalization
+                try:
+                    logger.info("ℹ️ [SETUP] Pre-unlock: invoking reset_gpu_state() to restore normal GPU state")
+                    reset_gpu_state(logger)
+                except Exception as _e:
+                    logger.warning(f"⚠️ [SETUP] reset_gpu_state failed (continuing): {_e}")
                 pref = os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default')
                 enforce_flag = _parse_bool_env('UNRESTRICT_ENFORCE_BASELINE', '1')
                 strict_verify = None  # để hàm tự đọc VERIFY_THROTTLE_REASONS_STRICT

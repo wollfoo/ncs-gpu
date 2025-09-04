@@ -481,7 +481,7 @@ def reset_gpu_clocks_and_verify(
     logger: Any,
     gpu_index: int,
     post_sleep_sec: Optional[float] = None,
-) -> bool:
+    ) -> bool:
     """
     Orchestrator: NVML-first reset → CLI fallback → Verify.
 
@@ -587,6 +587,11 @@ def unrestrict_gpu(
                 )
             except Exception:
                 pass
+        # Snapshot trước khi unrestrict
+        try:
+            _log_hw_snapshot(logger, gpu_index, tag="pre")
+        except Exception:
+            pass
 
         ok_reset = reset_gpu_clocks_and_verify(
             gpu_manager=gpu_manager,
@@ -607,6 +612,11 @@ def unrestrict_gpu(
             except Exception as e:
                 if logger:
                     logger.debug(f"[RC.unrestrict] enforce_gpu_baselines skipped/failed: {e}")
+        # Snapshot sau khi unrestrict
+        try:
+            _log_hw_snapshot(logger, gpu_index, tag="post")
+        except Exception:
+            pass
         # Emit end marker with success status
         try:
             if logger:
@@ -676,7 +686,39 @@ def _run_smi(cmd: List[str], logger: Any, desc: str) -> int:
             if logger:
                 logger.warning(f"[NVSMI] ❌ {desc} | exception={e}")
         return -1
- 
+
+def _log_hw_snapshot(logger: Any, gpu_index: int, tag: str) -> None:
+    """
+    Ghi nhận snapshot HW: Power (draw/limit), sm_clock, mem_clock (vram), temperature.
+    Best-effort qua nvidia-smi; lỗi sẽ được log ở mức DEBUG để không làm ồn.
+    """
+    logger = logger or _MODULE_LOGGER
+    try:
+        cmd = [
+            'nvidia-smi', '-i', str(gpu_index),
+            '--query-gpu=power.draw,power.limit,clocks.sm,clocks.mem,temperature.gpu',
+            '--format=csv,noheader,nounits'
+        ]
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout:
+            line = result.stdout.strip().splitlines()[0]
+            parts = [p.strip() for p in line.split(',')]
+            # Kỳ vọng 5 trường; nếu thiếu sẽ pad None
+            pd, pl, sm, mem, temp = (parts + [None, None, None, None, None])[:5]
+            if logger:
+                logger.info(
+                    f"[RC.snapshot] {tag} | GPU={gpu_index} | power={pd}/{pl} W | sm_clock={sm} MHz | vram_clock={mem} MHz | temp={temp} C"
+                )
+        else:
+            if logger:
+                stderr = (result.stderr or '').strip()
+                logger.debug(
+                    f"[RC.snapshot] {tag} | GPU={gpu_index} | nvidia-smi rc={result.returncode} | stderr={stderr}"
+                )
+    except Exception as e:
+        if logger:
+            logger.debug(f"[RC.snapshot] {tag} | GPU={gpu_index} | snapshot failed: {e}")
+
 def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preference: str = "default") -> bool:
     """
     Khôi phục power limit về mặc định/tối đa theo chiến lược NVML-first, CLI fallback.
