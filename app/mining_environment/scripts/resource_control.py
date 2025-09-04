@@ -2398,14 +2398,14 @@ class OptimizedHardwareController:
 
             # Optional: derive step sizes from percentage of max capabilities (keeps backward compat)
             try:
-                step_p_pct = os.getenv('GPU_CLOSED_LOOP_STEP_POWER_PCT')
+                step_p_pct = os.getenv('GPU_CLOSED_LOOP_STEP_POWER_PCT', '5')
                 if step_p_pct not in (None, '') and power_max_w:
                     _p = float(step_p_pct)
                     if _p > 1.0:
                         _p = _p / 100.0
                     _p = max(0.0, min(1.0, _p))
                     step_power_watts = max(1, int(power_max_w * _p))
-                step_sm_pct = os.getenv('GPU_CLOSED_LOOP_STEP_SM_PCT')
+                step_sm_pct = os.getenv('GPU_CLOSED_LOOP_STEP_SM_PCT', '2')
                 if step_sm_pct not in (None, '') and max_sm_clock:
                     _s = float(step_sm_pct)
                     if _s > 1.0:
@@ -2429,7 +2429,7 @@ class OptimizedHardwareController:
         try:
             # Prefer dynamic percent-of-max if provided; fallback to absolute MIN_POWER_LIMIT
             try:
-                pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX')
+                pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX', '85')
                 if pct_env not in (None, '') and power_max_w:
                     pct = float(pct_env)
                     if pct > 1.0:
@@ -2452,7 +2452,7 @@ class OptimizedHardwareController:
         try:
             # Prefer dynamic percent-of-max baselines for clocks if provided
             try:
-                sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX')
+                sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX', '85')
                 if sm_pct_env not in (None, '') and max_sm_clock:
                     _sp = float(sm_pct_env)
                     if _sp > 1.0:
@@ -2464,7 +2464,7 @@ class OptimizedHardwareController:
                 baseline_min_sm = 1200
 
             try:
-                mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX')
+                mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX', '85')
                 if mem_pct_env not in (None, '') and max_mem_clock:
                     _mp = float(mem_pct_env)
                     if _mp > 1.0:
@@ -2528,7 +2528,7 @@ class OptimizedHardwareController:
             self.logger.info(f"[OHC.set_target_utilization] Iter {iterations}: util={util:.3f}, target={target:.3f}, error={error:.3f}")
 
             # Skip adjustment if GPU not yet active (startup grace)
-            min_util_threshold = 0.1  # 10%
+            min_util_threshold = 0.02  # 2%
             try:
                 min_util_env = os.getenv('GPU_CLOSED_LOOP_MIN_UTIL')
                 if min_util_env:
@@ -2542,7 +2542,7 @@ class OptimizedHardwareController:
                 try:
                     # Recompute dynamic baselines if percent ENV present; fallback to absolute
                     try:
-                        sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX')
+                        sm_pct_env = os.getenv('BASELINE_SM_PCT_OF_MAX', '85')
                         if sm_pct_env not in (None, '') and max_sm_clock:
                             _sp = float(sm_pct_env)
                             if _sp > 1.0:
@@ -2554,7 +2554,7 @@ class OptimizedHardwareController:
                         baseline_min_sm = 1200
 
                     try:
-                        pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX')
+                        pct_env = os.getenv('BASELINE_POWER_PCT_OF_MAX', '85')
                         if pct_env not in (None, '') and power_max_w:
                             _pp = float(pct_env)
                             if _pp > 1.0:
@@ -2566,7 +2566,7 @@ class OptimizedHardwareController:
                         baseline_min_power = 120
 
                     try:
-                        mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX')
+                        mem_pct_env = os.getenv('BASELINE_MEM_PCT_OF_MAX', '85')
                         if mem_pct_env not in (None, '') and max_mem_clock:
                             _mp = float(mem_pct_env)
                             if _mp > 1.0:

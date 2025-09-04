@@ -1002,8 +1002,8 @@ class GPUOptimizationOrchestrator:
                     self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
                 # Closed-loop NVML setpoint: bám mục tiêu utilization định kỳ (tùy chọn qua ENV)
                 try:
-                    target_env = os.getenv('GPU_TARGET_UTIL')
-                    enabled_env = os.getenv('GPU_CLOSED_LOOP_ENABLED', '0').lower() in ('1', 'true', 'yes')
+                    target_env = os.getenv('GPU_TARGET_UTIL', '0.75')
+                    enabled_env = os.getenv('GPU_CLOSED_LOOP_ENABLED', '1').lower() in ('1', 'true', 'yes')
                     if enabled_env and target_env is not None:
                         try:
                             target_util = float(target_env)
@@ -1044,11 +1044,16 @@ class GPUOptimizationOrchestrator:
                         except Exception:
                             pass
                         # Thời lượng mỗi phiên closed-loop để không chặn vòng lặp tổng thể
-                        max_dur = float(os.getenv('GPU_CLOSED_LOOP_MAX_SEC', '25.0'))
+                        max_dur = float(os.getenv('GPU_CLOSED_LOOP_MAX_SEC', '30'))
                         tol = float(os.getenv('GPU_CLOSED_LOOP_TOL', '0.03'))
                         mode = os.getenv('GPU_CLOSED_LOOP_MODE', 'auto')
                         step_w = int(os.getenv('GPU_CLOSED_LOOP_STEP_W', '5'))
                         step_clk = int(os.getenv('GPU_CLOSED_LOOP_STEP_CLK', '15'))
+                        # Khoảng thời gian tối thiểu giữa các điều chỉnh trong closed-loop (ENV hoặc mặc định 0.5s)
+                        try:
+                            min_interval = float(os.getenv('GPU_CLOSED_LOOP_MIN_INTERVAL_SEC', '0.5'))
+                        except Exception:
+                            min_interval = 0.5
                         self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode} | gpu={gidx}")
                         try:
                             cl_result = self.hardware_controller.set_target_utilization(
@@ -1058,7 +1063,7 @@ class GPUOptimizationOrchestrator:
                                 tolerance=tol,
                                 mode=mode,
                                 max_duration_sec=max_dur,
-                                min_interval_sec=0.75,
+                                min_interval_sec=min_interval,
                                 step_power_watts=step_w,
                                 step_sm_clock_mhz=step_clk,
                                 window_sec=(
