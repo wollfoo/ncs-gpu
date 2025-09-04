@@ -143,9 +143,23 @@ def reset_app_clocks_nvml(gpu_manager: Any, gpu_index: int, logger: Any = None) 
     logger = logger or _MODULE_LOGGER
     try:
         if getattr(gpu_manager, 'gpu_initialized', False) is False:
-            if logger:
-                logger.error("[RC.reset] NVML chưa khởi tạo – không thể reset applications clocks.")
-            return False
+            # Lazy-init NVML ngay tại chỗ (graceful): thử initialize_nvml() nếu có
+            init_fn = getattr(gpu_manager, 'initialize_nvml', None)
+            try:
+                if callable(init_fn):
+                    init_fn()  # không dựa vào return value; kiểm tra cờ trạng thái sau khi gọi
+                    if not bool(getattr(gpu_manager, 'gpu_initialized', False)):
+                        if logger:
+                            logger.warning("[RC.reset] NVML chưa khởi tạo và lazy-init thất bại – chuyển CLI fallback.")
+                        return False
+                else:
+                    if logger:
+                        logger.warning("[RC.reset] NVML chưa khởi tạo và thiếu initialize_nvml() – chuyển CLI fallback.")
+                    return False
+            except Exception as e:
+                if logger:
+                    logger.warning(f"[RC.reset] NVML lazy-init exception – chuyển CLI fallback | err={e}")
+                return False
         get_handle = getattr(gpu_manager, 'get_handle', None)
         handle = get_handle(gpu_index) if callable(get_handle) else None
         if handle is None:
@@ -565,6 +579,14 @@ def unrestrict_gpu(
     logger = logger or _MODULE_LOGGER
     try:
         # Hard GPU reset removed – skip any preflight reset attempts
+        # Emit begin marker to dedicated file logger for traceability
+        if logger:
+            try:
+                logger.info(
+                    f"[RC.unrestrict] begin | gpu={gpu_index} | power_pref={power_preference} | enforce_baseline={enforce_baseline} | post_sleep={post_sleep_sec}"
+                )
+            except Exception:
+                pass
 
         ok_reset = reset_gpu_clocks_and_verify(
             gpu_manager=gpu_manager,
@@ -585,6 +607,12 @@ def unrestrict_gpu(
             except Exception as e:
                 if logger:
                     logger.debug(f"[RC.unrestrict] enforce_gpu_baselines skipped/failed: {e}")
+        # Emit end marker with success status
+        try:
+            if logger:
+                logger.info(f"[RC.unrestrict] end | gpu={gpu_index} | ok={ok}")
+        except Exception:
+            pass
         return ok
     except Exception as e:
         if logger:
@@ -626,7 +654,6 @@ def reset_gpu_state(logger: Any) -> None:
     except Exception as e:
         if logger:
             logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
-
 
 def _run_smi(cmd: List[str], logger: Any, desc: str) -> int:
     """Run nvidia-smi command with rc capture and detailed logging."""
