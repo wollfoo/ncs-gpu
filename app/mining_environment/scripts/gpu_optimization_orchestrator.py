@@ -33,9 +33,9 @@ try:
     from .error_management import get_error_reporter, ErrorCode, ErrorSeverity
     # Unrestrict helpers (NVML-first + CLI fallback)
     from .gpu_unrestrict import (
-        verify_gpu_clock_state,
         verify_gpu_state_extended,
         unrestrict_gpu,
+        discover_and_enforce_baseline,
     )
 except ImportError as e:
     # Fallback for standalone testing - use absolute imports
@@ -52,9 +52,9 @@ except ImportError as e:
     from mining_environment.scripts.module_loggers import get_gpu_optimization_orchestrator_logger
     from mining_environment.scripts.error_management import get_error_reporter, ErrorCode, ErrorSeverity
     from mining_environment.scripts.gpu_unrestrict import (
-        verify_gpu_clock_state,
         verify_gpu_state_extended,
         unrestrict_gpu,
+        discover_and_enforce_baseline,
     )
 
 # **Logger setup** (thiết lập logger)
@@ -529,9 +529,9 @@ class GPUOptimizationOrchestrator:
                 except Exception:
                     indices = [0]
                 for gidx in list(indices):
-                    # Verify clock state; if locked or forced, enqueue an unrestrict intent
+                    # Verify GPU state (extended); if locked or forced, enqueue an unrestrict intent
                     try:
-                        unlocked = bool(verify_gpu_clock_state(None, gidx))
+                        unlocked = bool(verify_gpu_state_extended(None, gidx, True))
                     except Exception:
                         unlocked = False
                     always = str(os.getenv('UNRESTRICT_SUPERVISOR_ALWAYS', '0')).lower() in ('1', 'true', 'yes')
@@ -810,7 +810,7 @@ class GPUOptimizationOrchestrator:
                             pass
                         need_unrestrict = False
                         try:
-                            unlocked = bool(verify_gpu_clock_state(None, gidx))
+                            unlocked = bool(verify_gpu_state_extended(None, gidx, True))
                             need_unrestrict = not unlocked
                         except Exception:
                             # Best-effort: if verify fails, prefer attempting unrestrict guarded by its own dwell/cooldowns
@@ -835,7 +835,7 @@ class GPUOptimizationOrchestrator:
                                 ts_start = datetime.now().isoformat()
                                 t0 = time.time()
                                 try:
-                                    pre_unlocked = bool(verify_gpu_clock_state(None, gidx))
+                                    pre_unlocked = bool(verify_gpu_state_extended(None, gidx, True))
                                 except Exception:
                                     pre_unlocked = False
                                 try:
@@ -844,21 +844,37 @@ class GPUOptimizationOrchestrator:
                                     )
                                 except Exception:
                                     pass
-                                ok_unr = bool(
-                                    unrestrict_gpu(
-                                        gpu_manager=grm,
-                                        logger=None,
-                                        gpu_index=gidx,
-                                        power_preference=power_pref,
-                                        post_sleep_sec=post_sleep,
-                                        enforce_baseline=enforce_baseline,
+                                # Choose comprehensive baseline flow when enforce_baseline is enabled; otherwise use standard unrestrict
+                                if enforce_baseline:
+                                    # Comprehensive: discover → reset/unlock → restore power → baseline → strict verify
+                                    try:
+                                        res = discover_and_enforce_baseline(
+                                            gpu_manager=grm,
+                                            logger=None,
+                                            gpu_index=gidx,
+                                            power_preference=power_pref,
+                                            enforce_baseline=True,
+                                            strict_verify=True,
+                                        )
+                                        ok_unr = bool(isinstance(res, dict) and res.get('ok'))
+                                    except Exception:
+                                        ok_unr = False
+                                else:
+                                    ok_unr = bool(
+                                        unrestrict_gpu(
+                                            gpu_manager=grm,
+                                            logger=None,
+                                            gpu_index=gidx,
+                                            power_preference=power_pref,
+                                            post_sleep_sec=post_sleep,
+                                            enforce_baseline=False,
+                                        )
                                     )
-                                )
                                 t1 = time.time()
                                 ts_end = datetime.now().isoformat()
                                 dur = max(0.0, t1 - t0)
                                 try:
-                                    post_unlocked = bool(verify_gpu_clock_state(None, gidx))
+                                    post_unlocked = bool(verify_gpu_state_extended(None, gidx, True))
                                 except Exception:
                                     post_unlocked = False
                                 try:
