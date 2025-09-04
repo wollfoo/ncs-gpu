@@ -234,89 +234,8 @@ setup_direct_pid_registry() {
     log "$LOG_INFO" "DirectPIDRegistry is handled by Python components; no setup required at entrypoint"
 }
 
-# ===== Pre-flight GPU Reset (guarded) =====
-maybe_sudo() {
-    if command -v sudo >/dev/null 2>&1; then sudo "$@"; else "$@"; fi
-}
-
-gpu_idle() {
-    # No compute processes attached
-    [ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null)" ]
-}
-
-cooldown_ok() {
-    local stamp="${GPU_RESET_STAMP_PATH:-/tmp/.gpu_reset_stamp}"
-    local min="${GPU_RESET_COOLDOWN_MIN:-10}" # minutes
-    [ ! -f "$stamp" ] && return 0
-    local last ts_now diff
-    last=$(cat "$stamp" 2>/dev/null || echo 0)
-    ts_now=$(date +%s)
-    diff=$(( (ts_now - last) / 60 ))
-    [ "$diff" -ge "$min" ]
-}
-
-preflight_gpu_reset() {
-    # Feature flag: default enabled (1/true/yes)
-    if [[ ! "${ENABLE_GPU_RESET_ON_START:-1}" =~ ^(1|true|yes|TRUE|YES)$ ]]; then
-        log "$LOG_INFO" "Pre-flight GPU Reset disabled via ENABLE_GPU_RESET_ON_START=${ENABLE_GPU_RESET_ON_START:-0}"
-        return 0
-    fi
-
-    if ! command -v nvidia-smi >/dev/null 2>&1; then
-        log "$LOG_WARN" "nvidia-smi not found; skip pre-flight GPU Reset"
-        return 0
-    fi
-
-    if ! cooldown_ok; then
-        log "$LOG_INFO" "Pre-flight GPU Reset skipped due to cooldown (GPU_RESET_COOLDOWN_MIN=${GPU_RESET_COOLDOWN_MIN:-10}m)"
-        return 0
-    fi
-
-    log "$LOG_INFO" "Pre-flight GPU Reset starting..."
-    # Try stopping MPS if running (best effort)
-    echo quit | nvidia-cuda-mps-control >/dev/null 2>&1 || true
-
-    if ! gpu_idle; then
-        log "$LOG_WARN" "GPU is busy with active compute processes; skip GPU Reset"
-        return 0
-    fi
-
-    # Build GPU index list
-    mapfile -t GPU_LIST < <(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null)
-    if [ "${#GPU_LIST[@]}" -eq 0 ]; then
-        GPU_LIST=(0)
-    fi
-
-    local any_ok=0
-    for g in "${GPU_LIST[@]}"; do
-        log "$LOG_INFO" "Resetting GPU index ${g}..."
-        if maybe_sudo nvidia-smi --gpu-reset -i "$g"; then
-            log "$LOG_INFO" "✅ GPU ${g} reset successful"
-            any_ok=1
-            sleep 2
-        else
-            log "$LOG_WARN" "⚠️ GPU ${g} reset not supported or failed; continuing"
-        fi
-    done
-
-    # Stamp cooldown if at least one reset succeeded
-    if [ "$any_ok" -eq 1 ]; then
-        date +%s > "${GPU_RESET_STAMP_PATH:-/tmp/.gpu_reset_stamp}" || true
-    fi
-
-    # Re-apply minimal safe defaults (best effort)
-    maybe_sudo nvidia-smi -pm 1 || true
-    for g in "${GPU_LIST[@]}"; do
-        maybe_sudo nvidia-smi -i "$g" -c EXCLUSIVE_PROCESS >/dev/null 2>&1 || true
-    done
-
-    # Verification snapshot (best effort)
-    date && nvidia-smi || true
-    nvidia-smi dmon -s pucmt -d 1 -c 3 >/dev/null 2>&1 || true
-
-    log "$LOG_INFO" "Pre-flight GPU Reset completed"
-    return 0
-}
+# ===== Hard GPU Reset – REMOVED from entrypoint (handled nowhere) =====
+# All pre-flight GPU reset helpers and invocations have been removed
 
 # ===== Main =====
 
@@ -342,8 +261,7 @@ ensure_libhwloc || true
 # setup_ebpf_environment (removed, eBPF disabled)
 check_gpu_environment
 
-# Run Pre-flight GPU Reset (guarded; default enabled)
-preflight_gpu_reset
+# Hard GPU Reset removed – no preflight GPU reset executed here
 
 # Start monitoring services in the background
 log "$LOG_INFO" "Starting system monitoring..."

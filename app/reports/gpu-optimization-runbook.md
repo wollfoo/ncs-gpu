@@ -12,33 +12,11 @@ Ngày: 2025-09-02 18:50:38Z
 - Driver/CUDA: Driver 550.90.07; CUDA 12.4 (Runtime). Chưa có CUDA Toolkit `nvcc` (trình biên dịch CUDA – compile code CUDA).
 - Hệ điều hành: Linux. Cần `sudo` cho thao tác thay đổi power limit và application clocks.
 
-## 0) Pre-flight GPU Reset (mặc định có guard)
+## 0) Hard GPU Reset — ĐÃ LOẠI BỎ
 
-- Mục tiêu: xử lý tình trạng kẹt P‑state/xung sau crash/điều chỉnh clocks/power lặp lại. Reset có điều kiện, __mặc định bật__.
-- Kích hoạt/Tắt bằng biến môi trường:
-  - `ENABLE_GPU_RESET_ON_START=1` (mặc định). Tắt bằng `0/false/no`.
-  - `GPU_RESET_COOLDOWN_MIN=<phút>` (mặc định `10`) – tránh reset lặp.
-  - `GPU_RESET_STAMP_PATH=<file>` (mặc định `/tmp/.gpu_reset_stamp`).
-- Guard an toàn & trình tự thực thi (được tự động hoá trong entrypoint):
-  1) Dừng CUDA MPS (best effort): `echo quit | nvidia-cuda-mps-control`.
-  2) Xác nhận GPU rảnh: `nvidia-smi --query-compute-apps=pid --format=csv,noheader` phải rỗng.
-  3) Kiểm tra năng lực reset: có `nvidia-smi`; nếu reset không hỗ trợ (hypervisor/primary display) → __bỏ qua an toàn__.
-  4) Reset tuần tự từng GPU: `nvidia-smi --gpu-reset -i <g>`; ngủ ngắn 2s giữa các GPU.
-  5) Áp lại cấu hình tối thiểu: `-pm 1`, `-c EXCLUSIVE_PROCESS` (tùy chọn: `-pl`, `-ac` theo mục 11/4.3).
-  6) Ghi log/xác minh: `date && nvidia-smi`, `nvidia-smi dmon -s pucmt -d 1 -c 3`.
-  7) Cooldown: đóng dấu thời gian vào `GPU_RESET_STAMP_PATH`; bỏ qua nếu chưa đủ `GPU_RESET_COOLDOWN_MIN` phút.
-- Vị trí tích hợp: `app/start_mining.py` – khối PRE-FLIGHT GPU hard reset được gọi ở đầu `main()` qua `perform_hard_gpu_reset(logger)` với gating bằng các event `GPU_RESET_COMPLETED`/`GPU_RESET_SUCCESS`; reset diễn ra đúng một lần khi khởi động.
-- Ví dụ cấu hình ENV:
-  ```bash
-  # Mặc định bật
-  ENABLE_GPU_RESET_ON_START=1
-  # Tắt nhanh
-  ENABLE_GPU_RESET_ON_START=0
-  # Tuỳ chọn
-  GPU_RESET_COOLDOWN_MIN=10
-  GPU_RESET_STAMP_PATH=/tmp/.gpu_reset_stamp
-  ```
-- Ghi chú: Cơ chế `maybe_sudo` tự động dùng `sudo` nếu có; nếu không, lệnh sẽ chạy trực tiếp. Reset có thể bị chặn bởi môi trường; pipeline vẫn tiếp tục với cảnh báo.
+- Hệ thống đã loại bỏ hoàn toàn mọi cơ chế/tiến trình hard GPU reset (`nvidia-smi --gpu-reset`).
+- Thay vào đó, sử dụng các biện pháp “mềm” để ổn định GPU: `Persistence Mode`, `Compute Mode (EXCLUSIVE_PROCESS)`, `Power Limit`, `Application Clocks`, và xác minh bằng `nvidia-smi`/`dmon` theo các mục bên dưới.
+- Không còn biến môi trường hay gating liên quan đến GPU reset trong quá trình khởi động.
 
 ## 3) Khảo sát nhanh (Inventory – kiểm kê)
 - Tổng quan GPU (overview – tổng quan):
@@ -316,10 +294,7 @@ CUDA_VISIBLE_DEVICES=1 numactl --cpunodebind=0 --membind=0 <cmd_gpu1>
    dcgmi policy --set ...
    ```
  
- - __GPU Reset__ (đặt lại GPU khi không có tiến trình sử dụng – làm sạch trạng thái lạ):
-   ```bash
-   sudo nvidia-smi --gpu-reset -i <GPU_ID>
-   ```
+ - __GPU Reset__ (ĐÃ LOẠI BỎ) Không sử dụng `nvidia-smi --gpu-reset` trong hệ thống này.
  
  - __Tự động hoá sau reboot (systemd)__ (áp cấu hình đã chốt – power limit, persistence, compute mode, clocks):
    ```bash

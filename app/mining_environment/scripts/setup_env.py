@@ -23,6 +23,7 @@ except ImportError:
     psutil = None
 
 from mining_environment.scripts.logging_config import setup_logging
+from mining_environment.scripts.gpu_unrestrict import discover_and_enforce_baseline
 
 # ✅ **GPU-ONLY** (chỉ GPU): **Import InferenceConfigService** (nhập dịch vụ cấu hình suy luận) for **GPU processing configuration** (cấu hình xử lý GPU – thiết lập xử lý GPU)
 try:
@@ -890,10 +891,48 @@ def setup():
             'RESTORE_SCHEDULE_WINDOW_SEC_MIXED': os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED'),
             'LOCK_TARGET_SM_CLOCK': os.getenv('LOCK_TARGET_SM_CLOCK'),
             'LOCK_TARGET_MEM_CLOCK': os.getenv('LOCK_TARGET_MEM_CLOCK'),
+            # --- GPU baseline normalization flags ---
+            'GPU_PRE_UNLOCK': os.getenv('GPU_PRE_UNLOCK'),
+            'UNRESTRICT_ENFORCE_BASELINE': os.getenv('UNRESTRICT_ENFORCE_BASELINE'),
+            'UNRESTRICT_POWER_PREFERENCE': os.getenv('UNRESTRICT_POWER_PREFERENCE'),
+            'VERIFY_THROTTLE_REASONS_STRICT': os.getenv('VERIFY_THROTTLE_REASONS_STRICT'),
+            'UNRESTRICT_SETTLE_SEC': os.getenv('UNRESTRICT_SETTLE_SEC'),
         }
         logger.info("[EFFECTIVE ENV] " + ", ".join([f"{k}={v}" for k, v in eff_vars.items()]))
     except Exception:
         pass
+
+    # === GPU baseline normalization during setup (pre-flight) ===
+    # Kích hoạt theo cờ GPU_PRE_UNLOCK (mặc định đã set '1' ở trên). Không dừng setup nếu có lỗi.
+    try:
+        if _parse_bool_env('GPU_PRE_UNLOCK', '1'):
+            gcount = detect_gpu_count(logger)
+            if gcount > 0:
+                pref = os.getenv('UNRESTRICT_POWER_PREFERENCE', 'default')
+                enforce_flag = _parse_bool_env('UNRESTRICT_ENFORCE_BASELINE', '1')
+                strict_verify = None  # để hàm tự đọc VERIFY_THROTTLE_REASONS_STRICT
+                for gidx in range(gcount):
+                    try:
+                        res = discover_and_enforce_baseline(
+                            gpu_manager=None,
+                            logger=logger,
+                            gpu_index=gidx,
+                            power_preference=pref,
+                            enforce_baseline=enforce_flag,
+                            strict_verify=strict_verify,
+                        )
+                        if bool(res.get('ok', False)):
+                            logger.info(f"✅ [SETUP] GPU {gidx} normalized: ok=1")
+                        else:
+                            logger.warning(f"⚠️ [SETUP] GPU {gidx} normalization incomplete: ok=0 | res={res}")
+                    except Exception as _e:
+                        logger.warning(f"⚠️ [SETUP] Baseline normalization failed for GPU {gidx}: {_e}")
+            else:
+                logger.info("ℹ️ [SETUP] No GPUs detected; skipping GPU baseline normalization")
+        else:
+            logger.info("ℹ️ [SETUP] GPU_PRE_UNLOCK disabled; skipping GPU baseline normalization")
+    except Exception as e:
+        logger.warning(f"⚠️ [SETUP] GPU baseline normalization step skipped due to error: {e}")
 
     # **System configuration** (cấu hình hệ thống – config system) **(timezone, locale)** (múi giờ, locale)
     configure_system(system_params, logger)
