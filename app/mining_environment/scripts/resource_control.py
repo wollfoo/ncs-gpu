@@ -1669,7 +1669,7 @@ class OptimizedHardwareController:
         self.power_max = config.get('power_max', 200)            # Max power
         
         # **HASHRATE FIX: Profile settings with GPU_TARGET_UTIL-based allocation** (cài đặt profile với phân bổ dựa trên GPU_TARGET_UTIL)
-        gpu_target_util = float(os.environ.get('GPU_TARGET_UTIL', '0.70'))  # Default 70% (Inference profile) from ENV
+        gpu_target_util = float(os.environ.get('GPU_TARGET_UTIL', '0.80'))  # Default 80% (Inference profile) from ENV
         self.profile = config.get('optimization_profile', {
             'vram_allocation': gpu_target_util,    # Use GPU_TARGET_UTIL instead of fixed 50%
             'compute_allocation': gpu_target_util,  # New: compute resource allocation
@@ -2141,6 +2141,7 @@ class OptimizedHardwareController:
                         # Đọc target và áp "floor" theo GPU_UTIL_MIN khi không cho phép under-80
                         target_util = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
                         allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', 'false')).lower() in ('1', 'true', 'yes')
+                        min_info = "n/a"
                         if not allow_under_80:
                             try:
                                 min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
@@ -2151,8 +2152,12 @@ class OptimizedHardwareController:
                                 # Cho phép nhập dạng % (ví dụ 80 → 0.80)
                                 min_util = min_util / 100.0
                             target_util = max(min_util, target_util)
+                            min_info = f"{min_util:.2f}"
                         mode = str(os.getenv('CLOSED_LOOP_MODE', 'power'))
-                        self.logger.info(f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}")
+                        self.logger.info(
+                            f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}, "
+                            f"allow_under_80={allow_under_80}, min_floor={min_info}"
+                        )
                         t_cl_start = time.time()
                         cl = self.set_target_utilization(
                             pid=pid,
@@ -2365,6 +2370,33 @@ class OptimizedHardwareController:
         if target > 1.0:
             target = target / 100.0
         target = max(0.0, min(1.0, target))
+
+        # Chẩn đoán: tính "effective target" từ ENV để log (không thay đổi hành vi điều khiển)
+        try:
+            min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
+            min_util = float(min_util_env)
+        except Exception:
+            min_util = 0.75
+        if min_util > 1.0:
+            # Cho phép nhập dạng phần trăm (ví dụ 75 → 0.75)
+            min_util = min_util / 100.0
+        try:
+            max_util_env = os.getenv('GPU_UTIL_MAX', '0.90')
+            max_util = float(max_util_env)
+        except Exception:
+            max_util = 0.90
+        if max_util > 1.0:
+            max_util = max_util / 100.0
+        allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', '0')).lower() in ('1', 'true', 'yes')
+        effective_target_hint = target if allow_under_80 else max(min_util, min(max_util, target))
+        try:
+            self.logger.info(
+                f"🎯 [OHC.set_target_utilization] Target resolve: requested={float(target_utilization):.2f}, "
+                f"normalized={target:.2f}, min={min_util:.2f}, max={max_util:.2f}, "
+                f"allow_under_80={allow_under_80} → effective_hint={effective_target_hint:.2f}"
+            )
+        except Exception:
+            pass
 
         # Resolve GPU index
         if gpu_index is None:
