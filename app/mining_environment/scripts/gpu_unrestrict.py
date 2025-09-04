@@ -877,7 +877,6 @@ def enforce_gpu_baselines(logger: Any) -> None:
         if logger:
             logger.debug(f"[GPU-BASELINE] Enforcement skipped due to unexpected error: {e}")
 
-
 def _detect_gpu_count(logger: Any = None) -> int:
     """
     Detect number of NVIDIA GPUs via nvidia-smi; returns 0 on failure.
@@ -893,7 +892,6 @@ def _detect_gpu_count(logger: Any = None) -> int:
         except Exception:
             pass
         return 0
-
 
 def discover_gpu_caps(logger: Any, gpu_manager: Any, gpu_index: int) -> Dict[str, Any]:
     """Discover maximum capabilities of a GPU (NVML-first, CLI fallback).
@@ -1118,7 +1116,6 @@ def discover_gpu_caps(logger: Any, gpu_manager: Any, gpu_index: int) -> Dict[str
     except Exception:
         pass
     return caps
-
 
 def discover_and_enforce_baseline(
     gpu_manager: Any,
