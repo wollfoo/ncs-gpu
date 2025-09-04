@@ -2,6 +2,28 @@
 đề xuất thêm các kỹ thuật để gỡ bỏ xoá mọi giới hạn ẩn ở tầng phần cứng/driver (nhiệt, power/perf‑cap).  (bao gồm Power, sm_clock, vram_target, clock, temperature) 
 
 
+có phương thức tự động nhận diện các chỉ số tối đa của GPU (Power, sm_clock, vram_target, clock, temperature) không ?
+
+
+
+
+Thiết kế một hàm chức năng để giám sát và điều chỉnh các thông số GPU về trạng thái chuẩn trước khi bắt đầu quá trình mining vào module gpu_unrestrict.py. Hàm này cần thực hiện các nhiệm vụ sau:
+
+1. Theo dõi và ghi nhận các chỉ số tối đa của GPU bao gồm:
+   - Công suất (Power)
+   - Tần số nhân (sm_clock)
+   - Mục tiêu VRAM (vram_target)
+   - Tần số (clock)
+   - Nhiệt độ (temperature)
+
+2. Áp dụng baseline cho các thông số này để đưa GPU về trạng thái hoạt động ổn định:
+   - Đặt lại các giá trị về mức an toàn
+   - Đảm bảo nhiệt độ hoạt động trong ngưỡng cho phép
+   - Thiết lập tần số và điện năng phù hợp
+
+3. Kiểm tra xác nhận GPU đã trở về trạng thái bình thường trước khi khởi động quá trình mining.
+
+Hàm cần được thiết kế để có thể tích hợp dễ dàng vào hệ thống hiện có và đảm bảo độ tin cậy cao.
 
 
 
@@ -40,11 +62,6 @@ Liệt kê đầy đủ các phương pháp khả dụng và đề xuất giải
    - Đảm bảo không có sự cố trong chu kỳ giám sát
 
 4. Ghi nhận mọi cảnh báo hoặc lỗi liên quan đến các chức năng tối ưu GPU trong quá trình hoạt động.
-
-
-đề xuất GPU device reset cứng đưa vào kích hoạt trong start_mining
-và kích hoạt tất cả các luồng khởi chạy setup_env , resource_manager , gpu mining
-đảm bảo có cờ thông báo đã hoàn tất GPU device reset rồi mới tiếp tục kích hoạt các luồng tiếp theo 
 
 
 
@@ -101,7 +118,6 @@ và kích hoạt tất cả các luồng khởi chạy setup_env , resource_mana
   - Dừng MPS, đảm bảo GPU rảnh.
   - Bật Persistence Mode, đặt Compute Mode = EXCLUSIVE_PROCESS.
   - Reset/lock lại clocks, đặt Power Limit, “persistence flip” (pm 0 → pm 1) nếu muốn.
-  - Các thao tác này đã có sẵn trong codebase qua các hàm ở [gpu_unrestrict.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_unrestrict.py:0:0-0:0) (baseline và verify).
 
 # Quy trình quyết định gợi ý (trên host)
 1) Thử `nvidia-smi -i <g> --gpu-reset` → nếu “not supported”.
