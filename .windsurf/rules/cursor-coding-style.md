@@ -39,10 +39,14 @@ activation: always_on
 - Error handling & logging
   - Validate inputs/assumptions at boundaries; fail fast with actionable messages.
   - Use structured, level-appropriate logs; avoid console spam in hot paths.
+  - Logs language: With structured logging, keep keys/fields in English (stable for machine parsing), and the `message` in Vietnamese; important logs can include a short English sentence. If the external standard requires English, add Vietnamese annotations or bilingual content. Follow `rules/language-rules.md`.
 
 - Comments & docs
   - Prefer intent-revealing code; add comments for non-obvious decisions, invariants, or edge cases.
   - Keep comments adjacent to the code they describe; update when refactoring.
+
+- Docstring/comment language: Default to Vietnamese; when mentioning an English term, include a brief Vietnamese explanation following the “Standard Syntax” in [rules/language-rules.md].
+- Bilingual (Vietnamese first, English after) for module-level and Public API docstrings, as well as operational guides; apply this when the team primarily uses Vietnamese.
 
 - Imports & dependencies
   - Place imports at file top only; if adding imports during an edit, use a dedicated top-of-file hunk.
