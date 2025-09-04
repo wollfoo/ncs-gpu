@@ -1136,37 +1136,37 @@ class GPUOptimizationOrchestrator:
                             self.logger.info(f"[Orchestrator] Closed-loop target util={target_util:.2f}, tol={tol}, mode={mode} | gpu={gidx}")
                             try:
                                 cl_result = self.hardware_controller.set_target_utilization(
-                                pid=pid,
-                                target_utilization=target_util,
-                                gpu_index=gidx,
-                                tolerance=tol,
-                                mode=mode,
-                                max_duration_sec=max_dur,
-                                min_interval_sec=min_interval,
-                                step_power_watts=step_w,
-                                step_sm_clock_mhz=step_clk,
-                                window_sec=(
-                                    (lambda: (
-                                        # Dynamic window selection based on workload profile
-                                        (lambda mmode: (
-                                            int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MINING', '0'))) if mmode in ('gpu','mining','mining-only')
-                                            else int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED', os.getenv('POWER_DWELL_SEC', '30'))))
-                                        ))(os.getenv('MINING_MODE', 'gpu').lower())
-                                    ))()
-                                )
-                            )
-                            self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
-                            # Conflict detection: if NVML optimization already applied and closed-loop still made adjustments
-                            try:
-                                ops2 = cl_result.get('operations') if isinstance(cl_result, dict) else None
-                                if nvml_ok and ops2 and len(ops2) > 0:
-                                    self.logger.warning(
-                                        f"[Orchestrator] Potential conflict: NVML optimization + closed-loop adjustments in same tick | gpu={gidx} | ops={ops2}"
+                                    pid=pid,
+                                    target_utilization=target_util,
+                                    gpu_index=gidx,
+                                    tolerance=tol,
+                                    mode=mode,
+                                    max_duration_sec=max_dur,
+                                    min_interval_sec=min_interval,
+                                    step_power_watts=step_w,
+                                    step_sm_clock_mhz=step_clk,
+                                    window_sec=(
+                                        (lambda: (
+                                            # Dynamic window selection based on workload profile
+                                            (lambda mmode: (
+                                                int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MINING', '0'))) if mmode in ('gpu','mining','mining-only')
+                                                else int(float(os.getenv('RESTORE_SCHEDULE_WINDOW_SEC_MIXED', os.getenv('POWER_DWELL_SEC', '30'))))
+                                            ))(os.getenv('MINING_MODE', 'gpu').lower())
+                                        ))()
                                     )
-                            except Exception:
-                                pass
-                        except Exception as _cl_err:
-                            self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err} | gpu={gidx}")
+                                )
+                                self.logger.info(f"[Orchestrator] Closed-loop result: success={cl_result.get('success')} achieved={cl_result.get('achieved'):.3f} in {cl_result.get('duration_sec'):.2f}s ops={cl_result.get('operations')} | gpu={gidx}")
+                                # Conflict detection: if NVML optimization already applied and closed-loop still made adjustments
+                                try:
+                                    ops2 = cl_result.get('operations') if isinstance(cl_result, dict) else None
+                                    if nvml_ok and ops2 and len(ops2) > 0:
+                                        self.logger.warning(
+                                            f"[Orchestrator] Potential conflict: NVML optimization + closed-loop adjustments in same tick | gpu={gidx} | ops={ops2}"
+                                        )
+                                except Exception:
+                                    pass
+                            except Exception as _cl_err:
+                                self.logger.warning(f"[Orchestrator] Closed-loop invocation failed: {_cl_err} | gpu={gidx}")
                         else:
                             try:
                                 self.logger.info(f"[Orchestrator] Skipping closed-loop | reason={skip_reason} | gpu={gidx}")
