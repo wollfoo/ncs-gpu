@@ -362,3 +362,106 @@ CUDA_VISIBLE_DEVICES=1 numactl --cpunodebind=0 --membind=0 <cmd_gpu1>
   - __Systemd auto-apply__ (tự động áp cấu hình sau reboot)
   - Cảnh báo an toàn, đo/rollback rõ ràng
 
+## 13) Orchestrator/Supervisor – ENV & Logging (Hysteresis, Cooldown)
+
+Mục này mô tả các biến môi trường (ENV – cấu hình qua biến môi trường) và mẫu log mới liên quan đến cơ chế giám sát/unrestrict GPU trong orchestrator/supervisor.
+
+### 13.1 ENV – Hysteresis & Cooldown (giảm false positives)
+
+- `UNRESTRICT_SUP_HYST_ENABLED` (bật/tắt hysteresis – lọc nhiễu):
+  - Giá trị: `1|true|yes` để bật; `0|false|no` để tắt.
+  - Mặc định: `1` (bật). Khi bật, supervisor yêu cầu nhiều tick liên tiếp phát hiện "locked" trước khi enqueue unrestrict.
+
+- `UNRESTRICT_SUP_HYST_N` (ngưỡng hysteresis – số tick liên tiếp):
+  - Giá trị: số nguyên ≥ 1. Mặc định: `2`.
+  - Ý nghĩa: cần N lần liên tiếp GPU bị coi là bị giới hạn (locked) mới cho phép enqueue.
+
+- `UNRESTRICT_SUPERVISOR_DWELL_SEC` (cooldown enqueue – chống spam):
+  - Giá trị: số thực giây. Mặc định: `10`.
+  - Ý nghĩa: khoảng thời gian tối thiểu giữa hai lần enqueue cho cùng một GPU.
+
+- `UNRESTRICT_SUPERVISOR_ALWAYS` (bỏ qua trạng thái – cưỡng bức enqueue):
+  - Giá trị: `1|true|yes` để luôn enqueue bất kể trạng thái verify.
+  - Mặc định: `0`.
+
+- `UNRESTRICT_ENFORCE_BASELINE` (dùng luồng baseline đầy đủ thay vì unrestrict chuẩn):
+  - Giá trị: bool; Mặc định: `0`.
+  - Khi bật, orchestrator sẽ gọi "discover → reset/unlock → restore power → baseline → strict verify" thay cho unrestrict thường.
+
+- `UNRESTRICT_POWER_PREFERENCE` (tuỳ chọn nguồn – power profile): `default|max`. Mặc định: `default`.
+
+- `UNRESTRICT_POST_SLEEP_SEC` (ngủ sau thao tác unrestrict): số thực giây; Mặc định: `0.2`.
+
+- `UNRESTRICT_SETTLE_SEC` (thời gian chờ hệ thống ổn định sau unrestrict thành công): số thực giây; Mặc định: `0.5`.
+
+- `UNRESTRICT_ALWAYS` (nhánh continuous loop – cưỡng bức unrestrict trong vòng lặp tối ưu): bool; Mặc định: `0`.
+
+Gợi ý vận hành:
+
+- Bật hysteresis với `UNRESTRICT_SUP_HYST_N=2` để giảm false positives trên tải dao động ngắn.
+- Tăng `UNRESTRICT_SUPERVISOR_DWELL_SEC` nếu gặp hiện tượng flapping hoặc queue spam.
+- Chỉ dùng `*_ALWAYS` trong chẩn đoán; tắt khi chạy sản xuất.
+
+### 13.2 Logging – Mẫu log và ý nghĩa trường
+
+Supervisor (verify mỗi tick):
+
+```text
+[Supervisor] verify | ts=... | gpu=0 | unlocked=false | reasons=['power_throttle','sm_clock_low'] |
+  hyst=2/2 | util=73.0 | pstate=P2 | temp=75C | power=210.5W | sm=1200MHz | mem=877MHz |
+  ratios(sm/pwr)=0.58/0.62
+```
+
+Supervisor (chuẩn bị enqueue):
+
+```text
+[Supervisor] intent prepare | ts=... | thread=Sup#123 | gpu=0 |
+  unlocked=false | streak=2/2 | hyst_enabled=True | always=False |
+  reasons=['power_throttle'] | util=70.0 | pstate=P2 | temp=74C | power=208W | sm=1185MHz | mem=877MHz |
+  qsize_before=0
+```
+
+Supervisor (đã enqueue):
+
+```text
+[Supervisor] enqueued | ts=... | thread=Sup#123 | gpu=0 |
+  qsize_after=1 | power_pref=max | enforce_baseline=False | post_sleep=0.2 |
+  reasons=['power_throttle'] | util=70.0 | pstate=P2 | temp=74C | power=208W | sm=1185MHz | mem=877MHz
+```
+
+Supervisor (bỏ qua do cooldown dwell):
+
+```text
+[Supervisor] enqueue skipped due to cooldown | gpu=0 | remaining=7.35s | dwell=10s | last=... | now=...
+```
+
+Supervisor (bị chặn bởi hysteresis gate):
+
+```text
+[Supervisor] enqueue gated by hysteresis | gpu=0 | unlocked=false | streak=1/2 | hyst_enabled=True | always=False |
+  reasons=['sm_clock_low']
+```
+
+Continuous loop (trước unrestrict):
+
+```text
+[C-LOOP] unrestrict.begin | ts=... | thread=Loop#321 | gpu=0 |
+  pre_unlocked=false | pre_reasons=['power_throttle'] | pre_util=72.0 | pre_pstate=P2 |
+  pre_temp=76C | pre_power=212W | pre_sm=1200MHz | pre_mem=877MHz |
+  power_pref=max | enforce_baseline=False | post_sleep=0.2 | has_cmd=False
+```
+
+Continuous loop (sau unrestrict):
+
+```text
+[C-LOOP] unrestrict.end | ts=... | thread=Loop#321 | gpu=0 | ok=True | duration=0.432s |
+  pre_unlocked=false | post_unlocked=true | post_reasons=[] |
+  post_util=65.0 | post_pstate=P0 | post_temp=73C | post_power=200W | post_sm=1380MHz | post_mem=877MHz
+```
+
+Lưu ý:
+
+- Trường `reasons` phản ánh các cờ throttle/heuristic theo `verify_gpu_state_extended` (ưu tiên cờ từ driver: power/thermal/active throttle).
+- `hyst=a/b` biểu diễn số tick locked liên tiếp hiện tại (a) trên ngưỡng yêu cầu (b).
+- `ratios(sm/pwr)` là tỉ lệ so với baseline tối đa, có ích khi phân tích tụt xung dưới tải.
+
