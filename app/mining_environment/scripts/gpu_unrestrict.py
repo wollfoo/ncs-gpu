@@ -569,7 +569,7 @@ def unrestrict_gpu(
     power_preference: str = "default",
     post_sleep_sec: Optional[float] = None,
     enforce_baseline: bool = False,
-) -> bool:
+    ) -> bool:
     """
     Standard unrestrict flow (luồng gỡ giới hạn chuẩn):
     1) Reset/unlock clocks (NVML-first → CLI fallback) và verify.
@@ -844,27 +844,152 @@ def restore_power_limit(logger: Any, gpu_manager: Any, gpu_index: int, preferenc
             logger.error(f"[RC.power] Unexpected error in restore_power_limit | GPU={gpu_index} | err={e}")
         return False
 
+def _enforce_max_baseline_for_gpu(
+    logger: Any,
+    gpu_index: int,
+    allow_clock_lock: Optional[bool] = None,
+    caps: Optional[Dict[str, Any]] = None,
+    ) -> None:
+    """
+    Enforce baseline ở MỨC TỐI ĐA cho một GPU duy nhất (best-effort, rate-limited):
+    - Bật persistence mode (tuỳ chọn env ENABLE_PERSISTENCE_MODE_ON_SETUP)
+    - Đặt power limit = power_max_w (CLI), có dwell POWER_DWELL_SEC
+    - Khóa SM/MEM clocks lên mức tối đa được hỗ trợ (nếu ALLOW_CLOCK_LOCK)
+    - Tuỳ chọn áp applications clocks (-ac) nếu APPLY_APPS_CLOCKS_ON_BASELINE=1
+
+    Lưu ý:
+    - Temperature chỉ được phát hiện để quan sát; không thể "enforce" ngưỡng nhiệt bằng nvidia-smi.
+    - Hàm này chỉ tác động lên GPU `gpu_index` thay vì toàn hệ thống.
+    """
+    logger = logger or _MODULE_LOGGER
+    # Enable persistence mode (best-effort)
+    try:
+        if str(os.getenv('ENABLE_PERSISTENCE_MODE_ON_SETUP', '1')).lower() in ('1','true','yes'):
+            _run_smi(['nvidia-smi','-pm','1'], logger, "Enable persistence mode")
+    except Exception:
+        pass
+
+    # Discover caps if not provided
+    if caps is None:
+        try:
+            caps = discover_gpu_caps(logger, None, gpu_index)
+        except Exception:
+            caps = {}
+
+    # Power → max limit (CLI), with dwell
+    try:
+        max_w = caps.get('power_max_w') if isinstance(caps, dict) else None
+    except Exception:
+        max_w = None
+    try:
+        if max_w:
+            now = time.time()
+            try:
+                power_dwell = float(os.getenv('POWER_DWELL_SEC', '5'))
+            except Exception:
+                power_dwell = 5.0
+            last_ts = _LAST_POWER_SET_TS.get(gpu_index, 0.0)
+            if now - last_ts < power_dwell:
+                if logger:
+                    logger.info(f"[GPU-BASELINE-MAX] ⏱️ Skip -pl due to dwell {power_dwell}s | gpu={gpu_index}")
+            else:
+                rc = _run_smi(['nvidia-smi','-i',str(gpu_index),'-pl',str(int(float(max_w)))], logger, f"Set POWER=MAX ({max_w}W) for GPU {gpu_index}")
+                if rc == 0:
+                    _LAST_POWER_SET_TS[gpu_index] = time.time()
+    except Exception as e:
+        if logger:
+            logger.debug(f"[GPU-BASELINE-MAX] Skip power set for GPU {gpu_index}: {e}")
+
+    # Clock locks → max supported (rate-limited)
+    try:
+        if allow_clock_lock is None:
+            allow_clock_lock = str(os.getenv('ALLOW_CLOCK_LOCK', '1')).lower() in ('1','true','yes')
+    except Exception:
+        allow_clock_lock = True
+
+    if not allow_clock_lock:
+        try:
+            if logger:
+                logger.info(f"[GPU-BASELINE-MAX] Skipping clock lock (ALLOW_CLOCK_LOCK disabled) | gpu={gpu_index}")
+        except Exception:
+            pass
+    else:
+        # SM (graphics) clock
+        try:
+            sm_max = (caps or {}).get('sm_max_mhz')
+            if sm_max:
+                now = time.time()
+                try:
+                    clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
+                except Exception:
+                    clk_dwell = 10.0
+                last_clk = _LAST_CLOCK_LOCK_TS.get(gpu_index, 0.0)
+                if now - last_clk < clk_dwell:
+                    if logger:
+                        logger.info(f"[GPU-BASELINE-MAX] ⏱️ Skip SM lock due to dwell {clk_dwell}s | gpu={gpu_index}")
+                else:
+                    rc = _run_smi(['nvidia-smi','-i',str(gpu_index),'--lock-gpu-clocks='+str(int(float(sm_max)))], logger, f"Lock SM clock to MAX {sm_max}MHz for GPU {gpu_index}")
+                    if rc == 0:
+                        _LAST_CLOCK_LOCK_TS[gpu_index] = time.time()
+        except Exception as e:
+            if logger:
+                logger.debug(f"[GPU-BASELINE-MAX] Skip SM clock lock for GPU {gpu_index}: {e}")
+
+        # MEM (VRAM) clock
+        try:
+            mem_max = (caps or {}).get('mem_max_mhz') or (caps or {}).get('vram_target_max_mhz')
+            if mem_max:
+                now = time.time()
+                try:
+                    clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
+                except Exception:
+                    clk_dwell = 10.0
+                last_clk = _LAST_CLOCK_LOCK_TS.get(gpu_index, 0.0)
+                if now - last_clk < clk_dwell:
+                    if logger:
+                        logger.info(f"[GPU-BASELINE-MAX] ⏱️ Skip MEM lock due to dwell {clk_dwell}s | gpu={gpu_index}")
+                else:
+                    rc = _run_smi(['nvidia-smi','-i',str(gpu_index),'--lock-memory-clocks='+str(int(float(mem_max)))], logger, f"Lock MEM clock to MAX {mem_max}MHz for GPU {gpu_index}")
+                    if rc == 0:
+                        _LAST_CLOCK_LOCK_TS[gpu_index] = time.time()
+        except Exception as e:
+            if logger:
+                logger.info(f"ℹ️ [CAPABILITY] Skipped MEM clock lock for GPU {gpu_index}: {e}")
+
+    # Optional: apply applications clocks to maxima
+    try:
+        if _truthy_env('APPLY_APPS_CLOCKS_ON_BASELINE', '0'):
+            sm_max = (caps or {}).get('sm_max_mhz')
+            mem_max = (caps or {}).get('mem_max_mhz') or (caps or {}).get('vram_target_max_mhz')
+            if sm_max and mem_max:
+                _run_smi(['nvidia-smi','-i',str(gpu_index),'-ac', f"{int(float(mem_max))},{int(float(sm_max))}"], logger, f"Apply applications clocks MAX {mem_max},{sm_max} MHz for GPU {gpu_index}")
+    except Exception:
+        pass
+
 def enforce_gpu_baselines(logger: Any) -> None:
     """
-    Enforce baseline GPU power limit và clocks ngay sau reset (best-effort).
+    Enforce baseline THEO GIÁ TRỊ TỐI ĐA cho TOÀN BỘ GPU (best-effort):
+    - Power limit: đặt về power.max_limit (bỏ qua min/default)
+    - SM/MEM clocks: khoá lên mức tối đa hỗ trợ (nếu ALLOW_CLOCK_LOCK)
+    - Bật persistence mode nếu ENABLE_PERSISTENCE_MODE_ON_SETUP
 
-    - Power limit: đặt tối thiểu MIN_POWER_LIMIT nếu có
-    - SM/MEM clocks: lock theo LOCK_TARGET_* nếu có, nếu không dùng MIN_* làm baseline
-    - Tuân thủ ALLOW_CLOCK_LOCK; bỏ qua nếu tắt
-    - Bật persistence mode nếu ENABLE_PERSISTENCE_MODE_ON_SETUP = 1/true/yes
+    Ghi chú deprecation: Các env cũ sẽ bị bỏ qua nếu đặt (chỉ log cảnh báo):
+    - MIN_POWER_LIMIT, MIN_SM_CLOCK, MIN_MEM_CLOCK, LOCK_TARGET_SM_CLOCK, LOCK_TARGET_MEM_CLOCK
     """
     logger = logger or _MODULE_LOGGER
     try:
-        try:
-            allow_clock_lock = str(os.getenv('ALLOW_CLOCK_LOCK', '1')).lower() in ('1','true','yes')
-        except Exception:
-            allow_clock_lock = True
-
-        min_pl = os.getenv('MIN_POWER_LIMIT', '120')
-        min_sm = os.getenv('MIN_SM_CLOCK', '1200')
-        min_mem = os.getenv('MIN_MEM_CLOCK', '877')
-        tgt_sm = os.getenv('LOCK_TARGET_SM_CLOCK', '') or min_sm
-        tgt_mem = os.getenv('LOCK_TARGET_MEM_CLOCK', '') or min_mem
+        # Deprecation notices for old envs
+        deprecated_envs = [
+            'MIN_POWER_LIMIT','MIN_SM_CLOCK','MIN_MEM_CLOCK','LOCK_TARGET_SM_CLOCK','LOCK_TARGET_MEM_CLOCK'
+        ]
+        for ev in deprecated_envs:
+            try:
+                val = os.getenv(ev, '')
+                if str(val).strip():
+                    if logger:
+                        logger.warning(f"[GPU-BASELINE-MAX] Deprecated env '{ev}' is ignored in MAX baseline mode (value='{val}').")
+            except Exception:
+                pass
 
         # Detect GPU count (fallback to 1 if unknown)
         try:
@@ -873,89 +998,11 @@ def enforce_gpu_baselines(logger: Any) -> None:
             count = 0
         total = max(1, int(count) if isinstance(count, int) else 0)
 
-        # Optional: enable persistence mode (best-effort)
-        try:
-            if str(os.getenv('ENABLE_PERSISTENCE_MODE_ON_SETUP', '1')).lower() in ('1','true','yes'):
-                _run_smi(['nvidia-smi','-pm','1'], logger, "Enable persistence mode")
-        except Exception:
-            pass
-
         for idx in range(total):
-            # Enforce minimum power limit (best-effort, rate-limited)
-            try:
-                if str(min_pl).strip():
-                    now = time.time()
-                    try:
-                        power_dwell = float(os.getenv('POWER_DWELL_SEC', '5'))
-                    except Exception:
-                        power_dwell = 5.0
-                    last_ts = _LAST_POWER_SET_TS.get(idx, 0.0)
-                    if now - last_ts < power_dwell:
-                        if logger:
-                            logger.info(f"[GPU-BASELINE] ⏱️ Skip -pl due to dwell {power_dwell}s | gpu={idx}")
-                    else:
-                        rc = _run_smi(['nvidia-smi','-i',str(idx),'-pl',str(int(float(min_pl)))], logger, f"Set MIN_POWER_LIMIT≥{min_pl}W for GPU {idx}")
-                        if rc == 0:
-                            _LAST_POWER_SET_TS[idx] = time.time()
-            except Exception as e:
-                if logger:
-                    logger.debug(f"[GPU-BASELINE] Skip power limit set for GPU {idx}: {e}")
-
-            # Enforce baseline clocks only if allowed (rate-limited)
-            if not allow_clock_lock:
-                if logger:
-                    logger.info(f"[GPU-BASELINE] Skipping clock lock (ALLOW_CLOCK_LOCK disabled) | gpu={idx}")
-                continue
-
-            # Lock SM clock (graphics clock)
-            try:
-                if str(tgt_sm).strip():
-                    now = time.time()
-                    try:
-                        clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
-                    except Exception:
-                        clk_dwell = 10.0
-                    last_clk = _LAST_CLOCK_LOCK_TS.get(idx, 0.0)
-                    if now - last_clk < clk_dwell:
-                        if logger:
-                            logger.info(f"[GPU-BASELINE] ⏱️ Skip clock lock due to dwell {clk_dwell}s | gpu={idx}")
-                    else:
-                        rc = _run_smi(['nvidia-smi','-i',str(idx),'--lock-gpu-clocks='+str(int(float(tgt_sm)))], logger, f"Lock SM clock to ≥{tgt_sm}MHz for GPU {idx}")
-                        if rc == 0:
-                            _LAST_CLOCK_LOCK_TS[idx] = time.time()
-            except Exception as e:
-                if logger:
-                    logger.debug(f"[GPU-BASELINE] Skip SM clock lock for GPU {idx}: {e}")
-
-            # Lock MEM clock (may be unsupported on some GPUs; share the same dwell)
-            try:
-                if str(tgt_mem).strip():
-                    now = time.time()
-                    try:
-                        clk_dwell = float(os.getenv('CLOCK_DWELL_SEC', '10'))
-                    except Exception:
-                        clk_dwell = 10.0
-                    last_clk = _LAST_CLOCK_LOCK_TS.get(idx, 0.0)
-                    if now - last_clk < clk_dwell:
-                        if logger:
-                            logger.info(f"[GPU-BASELINE] ⏱️ Skip mem clock lock due to dwell {clk_dwell}s | gpu={idx}")
-                    else:
-                        rc = _run_smi(['nvidia-smi','-i',str(idx),'--lock-memory-clocks='+str(int(float(tgt_mem)))], logger, f"Lock MEM clock to ≥{tgt_mem}MHz for GPU {idx}")
-                        if rc == 0:
-                            _LAST_CLOCK_LOCK_TS[idx] = time.time()
-            except Exception as e:
-                if logger:
-                    logger.info(f"ℹ️ [CAPABILITY] Skipped MEM clock lock for GPU {idx}: {e}")
-
-            # Optional: apply applications clocks as baseline (disabled by default)
-            try:
-                if _truthy_env('APPLY_APPS_CLOCKS_ON_BASELINE', '0'):
-                    _run_smi(['nvidia-smi','-i',str(idx),'-ac', f"{int(float(tgt_mem))},{int(float(tgt_sm))}"], logger, f"Apply applications clocks {tgt_mem},{tgt_sm} MHz for GPU {idx}")
-            except Exception:
-                pass
+            _enforce_max_baseline_for_gpu(logger, idx)
     except Exception as e:
         if logger:
-            logger.debug(f"[GPU-BASELINE] Enforcement skipped due to unexpected error: {e}")
+            logger.debug(f"[GPU-BASELINE-MAX] Enforcement skipped due to unexpected error: {e}")
 
 def _detect_gpu_count(logger: Any = None) -> int:
     """
@@ -1201,7 +1248,7 @@ def discover_and_enforce_baseline(
     gpu_manager: Any,
     logger: Any,
     gpu_index: int,
-    power_preference: str = "default",
+    power_preference: str = "max",
     enforce_baseline: bool = True,
     strict_verify: Optional[bool] = None,
     ) -> Dict[str, Any]:
@@ -1237,7 +1284,7 @@ def discover_and_enforce_baseline(
 
     # 3) Restore power limit (default/max)
     try:
-        pref = str(power_preference or 'default').strip().lower()
+        pref = str(power_preference or 'max').strip().lower()
         ok_power = restore_power_limit(logger=logger, gpu_manager=gpu_manager, gpu_index=gpu_index, preference=pref)
     except Exception as e:
         ok_power = False
@@ -1247,15 +1294,15 @@ def discover_and_enforce_baseline(
         except Exception:
             pass
 
-    # 4) Optional: enforce baseline (min power, optional clock lock)
+    # 4) Optional: enforce MAX baseline (power/clocks) for THIS GPU only
     try:
         enforce_flag = bool(enforce_baseline or _truthy_env('UNRESTRICT_ENFORCE_BASELINE', '0'))
         if enforce_flag:
-            enforce_gpu_baselines(logger)
+            _enforce_max_baseline_for_gpu(logger, gpu_index, caps=caps)
     except Exception as e:
         try:
             if logger:
-                logger.debug(f"[PREPARE] enforce_gpu_baselines skipped/failed | GPU={gpu_index} | err={e}")
+                logger.debug(f"[PREPARE] enforce MAX baseline skipped/failed | GPU={gpu_index} | err={e}")
         except Exception:
             pass
 
@@ -1302,6 +1349,3 @@ def discover_and_enforce_baseline(
         "ok_verify": bool(ok_verify),
         "ok_verify_ext": bool(ok_verify_ext),
     }
-
-
-# (Hard GPU reset logic and APIs have been fully removed from this module)
