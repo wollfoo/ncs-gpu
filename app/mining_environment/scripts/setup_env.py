@@ -815,6 +815,25 @@ def setup():
     _force_env('GPU_CLOSED_LOOP_MODE', 'auto')
     _force_env('GPU_CLOSED_LOOP_MAX_SEC', '35.0')
 
+    # Disable-on-conflict (ép cứng – force): tự động treo closed-loop khi xung đột NVML + closed-loop
+    _force_env('GPU_CLOSED_LOOP_DISABLE_ON_CONFLICT', '1')
+    _force_env('GPU_CLOSED_LOOP_CONFLICT_SUSPEND_SEC', '60')
+
+    # Baseline wave (ép cứng – force): sóng mục tiêu GPU util dạng sin + jitter + drift
+    _force_env('GPU_BASELINE_WAVE_ENABLED', '1')
+    _force_env('GPU_BASELINE_WAVE_MIN', '0.60')
+    _force_env('GPU_BASELINE_WAVE_MAX', '0.90')
+    _force_env('GPU_BASELINE_WAVE_PERIOD_MIN_SEC', '20')
+    _force_env('GPU_BASELINE_WAVE_PERIOD_MAX_SEC', '60')
+    _force_env('GPU_BASELINE_WAVE_DRIFT_PCT', '0.01')
+    _force_env('GPU_BASELINE_WAVE_JITTER_PCT', '0.03')
+
+    # Closed-loop skip/cooldown/strikes/suspend (ép cứng – force)
+    _force_env('GPU_CLOSED_LOOP_SKIP_ON_OPTIMIZATION', '1')
+    _force_env('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC', '3')
+    _force_env('GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES', '3')
+    _force_env('GPU_CLOSED_LOOP_SUSPEND_SEC', '60')
+
     # Anti-thrashing: dwell-time and max delta for power changes
     _force_env('POWER_DWELL_SEC', '30')
     _force_env('POWER_MAX_DELTA_W', '15')
@@ -853,9 +872,9 @@ def setup():
 
     # Enforce fixed GPU utilization window independent of configuration (áp cứng không phụ thuộc cấu hình)
     try:
-        os.environ['GPU_UTIL_MIN'] = '0.75'  # 75%
-        os.environ['GPU_UTIL_MAX'] = '0.90'  # 90%
-        logger.info("ℹ️ [FORCE] GPU_UTIL_MIN=0.75, GPU_UTIL_MAX=0.90 (decoupled from configuration)")
+        _force_env('GPU_UTIL_MIN', '0.60')  # 60%
+        _force_env('GPU_UTIL_MAX', '0.90')  # 90%
+        logger.info("ℹ️ [FORCE] GPU_UTIL_MIN=0.60, GPU_UTIL_MAX=0.90 (decoupled from configuration)")
     except Exception:
         pass
 
@@ -877,6 +896,9 @@ def setup():
             'CLOCK_LOCK_VERIFY_WINDOW_SEC': os.getenv('CLOCK_LOCK_VERIFY_WINDOW_SEC'),
             'CLOCK_LOCK_TEMP_MAX': os.getenv('CLOCK_LOCK_TEMP_MAX'),
             'CLOCK_LOCK_MIN_INCREASE_PCT': os.getenv('CLOCK_LOCK_MIN_INCREASE_PCT'),
+            # --- Fixed util window ---
+            'GPU_UTIL_MIN': os.getenv('GPU_UTIL_MIN'),
+            'GPU_UTIL_MAX': os.getenv('GPU_UTIL_MAX'),
             'MIN_POWER_LIMIT': os.getenv('MIN_POWER_LIMIT'),
             'MIN_SM_CLOCK': os.getenv('MIN_SM_CLOCK'),
             'MIN_MEM_CLOCK': os.getenv('MIN_MEM_CLOCK'),
@@ -884,6 +906,14 @@ def setup():
             'ENABLE_PERSISTENCE_MODE_ON_SETUP': os.getenv('ENABLE_PERSISTENCE_MODE_ON_SETUP'),
             'GPU_CLOSED_LOOP_ENABLED': os.getenv('GPU_CLOSED_LOOP_ENABLED'),
             'GPU_TARGET_UTIL': os.getenv('GPU_TARGET_UTIL'),
+            # --- Closed-loop skip/cooldown/strikes/suspend ---
+            'GPU_CLOSED_LOOP_SKIP_ON_OPTIMIZATION': os.getenv('GPU_CLOSED_LOOP_SKIP_ON_OPTIMIZATION'),
+            'GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC': os.getenv('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC'),
+            'GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES': os.getenv('GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES'),
+            'GPU_CLOSED_LOOP_SUSPEND_SEC': os.getenv('GPU_CLOSED_LOOP_SUSPEND_SEC'),
+            # --- Closed-loop conflict handling ---
+            'GPU_CLOSED_LOOP_DISABLE_ON_CONFLICT': os.getenv('GPU_CLOSED_LOOP_DISABLE_ON_CONFLICT'),
+            'GPU_CLOSED_LOOP_CONFLICT_SUSPEND_SEC': os.getenv('GPU_CLOSED_LOOP_CONFLICT_SUSPEND_SEC'),
             'CANCEL_CROSS_PID_RESTORE_BY_GPU': os.getenv('CANCEL_CROSS_PID_RESTORE_BY_GPU'),
             'RESTORE_IDLE_UTIL_THRESHOLD': os.getenv('RESTORE_IDLE_UTIL_THRESHOLD'),
             'RESTORE_IDLE_MIN_DURATION_SEC': os.getenv('RESTORE_IDLE_MIN_DURATION_SEC'),
@@ -897,6 +927,14 @@ def setup():
             'UNRESTRICT_POWER_PREFERENCE': os.getenv('UNRESTRICT_POWER_PREFERENCE'),
             'VERIFY_THROTTLE_REASONS_STRICT': os.getenv('VERIFY_THROTTLE_REASONS_STRICT'),
             'UNRESTRICT_SETTLE_SEC': os.getenv('UNRESTRICT_SETTLE_SEC'),
+            # --- Baseline wave ---
+            'GPU_BASELINE_WAVE_ENABLED': os.getenv('GPU_BASELINE_WAVE_ENABLED'),
+            'GPU_BASELINE_WAVE_MIN': os.getenv('GPU_BASELINE_WAVE_MIN'),
+            'GPU_BASELINE_WAVE_MAX': os.getenv('GPU_BASELINE_WAVE_MAX'),
+            'GPU_BASELINE_WAVE_PERIOD_MIN_SEC': os.getenv('GPU_BASELINE_WAVE_PERIOD_MIN_SEC'),
+            'GPU_BASELINE_WAVE_PERIOD_MAX_SEC': os.getenv('GPU_BASELINE_WAVE_PERIOD_MAX_SEC'),
+            'GPU_BASELINE_WAVE_DRIFT_PCT': os.getenv('GPU_BASELINE_WAVE_DRIFT_PCT'),
+            'GPU_BASELINE_WAVE_JITTER_PCT': os.getenv('GPU_BASELINE_WAVE_JITTER_PCT'),
         }
         logger.info("[EFFECTIVE ENV] " + ", ".join([f"{k}={v}" for k, v in eff_vars.items()]))
     except Exception:

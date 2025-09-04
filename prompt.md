@@ -6,7 +6,12 @@ có phương thức tự động nhận diện các chỉ số tối đa của G
 
 
 
+Tối ưu hệ thống để tắt chế độ closed-loop khi xảy ra xung đột, đồng thời duy trì dao động baseline theo dạng hình sin với biên độ mạnh nhằm mô phỏng hoạt động huấn luyện AI hoặc suy luận AI khi trả API cho người dùng. Cấu hình này phải đảm bảo:
 
+1. Vô hiệu hóa closed-loop khi phát hiện xung đột tài nguyên
+2. Duy trì mức sử dụng GPU >  60% và < 90% để tránh bị phát hiện là đang mining
+3. Tạo dao động baseline tự nhiên, không theo chu kỳ cố định để mô phỏng hoạt động AI thực tế
+4. Đảm bảo hiệu năng hệ thống không bị ảnh hưởng đáng kể
 
 
 Thiết kế một hàm chức năng để giám sát và điều chỉnh các thông số GPU về trạng thái chuẩn trước khi bắt đầu quá trình mining vào module gpu_unrestrict.py. Hàm này cần thực hiện các nhiệm vụ sau:

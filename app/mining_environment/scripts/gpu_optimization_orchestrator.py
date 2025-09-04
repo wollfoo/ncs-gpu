@@ -14,6 +14,7 @@ import os
 import logging
 import time
 import random
+import math
 import json
 import functools
 from typing import Dict, Any, List, Optional, Tuple
@@ -1034,6 +1035,69 @@ class GPUOptimizationOrchestrator:
                         max_util = max(0.0, min(1.0, max_util))
                         # Clamp target utilization to [min_util, max_util]
                         target_util = max(min_util, min(max_util, max(0.0, target_util)))
+                        # Optional: baseline wave (sóng cơ sở dạng sin + jitter + drift) để mô phỏng tải AI
+                        # Bật qua ENV GPU_BASELINE_WAVE_ENABLED; biên và chu kỳ được giới hạn bởi [min_util, max_util]
+                        try:
+                            wave_enabled = str(os.getenv('GPU_BASELINE_WAVE_ENABLED', '0')).lower() in ('1','true','yes')
+                        except Exception:
+                            wave_enabled = False
+                        if wave_enabled:
+                            # Trạng thái sóng theo từng GPU (khởi tạo lười)
+                            if not hasattr(self, '_wave_state'):
+                                self._wave_state = {}
+                            now_ts = time.time()
+                            st_wave = self._wave_state.get(gidx)
+                            # Đọc biên dưới/trên đề xuất, sau đó kẹp trong [min_util, max_util]
+                            try:
+                                min_wave = float(os.getenv('GPU_BASELINE_WAVE_MIN', f"{min_util:.2f}"))
+                            except Exception:
+                                min_wave = min_util
+                            try:
+                                max_wave = float(os.getenv('GPU_BASELINE_WAVE_MAX', f"{max_util:.2f}"))
+                            except Exception:
+                                max_wave = max_util
+                            lo = max(min_util, max(0.0, min(min_wave, max_wave)))
+                            hi = min(max_util, max(0.0, max(min_wave, max_wave)))
+                            # Chu kỳ ngẫu nhiên trong [per_min, per_max] với drift để tránh chu kỳ cố định
+                            try:
+                                per_min = float(os.getenv('GPU_BASELINE_WAVE_PERIOD_MIN_SEC', '20'))
+                            except Exception:
+                                per_min = 20.0
+                            try:
+                                per_max = float(os.getenv('GPU_BASELINE_WAVE_PERIOD_MAX_SEC', '60'))
+                            except Exception:
+                                per_max = 60.0
+                            per_min = max(5.0, min(per_min, per_max if per_max > 0 else per_min))
+                            per_max = max(per_min, per_max)
+                            try:
+                                drift_pct = float(os.getenv('GPU_BASELINE_WAVE_DRIFT_PCT', '0.01'))
+                            except Exception:
+                                drift_pct = 0.01
+                            try:
+                                jitter_pct = float(os.getenv('GPU_BASELINE_WAVE_JITTER_PCT', '0.03'))
+                            except Exception:
+                                jitter_pct = 0.03
+                            # Khởi tạo lần đầu: ngẫu nhiên hóa pha để tránh đồng bộ giữa GPU
+                            if st_wave is None:
+                                st_wave = {
+                                    'start_ts': now_ts - random.uniform(0.0, per_max),
+                                    'period': random.uniform(per_min, per_max),
+                                }
+                                self._wave_state[gidx] = st_wave
+                            # Drift chu kỳ nhẹ (random walk) theo mỗi tick
+                            st_wave['period'] = max(per_min, min(per_max, float(st_wave['period']) * (1.0 + random.uniform(-drift_pct, drift_pct))))
+                            period = max(per_min, float(st_wave['period']))
+                            phase = 2.0 * math.pi * ((now_ts - float(st_wave['start_ts'])) / period)
+                            center = 0.5 * (lo + hi)
+                            amp = 0.5 * max(0.0, hi - lo)
+                            base_wave = center + amp * math.sin(phase)
+                            jitter = random.uniform(-jitter_pct, jitter_pct)
+                            dyn_target = base_wave + jitter
+                            target_util = max(min_util, min(max_util, dyn_target))
+                            try:
+                                self.logger.debug(f"[Orchestrator] Baseline wave target={target_util:.2f} (lo={lo:.2f}, hi={hi:.2f}, period={period:.1f}s) | gpu={gidx}")
+                            except Exception:
+                                pass
                         try:
                             self.logger.info(f"[Orchestrator] Enforced min utilization={min_util:.2f} → target_util={target_util:.2f} | allow_under_80={allow_under_80} | gpu={gidx}")
                             # Skip closed-loop this tick if utilization metrics invalid (marked -1.0)
@@ -1163,6 +1227,29 @@ class GPUOptimizationOrchestrator:
                                         self.logger.warning(
                                             f"[Orchestrator] Potential conflict: NVML optimization + closed-loop adjustments in same tick | gpu={gidx} | ops={ops2}"
                                         )
+                                        # Reactive brake: treo closed-loop khi phát hiện xung đột thực tế
+                                        try:
+                                            disable_on_conf = str(os.getenv('GPU_CLOSED_LOOP_DISABLE_ON_CONFLICT', '1')).lower() in ('1','true','yes')
+                                        except Exception:
+                                            disable_on_conf = True
+                                        if disable_on_conf:
+                                            try:
+                                                conflict_suspend = float(os.getenv('GPU_CLOSED_LOOP_CONFLICT_SUSPEND_SEC', os.getenv('GPU_CLOSED_LOOP_SUSPEND_SEC', '60')))
+                                            except Exception:
+                                                try:
+                                                    conflict_suspend = float(os.getenv('GPU_CLOSED_LOOP_SUSPEND_SEC', '60'))
+                                                except Exception:
+                                                    conflict_suspend = 60.0
+                                            try:
+                                                if not hasattr(self, '_cl_suspended_until'):
+                                                    self._cl_suspended_until = {}
+                                                if not hasattr(self, '_cl_strikes'):
+                                                    self._cl_strikes = {}
+                                                self._cl_suspended_until[gidx] = time.time() + max(0.0, conflict_suspend)
+                                                self._cl_strikes[gidx] = 0
+                                                self.logger.warning(f"[Orchestrator] Disable-on-conflict engaged: suspended closed-loop for {conflict_suspend:.1f}s | gpu={gidx}")
+                                            except Exception:
+                                                pass
                                 except Exception:
                                     pass
                             except Exception as _cl_err:
