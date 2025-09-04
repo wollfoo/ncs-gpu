@@ -649,6 +649,11 @@ def reset_gpu_state(logger: Any) -> None:
             count = 0
         total = max(1, int(count) if isinstance(count, int) else 0)
         for idx in range(total):
+            # Snapshot before unlock (pre)
+            try:
+                _log_hw_snapshot(logger, idx, tag="pre")
+            except Exception:
+                pass
             # Optional: set compute mode to EXCLUSIVE_PROCESS (best-effort)
             try:
                 if str(os.getenv('ENABLE_COMPUTE_MODE_EXCLUSIVE', '1')).lower() in ('1','true','yes'):
@@ -661,6 +666,12 @@ def reset_gpu_state(logger: Any) -> None:
             except Exception as smi_e:
                 if logger:
                     logger.debug(f"[GPU-RESET] nvidia-smi unlock exception for GPU {idx}: {smi_e}")
+            finally:
+                # Snapshot after unlock (post)
+                try:
+                    _log_hw_snapshot(logger, idx, tag="post")
+                except Exception:
+                    pass
     except Exception as e:
         if logger:
             logger.debug(f"[GPU-RESET] Skipped due to unexpected error: {e}")
