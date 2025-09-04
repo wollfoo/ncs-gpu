@@ -1062,9 +1062,9 @@ class GPUOptimizationOrchestrator:
                         except Exception:
                             skip_on_opt = True
                         try:
-                            cooldown_sec = float(os.getenv('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC', '2.5'))
+                            cooldown_sec = float(os.getenv('GPU_CLOSED_LOOP_SKIP_COOLDOWN_SEC', '3'))
                         except Exception:
-                            cooldown_sec = 2.5
+                            cooldown_sec = 3
                         try:
                             auto_disable_strikes = int(os.getenv('GPU_CLOSED_LOOP_AUTO_DISABLE_STRIKES', '3'))
                         except Exception:
