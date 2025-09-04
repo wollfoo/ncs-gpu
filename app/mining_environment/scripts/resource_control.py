@@ -2138,10 +2138,19 @@ class OptimizedHardwareController:
                 nvml_ok = bool(status.get('nvml_ok', False))
                 if closed_loop_enabled and self.nvml_available and nvml_ok:
                     if normalized_strategy in ('mining', 'aggressive', 'gpu'):
-                        target_util = float(os.getenv('GPU_TARGET_UTIL', '0.70'))
+                        # Đọc target và áp "floor" theo GPU_UTIL_MIN khi không cho phép under-80
+                        target_util = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
                         allow_under_80 = str(os.getenv('ALLOW_UTIL_UNDER_80', 'false')).lower() in ('1', 'true', 'yes')
                         if not allow_under_80:
-                            target_util = max(0.80, target_util)
+                            try:
+                                min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
+                                min_util = float(min_util_env)
+                            except Exception:
+                                min_util = 0.75
+                            if min_util > 1.0:
+                                # Cho phép nhập dạng % (ví dụ 80 → 0.80)
+                                min_util = min_util / 100.0
+                            target_util = max(min_util, target_util)
                         mode = str(os.getenv('CLOSED_LOOP_MODE', 'power'))
                         self.logger.info(f"🎯 [OHC.optimize_for_pid] Closed-loop enabled → target_util={target_util:.2f}, mode={mode}")
                         t_cl_start = time.time()

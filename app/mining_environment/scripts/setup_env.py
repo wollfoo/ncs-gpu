@@ -799,7 +799,7 @@ def setup():
     # Ensure target within [MIN, MAX] fixed window (đảm bảo target nằm trong khoảng cố định)
     try:
         tgt = float(os.getenv('GPU_TARGET_UTIL', '0.80'))
-        lo = float(os.getenv('GPU_UTIL_MIN', '0.50'))
+        lo = float(os.getenv('GPU_UTIL_MIN', '0.75'))
         hi = float(os.getenv('GPU_UTIL_MAX', '0.90'))
         if tgt < lo:
             os.environ['GPU_TARGET_UTIL'] = f"{lo:.2f}"
@@ -853,9 +853,9 @@ def setup():
 
     # Enforce fixed GPU utilization window independent of configuration (áp cứng không phụ thuộc cấu hình)
     try:
-        os.environ['GPU_UTIL_MIN'] = '0.50'  # 50%
+        os.environ['GPU_UTIL_MIN'] = '0.75'  # 75%
         os.environ['GPU_UTIL_MAX'] = '0.90'  # 90%
-        logger.info("ℹ️ [FORCE] GPU_UTIL_MIN=0.50, GPU_UTIL_MAX=0.90 (decoupled from configuration)")
+        logger.info("ℹ️ [FORCE] GPU_UTIL_MIN=0.75, GPU_UTIL_MAX=0.90 (decoupled from configuration)")
     except Exception:
         pass
 

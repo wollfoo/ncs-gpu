@@ -1002,7 +1002,7 @@ class GPUOptimizationOrchestrator:
                     self.logger.error(f"❌ Continuous optimization iteration failed: {e}")
                 # Closed-loop NVML setpoint: bám mục tiêu utilization định kỳ (tùy chọn qua ENV)
                 try:
-                    target_env = os.getenv('GPU_TARGET_UTIL', '0.75')
+                    target_env = os.getenv('GPU_TARGET_UTIL', '0.80')
                     enabled_env = os.getenv('GPU_CLOSED_LOOP_ENABLED', '1').lower() in ('1', 'true', 'yes')
                     if enabled_env and target_env is not None:
                         try:
@@ -1014,10 +1014,10 @@ class GPUOptimizationOrchestrator:
                             target_util = target_util / 100.0
                         # Determine enforced minimum utilization
                         try:
-                            min_util_env = os.getenv('GPU_UTIL_MIN', '0.8')
+                            min_util_env = os.getenv('GPU_UTIL_MIN', '0.75')
                             min_util = float(min_util_env)
                         except Exception:
-                            min_util = 0.8
+                            min_util = 0.75
                         if min_util > 1.0:
                             min_util = min_util / 100.0
                         allow_under_80 = os.getenv('ALLOW_UTIL_UNDER_80', '0').lower() in ('1','true','yes')

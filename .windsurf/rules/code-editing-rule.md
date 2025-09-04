@@ -3,6 +3,9 @@ trigger: always_on
 ---
 
 ---
+alwaysApply: true
+---
+---
 type: capability_prompt
 scope: project
 priority: normal
@@ -28,7 +31,7 @@ activation: always_on
 - Evidence: Read target files before editing; cite `file:line` where relevant.
 - Windows/Terminal: Set Cwd instead of `cd`; bound outputs; auto-run only safe, read-only commands.
 - Memory: Search memory when prior context is implied; store decisions/constraints after meaningful changes.
-- Language compliance: Comments/logs/docstrings mặc định phải bằng tiếng Việt; docstring cấp module và Public API, cùng hướng dẫn vận hành, cần song ngữ (dòng tiếng Việt trước, dòng tiếng Anh sau). Tuân thủ `rules/language-rules.md`. Với structured logging, giữ key/field tiếng Anh và `message` tiếng Việt; nếu chuẩn bên ngoài bắt buộc tiếng Anh, bổ sung chú thích tiếng Việt liền kề khi phù hợp.
+- Language compliance: Default to Vietnamese for comments/logs/docstrings; for module-level and Public API docstrings, as well as operational guides, use bilingual content (Vietnamese first, English after). Structured logs: keep keys/fields in English and the `message` in Vietnamese; when an external standard/SDK mandates English, add adjacent Vietnamese annotations where appropriate. Follow `rules/language-rules.md`.
 </execution_directives>
 
 <v4a_constraints>
@@ -169,7 +172,7 @@ This section is superseded by <workflow>. Use <workflow> for the canonical, step
 - Budget: Small tasks ≤2 tool calls; prefer minimal, verifiable diffs.
 - Terminal: Set Cwd (no `cd`); auto-run only safe, read-only commands; bound outputs.
 - Messaging: User-facing messages concise; patches detailed and easy to review.
-- Language: Comments/logs/docstrings mặc định tiếng Việt; docstring cấp module và Public API, cùng hướng dẫn vận hành, song ngữ (VN trước, EN sau). Tuân thủ `rules/language-rules.md`. Structured logs: key/field tiếng Anh, `message` tiếng Việt; khi chuẩn ngoài bắt buộc tiếng Anh, thêm chú thích tiếng Việt khi phù hợp.
+- Language: Default to Vietnamese for comments/logs/docstrings; for module-level and Public API docstrings, as well as operational guides, use bilingual content (Vietnamese first, English after). Structured logs: keep keys/fields in English and the `message` in Vietnamese; when an external standard/SDK mandates English, add adjacent Vietnamese annotations where appropriate. Follow `rules/language-rules.md`.
 </constraints>
 
 <deliverables>
