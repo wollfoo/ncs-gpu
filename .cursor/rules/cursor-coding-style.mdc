@@ -38,10 +38,14 @@ activation: always_on
 - Error handling & logging
   - Validate inputs/assumptions at boundaries; fail fast with actionable messages.
   - Use structured, level-appropriate logs; avoid console spam in hot paths.
+  - Logs language: With structured logging, keep keys/fields in English (stable for machine parsing), and the `message` in Vietnamese; important logs can include a short English sentence. If the external standard requires English, add Vietnamese annotations or bilingual content. Follow `rules/language-rules.md`.
 
 - Comments & docs
   - Prefer intent-revealing code; add comments for non-obvious decisions, invariants, or edge cases.
   - Keep comments adjacent to the code they describe; update when refactoring.
+
+- Docstring/comment language: Default to Vietnamese; when mentioning an English term, include a brief Vietnamese explanation following the “Standard Syntax” in [rules/language-rules.md].
+- Bilingual (Vietnamese first, English after) for module-level and Public API docstrings, as well as operational guides; apply this when the team primarily uses Vietnamese.
 
 - Imports & dependencies
   - Place imports at file top only; if adding imports during an edit, use a dedicated top-of-file hunk.
@@ -101,3 +105,4 @@ activation: always_on
 - Write code for clarity first. Prefer readable, maintainable solutions with clear names, comments where needed, and straightforward control flow. Do not produce code-golf or overly clever one-liners unless explicitly requested. Use high verbosity for writing code and code tools.
 
 - Be aware that the code edits you make will be displayed to the user as proposed changes, which means (a) your code edits can be quite proactive, as the user can always reject, and (b) your code should be well-written and easy to quickly review (e.g., appropriate variable names instead of single letters). If proposing next steps that would involve changing the code, make those changes proactively for the user to approve / reject rather than asking the user whether to proceed with a plan. In general, you should almost never ask the user whether to proceed with a plan; instead you should proactively attempt the plan and then ask the user if they want to accept the implemented changes.
+
