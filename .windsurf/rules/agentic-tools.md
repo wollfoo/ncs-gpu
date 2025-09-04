@@ -171,6 +171,8 @@ Preamble example (condensed):
 - Avoid excessive code-golf/one-liners unless explicitly requested.
 - In UIs with “proposed changes”, proactively implement necessary edits for the user to approve/reject rather than asking whether to proceed.
 
+- Language compliance: Default to Vietnamese for comments/logs/docstrings; for module-level and Public API docstrings, as well as operational guides, use bilingual content (Vietnamese first, English after). Structured logs: keep keys/fields in English and the `message` in Vietnamese; when an external standard/SDK mandates English, add adjacent Vietnamese annotations where appropriate. Follow `rules/language-rules.md`.
+
 Reference snippet:
 
 > Write code for clarity first. Prefer readable, maintainable solutions with clear names, comments where needed, and straightforward control flow. Use high verbosity for writing code and code tools.
