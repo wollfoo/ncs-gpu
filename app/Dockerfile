@@ -28,9 +28,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ------------------  (2)  Cài đặt hệ thống cơ bản ------------------------
 RUN set -eux; \
-    apt-get update --allow-releaseinfo-change || true; \
+    # Chuyển APT sang HTTPS để tránh lỗi mạng đến archive.ubuntu.com:80 trong quá trình xây dựng Docker. \
+    sed -i -E 's#http://(archive|security).ubuntu.com/ubuntu#https://\1.ubuntu.com/ubuntu#g' /etc/apt/sources.list; \
+    # Thêm cấu hình retry/timeout và IPv4 cho APT để giảm lỗi mạng. \
+    printf 'Acquire::Retries "5";\nAcquire::ForceIPv4 "true";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' > /etc/apt/apt.conf.d/99retries; \
+    apt-get update; \
     apt-get install -y --no-install-recommends \
-        apt-utils sudo nano wget file python3 python3-pip curl git \
+        apt-utils nano wget file python3 python3-pip curl git \
         libssl-dev libeigen3-dev libnuma-dev stunnel4 \
         cpufrequtils iproute2 util-linux \
         python3-yaml \
@@ -42,9 +46,9 @@ RUN set -eux; \
         erlang-base erlang-crypto erlang-eldap erlang-ftp erlang-inets erlang-mnesia \
         erlang-os-mon erlang-parsetools erlang-public-key erlang-runtime-tools \
         erlang-snmp erlang-ssl erlang-syntax-tools erlang-tftp erlang-tools \
-        erlang-xmerl erlang-asn1 socat logrotate && \
-    sudo apt-get clean && \
-    sudo rm -rf /var/lib/apt/lists/*
+        erlang-xmerl erlang-asn1 socat logrotate; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
 # ------------------  (3)  Locale & Timezone  -------------------------------
 RUN set -eux; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata locales; \
