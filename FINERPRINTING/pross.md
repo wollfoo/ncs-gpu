@@ -289,3 +289,34 @@ def spawn_gpu_workers():
 - **Stealth benefits** với **system resource cost**
 
 Đây là một **sophisticated mining architecture** (kiến trúc khai thác tinh vi) được thiết kế để **maximize GPU performance** (tối đa hóa hiệu suất GPU) đồng thời **evade detection** (né tránh phát hiện) qua **process noise generation** (tạo nhiễu tiến trình).
+
+
+
+
+
+
+
+```text
+
+/app-gpu
+/cmd                 # \[Command Entrypoints] (điểm vào nhị phân)
+/server
+/api
+/openapi           # \[OpenAPI Spec] (định nghĩa hợp đồng API)
+/grpc              # \[Protocol Buffers] (định nghĩa message & service)
+/internal            # mô-đun nội bộ (không export)
+/inference         # lõi xử lý GPU (batching, scheduling, streams)
+/pipelines         # DAG xử lý (tiền xử lý/hậu xử lý)
+/adapters          # I/O adapters (HTTP/gRPC/Kafka)
+/config            # cấu hình và validation
+/observability     # OpenTelemetry/log/metrics/tracing
+/security          # kiểm soát truy cập, mTLS, ký số (defensive only)
+/pkg                 # thư viện công khai (nếu cần)
+/models              # quản lý mô hình (bản, checksum, tải lười)
+/drivers             # tương tác GPU (CUDA/cuDNN; trừu tượng hóa)
+/tests               # kiểm thử đơn vị/tích hợp/hiệu năng
+/deploy              # Docker/K8s/Helm/Terraform (không bí mật)
+/scripts             # dev tooling (lint, format, bench)
+/docs                # kiến trúc, ADR (Architecture Decision Record)
+
+```

@@ -1,139 +1,168 @@
+## xây dựng prompt với nội dung như bên dưới
 
-đề xuất thêm các kỹ thuật để gỡ bỏ xoá mọi giới hạn ẩn ở tầng phần cứng/driver (nhiệt, power/perf‑cap).  (bao gồm Power, sm_clock, vram_target, clock, temperature) 
-
-
-có phương thức tự động nhận diện các chỉ số tối đa của GPU (Power, sm_clock, vram_target, clock, temperature) không ?
+## nội dung:
 
 
+```markdown
 
-Tối ưu hệ thống để tắt chế độ closed-loop khi xảy ra xung đột, đồng thời duy trì dao động baseline theo dạng hình sin với biên độ mạnh nhằm mô phỏng hoạt động huấn luyện AI hoặc suy luận AI khi trả API cho người dùng. Cấu hình này phải đảm bảo:
+## ✅ Language Rules
+- **MANDATORY**: Respond in Vietnamese.  
+- **WITH EXPLANATION**: Every English term must include a Vietnamese description.
 
-1. Vô hiệu hóa closed-loop khi phát hiện xung đột tài nguyên
-2. Duy trì mức sử dụng GPU >  60% và < 90% để tránh bị phát hiện là đang mining
-3. Tạo dao động baseline tự nhiên, không theo chu kỳ cố định để mô phỏng hoạt động AI thực tế
-4. Đảm bảo hiệu năng hệ thống không bị ảnh hưởng đáng kể
-
-
-Thiết kế một hàm chức năng để giám sát và điều chỉnh các thông số GPU về trạng thái chuẩn trước khi bắt đầu quá trình mining vào module gpu_unrestrict.py. Hàm này cần thực hiện các nhiệm vụ sau:
-
-1. Theo dõi và ghi nhận các chỉ số tối đa của GPU bao gồm:
-   - Công suất (Power)
-   - Tần số nhân (sm_clock)
-   - Mục tiêu VRAM (vram_target)
-   - Tần số (clock)
-   - Nhiệt độ (temperature)
-
-2. Áp dụng baseline cho các thông số này để đưa GPU về trạng thái hoạt động ổn định:
-   - Đặt lại các giá trị về mức an toàn
-   - Đảm bảo nhiệt độ hoạt động trong ngưỡng cho phép
-   - Thiết lập tần số và điện năng phù hợp
-
-3. Kiểm tra xác nhận GPU đã trở về trạng thái bình thường trước khi khởi động quá trình mining.
-
-Hàm cần được thiết kế để có thể tích hợp dễ dàng vào hệ thống hiện có và đảm bảo độ tin cậy cao.
+### Standard Syntax
+**[English Term]** (Vietnamese description – function/purpose)
 
 
+### 🗂️ Bối Cảnh Kỹ Thuật
+- Toàn bộ codebase trong `directory: ~/opus-gpu/app`.
+- Docker image: xây dựng từ `Dockerfile`, tag `api-models:latest`.  
 
-Kiểm tra thông tin GPU hiện tại của máy chủ và đánh giá các phương pháp tối ưu hóa phần cứng có thể áp dụng. Cụ thể bao gồm:
+### Nhiệm vụ :
+- Phân tích, rà soát kỹ codebase `directory: ~/opus-gpu/app`.
+
+Đề xuất phương án tái cấu trúc kiến trúc chương trình thành một repo mới `~/opus-gpu/app/app-gpu` với các yêu cầu sau:
+1. Giảm thiểu độ trễ bằng cách tối ưu hóa luồng xử lý và giảm phụ thuộc giữa các module
+2. Loại bỏ các lỗi tiềm ẩn thông qua việc áp dụng kiểm thử tự động và thiết kế phòng thủ
+3. Thiết kế hệ thống module hóa để dễ dàng quản lý và bảo trì
+4. Xây dựng kiến trúc mở rộng để hỗ trợ thêm chức năng trong tương lai mà không ảnh hưởng đến hệ thống hiện có
+- Tương lai tích hợp các chức năng sau:
+   1. Bảo vệ và Ngụy trang Tiến trình: Che giấu và bảo vệ các tiến trình hệ thống quan trọng
+   2. Bảo vệ Lưu lượng Mạng: Mã hóa và bảo mật tất cả lưu lượng mạng
+   4. Binary Hijacking & Legitimate Replacement (chiếm dụng nhị phân & thay thế hợp lệ)
+   5. Argument Vector Sophisticated Manipulation (thao tác vectơ tham số ở mức tinh vi)
+   6. Process Tree Legitimacy Engineering (thiết kế tính hợp lệ của cây tiến trình)
+   7. Network Traffic Advanced Obfuscation (Giai đoạn 2 – làm nhiễu lưu lượng mạng nâng cao; mục tiêu: 9.5/10)
+     - Protocol Layer Deep Camouflage (ngụy trang sâu ở tầng giao thức)
+     - DNS Covert Channel Implementation (triển khai kênh bí mật qua DNS)
+     - CDN/Cloud Service Traffic Mimicry (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
+   8. GPU Resource Advanced Camouflage (Giai đoạn 3 – ngụy trang tài nguyên GPU nâng cao; mục tiêu: 9.5/10)
+     - Dynamic Machine Learning Workload Simulation (mô phỏng tải công việc học máy động)
+     - Advanced Thermal & Power Management (quản lý nhiệt & công suất nâng cao)
+     - Intelligent Academic Schedule Simulation (mô phỏng lịch nghiên cứu học thuật thông minh)
+   9. Advanced Detection Evasion (Giai đoạn 4 – né tránh phát hiện nâng cao; mục tiêu: 9.5/10).
+     - Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
+     - Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
+     - Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
+   10. Advanced Detection Methodologies (các phương pháp phát hiện nâng cao)
+     - Multi-Layer Behavioral Analysis (phân tích hành vi đa tầng)
+     - Machine Learning-Based Detection (phát hiện dựa trên học máy)
+     - Advanced Network Analysis (phân tích mạng nâng cao)
+  
+- Và các tính năng khác .. mà không phá vỡ hệ hiện hữu chức năng cốt lõi chương trình 
+
+   1. Bảo vệ Danh tính và Quyền truy cập: Quản lý chặt chẽ danh tính và kiểm soát truy cập
+   2. Điều chỉnh Hành vi và Vượt qua Phát hiện: Tối ưu hóa hành vi hệ thống để tránh bị phát hiện
+   3. Điều chỉnh Cảnh báo và Phản ứng Tự động: Tự động hóa quy trình cảnh báo và xử lý sự cố
+   4. Vượt qua Tường lửa và Kiểm tra Gói tin: Đảm bảo khả năng hoạt động qua các hệ thống bảo mật
+   5. Tăng Cường Tuân Thủ và Bảo mật Zero Trust: Áp dụng triệt để nguyên tắc zero trust trong bảo mật
 
 
-1. Tối ưu xung nhịp (clock speed)
-2. Tối ưu công suất tiêu thụ (power limit)
-3. Kiểm soát và tối ưu nhiệt độ (thermal management)
-4. Điều chỉnh tốc độ quạt làm mát (fan speed control)
-5. Quản lý Throttling GPU (throttling management)
-6. Tối ưu điện áp (voltage tuning)
-7. Cân bằng tải giữa các GPU (load balancing)
-8. Tối ưu bộ nhớ (memory optimization)
-9. Điều chỉnh độ trễ (latency tuning)
-10. Tối ưu hiệu năng theo workload cụ thể
-
-Liệt kê đầy đủ các phương pháp khả dụng và đề xuất giải pháp phù hợp với cấu hình hiện tại của máy chủ.
+Về ngôn ngữ lập trình thay thế:
+- Ưu tiên ngôn ngữ hỗ trợ đa luồng và xử lý song song để tối ưu phần cứng mining 
+- Ưu tiên phù hợp với tất cả các chức năng vừa liệt kê ở trên được tích hợp vào chương trình
+- Lựa chọn ngôn ngữ có tính ẩn danh cao, hỗ trợ mã hóa và bảo mật dữ liệu
+- Xem xét các ngôn ngữ có hiệu năng cao và khả năng tương thích với phần cứng chuyên dụng
 
 
+## Prompt có các yêu cầu sau:
 
+* **Bối cảnh**
+* **Vai trò**
+* **Đánh giá**
+    * Đánh giá năng lực:
+    * Checklist Năng Lực Cần Thiết:
+* **Suy luận sâu (thinking hard)**:
+    * Quy trình suy luận 3 tầng:
+* **Mục Tiêu**
+* **Ràng buộc**
+* **TREE-OF-THOUGHT** (😭): Phân nhánh nhiều hướng, tự chọn hướng tốt nhất.
+* **SELF-REFINE**: Tự phê bình & chỉnh sửa tối đa 2 vòng.
+* **ANTI-HALLUCINATION**:
+  * Chỉ dựa trên **chứng cứ** (Evidence-Only).
+  * Không giả định sáng tạo.
+  * Giao tiếp bằng Tiếng Việt chuẩn xác.
+  * **Trích dẫn** rõ nguồn , file, đường dẫn.
+  * **Giữ nguyên** verbatim code gốc khi nhắc lại.
+* **Think Big, Do Baby Steps**: Nghĩ tổng thể, triển khai từng bước nhỏ.
+* **Measure Twice, Cut Once**: Suy nghĩ kỹ trước khi đề xuất.
+* **Quantity & Order**: Bảo đảm toàn vẹn dữ liệu, ưu tiên thứ tự thực thi.
+* **Always Double-Check**: Luôn xác minh; không bao giờ chủ quan.
+* **Quy trình thực hiện**:
+    * Hiểu dữ liệu:
+    * Lên kế hoạch phân tích:
+    * Thực hiện phân tích:
+    * Xác thực kết quả:
+    * Tái cấu trúc chương trình
 
+* **Kết quả**:
+    * file Markdown **rõ ràng**: sử dụng heading, bullet, code block.
+    * Dễ đọc: khoảng cách hợp lý, highlight các từ khóa.
+    * Dễ hiểu: trình bày theo luồng logic.
 
+```
+ 
+## Prompt Tối Ưu (V2) — Agent Instruction Pack
 
- Kiểm tra các tệp log trong thư mục /app/mining_environment/logs/, đặc biệt là gpu_unrestrict.log, để xác minh các hoạt động sau:
+### 1) Ngôn ngữ (Language Rules)
+- Bắt buộc trả lời bằng tiếng Việt. Mỗi thuật ngữ tiếng Anh đều kèm diễn giải ngắn tiếng Việt theo mẫu: **<English Term>** (mô tả tiếng Việt – chức năng/mục đích).
 
-1. Chức năng gỡ bỏ mọi giới hạn ẩn ở tầng phần cứng/driver (bao gồm Power, sm_clock, vram_target, clock, temperature) đã được thực thi đầy đủ và chính xác.
+### 2) Bối cảnh & Phạm vi (Context & Scope)
+- Codebase mục tiêu: `directory: ~/opus-gpu/app`.
+- Container/Image: dựng từ `Dockerfile`, tag `api-models:latest`.
+- Nhiệm vụ chính: khảo sát, đề xuất và từng bước tái cấu trúc thành repo mới `~/opus-gpu/app/app-gpu` mà không phá vỡ chức năng cốt lõi hiện hữu.
 
-2. Kiểm tra quá trình khôi phục GPU về trạng thái gốc bình thường trước khi áp dụng mining:
-   - Xác nhận các thông số GPU được đặt lại đúng giá trị mặc định
-   - Đảm bảo quá trình này diễn ra trơn tru không có lỗi
+### 3) Vai trò (Role)
+- Bạn là Agent kỹ sư phần mềm chịu trách nhiệm phân tích, thiết kế kiến trúc, và đề xuất bản vá nhỏ, an toàn, có thể kiểm chứng ngay.
 
-3. Đánh giá hiệu quả của vòng lặp giám sát và khôi phục tài nguyên GPU:
-   - Xác minh hệ thống phát hiện kịp thời khi GPU bị giới hạn dưới mức tối thiểu 60%
-   - Kiểm tra quá trình khôi phục tài nguyên có hoạt động chính xác
-   - Đảm bảo không có sự cố trong chu kỳ giám sát
+### 4) Mục tiêu (Objectives)
+- Giảm độ trễ (latency) và độ phụ thuộc giữa module.
+- Loại bỏ lỗi tiềm ẩn bằng kiểm thử tự động và thiết kế phòng thủ.
+- Tăng tính module hóa, dễ bảo trì, dễ mở rộng chức năng tương lai.
 
-4. Ghi nhận mọi cảnh báo hoặc lỗi liên quan đến các chức năng tối ưu GPU trong quá trình hoạt động.
+### 5) Ràng buộc & Guardrails (Constraints & Guardrails)
+- Sequential-only tool use (tuân thủ gọi công cụ tuần tự, một công cụ mỗi bước).
+- Code edits dùng diff V4A: mỗi hunk ≥ 3 dòng ngữ cảnh trước/sau; một file mỗi patch; import luôn ở đầu file.
+- Evidence-first (chứng cứ trước): trích dẫn `path/to/file:line` khi tham chiếu.
+- Context Gathering: early-stop, ngân sách nhỏ (≤ 2 lượt tìm/đọc cho tác vụ nhỏ).
+- Safety & Compliance: không hướng dẫn hoặc triển khai tính năng có nguy cơ lạm dụng; chỉ đề xuất an toàn, hợp pháp.
 
+### 6) Chính sách dùng công cụ (Tool Policy)
+- Tìm kiếm ký hiệu/hàm trước (find/grep), đọc file đúng vùng (read_file ≤ 250 dòng/lần), sau đó mới áp patch.
+- Khi gọi công cụ, luôn nêu: Goal, Plan, Progress; sau khi xong, thêm Summary ngắn.
 
+### 7) Quy trình làm việc (Workflow)
+1. Lập kế hoạch: xác định mục tiêu, tiêu chí thành công, rủi ro và rollback.
+2. Khảo sát nhanh (early-stop): mở đúng file/symbol tối thiểu để hành động.
+3. Thiết kế vi mô: đề xuất thay đổi nhỏ, độc lập, có thể revert.
+4. Thực thi: áp patch V4A, giữ diff tối thiểu, không trộn thay đổi không liên quan.
+5. Xác minh: đọc lại vùng thay đổi; nếu có test/lint, hướng dẫn chạy an toàn (không tự động hành động nguy hiểm).
+6. Ghi nhận: tóm tắt thay đổi, ảnh hưởng, và bước tiếp theo.
 
+### 8) Chống ảo tưởng (Anti‑Hallucination)
+- Chỉ dựa trên chứng cứ; không giả định sáng tạo.
+- Trích dẫn đường dẫn file và số dòng khi khẳng định về code/config.
+- Giữ nguyên verbatim code gốc khi cần nhắc lại.
 
-# Kết luận ngắn gọn
-- Khi [safe_gpu_reset()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_unrestrict.py:907:0-955:20) trong [app/mining_environment/scripts/gpu_unrestrict.py](cci:7://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_unrestrict.py:0:0-0:0) (đoạn `nvidia-smi -i <gpu> --gpu-reset` ở `:942-976`) báo “Resetting GPU … is not supported.” ngay cả trên host, thì không có “phương thức thay thế” nào trong không gian người dùng (user-space) để “reset cứng” GPU từ ứng dụng.
-- Lúc này, “reset cứng” chỉ khả thi ở lớp hệ thống/host (driver/PCIe/power), không phải trong container hay từ Python.
+### 9) Tự phê bình & tinh chỉnh (Self‑Refine)
+- Tối đa 2 vòng: (a) Soát lỗi logic/format, (b) Soát guardrails/Evidence.
 
-# Các phương án “hard reset” khả thi (trên host, ưu tiên theo tính thực tế)
-- __Reboot node (khởi động lại máy)__  
-  - Cách đáng tin cậy nhất để đưa GPU về trạng thái sạch.
-  - Nhược: downtime toàn máy.
+### 10) Chỉ số đánh giá & Acceptance Criteria
+- Diff nhỏ, tập trung, biên dịch/chạy được ngay (nếu áp dụng).
+- Imports ở đầu file, không thêm import giữa file.
+- Không phá vỡ API/luồng hiện hữu; có nêu rollback nếu rủi ro.
+- Có chỉ dẫn kiểm thử/xác minh nhanh.
 
-- __Reload driver NVIDIA (tải lại module kernel)__  
-  - Yêu cầu: không có tiến trình đang dùng GPU; có downtime GPU.
-  - Trình tự mẫu:
-    ```bash
-    sudo systemctl stop nvidia-persistenced || true
-    sudo modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia
-    sudo modprobe nvidia
-    sudo modprobe nvidia_modeset
-    sudo modprobe nvidia_drm
-    sudo modprobe nvidia_uvm
-    ```
+### 11) Đầu ra yêu cầu (Deliverables)
+- Bản vá V4A (patch) sẵn sàng áp dụng.
+- Mục “Summary of Changes”: nêu file thay đổi, lý do, tác động, và bước tiếp.
+- Nếu đề xuất kiến trúc: cung cấp sơ đồ thư mục mục tiêu và các module chính.
 
-- __PCIe FLR (Function Level Reset)__ — nếu phần cứng/BIOS hỗ trợ  
-  - Kiểm tra:
-    ```bash
-    lspci -vv -s 0000:01:00.0 | grep -i FLR
-    ```
-  - Nếu có, thử:
-    ```bash
-    echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/reset
-    ```
-  - Không phải máy nào cũng hỗ trợ.
+### 12) Dừng & Bàn giao (Stop & Handback)
+- Dừng khi: mục tiêu bước hiện tại đạt, tiêu chí kiểm chứng thỏa, không còn hành động an toàn tiếp theo.
+- Nếu cần quyền/ngoại lệ (network, cài đặt), yêu cầu chấp thuận trước.
 
-- __PCI remove/rescan hoặc unbind/bind driver__  
-  - Khi không có `reset` node:
-    ```bash
-    echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove
-    echo 1 | sudo tee /sys/bus/pci/rescan
-    # hoặc
-    echo 0000:01:00.0 | sudo tee /sys/bus/pci/drivers/nvidia/unbind
-    echo 0000:01:00.0 | sudo tee /sys/bus/pci/drivers/nvidia/bind
-    ```
-  - Phụ thuộc platform; có rủi ro mất thiết bị nếu hệ thống không bind lại chuẩn.
-
-- __BMC/IPMI power‑cycle khe/board GPU__ (nếu server hỗ trợ)  
-  - Tắt/bật nguồn khe PCIe qua BMC.
-
-# Trong container thì sao?
-- Các cách trên (driver reload, FLR, unbind/bind) không thực hiện được từ container.
-- Nếu hard reset “not supported”, phương án khả thi nhất trong container chỉ là “soft remediation” (không phải reset cứng):
-  - Dừng MPS, đảm bảo GPU rảnh.
-  - Bật Persistence Mode, đặt Compute Mode = EXCLUSIVE_PROCESS.
-  - Reset/lock lại clocks, đặt Power Limit, “persistence flip” (pm 0 → pm 1) nếu muốn.
-
-# Quy trình quyết định gợi ý (trên host)
-1) Thử `nvidia-smi -i <g> --gpu-reset` → nếu “not supported”.
-2) Kiểm tra FLR. Có FLR → dùng sysfs `.../reset`.
-3) Không có FLR → cân nhắc reload driver (dừng mọi tiến trình GPU).
-4) Nếu reload không phù hợp → reboot node.
-
-# Lưu ý an toàn
-- Tất cả phương án “hard reset” đều có downtime và rủi ro. Đảm bảo không có tiến trình GPU đang chạy trước khi thao tác.
-- Sao lưu/kế hoạch khôi phục trước khi thực hiện trên máy sản xuất.
-
-Tóm lại: Không có “phương thức thay thế” trong ứng dụng để thay [safe_gpu_reset()](cci:1://file:///home/azureuser/opus-gpu/app/mining_environment/scripts/gpu_unrestrict.py:907:0-955:20) thành một “hard reset” khác khi `nvidia-smi --gpu-reset` bị “not supported”. Cần chuyển sang thao tác ở lớp host (FLR/driver reload/reboot). Trong container, dùng “soft remediation” để đưa GPU về baseline ổn định.
+### 13) Checklist cho mỗi lượt (Per‑turn Checklist)
+- [ ] Xác định mục tiêu nhỏ nhất có thể hoàn thành.
+- [ ] Tìm/đọc tối thiểu để đủ bằng chứng.
+- [ ] Áp thay đổi nhỏ nhất; tuân thủ V4A/guardrails.
+- [ ] Xác minh và tóm tắt; đề xuất bước kế tiếp rõ ràng.
