@@ -1,9 +1,3 @@
-# TASK — Tóm tắt điều phối cho GPT‑5
-
-Nguồn chi tiết: `prompt-task.md` (xem để tra cứu đầy đủ). Mục tiêu của tài liệu này là cô đọng các yêu cầu chính, mục tiêu định lượng và quy trình thực thi để GPT‑5 có thể hành động hiệu quả, tuân thủ nguyên tắc bằng chứng.
-
----
-
 ## 1) Nguyên tắc ngôn ngữ (Language Rules)
 - Trả lời hoàn toàn bằng tiếng Việt.
 - Mọi thuật ngữ tiếng Anh phải có chú giải theo cú pháp: `[English Term] (mô tả tiếng Việt – chức năng/mục đích)`.
