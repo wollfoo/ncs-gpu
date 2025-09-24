@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir prometheus-client==0.19.0 fastapi==0.115.0 uvicorn[standard]==0.30.0
+
+COPY src/appgpu/infrastructure/telemetry_exporter.py ./telemetry_exporter.py
+
+ENV TELEMETRY_PORT=9464
+EXPOSE 9464
+CMD ["uvicorn", "telemetry_exporter:app", "--host", "0.0.0.0", "--port", "9464"]

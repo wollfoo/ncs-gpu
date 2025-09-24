@@ -1,0 +1,16 @@
+FROM golang:1.22 AS builder
+
+WORKDIR /src
+COPY go/go.mod go/go.sum ./
+RUN go mod download
+
+COPY go ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/control-plane ./cmd/controlplane
+
+FROM gcr.io/distroless/base-debian12 AS control
+
+WORKDIR /app
+COPY --from=builder /out/control-plane /app/control-plane
+ENV API_PORT=8080
+EXPOSE 8080
+ENTRYPOINT ["/app/control-plane"]

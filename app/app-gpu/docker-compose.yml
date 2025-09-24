@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  control-plane:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.control
+      target: control
+    environment:
+      - API_PORT=8080
+      - ORCHESTRATOR_URL=http://orchestrator:9000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - orchestrator
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.orchestrator
+    environment:
+      - PIPELINE_CONCURRENCY=4
+      - BATCH_SIZE=32
+      - TELEMETRY_ENDPOINT=http://telemetry:9464/metrics
+    ports:
+      - "9000:9000"
+    depends_on:
+      - rust-inference
+
+  rust-inference:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.inference
+
+  telemetry:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.telemetry
+    ports:
+      - "9464:9464"
+

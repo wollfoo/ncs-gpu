@@ -1,0 +1,62 @@
+name: app-gpu-ci
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -U pip
+          pip install -r requirements.txt
+      - name: Lint & Test
+        run: |
+          source .venv/bin/activate
+          make lint
+          make test
+      - name: Integration
+        run: |
+          source .venv/bin/activate
+          make integration
+      - name: Performance smoke
+        run: |
+          source .venv/bin/activate
+          pytest tests/performance --benchmark-skip
+
+  rust-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Cargo build
+        run: |
+          cd rust
+          cargo build --release
+
+  go-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Go build
+        run: |
+          cd go
+          go build ./...
