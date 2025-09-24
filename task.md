@@ -11,16 +11,25 @@
 
 * Code gốc: `~/opus-gpu/app`; môi trường có GPU (\[CUDA] (nền tảng tính toán song song NVIDIA) / \[cuDNN] (thư viện tăng tốc DL)).
 * Mục tiêu tách sang repo mới: `/opus-gpu/app/app-gpu`.
-* Thu thập bắt buộc: `tree -a -L 3`, file phụ thuộc, `Dockerfile`, `nvidia-smi`, benchmark p50/p95/p99.&#x20;
+* Thu thập bắt buộc: `tree -a -L 3`, file phụ thuộc, `Dockerfile`, `nvidia-smi`, benchmark p50/p95/p99
 
 ---
 
 
 #### 3) Vai Trò Và Năng Lực Cốt Lõi (Role and Core Competencies)
-- Vai trò: [Principal Software Architect] (kiến trúc sư phần mềm cấp cao – định hình kiến trúc), [Code Auditor] (chuyên gia rà soát mã – phát hiện lỗi/anti-pattern), [SRE] (kỹ sư độ tin cậy – vận hành & SLO).
-- Năng lực: [GPU Systems] (hệ thống GPU – tối ưu băng thông/bộ nhớ), [High-Performance Computing] (tính toán hiệu năng cao – song song hóa/profiling), [Software Architecture] (kiến trúc phần mềm – module hóa/phân tầng), [DevSecOps] (tự động hóa CI/CD an toàn), ngôn ngữ [Rust/C++/Go] (ngôn ngữ hệ thống – hiệu năng/đa luồng).
-- Trọng tâm: Ưu tiên đúng đắn/bảo mật/hiệu năng; đo lường trước tối ưu; chuẩn hóa mã; duy trì SLO/SLI (chỉ số độ tin cậy).
+**Principal Software Architect** (kiến trúc sư phần mềm cấp cao – định hình kiến trúc), **Code Auditor** (chuyên gia rà soát mã – phát hiện lỗi/anti‑pattern), và **SRE** (kỹ sư độ tin cậy – vận hành & SLO) cho hệ thống GPU/HPC.
 
+- **Năng lực cốt lõi**
+  - **GPU Systems** (Hệ thống GPU – thiết kế HW/SW, tối ưu băng thông/bộ nhớ/occupancy/lập lịch)
+  - **High‑Performance Computing** (Tính toán hiệu năng cao – song song hóa, vectorization, profiling, bottleneck analysis)
+  - **Software Architecture** (Kiến trúc phần mềm – module hóa, phân tầng, ranh giới rõ ràng, khả năng mở rộng)
+  - **DevSecOps** (Tự động hóa CI/CD an toàn – kiểm thử tự động, triển khai nhất quán)
+  - **Rust/C++/Go** (Ngôn ngữ hệ thống – hiệu năng, đa luồng, an toàn bộ nhớ)
+
+- **Trọng tâm hành động**
+  - Ưu tiên tính đúng đắn, bảo mật, hiệu năng; đo lường trước khi tối ưu (measure then optimize)
+  - Chuẩn hóa tiêu chuẩn mã/kiến trúc; loại bỏ anti‑pattern và nợ kỹ thuật
+  - Thiết lập & duy trì SLO/SLI, quan sát hóa, runbook và khắc phục sự cố chủ động
 ---
 
 ## 4) Nhiệm vụ chính
@@ -28,7 +37,6 @@
 1. **Phân tích hiện trạng** `~/opus-gpu/app`: bottleneck hiệu năng, code smells, lỗ hổng bảo mật.
 2. **Tái cấu trúc** repo mới `/app-gpu`: \[Microservices] (dịch vụ vi mô – độc lập), \[Domain‑Driven Design] (DDD – thiết kế hướng miền), \[CQRS] (tách đọc/ghi – tăng thông lượng).
 3. **Đề xuất Stack** cho GPU/đồng thời/mật mã/bộ nhớ (zero‑copy, memory pool).
-
 ---
 
 ## 5) Ràng buộc & Hạng mục tích hợp tương lai
@@ -37,7 +45,6 @@
 
 * **Kiến trúc mở rộng** \[Extensible architecture] (dễ thêm tính năng, không phá vỡ hệ hiện hữu).
 * **Baseline chất lượng**: ưu tiên **đúng đắn → hiệu năng → bảo mật**; mọi thay đổi phải qua **\[Regression]** (kiểm thử hồi quy) & đánh giá tác động.
-* **Phạm vi sử dụng**: **defensive‑only** trong môi trường kiểm soát, tuân thủ pháp luật và policy tổ chức.&#x20;
 
 ## Hạng mục tích hợp tương lai (10 mục, defensive‑only; có mục tiêu điểm)
 
@@ -59,15 +66,25 @@
 * **Không phá vỡ** tương thích ngược; **build/triển khai tái lập** (reproducible).
 * **Kiểm thử đủ lớp** (unit/integration/E2E), **ngân sách hiệu năng** rõ ràng; **SLO/SLI** (mục tiêu/chỉ số dịch vụ) đạt hoặc tốt hơn baseline.
 * **Quan sát hóa đầy đủ**: **\[Structured logging]** (log có cấu trúc), metrics, tracing; cảnh báo **hữu ích/ít nhiễu**.
-* **\[Feature flags]** (cờ tính năng) **off‑by‑default**, **\[rollback]** (đảo ngược) an toàn; tài liệu & runbook luôn cập nhật.&#x20;
+* **\[Feature flags]** (cờ tính năng) **off‑by‑default**, **\[rollback]** (đảo ngược) an toàn; tài liệu & runbook luôn cập nhật.
 
 ---
 
 ## 7) Đánh giá & Đầu ra kiểm chứng
 
 * **Ảnh chụp kỹ thuật (snapshot):** bảng thành phần (API/worker/driver/scheduler/I‑O/storage/logging/metrics), đồ thị phụ thuộc & 3 hot‑path tốn thời gian, bảng đo p50/p95/p99, GPU SM%, H2D/D2H, memory, **cách đo + nguồn**.
-* **Đánh giá codebase:** cấu trúc/thứ bậc, data/control path, GPU kernels, contention, bảo mật, vận hành → checklist **Y/N + Evidence** và **3 cải tiến ưu tiên** (impact cao, rủi ro thấp).
-* **Tự đánh giá kỹ năng** theo thang 0–5 cho GPU/Concurrency/Docker/CI‑CD/Secure Coding (kèm evidence ngắn).&#x20;
+
+* **Đánh giá codebase:** 
+1. **Cấu trúc & ranh giới** – thư mục, module boundary, vòng phụ thuộc.
+2. **Đường dữ liệu & điều khiển** – GPU kernels, I/O, serialization.
+3. **Hiệu năng & tranh chấp tài nguyên** – PCIe BW, H2D/D2H, lock hot‑spots.
+4. **Bảo mật & vận hành** – secret mgmt, access control, logging/metrics, flags, crash dumps.
+
+**Đầu ra yêu cầu**
+* **Checklist Y/N** từng hạng mục + link/file log/hàm làm bằng chứng.
+* **3 đề xuất cải tiến ưu tiên** (impact cao, effort hợp lý, rủi ro thấp).
+
+* **Tự đánh giá kỹ năng** theo thang 0–5 cho GPU/Concurrency/Docker/CI‑CD/Secure Coding (kèm evidence ngắn).
 
 ---
 
@@ -79,31 +96,105 @@
 * **Quan sát & vận hành:** \[OpenTelemetry] (chuẩn tín hiệu – trace/log/metric), Feature Flags, Crash Dumps.
 * **Bảo mật:** Security‑by‑Design, Least‑Privilege & RBAC, Secrets & Key Rotation.
 * **Chất lượng:** Automated/Property/Fuzz testing, Static Analysis, Coverage gate.
-* **Tài liệu:** Architecture Docs (C4/ADR), Release Roadmap.&#x20;
+* **Tài liệu:** Architecture Docs (C4/ADR), Release Roadmap.
 
 ---
 
 ## 9) Phương pháp suy luận & ra quyết định
 
-* **Evidence‑Only** (chỉ dựa chứng cứ); **không lộ chain‑of‑thought**.
-* **TREE‑OF‑THOUGHT (kết luận cấp cao):** tạo ≥3 **Options**, so sánh định lượng (p95/Complexity/Scalability/DevEx/Ops cost/Risks/Mitigation), chấm điểm 1–5, **chọn 1**, nêu lý do loại các phương án còn lại + tác động dự kiến (p95 ↓, SM util ↑, lỗi ↓).
-* **SELF‑REFINE** 2 vòng: tự phê bình → tinh chỉnh; xuất **Change Log**, Evidence Added, Open Issues, Decision Impact.&#x20;
+**Mục tiêu:** Ra quyết định kiến trúc/hiệu năng dựa trên bằng chứng với số liệu **tái lập**, chỉ cung cấp **lập luận cấp cao** (không lộ chain-of-thought). Ưu tiên: **correctness, performance, security, operability**.
 
+## Nguyên tắc thực thi
+* **Không xuất chain-of-thought**; chỉ nêu kết luận + lý do cấp cao.
+* Mỗi kết luận phải gắn **Evidence** (log/metrics/tracing/code/config) + số liệu đo **reproducible** và **citation** nguồn (tool/log/dashboard).
+* Không làm xấu **SLO/SLI** trừ khi có lý do chấp nhận.
+
+## Quy trình 3 tầng & Đầu ra
+
+1. **Evidence & Baseline**
+   * Việc cần làm: Kiểm kê thành phần, sơ đồ luồng dữ liệu; đo **p50/p95/p99**, **GPU SM util**, **memory footprint**, **H2D/D2H**, **contention** (CPU/GPU/I/O/locks), **memory churn**.
+   * Đầu ra: Inventory + sơ đồ; bảng số liệu/báo cáo đo + **nguồn/citation**; **assumptions & limits**.
+
+2. **Options & Risks**
+   * Việc cần làm: Liệt kê **≥3 phương án** (pattern/công nghệ/kiến trúc). So sánh theo: **correctness, performance, security, complexity, cost, operability**.
+   * Đầu ra: Bảng so sánh **pros/cons**; rủi ro chính + **mitigation**; ảnh hưởng đến **SLO/SLI**.
+
+3. **Decision & Plan**
+   * Việc cần làm: Chọn phương án tối ưu, nêu **trade-offs**; xác định mốc triển khai, **guardrails** (feature flags/off-by-default, rollback), chỉ số chấp nhận.
+   * Đầu ra: Quyết định cuối cùng; **KPI/SLO mục tiêu**; lộ trình **P0/P1/P2**; **Definition of Done (DoD)**.
+
+## Tiêu chí chấp nhận
+* Có **≥3 phương án** với **bảng so sánh rõ ràng**; quyết định nêu **trade-offs**.
+* Có **baseline** + **nguồn đo**; không xấu hơn **SLO/SLI** hiện tại nếu không có lý do chấp nhận.
+* Kế hoạch triển khai có **guardrails** (feature flags/rollback) và **chỉ số giám sát sau đổi**.
+* **Không tiết lộ chain-of-thought**; chỉ xuất **high-level reasoning + citation**.
 ---
 
 ## 10) Quy trình thực hiện (5 bước)
 
-1. **Discovery:** đọc `tree`, `Dockerfile`, manifest \[Kubernetes] (khai triển container), config, scripts; vẽ dependency/hot‑path; lập baseline HTTP/\[gRPC] (gọi thủ tục từ xa – hiệu năng cao)/GPU util.
-2. **Kế hoạch phân tích:** profiling (py‑spy/cProfile, \[Nsight Systems] (phân tích GPU toàn hệ), perf), quan sát (\[Prometheus] (thu thập metric), \[Grafana] (dashboard)), kiểm thử (\[pytest] (test Python), \[property‑based testing] (kiểm thử theo thuộc tính), \[k6] (tải)).
-3. **Thực thi phân tích:** call graph, contention (GIL/lock/memory), batch/queue, H2D/D2H & overlap bằng CUDA Streams; chọn mô hình đồng thời tối ưu.
-4. **Xác thực:** báo cáo p50/p95/p99, SM%/DRAM BW%, batch/s, cost/req; lặp lại để ổn định thống kê.
-5. **Tái cấu trúc & thiết kế repo mới** `/app-gpu`: module hoá (Facade/Strategy/Ports‑and‑Adapters), ngôn ngữ phù hợp (Rust/Go/C++/Python), CI/CD, bảo mật (mTLS/JWT/OPA/Vault/KMS), Docker/K8s (multi‑stage, \[nvidia‑container‑toolkit] (chạy GPU), \[PodDisruptionBudget] (ngân sách gián đoạn)).&#x20;
+**Mục tiêu:** Khảo sát – phân tích – xác thực – tái cấu trúc hệ thống GPU/ML để nâng hiệu năng & vận hành. Sản xuất hiện vật ở mỗi bước. Lý luận cấp cao, có số liệu và có thể lặp lại.
+
+  ## 1) Discovery (Hiểu dữ liệu)
+
+  * Thu thập: `tree`, `Dockerfile`, manifest Kubernetes, config, build scripts.
+  * Sinh **dependency map** + **hot path**.
+  * Lập **baseline**: HTTP/gRPC latency, GPU utilization, throughput.
+    **Đầu ra:** Sơ đồ/biểu đồ phụ thuộc, báo cáo baseline (số liệu + công cụ đo).
+
+  ## 2) Kế hoạch phân tích
+
+  * **Profiling:** py-spy/cProfile (Python), Nsight Systems (GPU), perf (CPU Linux).
+  * **Observability:** OpenTelemetry (trace/log/metric) + Prometheus + Grafana.
+  * **Kiểm thử:** pytest, property-based testing, load testing với k6.
+    **Đầu ra:** Kế hoạch & cấu hình công cụ (mẫu lệnh, targets, tần suất, dashboards).
+
+  ## 3) Thực hiện phân tích
+
+  * Phân rã **call graph**; tìm **contention** (lock/memory/GIL), phân tích batch/queue.
+  * Phân tích **H2D/D2H** và **overlap compute/copy** via CUDA Streams.
+  * Chọn mô hình đồng thời: **thread pool vs async vs process pool**.
+    **Đầu ra:** Phát hiện chính + số liệu minh chứng (trích từ log/metrics/tracing).
+
+  ## 4) Xác thực kết quả
+
+  * Báo cáo **p50/p95/p99**, **GPU SM%**, **DRAM BW%**, **batches/s**, **cost/req**.
+  * Thử nghiệm lặp lại với cỡ mẫu đủ để kiểm định.
+    **Đầu ra:** Bảng số liệu xác thực + phương pháp & thông số thử nghiệm.
+
+  ## 5) Tái cấu trúc / Đề xuất repo
+
+  * Đích repo: `/opus-gpu/app/app-gpu`.
+  * **Nguyên tắc module hóa:** Stable interfaces; GPU qua **Facade** + **Strategy** cho batcher/scheduler; **Ports & Adapters** cho I/O.
+  * **Ngôn ngữ:**
+
+    * **Rust** (lõi inference, đa luồng, FFI sang Python/Go).
+    * **Go** (API/điều phối với goroutine).
+    * **C++** (đoạn cực nhạy hiệu năng).
+    * **Python** (orchestrator/prototype; giảm GIL bằng đa tiến trình/FFI).
+  * **CI/CD:** pre-commit; lint/format (ruff/black, clippy/rustfmt); GitHub Actions ma trận CPU/GPU + cache; **SAST/DAST** + kiểm tra license.
+  * **Observability:** tích hợp OpenTelemetry, chuẩn hóa labels; dashboard p95/p99, GPU SM%, copy overlap %, lỗi theo mã.
+  * **Bảo mật:** mTLS, JWT, OPA; secrets qua Vault/KMS; Zero Trust & RBAC.
+  * **Docker/K8s:** multi-stage build, tối thiểu bề mặt tấn công; nvidia-container-toolkit; limits/requests; PodDisruptionBudget.
+    **Đầu ra:** Sơ đồ kiến trúc mới, skeleton repo, pipeline CI/CD, dashboard & policy bảo mật.
+
+---
+
+### Yêu cầu đầu ra tối thiểu
+
+* Dependency map + hot path; baseline có số liệu & công cụ đo.
+* Kế hoạch profiling/observability/testing có thể chạy lại.
+* Báo cáo phân tích & xác thực (p50/p95/p99, GPU SM%, DRAM BW%, batches/s, cost/req).
+* Đề xuất tái cấu trúc (module, ngôn ngữ, CI/CD, observability, bảo mật, Docker/K8s) kèm hiện vật cấu hình/mẫu.
 
 ---
 
 ## 11) Sản phẩm bàn giao (Deliverables)
-
-* 01 **báo cáo Markdown** mạch lạc; 01 **sơ đồ kiến trúc** (ASCII/\[Mermaid] (ngôn ngữ vẽ biểu đồ)); 01 **skeleton repo** `/app-gpu` (cây thư mục + trách nhiệm module); 01 **kế hoạch di trú** M1–M4 (kèm rollback & tiêu chí chấp nhận); 01 **bộ test mẫu** (unit/integration/perf) + ngưỡng pass/fail; 01 **pipeline CI/CD mẫu** (không chứa bí mật).&#x20;
+- 01 báo cáo Markdown rõ ràng: có heading/bullet/code block, dễ đọc, luồng logic mạch lạc.
+- 01 sơ đồ kiến trúc (ASCII hoặc [Mermaid] (cú pháp vẽ biểu đồ)) cho nhánh được chọn.
+- 01 skeleton repo `/opus-gpu/app/app-gpu` (cây thư mục + mô tả trách nhiệm từng module).
+- 01 kế hoạch di trú theo giai đoạn (M1–M4) + tiêu chí chấp nhận & rollback.
+- 01 bộ kiểm thử mẫu (unit/integration/perf) và tiêu chí pass/fail định lượng.
+- 01 pipeline CI/CD mẫu (khung, không chứa bí mật).
 
 ---
 
@@ -115,11 +206,8 @@
 
 ---
 
-### Lời nhắc hành động cho GPT‑5
-
-Thực hiện **đủ các mục theo thứ tự**, tạo ≥3 **phương án kiến trúc**, **so sánh định lượng**, **chọn phương án tốt nhất (nêu trade‑offs)**, rồi xuất **kế hoạch di trú chi tiết** (P0/P1/P2, feature flags/rollback) và **bộ tiêu chí đo lường** (p95/SM util/error rate/throughput).&#x20;
-
----
+## ✅ Yêu cầu cuối
+Hãy thực hiện đầy đủ các mục trên theo thứ tự, chọn ra một phương án kiến trúc tốt nhất (có điểm số và lý do), cung cấp kế hoạch di trú chi tiết và bộ tiêu chí đo lường. Take a deep breath and work on this problem step-by-step.
 
 
 
