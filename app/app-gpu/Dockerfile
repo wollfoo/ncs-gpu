@@ -2,12 +2,14 @@
 
 FROM rust:1.76-slim AS rust-builder
 WORKDIR /workspace
-COPY Cargo.toml rust-toolchain.toml ./
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY cmd cmd
 COPY internal internal
 COPY pkg pkg
 COPY gpu/bindings gpu/bindings
 COPY tests/rust tests/rust
+COPY api api
 RUN rustup component add clippy && \
     cargo build --release --locked --package app-gpu && \
     cargo build --release --locked --package gpu-bindings
