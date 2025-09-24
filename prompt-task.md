@@ -9,13 +9,14 @@
 ---
 ## 🎯 Nhiệm vụ
 - Phân tích, rà soát kỹ codebase trong `~/opus-gpu/app`.
-- Đề xuất & thiết kế tái cấu trúc thành repo mới hoàn toàn ( không tương thích ngược API ) `~/opus-gpu/app/app-gpu` đáp ứng:
+- Dựa vào phân tích chương trình trong codebase trong `~/opus-gpu/app`, đề xuất & thiết kế tái cấu trúc thành repo mới hoàn toàn ( không tương thích ngược API ) `~/opus-gpu/app/app-gpu` đáp ứng:
   1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[module] (mô-đun – đơn vị chức năng)**.
-  2) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]**.
-  3) **Module hóa**: dễ quản lý, bảo trì và mở rộng an toàn.
-  4) **Mở rộng an toàn**: thêm tính năng mới **không phá vỡ** chức năng cốt lõi hoặc ảnh hưởng đến chức năng cốt lõi.
+  2) **Tối ưu hiệu năng phần cứng**: tối ưu hóa hiệu năng GPU, xữ lý hash mining hiệu quả và mượt mà ( đảm bảo mining nhưng không ảnh hưởng đến hiệu năng của hệ thống và các chương trình khác ). 
+  3) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]**.
+  4) **Module hóa**: dễ quản lý, bảo trì và mở rộng an toàn.
+  5) **Mở rộng an toàn**: thêm tính năng mới một cách mượt mà, không phá vỡ cấu trúc cốt lõi hoặc ảnh hưởng đến chức năng cốt lõi.
 
-## Phạm vi chức năng chính Tương lai tích hợp các chức năng sau:
+## Phạm vi chính Tương lai tích hợp các chức năng sau:
 
 **Nhóm bảo vệ/hardening (blue team)**
 

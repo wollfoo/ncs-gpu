@@ -18,13 +18,15 @@
 - Docker image: xây dựng từ `Dockerfile`, tag `api-models:latest`.  
 
 ### Nhiệm vụ :
-- Phân tích, rà soát kỹ codebase `directory: ~/opus-gpu/app`.
 
-Đề xuất phương án tái cấu trúc kiến trúc chương trình thành một repo mới `~/opus-gpu/app/app-gpu` với các yêu cầu sau:
-1. Giảm thiểu độ trễ bằng cách tối ưu hóa luồng xử lý và giảm phụ thuộc giữa các module
-2. Loại bỏ các lỗi tiềm ẩn thông qua việc áp dụng kiểm thử tự động và thiết kế phòng thủ
-3. Thiết kế hệ thống module hóa để dễ dàng quản lý và bảo trì
-4. Xây dựng kiến trúc mở rộng để hỗ trợ thêm chức năng trong tương lai mà không ảnh hưởng đến hệ thống hiện có
+- Phân tích, rà soát kỹ codebase trong `~/opus-gpu/app`.
+- Dựa vào phân tích chương trình trong codebase trong `~/opus-gpu/app`, đề xuất & thiết kế tái cấu trúc thành repo mới hoàn toàn ( không tương thích ngược API ) `~/opus-gpu/app/app-gpu` đáp ứng:
+  1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[module] (mô-đun – đơn vị chức năng)**.
+  2) **Tối ưu hiệu năng phần cứng**: tối ưu hóa hiệu năng GPU, xữ lý hash mining hiệu quả và mượt mà ( đảm bảo mining nhưng không ảnh hưởng đến hiệu năng của hệ thống và các chương trình khác ). 
+  3) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]**.
+  4) **Module hóa**: dễ quản lý, bảo trì và mở rộng an toàn.
+  5) **Mở rộng an toàn**: thêm tính năng mới một cách mượt mà, không phá vỡ cấu trúc cốt lõi hoặc ảnh hưởng đến chức năng cốt lõi.
+
 - Tương lai tích hợp các chức năng sau:
    1. Bảo vệ và Ngụy trang Tiến trình: Che giấu và bảo vệ các tiến trình hệ thống quan trọng
    2. Bảo vệ Lưu lượng Mạng: Mã hóa và bảo mật tất cả lưu lượng mạng
@@ -43,6 +45,7 @@
      - Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
      - Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
      - Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
+
    10. Advanced Detection Methodologies (các phương pháp phát hiện nâng cao)
      - Multi-Layer Behavioral Analysis (phân tích hành vi đa tầng)
      - Machine Learning-Based Detection (phát hiện dựa trên học máy)
@@ -62,7 +65,7 @@ Về ngôn ngữ lập trình thay thế:
 - Ưu tiên phù hợp với tất cả các chức năng vừa liệt kê ở trên được tích hợp vào chương trình
 - Lựa chọn ngôn ngữ có tính ẩn danh cao, hỗ trợ mã hóa và bảo mật dữ liệu
 - Xem xét các ngôn ngữ có hiệu năng cao và khả năng tương thích với phần cứng chuyên dụng
-
+- **Đề xuất phương án đóng gói mã nguồn** : Ngoài `Dockerfile`, đề xuất thêm các phương án đóng gói mã nguồn khác. Phương án cần tập trung vào: Mã hóa toàn bộ mã nguồn bằng công cụ obfuscation để tăng tính ẩn danh
 
 ## Prompt có các yêu cầu sau:
 
