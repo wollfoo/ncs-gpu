@@ -1,0 +1,21 @@
+api:
+  rest_bind: "0.0.0.0:8080"
+  grpc_bind: "0.0.0.0:50051"
+  modes:
+    - Rest
+    - Grpc
+scheduler:
+  backlog: 1024
+  batch_size: 64
+  tick_ms: 500
+observability:
+  log_level: info
+  tracer_endpoint: http://otel-collector:4317
+metrics:
+  port: 9100
+rbac:
+  roles:
+    - name: operator
+      permissions:
+        - submit_job
+        - read_metrics

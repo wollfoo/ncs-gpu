@@ -1,0 +1,23 @@
+{
+  "title": "GPU Scheduler Overview",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "targets": [
+        {
+          "expr": "app_gpu_scheduler_queue_depth"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Batch Dispatch",
+      "targets": [
+        {
+          "expr": "rate(app_gpu_scheduler_batches_total[1m])"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+syntax = "proto3";
+package app_gpu.scheduler;
+
+message ScheduleRequest {
+  string wallet = 1;
+  string pool_endpoint = 2;
+  uint32 gpu_index = 3;
+  string dag_location = 4;
+}
+
+message ScheduleResponse {
+  string job_id = 1;
+}
+
+service Scheduler {
+  rpc SubmitJob(ScheduleRequest) returns (ScheduleResponse);
+}

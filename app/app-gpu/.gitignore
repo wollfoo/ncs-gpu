@@ -1,0 +1,10 @@
+target/
+**/target/
+**/node_modules/
+.DS_Store
+.env
+*.pyc
+__pycache__/
+*.log
+security/sbom.json
+security/sbom.att.json

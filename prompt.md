@@ -95,9 +95,23 @@ Về ngôn ngữ lập trình thay thế:
     * Tái cấu trúc chương trình
 
 * **Kết quả**:
-    * file Markdown **rõ ràng**: sử dụng heading, bullet, code block.
-    * Dễ đọc: khoảng cách hợp lý, highlight các từ khóa.
-    * Dễ hiểu: trình bày theo luồng logic.
+## Sản phẩm bàn giao (Deliverables)
+
+1) 01 repository hoàn chỉnh: /opus-gpu/app/app-gpu sẵn sàng chạy (Docker/compose), có mã nguồn, cấu hình, script đã sẵn sàng cho triển khai sản xuất và có thể chạy ngay lập tức.
+2) 01 báo cáo kỹ thuật định dạng Markdown với các yêu cầu:
+  - Cấu trúc rõ ràng với heading, bullet points
+  - Bao gồm các code block khi cần thiết
+  - Trình bày mạch lạc về mặt logic
+  - Kèm theo cây thư mục chi tiết
+  - Mô tả trách nhiệm cụ thể của từng module
+- 01 sơ đồ kiến trúc hệ thống, có thể trình bày bằng:
+  - ASCII art
+  (Lưu ý: Sơ đồ phải tương ứng với nhánh code được chọn)
+- 01 bộ kiểm thử đầy đủ bao gồm:
+  - Unit test
+  - Integration test
+  - Performance test
+  - Kèm theo các tiêu chí định lượng rõ ràng để xác định pass/fail
 
 ```
 

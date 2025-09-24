@@ -1,0 +1,6 @@
+scanner: owasp-zap
+config:
+  target: http://core:8080
+  ruleset: baseline
+  auth:
+    enabled: false

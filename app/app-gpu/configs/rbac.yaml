@@ -1,0 +1,11 @@
+roles:
+  - name: operator
+    permissions:
+      - submit_job
+      - read_metrics
+  - name: observer
+    permissions:
+      - read_metrics
+bindings:
+  - subject: service-account-controller
+    role: operator
