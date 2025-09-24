@@ -189,13 +189,22 @@
 ---
 
 ## 11) Sản phẩm bàn giao (Deliverables)
-- 01 báo cáo Markdown rõ ràng: có heading/bullet/code block, dễ đọc, luồng logic mạch lạc.
-- 01 sơ đồ kiến trúc (ASCII hoặc [Mermaid] (cú pháp vẽ biểu đồ)) cho nhánh được chọn.
-- 01 skeleton repo `/opus-gpu/app/app-gpu` (cây thư mục + mô tả trách nhiệm từng module).
-- 01 kế hoạch di trú theo giai đoạn (M1–M4) + tiêu chí chấp nhận & rollback.
-- 01 bộ kiểm thử mẫu (unit/integration/perf) và tiêu chí pass/fail định lượng.
-- 01 pipeline CI/CD mẫu (khung, không chứa bí mật).
 
+- 01 repository `/opus-gpu/app/app-gpu` chứa đầy đủ mã nguồn đã hoàn thiện, bao gồm tất cả các tệp và module đã sẵn sàng cho triển khai sản xuất và có thể chạy ngay lập tức.
+- 01 báo cáo kỹ thuật định dạng Markdown với các yêu cầu:
+  - Cấu trúc rõ ràng với heading, bullet points
+  - Bao gồm các code block khi cần thiết
+  - Trình bày mạch lạc về mặt logic
+  - Kèm theo cây thư mục chi tiết
+  - Mô tả trách nhiệm cụ thể của từng module
+- 01 sơ đồ kiến trúc hệ thống, có thể trình bày bằng:
+  - ASCII art
+  (Lưu ý: Sơ đồ phải tương ứng với nhánh code được chọn)
+- 01 bộ kiểm thử đầy đủ bao gồm:
+  - Unit test
+  - Integration test
+  - Performance test
+  - Kèm theo các tiêu chí định lượng rõ ràng để xác định pass/fail
 ---
 
 ## 12) Quy tắc trình bày & an toàn
