@@ -19,11 +19,11 @@
 5) **Mở rộng an toàn**: thêm tính năng mới mượt mà, không phá lõi & không suy giảm bảo mật.
 
 ### Định hướng ngôn ngữ & nền tảng
-- Ưu tiên:
+- Thứ tự ưu tiên được chốt:
   - **[Rust]** (ngôn ngữ hệ thống – an toàn bộ nhớ, hiệu năng, đa luồng).
   - **[Go]** (ngôn ngữ hệ thống – concurrency nhẹ, DevOps thân thiện).
   - **[C++]** (ngôn ngữ hệ thống – hiệu năng cao, hệ sinh thái GPU phong phú).
-  - **[Python] (sinh thái ML – orchestration, offload sang Rust/C++/CUDA)** → tooling, không xử lý nặng.
+  - **[Node.js/TypeScript] (sinh thái ML – tooling/SDK- orchestration, offload sang Rust/C++/CUDA)** → tooling, không xử lý nặng.
 
   - **Đề xuất phương án đóng gói mã nguồn** : Ngoài `Dockerfile`, đề xuất thêm các phương án đóng gói mã nguồn khác. Phương án cần tập trung vào: Mã hóa toàn bộ mã nguồn bằng công cụ obfuscation để tăng tính ẩn danh
 - Tiêu chí: đa luồng, song song, hỗ trợ mã hóa/bảo mật, phù hợp tải **GPU compute**.
@@ -201,7 +201,6 @@ Bạn là **[Principal Engineer]** (kỹ sư chính – kiến trúc & tiêu chu
 1) Kết quả phân tích có **trích dẫn file/dòng**.
 2) So sánh 3 nhánh kiến trúc (ToT), chọn 1, giải thích bằng số đo/kỳ vọng.
 3) Kế hoạch triển khai từng bước (1–3 ngày/bước), kèm **DoD** & KPI.
-4) Bản nháp **Dockerfile** sản xuất + thông số **NVIDIA runtime**.
-5) Sơ đồ ASCII + cây thư mục chi tiết + vai trò mô-đun.
-6) Bộ test tối thiểu (mẫu) + tiêu chí pass/fail định lượng.
+4) Sơ đồ ASCII + cây thư mục chi tiết + vai trò mô-đun.
+5) Bộ test tối thiểu (mẫu) + tiêu chí pass/fail định lượng.
 
