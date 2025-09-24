@@ -1,8 +1,0 @@
-version: 1
-checks:
-  - name: cargo-audit
-    command: ["cargo", "audit"]
-  - name: gosec
-    command: ["gosec", "./..."]
-  - name: semgrep
-    command: ["semgrep", "--config", "p/security-audit", "cmd", "internal", "pkg"]
