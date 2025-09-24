@@ -6,8 +6,14 @@ import asyncio
 import json
 from pathlib import Path
 
-from ...application import SubmitJobCommand, JobService, MetricsService, CommandHandler
-from ...domain import PipelineStage
+from ...application import (
+    SubmitJobCommand,
+    JobService,
+    MetricsService,
+    CommandHandler,
+    MetricsRecorder,
+)
+from ...domain import PipelineStage, StageCompleted
 from ...config import load_config
 from ..gpu_adapter import GPUAdapter
 from ..scheduler import Scheduler
@@ -23,7 +29,8 @@ async def main(batch_payload_path: str) -> None:
         PipelineStage(name="postprocess", duration_budget_ms=20, max_concurrency=4),
     ]
     job_service = JobService(stage_templates)
-    handler = CommandHandler(job_service, MetricsService())
+    metrics_recorder = MetricsRecorder()
+    handler = CommandHandler(job_service, MetricsService(metrics_recorder))
     adapter = GPUAdapter()
 
     async def stage_pre(batch):
@@ -42,7 +49,13 @@ async def main(batch_payload_path: str) -> None:
         stage_complete=message_bus.publish,
     )
 
-    asyncio.create_task(message_bus.start())
+    async def on_stage_completed(event: StageCompleted) -> None:
+        if event.is_final and event.duration_ms is not None:
+            metrics_recorder.record(event.duration_ms)
+
+    message_bus.subscribe(StageCompleted, on_stage_completed)
+
+    bus_task = asyncio.create_task(message_bus.start())
 
     payload = json.loads(Path(batch_payload_path).read_text())
     jobs = [
@@ -58,6 +71,8 @@ async def main(batch_payload_path: str) -> None:
     ]
     batch = job_service.batch(jobs, batch_size=config.batch_size)
     await scheduler.run(batch)
+    await message_bus.stop()
+    await bus_task
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

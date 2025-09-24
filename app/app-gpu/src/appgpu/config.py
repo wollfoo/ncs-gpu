@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppConfig(BaseSettings):
@@ -26,9 +26,7 @@ class AppConfig(BaseSettings):
     )
     enable_feature_flags: bool = Field(True, description="Bật/tắt hệ flag bảo vệ")
 
-    class Config:
-        env_prefix = "APPGPU_"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_prefix="APPGPU_", case_sensitive=False)
 
 
 @lru_cache

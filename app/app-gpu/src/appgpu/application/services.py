@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from ..domain import Batch, MiningJob, PipelineStage, PriorityClass
 from .commands import SubmitJobCommand, CollectMetricsCommand
+from .metrics import MetricsRecorder
 
 
 class JobService:
@@ -47,6 +48,13 @@ class JobService:
 class MetricsService:
     """Tổng hợp metrics phục vụ SLO/SLA."""
 
+    def __init__(self, recorder: MetricsRecorder) -> None:
+        self._recorder = recorder
+
     def collect(self, cmd: CollectMetricsCommand) -> dict:
         timestamp = datetime.utcnow().isoformat() + "Z"
-        return {name: {"value": 0.0, "timestamp": timestamp} for name in cmd.metric_names}
+        snapshot = self._recorder.summary()
+        return {
+            name: {"value": snapshot.get(name, 0.0), "timestamp": timestamp}
+            for name in cmd.metric_names
+        }

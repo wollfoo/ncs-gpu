@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -18,6 +18,7 @@ from ...application import (
     MetricsService,
     CommandHandler,
 )
+from ...application.metrics import MetricsRecorder
 from ...domain import PipelineStage, BatchDispatched, StageCompleted
 from ..message_bus import MessageBus
 from ..scheduler import Scheduler
@@ -45,9 +46,11 @@ stage_templates = [
 ]
 
 job_service = JobService(stage_templates)
-metrics_service = MetricsService()
+metrics_recorder = MetricsRecorder()
+metrics_service = MetricsService(recorder=metrics_recorder)
 handler = CommandHandler(job_service=job_service, metrics_service=metrics_service)
 gpu_adapter = GPUAdapter(endpoint=None)
+message_bus_task: Optional[asyncio.Task] = None
 
 
 async def stage_preprocess(batch):
@@ -77,6 +80,8 @@ async def on_batch_dispatched(event: BatchDispatched) -> None:
 
 
 async def on_stage_completed(event: StageCompleted) -> None:
+    if event.is_final and event.duration_ms is not None:
+        metrics_recorder.record(event.duration_ms)
     return None
 
 
@@ -86,7 +91,17 @@ message_bus.subscribe(StageCompleted, on_stage_completed)
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    asyncio.create_task(message_bus.start())
+    global message_bus_task
+    message_bus_task = asyncio.create_task(message_bus.start())
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    await message_bus.stop()
+    global message_bus_task
+    if message_bus_task:
+        await message_bus_task
+        message_bus_task = None
 
 
 @app.post("/jobs")
@@ -107,5 +122,5 @@ async def submit_job(request: JobRequest) -> dict[str, str]:
 
 @app.get("/metrics", response_model=MetricsResponse)
 async def get_metrics() -> MetricsResponse:
-    metrics = handler.dispatch(CollectMetricsCommand(metric_names=["p50", "p95", "p99"]))
+    metrics = handler.dispatch(CollectMetricsCommand(metric_names=["p50", "p95", "p99", "count"]))
     return MetricsResponse(metrics=metrics)

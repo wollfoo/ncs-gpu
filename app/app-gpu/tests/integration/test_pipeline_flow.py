@@ -2,7 +2,13 @@ import asyncio
 
 import pytest
 
-from appgpu.application import SubmitJobCommand, JobService, MetricsService, CommandHandler
+from appgpu.application import (
+    SubmitJobCommand,
+    JobService,
+    MetricsService,
+    CommandHandler,
+    MetricsRecorder,
+)
 from appgpu.domain import PipelineStage
 from appgpu.infrastructure import MessageBus, Scheduler, GPUAdapter
 
@@ -15,7 +21,8 @@ async def test_pipeline_complete():
         PipelineStage(name="infer", duration_budget_ms=40, max_concurrency=2),
     ]
     job_service = JobService(stages)
-    handler = CommandHandler(job_service, MetricsService())
+    metrics_recorder = MetricsRecorder()
+    handler = CommandHandler(job_service, MetricsService(metrics_recorder))
     adapter = GPUAdapter()
 
     async def stage_pre(batch):

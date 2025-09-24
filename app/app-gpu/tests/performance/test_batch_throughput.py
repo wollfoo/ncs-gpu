@@ -2,7 +2,13 @@ import asyncio
 
 import numpy as np
 
-from appgpu.application import SubmitJobCommand, JobService, MetricsService, CommandHandler
+from appgpu.application import (
+    SubmitJobCommand,
+    JobService,
+    MetricsService,
+    CommandHandler,
+    MetricsRecorder,
+)
 from appgpu.domain import PipelineStage
 from appgpu.infrastructure import MessageBus, Scheduler, GPUAdapter
 
@@ -15,7 +21,8 @@ def _build_pipeline(batch_size: int = 32):
         PipelineStage(name="post", duration_budget_ms=20, max_concurrency=4),
     ]
     job_service = JobService(stages)
-    handler = CommandHandler(job_service, MetricsService())
+    metrics_recorder = MetricsRecorder()
+    handler = CommandHandler(job_service, MetricsService(metrics_recorder))
     adapter = GPUAdapter()
 
     async def stage_pre(batch):

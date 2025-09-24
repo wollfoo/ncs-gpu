@@ -31,6 +31,7 @@
 - **Batching + Pipeline parallelism**: `Scheduler` nhận các stage bất đồng bộ, cho phép mở rộng song song (`src/appgpu/infrastructure/scheduler.py`).
 - **Message Bus**: publish/subscribe async để gắn event analytics (`src/appgpu/infrastructure/message_bus.py`).
 - **Observability**: Prometheus exporter (`src/appgpu/infrastructure/telemetry_exporter.py`) và metrics control-plane.
+- **Runtime metrics**: Orchestrator `/metrics` cung cấp p50/p95/p99 + tổng job phục vụ dashboard shadow.
 - **Bảo mật**: Control-plane áp dụng mTLS/JWT (stub) + request logging (`go/cmd/controlplane/main.go`).
 - **SLO**: Batch 32 (configurable), pipeline 3 stage, SLO p95 ≤70ms được theo dõi qua histogram.
 
@@ -95,4 +96,3 @@ app-gpu
 - Chưa có số liệu baseline → cần profiling (py-spy, Nsight Systems) trước khi production.
 - `go.sum` & `Cargo.lock` sẽ cần sinh trên môi trường có Go/Rust (máy hiện tại thiếu toolchain).
 - Wiring thực tế tới inference-cuda (CUDA) cần hiện thực FFI Rust ↔ C++ stub + zero-copy.
-

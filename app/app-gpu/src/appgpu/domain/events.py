@@ -27,3 +27,5 @@ class StageCompleted:
     stage: PipelineStage | None
     completed_at: datetime
     metrics: List[float]
+    is_final: bool = False
+    duration_ms: float | None = None

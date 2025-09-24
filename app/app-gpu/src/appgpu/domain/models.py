@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(slots=True)
@@ -39,6 +39,7 @@ class Batch:
     jobs: List[MiningJob]
     created_at: datetime = field(default_factory=datetime.utcnow)
     max_deadline_ms: Optional[int] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def size(self) -> int:

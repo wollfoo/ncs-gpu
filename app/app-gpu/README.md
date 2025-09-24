@@ -49,7 +49,7 @@ docker compose up --build
 
 ## Giám sát & Bảo mật
 
-- OpenTelemetry metrics/traces, Prometheus scrape endpoint (`/metrics`).
+- Orchestrator phơi bày `/metrics` với percentile (p50/p95/p99) và tổng số job xử lý, sẵn sàng cho Prometheus/Grafana.
 - mTLS + JWT (OPA policy stub) tại Go control-plane.
 - Feature flag + rollback guard trong orchestrator.
 
@@ -58,4 +58,3 @@ docker compose up --build
 1. Phân tích hiện trạng bằng báo cáo trong `docs/technical_report.md`.
 2. Triển khai song song (`blue-green`) bằng Docker Compose.
 3. Dùng tests + benchmark để xác nhận SLO trước khi switch traffic.
-
