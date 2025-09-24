@@ -59,20 +59,19 @@ impl Scheduler {
             let mut tick = tokio::time::interval(std::time::Duration::from_millis(cfg.scheduler.tick_ms));
             loop {
                 tokio::select! {
-                    Some(cmd) = rx.recv() => {
-                        if let Command::Enqueue { job, respond } = cmd {
-                            let mut queue = state.write().await;
-                            let job_id = format!("job-{}", queue.len() + 1);
-                            queue.push(job.clone());
-                            let result = ScheduleResult { job_id: job_id.clone(), queued_at: chrono::Utc::now() };
-                            let _ = respond.send(job_id.clone());
-                            emitter.emit_json("job.queued", &result);
-                            debug!(target: "scheduler", %job_id, queue_len = queue.len(), "queued job");
-                        }
+                    Some(Command::Enqueue { job, respond }) = rx.recv() => {
+                        let mut queue = state.write().await;
+                        let job_id = format!("job-{}", queue.len() + 1);
+                        queue.push(job.clone());
+                        let result = ScheduleResult { job_id: job_id.clone(), queued_at: chrono::Utc::now() };
+                        let _ = respond.send(job_id.clone());
+                        emitter.emit_json("job.queued", &result);
+                        debug!(target: "scheduler", %job_id, queue_len = queue.len(), "queued job");
                     }
                     _ = tick.tick() => {
                         let mut queue = state.write().await;
-                        let batch = queue.drain(..cfg.scheduler.batch_size.min(queue.len())).collect::<Vec<_>>();
+                        let drain_count = cfg.scheduler.batch_size.min(queue.len());
+                        let batch: Vec<_> = queue.drain(..drain_count).collect();
                         if !batch.is_empty() {
                             info!(target: "scheduler", size = batch.len(), "dispatching batch");
                             // TODO: integrate with GPU executor via gpu_bindings

@@ -3,28 +3,18 @@ package main
 import (
     "context"
     "fmt"
+    "log"
     "net/http"
     "os"
     "time"
 
     backoff "github.com/cenkalti/backoff/v4"
-    "github.com/sirupsen/logrus"
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-    sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
-    logger := logrus.New()
-    logger.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+    logger := log.New(os.Stdout, "controller ", log.LstdFlags|log.Lmicroseconds)
 
     ctx := context.Background()
-    shutdown, err := setupTracer(ctx)
-    if err != nil {
-        logger.WithError(err).Fatal("init tracer")
-    }
-    defer shutdown()
-
     coreEndpoint := getenv("CORE_ENDPOINT", "http://localhost:8080")
     client := &http.Client{Timeout: 5 * time.Second}
 
@@ -47,32 +37,14 @@ func main() {
                 if res.StatusCode >= http.StatusMultipleChoices {
                     return fmt.Errorf("core unhealthy: %s", res.Status)
                 }
-                logger.WithField("endpoint", coreEndpoint).Info("core alive")
+                logger.Printf("core alive endpoint=%s", coreEndpoint)
                 return nil
             }, backoff.NewExponentialBackOff())
             if err != nil {
-                logger.WithError(err).Error("health probe failed")
+                logger.Printf("health probe failed: %v", err)
             }
         }
     }
-}
-
-func setupTracer(ctx context.Context) (func(), error) {
-    endpoint := getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-
-    exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpoint(endpoint), otlptracehttp.WithInsecure())
-    if err != nil {
-        return nil, err
-    }
-
-    provider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
-    otel.SetTracerProvider(provider)
-
-    return func() {
-        ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-        defer cancel()
-        _ = provider.Shutdown(ctx)
-    }, nil
 }
 
 func getenv(key, fallback string) string {

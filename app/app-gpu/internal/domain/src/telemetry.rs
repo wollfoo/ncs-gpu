@@ -3,6 +3,7 @@ use crate::config::{MetricsConfig, ObservabilityConfig};
 use serde::Deserialize;
 use tracing::Level;
 use tracing_subscriber::{fmt, EnvFilter, Registry};
+use tracing_subscriber::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TelemetrySettings {
@@ -14,11 +15,14 @@ pub fn init_tracing(cfg: &ObservabilityConfig) -> Result<()> {
         .with_default_directive(cfg.log_level.parse().unwrap_or(Level::INFO.into()))
         .from_env_lossy();
 
-    Registry::default()
+    if let Err(err) = Registry::default()
         .with(env_filter)
         .with(fmt::layer().compact())
         .try_init()
-        .or_else(|_| Ok(()))?;
+    {
+        tracing::debug!(target = "telemetry", ?err, "tracing already initialized");
+    }
+
     Ok(())
 }
 
@@ -51,9 +55,7 @@ pub mod metrics {
 
     impl Exporter {
         pub fn new(cfg: &MetricsConfig) -> Result<Self> {
-            let builder = PrometheusBuilder::new();
-            let (recorder, handle) = builder.build()?;
-            metrics::set_boxed_recorder(Box::new(recorder))?;
+            let handle = PrometheusBuilder::new().install_recorder()?;
             Ok(Self {
                 handle,
                 join: None,
@@ -67,7 +69,7 @@ pub mod metrics {
             self.join = Some(tokio::spawn(async move {
                 let listener = TcpListener::bind(addr).await.expect("bind metrics");
                 loop {
-                    if let Ok((mut socket, _)) = listener.accept().await {
+                    if let Ok((socket, _)) = listener.accept().await {
                         let body = handle.render();
                         let response = format!(
                             "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: {}\r\n\r\n{}",

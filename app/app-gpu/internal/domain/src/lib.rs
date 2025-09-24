@@ -4,7 +4,6 @@ pub mod proto {
     include!("generated.rs");
 }
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]

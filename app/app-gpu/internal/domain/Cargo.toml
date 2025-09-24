@@ -16,3 +16,6 @@ tokio = { workspace = true }
 tonic = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
 prost = { workspace = true }
+
+[build-dependencies]
+tonic-build = "0.11"
