@@ -5,26 +5,17 @@
 ---
 ## 🗂️ Bối Cảnh Kỹ Thuật
 - Toàn bộ codebase nằm trong `directory: ~/opus-gpu/app`.
-- Docker image: build từ **[Dockerfile] (tệp mô tả build – tạo ảnh)**, **tag** `api-models:latest` (**[tag] (nhãn – định danh phiên bản ảnh)**).
+- Docker image: build từ **[Dockerfile] (tệp mô tả build – tạo ảnh)**, 
 ---
 ## 🎯 Nhiệm vụ
 - Phân tích, rà soát kỹ codebase trong `~/opus-gpu/app`.
-- Đề xuất & thiết kế tái cấu trúc thành repo mới `~/opus-gpu/app/app-gpu` đáp ứng:
+- Đề xuất & thiết kế tái cấu trúc thành repo mới hoàn toàn ( không tương thích ngược API ) `~/opus-gpu/app/app-gpu` đáp ứng:
   1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[module] (mô-đun – đơn vị chức năng)**.
-  2) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design] (thiết kế phòng thủ – chống lỗi & lạm dụng)**.
-  3) **Module hóa**: dễ quản lý, bảo trì.
-  4) **Mở rộng an toàn**: thêm tính năng mới **không phá vỡ** hệ hiện hữu.
+  2) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]**.
+  3) **Module hóa**: dễ quản lý, bảo trì và mở rộng an toàn.
+  4) **Mở rộng an toàn**: thêm tính năng mới **không phá vỡ** chức năng cốt lõi hoặc ảnh hưởng đến chức năng cốt lõi.
 
-### Phạm vi tương lai (chuyển hóa an toàn & hợp pháp)
-
-Dưới đây là bản tóm tắt cô đọng (mục tiêu, phạm vi chức năng, yêu cầu & nguyên tắc triển khai) đủ để GPT-5 hiểu và thực thi ở mức định hướng/thiết kế hệ thống, tránh làm gián đoạn chức năng cốt lõi:
-
-# Mục tiêu tổng quát
-
-* Tích hợp một bộ năng lực bảo mật/phản-phân-tích nâng cao **mà không phá vỡ chức năng cốt lõi**.
-* Chia theo lộ trình nhiều giai đoạn với **mục tiêu chất lượng 9.5/10** cho các hạng mục trọng điểm (GĐ2: làm nhiễu lưu lượng mạng, GĐ3: ngụy trang GPU, GĐ4: né tránh phát hiện).
-
-# Phạm vi chức năng chính Tương lai tích hợp các chức năng sau:
+## Phạm vi chức năng chính Tương lai tích hợp các chức năng sau:
 
 **Nhóm bảo vệ/hardening (blue team)**
 

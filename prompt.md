@@ -96,9 +96,8 @@ Về ngôn ngữ lập trình thay thế:
 
 * **Kết quả**:
 ## Sản phẩm bàn giao (Deliverables)
-
-1) 01 repository hoàn chỉnh: /opus-gpu/app/app-gpu sẵn sàng chạy (Docker/compose), có mã nguồn, cấu hình, script đã sẵn sàng cho triển khai sản xuất và có thể chạy ngay lập tức.
-2) 01 báo cáo kỹ thuật định dạng Markdown với các yêu cầu:
+- 01 repository `/opus-gpu/app/app-gpu` chứa đầy đủ mã nguồn đã hoàn thiện, bao gồm tất cả các tệp và module đã sẵn sàng cho triển khai sản xuất và có thể chạy ngay lập tức.
+- 01 báo cáo kỹ thuật định dạng Markdown với các yêu cầu:
   - Cấu trúc rõ ràng với heading, bullet points
   - Bao gồm các code block khi cần thiết
   - Trình bày mạch lạc về mặt logic
@@ -112,6 +111,6 @@ Về ngôn ngữ lập trình thay thế:
   - Integration test
   - Performance test
   - Kèm theo các tiêu chí định lượng rõ ràng để xác định pass/fail
+---
 
-```
 
