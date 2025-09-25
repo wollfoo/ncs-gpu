@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use audit::{default_audit_path, AuditLogger};
 use axum::{
     extract::{ConnectInfo, Path as AxumPath, State},
@@ -18,7 +18,7 @@ use once_cell::sync::OnceCell;
 use secret_manager::{ChainedSecretProvider, SecretManager, SecretManagerBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::{net::TcpListener, signal};
+use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
@@ -60,10 +60,10 @@ struct JobDetailsResponse {
 #[derive(Debug)]
 struct SchedulerConfig {
     http_addr: SocketAddr,
-    tls: Option<SchedulerTlsConfig>,
+    tls: SchedulerTlsConfig,
     nats_url: String,
     subject: String,
-    nats_tls: Option<NatsTlsConfig>,
+    nats_tls: NatsTlsConfig,
     audit_path: PathBuf,
     secret_refresh: Option<Duration>,
     secret_file_dir: Option<PathBuf>,
@@ -234,11 +234,9 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let mut nats_options =
-        NatsOptions::new(&config.nats_url, "scheduler").auth_token(nats_auth_token.clone());
-    if let Some(tls) = config.nats_tls.clone() {
-        nats_options = nats_options.tls(Some(tls));
-    }
+    let nats_options = NatsOptions::new(&config.nats_url, "scheduler")
+        .auth_token(nats_auth_token.clone())
+        .tls(Some(config.nats_tls.clone()));
     let nats = NatsConnection::connect_with_options(nats_options).await?;
     let store = JobStoreBuilder::from_env().build().await?;
 
@@ -272,42 +270,21 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_handle = Handle::new();
     let graceful = shutdown_signal(shutdown_handle.clone());
 
-    if let Some(tls) = config.tls {
-        let server_config = Arc::new(load_server_config(&tls)?);
-        let rustls_config = RustlsConfig::from_config(server_config);
-        let server = axum_server::bind_rustls(config.http_addr, rustls_config)
-            .handle(shutdown_handle.clone())
-            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-            .into_future();
-        tokio::pin!(server);
-
-        tokio::select! {
-            result = &mut server => {
-                result?;
-            }
-            _ = graceful => {
-                if let Err(err) = (&mut server).await {
-                    error!(error = %err, "scheduler server error");
-                }
-            }
-        }
-    } else {
-        let listener = TcpListener::bind(config.http_addr).await?;
-        let server = axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
+    let server_config = Arc::new(load_server_config(&config.tls)?);
+    let rustls_config = RustlsConfig::from_config(server_config);
+    let server = axum_server::bind_rustls(config.http_addr, rustls_config)
+        .handle(shutdown_handle.clone())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .into_future();
-        tokio::pin!(server);
+    tokio::pin!(server);
 
-        tokio::select! {
-            result = &mut server => {
-                result?;
-            }
-            _ = graceful => {
-                if let Err(err) = (&mut server).await {
-                    error!(error = %err, "scheduler server error");
-                }
+    tokio::select! {
+        result = &mut server => {
+            result?;
+        }
+        _ = graceful => {
+            if let Err(err) = (&mut server).await {
+                error!(error = %err, "scheduler server error");
             }
         }
     }
@@ -382,43 +359,46 @@ impl AppState {
     }
 }
 
-fn build_nats_tls_config(nats_url: &str) -> anyhow::Result<Option<NatsTlsConfig>> {
-    let ca_file = match std::env::var("NATS_TLS_CA_FILE") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => return Ok(None),
-    };
+fn build_nats_tls_config(nats_url: &str) -> anyhow::Result<NatsTlsConfig> {
+    let ca_file = PathBuf::from(
+        std::env::var("NATS_TLS_CA_FILE")
+            .context("cần đặt NATS_TLS_CA_FILE để bật mutual TLS với NATS")?,
+    );
     let domain = std::env::var("NATS_TLS_DOMAIN")
         .unwrap_or_else(|_| derive_domain_from_address(nats_url).to_string());
-    let client_cert = std::env::var("NATS_TLS_CLIENT_CERT")
-        .ok()
-        .map(PathBuf::from);
-    let client_key = std::env::var("NATS_TLS_CLIENT_KEY").ok().map(PathBuf::from);
-    if client_cert.is_some() ^ client_key.is_some() {
-        return Err(anyhow!(
-            "cần thiết lập đồng thời NATS_TLS_CLIENT_CERT và NATS_TLS_CLIENT_KEY khi bật mutual TLS"
-        ));
-    }
+    let client_cert = PathBuf::from(
+        std::env::var("NATS_TLS_CLIENT_CERT")
+            .context("cần đặt NATS_TLS_CLIENT_CERT cho mutual TLS với NATS")?,
+    );
+    let client_key = PathBuf::from(
+        std::env::var("NATS_TLS_CLIENT_KEY")
+            .context("cần đặt NATS_TLS_CLIENT_KEY cho mutual TLS với NATS")?,
+    );
 
-    Ok(Some(NatsTlsConfig {
+    Ok(NatsTlsConfig {
         domain,
         ca_file,
-        client_cert,
-        client_key,
-    }))
+        client_cert: Some(client_cert),
+        client_key: Some(client_key),
+    })
 }
 
-fn build_scheduler_tls_config() -> anyhow::Result<Option<SchedulerTlsConfig>> {
-    let cert = match std::env::var("SCHEDULER_TLS_CERT") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => return Ok(None),
-    };
-    let key = PathBuf::from(std::env::var("SCHEDULER_TLS_KEY")?);
-    let client_ca = PathBuf::from(std::env::var("SCHEDULER_TLS_CLIENT_CA")?);
-    Ok(Some(SchedulerTlsConfig {
+fn build_scheduler_tls_config() -> anyhow::Result<SchedulerTlsConfig> {
+    let cert = PathBuf::from(
+        std::env::var("SCHEDULER_TLS_CERT").context("cần đặt SCHEDULER_TLS_CERT cho scheduler")?,
+    );
+    let key = PathBuf::from(
+        std::env::var("SCHEDULER_TLS_KEY").context("cần đặt SCHEDULER_TLS_KEY cho scheduler")?,
+    );
+    let client_ca = PathBuf::from(
+        std::env::var("SCHEDULER_TLS_CLIENT_CA")
+            .context("cần đặt SCHEDULER_TLS_CLIENT_CA cho scheduler")?,
+    );
+    Ok(SchedulerTlsConfig {
         cert,
         key,
         client_ca,
-    }))
+    })
 }
 
 fn derive_domain_from_address(address: &str) -> String {

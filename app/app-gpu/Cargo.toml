@@ -5,7 +5,8 @@ members = [
     "common/nats-lite",
     "common/job-core",
     "common/secret-manager",
-    "common/audit"
+    "common/audit",
+    "tooling/pki-manager"
 ]
 resolver = "2"
 

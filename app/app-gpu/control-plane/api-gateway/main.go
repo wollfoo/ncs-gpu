@@ -37,17 +37,9 @@ func main() {
 		Handler: r,
 	}
 
-	if tlsConfig != nil {
-		srv.TLSConfig = tlsConfig
-		log.Printf("starting api-gateway addr=%s tls=enforced", addr)
-		if err := srv.ListenAndServeTLS("", ""); err != nil {
-			log.Fatalf("api-gateway failed: %v", err)
-		}
-		return
-	}
-
-	log.Printf("starting api-gateway addr=%s tls=disabled", addr)
-	if err := srv.ListenAndServe(); err != nil {
+	srv.TLSConfig = tlsConfig
+	log.Printf("starting api-gateway addr=%s tls=enforced", addr)
+	if err := srv.ListenAndServeTLS("", ""); err != nil {
 		log.Fatalf("api-gateway failed: %v", err)
 	}
 }
@@ -62,15 +54,18 @@ func defaultAddress() string {
 
 func buildTLSConfig() (*tls.Config, error) {
 	certFile := os.Getenv("API_GATEWAY_TLS_CERT")
-	keyFile := os.Getenv("API_GATEWAY_TLS_KEY")
-	caFile := os.Getenv("API_GATEWAY_TLS_CLIENT_CA")
-
-	if certFile == "" && keyFile == "" && caFile == "" {
-		return nil, nil
+	if certFile == "" {
+		return nil, fmt.Errorf("API_GATEWAY_TLS_CERT bắt buộc để bật mutual TLS")
 	}
 
-	if certFile == "" || keyFile == "" || caFile == "" {
-		return nil, fmt.Errorf("để bật mutual TLS cần đặt đủ API_GATEWAY_TLS_CERT, API_GATEWAY_TLS_KEY và API_GATEWAY_TLS_CLIENT_CA")
+	keyFile := os.Getenv("API_GATEWAY_TLS_KEY")
+	if keyFile == "" {
+		return nil, fmt.Errorf("API_GATEWAY_TLS_KEY bắt buộc để bật mutual TLS")
+	}
+
+	caFile := os.Getenv("API_GATEWAY_TLS_CLIENT_CA")
+	if caFile == "" {
+		return nil, fmt.Errorf("API_GATEWAY_TLS_CLIENT_CA bắt buộc để xác thực client")
 	}
 
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -89,10 +84,11 @@ func buildTLSConfig() (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    clientPool,
-		MinVersion:   tls.VersionTLS13,
-		NextProtos:   []string{"h2", "http/1.1"},
+		Certificates:             []tls.Certificate{certificate},
+		ClientAuth:               tls.RequireAndVerifyClientCert,
+		ClientCAs:                clientPool,
+		MinVersion:               tls.VersionTLS13,
+		NextProtos:               []string{"h2", "http/1.1"},
+		PreferServerCipherSuites: true,
 	}, nil
 }

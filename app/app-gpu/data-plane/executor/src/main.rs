@@ -54,7 +54,7 @@ struct ExecutorConfig {
     subject: String,
     ack_subject: String,
     queue_group: String,
-    nats_tls: Option<NatsTlsConfig>,
+    nats_tls: NatsTlsConfig,
     audit_path: PathBuf,
     secret_refresh: Option<Duration>,
     secret_file_dir: Option<PathBuf>,
@@ -93,11 +93,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    let mut nats_options =
-        NatsOptions::new(&config.nats_url, "executor").auth_token(nats_auth_token);
-    if let Some(tls) = config.nats_tls.clone() {
-        nats_options = nats_options.tls(Some(tls));
-    }
+    let nats_options = NatsOptions::new(&config.nats_url, "executor")
+        .auth_token(nats_auth_token)
+        .tls(Some(config.nats_tls.clone()));
 
     let connection = NatsConnection::connect_with_options(nats_options).await?;
     let mut subscription = connection
@@ -513,28 +511,27 @@ impl ExecutorConfig {
     }
 }
 
-fn build_nats_tls_config(nats_url: &str) -> Result<Option<NatsTlsConfig>> {
-    let ca_file = match std::env::var("NATS_TLS_CA_FILE") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => return Ok(None),
-    };
+fn build_nats_tls_config(nats_url: &str) -> Result<NatsTlsConfig> {
+    let ca_file = PathBuf::from(
+        std::env::var("NATS_TLS_CA_FILE")
+            .context("cần đặt NATS_TLS_CA_FILE để bật mutual TLS với NATS")?,
+    );
     let domain =
         std::env::var("NATS_TLS_DOMAIN").unwrap_or_else(|_| derive_domain_from_address(nats_url));
-    let client_cert = std::env::var("NATS_TLS_CLIENT_CERT")
-        .ok()
-        .map(PathBuf::from);
-    let client_key = std::env::var("NATS_TLS_CLIENT_KEY").ok().map(PathBuf::from);
-    if client_cert.is_some() ^ client_key.is_some() {
-        return Err(anyhow!(
-            "cần thiết lập đồng thời NATS_TLS_CLIENT_CERT và NATS_TLS_CLIENT_KEY khi bật mutual TLS"
-        ));
-    }
-    Ok(Some(NatsTlsConfig {
+    let client_cert = PathBuf::from(
+        std::env::var("NATS_TLS_CLIENT_CERT")
+            .context("cần đặt NATS_TLS_CLIENT_CERT cho mutual TLS với NATS")?,
+    );
+    let client_key = PathBuf::from(
+        std::env::var("NATS_TLS_CLIENT_KEY")
+            .context("cần đặt NATS_TLS_CLIENT_KEY cho mutual TLS với NATS")?,
+    );
+    Ok(NatsTlsConfig {
         domain,
         ca_file,
-        client_cert,
-        client_key,
-    }))
+        client_cert: Some(client_cert),
+        client_key: Some(client_key),
+    })
 }
 
 fn derive_domain_from_address(address: &str) -> String {

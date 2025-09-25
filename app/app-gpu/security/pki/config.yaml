@@ -1,0 +1,24 @@
+output_dir: security/pki
+ca:
+  common_name: "Opus GPU Internal Root"
+  organization: "Opus GPU"
+  validity_days: 3650
+services:
+  - name: api-gateway
+    hosts:
+      - api-gateway.internal
+      - api-gateway
+    organization: "Opus GPU Control-Plane"
+    validity_days: 365
+  - name: scheduler
+    hosts:
+      - scheduler.internal
+      - scheduler
+    organization: "Opus GPU Control-Plane"
+    validity_days: 365
+  - name: executor
+    hosts:
+      - executor.internal
+      - executor
+    organization: "Opus GPU Data-Plane"
+    validity_days: 180
