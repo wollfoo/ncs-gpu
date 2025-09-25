@@ -20,4 +20,4 @@ node-test:
 test: rust-test go-test node-test
 
 deps:
-	npm --prefix tooling/ts-sdk install
+	npm --prefix tooling/ts-sdk ci
