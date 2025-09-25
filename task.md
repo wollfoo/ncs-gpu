@@ -9,7 +9,7 @@
 ## 🗂️ Bối Cảnh Kỹ Thuật
 - Toàn bộ codebase trong `directory: ~/opus-gpu/app`.
 - Docker image: build từ `Dockerfile`, tag `api-models:latest`.
-- Mục tiêu tổng: tái kiến trúc sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn, tuân thủ.
+- Mục tiêu tổng: Dựa vào phân tích chương trình trong codebase trong `~/opus-gpu/app`, thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn, tuân thủ. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ.
 
 ## 🎯 Mục Tiêu
 1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[Module]** (mô-đun – đơn vị chức năng).
@@ -180,7 +180,7 @@ Bạn là **[Principal Engineer]** (kỹ sư chính – kiến trúc & tiêu chu
 ---
 
 ## 📦 Kết quả / Deliverables
-1. **Repository**: `/opus-gpu/app/app-gpu` sẵn sàng chạy sản xuất:
+1. **Repository**: `/opus-gpu/app-gpu` sẵn sàng chạy sản xuất:
 
 2. **Báo cáo kỹ thuật (Markdown)**:
    - Heading rõ ràng, bullet points, code blocks, cây thư mục chi tiết, trách nhiệm mô-đun.

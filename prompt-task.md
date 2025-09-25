@@ -31,25 +31,25 @@
   * Phân tích mạng nâng cao.
 
 **Nhóm mô phỏng đối kháng/ẩn mình (red-team emulation, dùng trong môi trường kiểm soát)**
-
 * Binary hijacking & “thay thế hợp lệ”.
 * Thao tác vectơ tham số/argument tinh vi.
 * “Kỹ nghệ” tính hợp lệ của cây tiến trình (process tree legitimacy).
+
 * **Làm nhiễu lưu lượng mạng (GĐ2)**:
+  * Protocol Layer Deep Camouflage (ngụy trang sâu ở tầng giao thức)
+  * DNS Covert Channel Implementation (triển khai kênh bí mật qua DNS)
+  * CDN/Cloud Service Traffic Mimicry (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
 
-  * Ngụy trang sâu tầng giao thức.
-  * Kênh bí mật qua DNS.
-  * Bắt chước lưu lượng CDN/dịch vụ đám mây.
 * **Ngụy trang tài nguyên GPU (GĐ3)**:
-
-  * Mô phỏng workload ML động.
-  * Quản lý nhiệt & công suất nâng cao.
-  * Mô phỏng lịch nghiên cứu/học thuật.
+  * Dynamic Machine Learning Workload Simulation (mô phỏng tải công việc học máy động)
+  * Advanced Thermal & Power Management (quản lý nhiệt & công suất nâng cao)
+  * Intelligent Academic Schedule Simulation (mô phỏng lịch nghiên cứu học thuật thông minh)
+  
 * **Né tránh phát hiện (GĐ4)**:
+  * Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
+  * Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
+  * Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
 
-  * Đối sách với phân tích hành vi.
-  * Làm nhiễu bộ đếm hiệu năng.
-  * Phát hiện sandbox/VM nâng cao.
 * Khả năng hoạt động qua tường lửa & kiểm tra gói (đánh giá khả năng tương thích/độ bền với cơ chế kiểm soát mạng).
 
 # Yêu cầu tích hợp & ràng buộc
