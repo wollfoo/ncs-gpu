@@ -1,0 +1,27 @@
+[package]
+name = "nats-lite"
+version = "0.1.0"
+edition = "2021"
+authors = ["Opus GPU Team"]
+description = "Lightweight async NATS client for job scheduling"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+
+# NATS specific
+nats = { workspace = true }
+
+# Async utilities
+tokio-util = "0.7"
+pin-project = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+    "control-plane/scheduler",
+    "data-plane/executor", 
+    "common/nats-lite",
+    "common/job-core"
+]
+
+[workspace.dependencies]
+# Core dependencies
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+thiserror = "1.0"
+
+# gRPC & networking
+tonic = "0.10"
+prost = "0.12"
+tonic-build = "0.10"
+tokio-stream = "0.1"
+
+# GPU & CUDA (bindings)
+cudarc = { version = "0.10", features = ["std"] }
+nvml-wrapper = "0.9"
+
+# Message queue
+nats = "0.24"
+redis = { version = "0.24", features = ["tokio-comp"] }
+
+# Storage & state
+etcd-rs = "1.0"
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-rustls"] }
+
+# Security
+rustls = "0.21"
+tokio-rustls = "0.24"
+rcgen = "0.11"
+jsonwebtoken = "9.0"
+
+# Performance & monitoring  
+prometheus = "0.13"
+opentelemetry = "0.21"
+opentelemetry-jaeger = "0.20"
+
+# Utilities
+clap = { version = "4.0", features = ["derive"] }
+config = "0.13"
+uuid = { version = "1.0", features = ["v4"] }
+bytes = "1.0"
+futures = "0.3"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+debug = true

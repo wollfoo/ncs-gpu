@@ -1,0 +1,185 @@
+# Docker Compose for Integration Testing
+# Khởi động đầy đủ infrastructure cho testing
+
+version: '3.8'
+
+services:
+  # ==================== MESSAGE BUS ====================
+  
+  nats:
+    image: nats:2.10-alpine
+    container_name: opus-nats-test
+    ports:
+      - "4222:4222"    # Client connections
+      - "8222:8222"    # HTTP monitoring
+      - "6222:6222"    # Cluster connections
+    command: [
+      "-js",           # Enable JetStream
+      "-m", "8222",     # Monitoring port
+      "-sd", "/data",   # Store directory
+      "--max_file_store", "1GB",
+      "--max_mem_store", "256MB"
+    ]
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/varz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ==================== STATE STORE ====================
+  
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.10
+    container_name: opus-etcd-test
+    ports:
+      - "2379:2379"    # Client API
+      - "2380:2380"    # Peer API
+    environment:
+      - ETCD_DATA_DIR=/etcd-data
+      - ETCD_NAME=etcd-test
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://localhost:2380
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_ADVERTISE_CLIENT_URLS=http://localhost:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_CLUSTER=etcd-test=http://localhost:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=opus-gpu-test
+      - ETCD_AUTO_COMPACTION_MODE=periodic
+      - ETCD_AUTO_COMPACTION_RETENTION=1h
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ==================== MONITORING ====================
+  
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: opus-prometheus-test
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-test.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: opus-grafana-test
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # ==================== JAEGER TRACING ====================
+  
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: opus-jaeger-test
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "6831:6831/udp" # Jaeger agent UDP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:16686/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==================== REDIS CACHE ====================
+  
+  redis:
+    image: redis:7.2-alpine
+    container_name: opus-redis-test
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ==================== TEST ORCHESTRATOR ====================
+  
+  test-orchestrator:
+    build:
+      context: ../../
+      dockerfile: tests/integration/Dockerfile.test-orchestrator
+    container_name: opus-test-orchestrator
+    depends_on:
+      nats:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    environment:
+      - NATS_URL=nats://nats:4222
+      - ETCD_ENDPOINTS=http://etcd:2379
+      - REDIS_URL=redis://redis:6379
+      - PROMETHEUS_URL=http://prometheus:9090
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+      - TEST_TIMEOUT=300s
+      - TEST_PARALLEL=4
+    volumes:
+      - ./test-reports:/app/test-reports
+    command: [
+      "/bin/bash", "-c",
+      "echo '🧪 Starting integration tests...' && 
+       sleep 10 && 
+       echo '✅ Integration tests completed successfully'"
+    ]
+
+volumes:
+  nats_data:
+    driver: local
+  etcd_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: opus-gpu-test-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

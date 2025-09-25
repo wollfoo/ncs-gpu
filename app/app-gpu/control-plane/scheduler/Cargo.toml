@@ -1,0 +1,60 @@
+[package]
+name = "opus-scheduler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Opus GPU Team"]
+description = "High-performance GPU task scheduler with backpressure control"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# gRPC
+tonic = { workspace = true }
+prost = { workspace = true }
+tonic-build = { workspace = true }
+tokio-stream = { workspace = true }
+
+# Message queue
+nats = { workspace = true }
+
+# Storage
+etcd-rs = { workspace = true }
+
+# Security
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+jsonwebtoken = { workspace = true }
+
+# GPU monitoring
+nvml-wrapper = { workspace = true }
+
+# Monitoring
+prometheus = { workspace = true }
+opentelemetry = { workspace = true }
+
+# Utilities
+clap = { workspace = true }
+config = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+
+# Time & async utilities
+tokio-util = "0.7"
+pin-project = "1.0"
+dashmap = "5.0"
+once_cell = "1.0"
+
+[build-dependencies]
+tonic-build = { workspace = true }
+
+[[bin]]
+name = "scheduler"
+path = "src/main.rs"
