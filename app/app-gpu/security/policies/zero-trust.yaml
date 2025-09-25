@@ -1,0 +1,16 @@
+apiVersion: security.opus/v1
+kind: ZeroTrustPolicy
+metadata:
+  name: default
+spec:
+  identity:
+    mtls: required
+    issuers:
+      - vault://pki/cluster
+  authorization:
+    engine: opa
+    bundles:
+      - s3://opa-bundles/app-gpu/baseline.tar.gz
+  telemetry:
+    auditLog: enabled
+    retentionDays: 30

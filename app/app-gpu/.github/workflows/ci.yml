@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - 'control-plane/**'
+      - 'data-plane/**'
+      - 'tooling/**'
+      - '.github/workflows/**'
+      - 'Cargo.toml'
+      - 'go.mod'
+      - 'package.json'
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Cargo test
+        run: cargo test --all
+
+  go:
+    name: Go Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-gpu/control-plane/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Go test
+        run: go test ./...
+
+  node:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-gpu/tooling/ts-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: npm install
+      - name: Lint
+        run: npm run lint -- --max-warnings=0
+      - name: Test
+        run: npm test
+
+  sbom:
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+    env:
+      SBOM_REGISTRY_URL: ${{ secrets.SBOM_REGISTRY_URL }}
+      SBOM_REGISTRY_TOKEN: ${{ secrets.SBOM_REGISTRY_TOKEN }}
+      SBOM_ARTIFACT_NAME: ${{ secrets.SBOM_ARTIFACT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate SBOM (CycloneDX)
+        uses: CycloneDX/gh-actions-generate-sbom@v2
+        with:
+          path: app-gpu
+          output-format: json
+          output-directory: sbom-artifacts
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-artifacts
+      - name: Push SBOM to external registry (optional)
+        if: env.SBOM_REGISTRY_URL != ''
+        run: bash app-gpu/tooling/scripts/upload_sbom.sh sbom-artifacts/bom.json

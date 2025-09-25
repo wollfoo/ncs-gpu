@@ -1,0 +1,16 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Go
+bin/
+coverage.out
+
+# Node
+node_modules/
+dist/
+
+# General
+.env
+.DS_Store
+*.log

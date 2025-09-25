@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  nats:
+    image: nats:2.10
+    ports:
+      - "4222:4222"
+  scheduler:
+    build: ../control-plane/scheduler
+    depends_on:
+      - nats
+  executor:
+    build: ../data-plane/executor
+    depends_on:
+      - nats

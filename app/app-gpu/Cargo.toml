@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "control-plane/scheduler",
+    "data-plane/executor"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+authors = ["Opus GPU Team"]
