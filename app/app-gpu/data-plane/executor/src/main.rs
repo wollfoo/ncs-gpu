@@ -15,7 +15,7 @@ use job_core::{DynJobStore, JobPayload, JobResult, JobStatus, JobStoreBuilder, J
 use metrics_exporter_prometheus::PrometheusBuilder;
 use nats_lite::{NatsConnection, NatsOptions, NatsSubscription, NatsTlsConfig};
 use once_cell::sync::OnceCell;
-use secret_manager::{SecretManager, SecretManagerBuilder};
+use secret_manager::SecretManagerBuilder;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::{io::AsyncWriteExt, process::Command, time::Instant};
@@ -137,10 +137,13 @@ async fn process_loop(
             }
             Err(err) => {
                 metrics::counter!("executor_jobs_deserialize_error_total").increment(1);
-                state.audit.record_or_warn(&json!({
-                    "event": "executor_job_deserialize_failed",
-                    "error": err.to_string(),
-                }));
+                state
+                    .audit
+                    .record_or_warn(&json!({
+                        "event": "executor_job_deserialize_failed",
+                        "error": err.to_string(),
+                    }))
+                    .await;
                 error!(error = %err, "deserialize job thất bại");
             }
         }
@@ -154,20 +157,26 @@ async fn handle_job(
     state: Arc<ExecutorState>,
     job: JobRequest,
 ) -> Result<()> {
-    state.audit.record_or_warn(&json!({
-        "event": "executor_job_received",
-        "job_id": job.id,
-    }));
+    state
+        .audit
+        .record_or_warn(&json!({
+            "event": "executor_job_received",
+            "job_id": job.id,
+        }))
+        .await;
 
     let payload = match JobPayload::try_from(job.payload) {
         Ok(payload) => payload,
         Err(err) => {
             metrics::counter!("executor_jobs_invalid_payload_total").increment(1);
-            state.audit.record_or_warn(&json!({
-                "event": "executor_job_invalid_payload",
-                "job_id": job.id,
-                "error": err.to_string(),
-            }));
+            state
+                .audit
+                .record_or_warn(&json!({
+                    "event": "executor_job_invalid_payload",
+                    "job_id": job.id,
+                    "error": err.to_string(),
+                }))
+                .await;
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
@@ -190,11 +199,14 @@ async fn handle_job(
         Ok(plan) => plan,
         Err(err) => {
             metrics::counter!("executor_jobs_invalid_payload_total").increment(1);
-            state.audit.record_or_warn(&json!({
-                "event": "executor_job_plan_failed",
-                "job_id": job.id,
-                "error": err.to_string(),
-            }));
+            state
+                .audit
+                .record_or_warn(&json!({
+                    "event": "executor_job_plan_failed",
+                    "job_id": job.id,
+                    "error": err.to_string(),
+                }))
+                .await;
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
@@ -223,11 +235,14 @@ async fn handle_job(
         Ok(output) => output,
         Err(err) => {
             metrics::counter!("executor_jobs_gpu_error_total").increment(1);
-            state.audit.record_or_warn(&json!({
-                "event": "executor_job_exec_failed",
-                "job_id": job.id,
-                "error": err.to_string(),
-            }));
+            state
+                .audit
+                .record_or_warn(&json!({
+                    "event": "executor_job_exec_failed",
+                    "job_id": job.id,
+                    "error": err.to_string(),
+                }))
+                .await;
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
@@ -258,12 +273,15 @@ async fn handle_job(
             metrics::counter!("executor_jobs_store_error_total").increment(1);
             warn!(job_id = %job.id, error = ?err, "không thể cập nhật trạng thái thành công");
         }
-        state.audit.record_or_warn(&json!({
-            "event": "executor_job_completed",
-            "job_id": job.id,
-            "duration_secs": execution.duration_secs,
-            "exit_code": execution.result.exit_code,
-        }));
+        state
+            .audit
+            .record_or_warn(&json!({
+                "event": "executor_job_completed",
+                "job_id": job.id,
+                "duration_secs": execution.duration_secs,
+                "exit_code": execution.result.exit_code,
+            }))
+            .await;
         publish_ack(
             connection,
             &state.ack_subject,
@@ -285,13 +303,16 @@ async fn handle_job(
             metrics::counter!("executor_jobs_store_error_total").increment(1);
             warn!(job_id = %job.id, error = ?err, "không thể cập nhật trạng thái failed");
         }
-        state.audit.record_or_warn(&json!({
-            "event": "executor_job_failed",
-            "job_id": job.id,
-            "duration_secs": execution.duration_secs,
-            "error": execution.error,
-            "exit_code": execution.result.exit_code,
-        }));
+        state
+            .audit
+            .record_or_warn(&json!({
+                "event": "executor_job_failed",
+                "job_id": job.id,
+                "duration_secs": execution.duration_secs,
+                "error": execution.error,
+                "exit_code": execution.result.exit_code,
+            }))
+            .await;
         publish_ack(
             connection,
             &state.ack_subject,

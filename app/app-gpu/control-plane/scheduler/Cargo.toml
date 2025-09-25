@@ -23,6 +23,6 @@ job-core = { path = "../../common/job-core" }
 audit = { path = "../../common/audit" }
 secret-manager = { path = "../../common/secret-manager" }
 axum-server = { version = "0.6", features = ["tls-rustls"] }
-tokio-rustls = "0.25"
-rustls = { version = "0.22", features = ["tls12"] }
+tokio-rustls = "0.24"
+rustls = "0.21"
 rustls-pemfile = "1"

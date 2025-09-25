@@ -1,25 +1,21 @@
-use std::{
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
+use anyhow::anyhow;
 use audit::{default_audit_path, AuditLogger};
 use axum::{
-    extract::{ConnectInfo, Path, State},
+    extract::{ConnectInfo, Path as AxumPath, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
 };
-use axum_server::Handle;
+use axum_server::{tls_rustls::RustlsConfig, Handle};
 use job_core::{
     DynJobStore, JobError, JobPayload, JobRecord, JobStatus, JobStoreBuilder, JobUpdate,
 };
 use metrics_exporter_prometheus::PrometheusBuilder;
 use nats_lite::{NatsConnection, NatsOptions, NatsTlsConfig};
 use once_cell::sync::OnceCell;
-use secret_manager::{SecretManager, SecretManagerBuilder};
+use secret_manager::{ChainedSecretProvider, SecretManager, SecretManagerBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{net::TcpListener, signal};
@@ -33,7 +29,7 @@ use self::tls::load_server_config;
 struct AppState {
     nats: NatsConnection,
     subject: String,
-    secret_manager: Arc<SecretManager<secret_manager::ChainedSecretProvider>>,
+    secret_manager: Arc<SecretManager<ChainedSecretProvider>>,
     bearer_token_key: Option<String>,
     store: DynJobStore,
     audit: AuditLogger,
@@ -167,7 +163,7 @@ async fn create_job(
 
 async fn get_job(
     ConnectInfo(source): ConnectInfo<SocketAddr>,
-    Path(job_id): Path<String>,
+    AxumPath(job_id): AxumPath<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<JobDetailsResponse>, StatusCode> {
     match state.store.get_job(&job_id).await {
@@ -266,19 +262,42 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(tls) = config.tls {
         let server_config = Arc::new(load_server_config(&tls)?);
-        axum_server::bind_rustls_config(config.http_addr, server_config)
-            .handle(shutdown_handle)
+        let rustls_config = RustlsConfig::from_config(server_config);
+        let server = axum_server::bind_rustls(config.http_addr, rustls_config)
+            .handle(shutdown_handle.clone())
             .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-            .with_graceful_shutdown(graceful)
-            .await?;
+            .into_future();
+        tokio::pin!(server);
+
+        tokio::select! {
+            result = &mut server => {
+                result?;
+            }
+            _ = graceful => {
+                if let Err(err) = (&mut server).await {
+                    error!(error = %err, "scheduler server error");
+                }
+            }
+        }
     } else {
         let listener = TcpListener::bind(config.http_addr).await?;
-        axum::serve(
+        let server = axum::serve(
             listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
         )
-        .with_graceful_shutdown(graceful)
-        .await?;
+        .into_future();
+        tokio::pin!(server);
+
+        tokio::select! {
+            result = &mut server => {
+                result?;
+            }
+            _ = graceful => {
+                if let Err(err) = (&mut server).await {
+                    error!(error = %err, "scheduler server error");
+                }
+            }
+        }
     }
 
     info!("scheduler stopped");
@@ -434,8 +453,10 @@ mod tls {
     use std::{fs, io::BufReader, path::Path, sync::Arc};
 
     use anyhow::{anyhow, Context, Result};
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    use rustls::{self, server::AllowAnyAuthenticatedClient, RootCertStore, ServerConfig};
+    use rustls::{
+        self, server::AllowAnyAuthenticatedClient, Certificate, PrivateKey, RootCertStore,
+        ServerConfig,
+    };
     use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 
     use super::SchedulerTlsConfig;
@@ -454,15 +475,15 @@ mod tls {
         Ok(config)
     }
 
-    fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
+    fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
         let file = fs::File::open(path)
             .with_context(|| format!("không mở được cert: {}", path.display()))?;
         let mut reader = BufReader::new(file);
         let certs = certs(&mut reader).map_err(|err| anyhow!("đọc cert thất bại: {err}"))?;
-        Ok(certs)
+        Ok(certs.into_iter().map(Certificate).collect())
     }
 
-    fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
+    fn load_private_key(path: &Path) -> Result<PrivateKey> {
         let file = fs::File::open(path)
             .with_context(|| format!("không mở được private key: {}", path.display()))?;
         let mut reader = BufReader::new(file);
@@ -471,7 +492,7 @@ mod tls {
             .into_iter()
             .next()
         {
-            return Ok(key);
+            return Ok(PrivateKey(key));
         }
         let file = fs::File::open(path)
             .with_context(|| format!("không mở được private key: {}", path.display()))?;
@@ -481,7 +502,7 @@ mod tls {
             .into_iter()
             .next()
         {
-            return Ok(key);
+            return Ok(PrivateKey(key));
         }
         Err(anyhow!(
             "không tìm thấy private key hợp lệ trong {}",
@@ -494,7 +515,7 @@ mod tls {
         let mut store = RootCertStore::empty();
         for cert in certs {
             store
-                .add(cert)
+                .add(&cert)
                 .map_err(|err| anyhow!("không thêm được CA: {err}"))?;
         }
         Ok(store)

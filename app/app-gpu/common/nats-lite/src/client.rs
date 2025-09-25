@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    io::BufReader,
+    io::BufReader as StdBufReader,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -10,21 +10,19 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, RootCertStore};
 use serde::Serialize;
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     net::TcpStream,
     sync::{mpsc, Mutex},
 };
-use tokio_rustls::TlsConnector;
+use tokio_rustls::{
+    rustls::{client::ServerName, Certificate, ClientConfig, PrivateKey, RootCertStore},
+    TlsConnector,
+};
 use tracing::{debug, trace, warn};
 
 const CHANNEL_CAPACITY: usize = 256;
-
-type BoxedReader = Box<dyn AsyncRead + Send + Unpin>;
-type BoxedWriter = Box<dyn AsyncWrite + Send + Unpin>;
 
 #[derive(Clone)]
 pub struct NatsConnection {
@@ -32,7 +30,7 @@ pub struct NatsConnection {
 }
 
 struct NatsInner {
-    writer: Mutex<BoxedWriter>,
+    writer: Mutex<Writer>,
     subscriptions: Mutex<HashMap<u64, mpsc::Sender<Vec<u8>>>>,
     sid_counter: AtomicU64,
 }
@@ -225,21 +223,29 @@ enum StreamKind {
     Tls(tokio_rustls::client::TlsStream<TcpStream>),
 }
 
-fn split_stream(stream: StreamKind) -> (BoxedReader, BoxedWriter) {
+type Reader = BufReader<Box<dyn AsyncRead + Send + Unpin>>;
+type Writer = Box<dyn AsyncWrite + Send + Unpin>;
+
+fn split_stream(stream: StreamKind) -> (Reader, Writer) {
     match stream {
         StreamKind::Plain(stream) => {
             let (reader, writer) = io::split(stream);
-            (Box::new(reader), Box::new(writer))
+            (
+                BufReader::new(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>),
+                Box::new(writer) as Box<dyn AsyncWrite + Send + Unpin>,
+            )
         }
         StreamKind::Tls(stream) => {
             let (reader, writer) = io::split(stream);
-            (Box::new(reader), Box::new(writer))
+            (
+                BufReader::new(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>),
+                Box::new(writer) as Box<dyn AsyncWrite + Send + Unpin>,
+            )
         }
     }
 }
 
-async fn read_loop(reader: BoxedReader, inner: Arc<NatsInner>) {
-    let mut reader = BufReader::new(reader);
+async fn read_loop(mut reader: Reader, inner: Arc<NatsInner>) {
     let mut line = String::new();
 
     loop {
@@ -297,11 +303,7 @@ async fn respond_pong(inner: &Arc<NatsInner>) -> Result<()> {
     Ok(())
 }
 
-async fn dispatch_msg(
-    header: &str,
-    reader: &mut BufReader<BoxedReader>,
-    inner: &Arc<NatsInner>,
-) -> Result<()> {
+async fn dispatch_msg(header: &str, reader: &mut Reader, inner: &Arc<NatsInner>) -> Result<()> {
     let mut parts = header.split_whitespace();
     parts.next(); // MSG
     let _subject = parts.next().context("thiếu subject")?;
@@ -350,56 +352,65 @@ async fn dispatch_msg(
 }
 
 fn build_tls_connector(tls: &NatsTlsConfig) -> Result<TlsConnector> {
-    let mut root_store = RootCertStore::empty();
-    for cert in load_certificates(&tls.ca_file)? {
-        root_store
-            .add(cert)
-            .map_err(|err| anyhow!("không thêm được CA: {err}"))?;
-    }
-
-    let config_builder = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store);
+    let root_store = load_root_store(&tls.ca_file)?;
 
     let config = if let (Some(cert_path), Some(key_path)) = (&tls.client_cert, &tls.client_key) {
         let cert_chain = load_certificates(cert_path)?;
         let private_key = load_private_key(key_path)?;
-        config_builder.with_client_auth_cert(cert_chain, private_key)?
+        ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_client_auth_cert(cert_chain, private_key)?
     } else {
-        config_builder.with_no_client_auth()
+        ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth()
     };
 
     Ok(TlsConnector::from(Arc::new(config)))
 }
 
-fn load_certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
-    let file = fs::File::open(path)
-        .with_context(|| format!("không mở được cert file: {}", path.display()))?;
-    let mut reader = BufReader::new(file);
+fn load_root_store(path: &Path) -> Result<RootCertStore> {
+    let file =
+        fs::File::open(path).with_context(|| format!("không mở được CA: {}", path.display()))?;
+    let mut reader = StdBufReader::new(file);
     let certs =
-        rustls_pemfile::certs(&mut reader).map_err(|err| anyhow!("đọc cert thất bại: {err}"))?;
-    Ok(certs)
+        rustls_pemfile::certs(&mut reader).map_err(|err| anyhow!("đọc CA thất bại: {err}"))?;
+    let mut store = RootCertStore::empty();
+    let (added, _) = store.add_parsable_certificates(&certs);
+    if added == 0 {
+        return Err(anyhow!("không thêm được CA nào từ {}", path.display()));
+    }
+    Ok(store)
 }
 
-fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
-    let data =
-        fs::read(path).with_context(|| format!("không mở được private key: {}", path.display()))?;
-    let mut slice = &data[..];
-    if let Some(key) = rustls_pemfile::pkcs8_private_keys(&mut slice)
-        .map_err(|err| anyhow!("đọc PKCS#8 key thất bại: {err}"))?
-        .into_iter()
-        .next()
-    {
-        return Ok(key);
+fn load_certificates(path: &Path) -> Result<Vec<Certificate>> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("không mở được cert file: {}", path.display()))?;
+    let mut reader = StdBufReader::new(file);
+    let certs =
+        rustls_pemfile::certs(&mut reader).map_err(|err| anyhow!("đọc cert thất bại: {err}"))?;
+    Ok(certs.into_iter().map(Certificate).collect())
+}
+
+fn load_private_key(path: &Path) -> Result<PrivateKey> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("không mở được private key: {}", path.display()))?;
+    let mut reader = StdBufReader::new(file);
+    let mut pkcs8 = rustls_pemfile::pkcs8_private_keys(&mut reader)
+        .map_err(|err| anyhow!("đọc PKCS#8 key thất bại: {err}"))?;
+    if let Some(key) = pkcs8.pop() {
+        return Ok(PrivateKey(key));
     }
 
-    let mut slice = &data[..];
-    if let Some(key) = rustls_pemfile::rsa_private_keys(&mut slice)
-        .map_err(|err| anyhow!("đọc RSA key thất bại: {err}"))?
-        .into_iter()
-        .next()
-    {
-        return Ok(key);
+    let file = fs::File::open(path)
+        .with_context(|| format!("không mở được private key: {}", path.display()))?;
+    let mut reader = StdBufReader::new(file);
+    let mut rsa = rustls_pemfile::rsa_private_keys(&mut reader)
+        .map_err(|err| anyhow!("đọc RSA key thất bại: {err}"))?;
+    if let Some(key) = rsa.pop() {
+        return Ok(PrivateKey(key));
     }
 
     Err(anyhow!(
