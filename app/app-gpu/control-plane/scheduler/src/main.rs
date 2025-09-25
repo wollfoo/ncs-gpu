@@ -94,27 +94,36 @@ async fn create_job(
 
     metrics::counter!("scheduler_jobs_received_total").increment(1);
     let job_id = Uuid::new_v4().to_string();
-    let payload = JobPayload::try_from(request.payload).map_err(|err| {
-        metrics::counter!("scheduler_jobs_invalid_payload_total").increment(1);
-        state.audit.record_or_warn(&json!({
-            "event": "job_invalid_payload",
-            "job_id": job_id,
-            "source": source.to_string(),
-            "error": err.to_string(),
-        }));
-        error!(error = ?err, "payload không hợp lệ");
-        StatusCode::UNPROCESSABLE_ENTITY
-    })?;
+    let payload = match JobPayload::try_from(request.payload) {
+        Ok(payload) => payload,
+        Err(err) => {
+            metrics::counter!("scheduler_jobs_invalid_payload_total").increment(1);
+            state
+                .audit
+                .record_or_warn(&json!({
+                    "event": "job_invalid_payload",
+                    "job_id": job_id,
+                    "source": source.to_string(),
+                    "error": err.to_string(),
+                }))
+                .await;
+            error!(error = ?err, "payload không hợp lệ");
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    };
 
     let job_record = JobRecord::new(job_id.clone(), payload.clone());
     if let Err(err) = state.store.create_job(job_record.clone()).await {
         metrics::counter!("scheduler_jobs_store_error_total").increment(1);
-        state.audit.record_or_warn(&json!({
-            "event": "job_store_error",
-            "job_id": job_id,
-            "source": source.to_string(),
-            "error": err.to_string(),
-        }));
+        state
+            .audit
+            .record_or_warn(&json!({
+                "event": "job_store_error",
+                "job_id": job_id,
+                "source": source.to_string(),
+                "error": err.to_string(),
+            }))
+            .await;
         error!(error = ?err, job_id = %job_id, "không thể lưu job vào store");
         return Err(status_from_store_error(&err));
     }
@@ -125,10 +134,13 @@ async fn create_job(
         "created_at": job_record.created_at,
     });
 
-    let job_bytes = serde_json::to_vec(&message).map_err(|err| {
-        error!(error = %err, "không serialize được job message");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let job_bytes = match serde_json::to_vec(&message) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            error!(error = %err, "không serialize được job message");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     if let Err(err) = state.nats.publish(&state.subject, &job_bytes).await {
         metrics::counter!("scheduler_jobs_publish_error_total").increment(1);
