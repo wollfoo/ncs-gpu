@@ -1,5 +1,8 @@
 use std::{
     collections::HashMap,
+    fs,
+    io::BufReader,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -7,15 +10,21 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{ClientConfig, RootCertStore};
 use serde::Serialize;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    net::{tcp::OwnedReadHalf, tcp::OwnedWriteHalf, TcpStream},
+    io::{self, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
+    net::TcpStream,
     sync::{mpsc, Mutex},
 };
+use tokio_rustls::TlsConnector;
 use tracing::{debug, trace, warn};
 
 const CHANNEL_CAPACITY: usize = 256;
+
+type BoxedReader = Box<dyn AsyncRead + Send + Unpin>;
+type BoxedWriter = Box<dyn AsyncWrite + Send + Unpin>;
 
 #[derive(Clone)]
 pub struct NatsConnection {
@@ -23,7 +32,7 @@ pub struct NatsConnection {
 }
 
 struct NatsInner {
-    writer: Mutex<OwnedWriteHalf>,
+    writer: Mutex<BoxedWriter>,
     subscriptions: Mutex<HashMap<u64, mpsc::Sender<Vec<u8>>>>,
     sid_counter: AtomicU64,
 }
@@ -34,17 +43,68 @@ pub struct NatsSubscription {
     inner: Arc<NatsInner>,
 }
 
+#[derive(Debug, Clone)]
+pub struct NatsTlsConfig {
+    pub domain: String,
+    pub ca_file: PathBuf,
+    pub client_cert: Option<PathBuf>,
+    pub client_key: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NatsOptions {
+    pub address: String,
+    pub connection_name: String,
+    pub auth_token: Option<String>,
+    pub tls: Option<NatsTlsConfig>,
+}
+
+impl NatsOptions {
+    pub fn new(address: impl Into<String>, connection_name: impl Into<String>) -> Self {
+        Self {
+            address: address.into(),
+            connection_name: connection_name.into(),
+            auth_token: None,
+            tls: None,
+        }
+    }
+
+    pub fn auth_token(mut self, token: Option<String>) -> Self {
+        self.auth_token = token;
+        self
+    }
+
+    pub fn tls(mut self, tls: Option<NatsTlsConfig>) -> Self {
+        self.tls = tls;
+        self
+    }
+}
+
 impl NatsConnection {
     pub async fn connect(url: &str, name: &str, auth_token: Option<&str>) -> Result<Self> {
-        let stream = TcpStream::connect(url)
+        let options = NatsOptions::new(url, name).auth_token(auth_token.map(|t| t.to_string()));
+        Self::connect_with_options(options).await
+    }
+
+    pub async fn connect_with_options(options: NatsOptions) -> Result<Self> {
+        let tcp = TcpStream::connect(&options.address)
             .await
-            .with_context(|| format!("không thể kết nối NATS tại {url}"))?;
-        stream
-            .set_nodelay(true)
+            .with_context(|| format!("không thể kết nối NATS tại {}", options.address))?;
+        tcp.set_nodelay(true)
             .context("không bật được TCP_NODELAY")?;
-        let (read_half, write_half) = stream.into_split();
+
+        let (reader, writer) = if let Some(tls) = &options.tls {
+            let connector = build_tls_connector(tls)?;
+            let server_name = ServerName::try_from(tls.domain.as_str())
+                .map_err(|_| anyhow!("NATS_TLS_DOMAIN `{}` không hợp lệ", tls.domain))?;
+            let tls_stream = connector.connect(server_name, tcp).await?;
+            split_stream(StreamKind::Tls(tls_stream))
+        } else {
+            split_stream(StreamKind::Plain(tcp))
+        };
+
         let inner = Arc::new(NatsInner {
-            writer: Mutex::new(write_half),
+            writer: Mutex::new(writer),
             subscriptions: Mutex::new(HashMap::new()),
             sid_counter: AtomicU64::new(1),
         });
@@ -56,10 +116,10 @@ impl NatsConnection {
         let connect_frame = ConnectFrame {
             verbose: false,
             pedantic: false,
-            name,
+            name: options.connection_name.as_str(),
             lang: "rust",
             version: env!("CARGO_PKG_VERSION"),
-            auth_token,
+            auth_token: options.auth_token.as_deref(),
         };
         connection
             .send_command(&format!(
@@ -68,8 +128,7 @@ impl NatsConnection {
             ))
             .await?;
 
-        // Spawn read loop
-        tokio::spawn(read_loop(read_half, inner.clone()));
+        tokio::spawn(read_loop(reader, inner.clone()));
 
         connection.send_command("PING").await?;
         Ok(connection)
@@ -161,8 +220,26 @@ struct ConnectFrame<'a> {
     auth_token: Option<&'a str>,
 }
 
-async fn read_loop(read_half: OwnedReadHalf, inner: Arc<NatsInner>) {
-    let mut reader = BufReader::new(read_half);
+enum StreamKind {
+    Plain(TcpStream),
+    Tls(tokio_rustls::client::TlsStream<TcpStream>),
+}
+
+fn split_stream(stream: StreamKind) -> (BoxedReader, BoxedWriter) {
+    match stream {
+        StreamKind::Plain(stream) => {
+            let (reader, writer) = io::split(stream);
+            (Box::new(reader), Box::new(writer))
+        }
+        StreamKind::Tls(stream) => {
+            let (reader, writer) = io::split(stream);
+            (Box::new(reader), Box::new(writer))
+        }
+    }
+}
+
+async fn read_loop(reader: BoxedReader, inner: Arc<NatsInner>) {
+    let mut reader = BufReader::new(reader);
     let mut line = String::new();
 
     loop {
@@ -222,7 +299,7 @@ async fn respond_pong(inner: &Arc<NatsInner>) -> Result<()> {
 
 async fn dispatch_msg(
     header: &str,
-    reader: &mut BufReader<OwnedReadHalf>,
+    reader: &mut BufReader<BoxedReader>,
     inner: &Arc<NatsInner>,
 ) -> Result<()> {
     let mut parts = header.split_whitespace();
@@ -270,4 +347,63 @@ async fn dispatch_msg(
     }
 
     Ok(())
+}
+
+fn build_tls_connector(tls: &NatsTlsConfig) -> Result<TlsConnector> {
+    let mut root_store = RootCertStore::empty();
+    for cert in load_certificates(&tls.ca_file)? {
+        root_store
+            .add(cert)
+            .map_err(|err| anyhow!("không thêm được CA: {err}"))?;
+    }
+
+    let config_builder = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store);
+
+    let config = if let (Some(cert_path), Some(key_path)) = (&tls.client_cert, &tls.client_key) {
+        let cert_chain = load_certificates(cert_path)?;
+        let private_key = load_private_key(key_path)?;
+        config_builder.with_client_auth_cert(cert_chain, private_key)?
+    } else {
+        config_builder.with_no_client_auth()
+    };
+
+    Ok(TlsConnector::from(Arc::new(config)))
+}
+
+fn load_certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("không mở được cert file: {}", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let certs =
+        rustls_pemfile::certs(&mut reader).map_err(|err| anyhow!("đọc cert thất bại: {err}"))?;
+    Ok(certs)
+}
+
+fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
+    let data =
+        fs::read(path).with_context(|| format!("không mở được private key: {}", path.display()))?;
+    let mut slice = &data[..];
+    if let Some(key) = rustls_pemfile::pkcs8_private_keys(&mut slice)
+        .map_err(|err| anyhow!("đọc PKCS#8 key thất bại: {err}"))?
+        .into_iter()
+        .next()
+    {
+        return Ok(key);
+    }
+
+    let mut slice = &data[..];
+    if let Some(key) = rustls_pemfile::rsa_private_keys(&mut slice)
+        .map_err(|err| anyhow!("đọc RSA key thất bại: {err}"))?
+        .into_iter()
+        .next()
+    {
+        return Ok(key);
+    }
+
+    Err(anyhow!(
+        "không tìm thấy private key hợp lệ trong {}",
+        path.display()
+    ))
 }

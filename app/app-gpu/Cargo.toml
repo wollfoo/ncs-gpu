@@ -3,7 +3,9 @@ members = [
     "control-plane/scheduler",
     "data-plane/executor",
     "common/nats-lite",
-    "common/job-core"
+    "common/job-core",
+    "common/secret-manager",
+    "common/audit"
 ]
 resolver = "2"
 

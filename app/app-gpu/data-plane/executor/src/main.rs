@@ -3,25 +3,24 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{anyhow, Context, Result};
+use audit::{default_audit_path, AuditLogger};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use job_core::{DynJobStore, JobPayload, JobResult, JobStatus, JobStoreBuilder, JobUpdate};
 use metrics_exporter_prometheus::PrometheusBuilder;
-use nats_lite::{NatsConnection, NatsSubscription};
+use nats_lite::{NatsConnection, NatsOptions, NatsSubscription, NatsTlsConfig};
 use once_cell::sync::OnceCell;
+use secret_manager::{SecretManager, SecretManagerBuilder};
 use serde::Deserialize;
+use serde_json::json;
 use tokio::{io::AsyncWriteExt, process::Command, time::Instant};
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-#[derive(Debug, Deserialize)]
-struct JobRequest {
-    id: String,
-    payload: serde_json::Value,
-}
 
 struct ExecutionPlan {
     command: PathBuf,
@@ -37,6 +36,31 @@ struct ExecutionOutput {
     error: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct JobRequest {
+    id: String,
+    payload: serde_json::Value,
+}
+
+#[derive(Clone)]
+struct ExecutorState {
+    ack_subject: String,
+    store: DynJobStore,
+    audit: AuditLogger,
+}
+
+struct ExecutorConfig {
+    nats_url: String,
+    subject: String,
+    ack_subject: String,
+    queue_group: String,
+    nats_tls: Option<NatsTlsConfig>,
+    audit_path: PathBuf,
+    secret_refresh: Option<Duration>,
+    secret_file_dir: Option<PathBuf>,
+    simulated_vault: Option<PathBuf>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::registry()
@@ -46,43 +70,78 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "127.0.0.1:4222".into());
-    let subject = std::env::var("EXECUTOR_SUBJECT").unwrap_or_else(|_| "gpu.jobs".into());
-    let ack_subject =
-        std::env::var("EXECUTOR_ACK_SUBJECT").unwrap_or_else(|_| format!("{subject}.ack"));
-    let queue_group =
-        std::env::var("EXECUTOR_QUEUE_GROUP").unwrap_or_else(|_| "gpu-executors".into());
-    let auth_token = std::env::var("NATS_AUTH_TOKEN").ok();
-
     init_metrics()?;
+    let config = ExecutorConfig::from_env()?;
 
-    let connection = NatsConnection::connect(&nats_url, "executor", auth_token.as_deref()).await?;
-    let mut subscription = connection.queue_subscribe(&subject, &queue_group).await?;
+    let mut secret_builder =
+        SecretManagerBuilder::new().with_env_provider(None, config.secret_file_dir.clone());
+    if let Some(path) = &config.simulated_vault {
+        secret_builder = secret_builder.with_simulated_vault(path.clone());
+    }
+    if let Some(refresh) = config.secret_refresh {
+        secret_builder = secret_builder.with_refresh_interval(refresh);
+    }
+    let secret_manager = secret_builder.build();
+
+    let audit_logger = AuditLogger::new(&config.audit_path).await?;
+
+    let nats_auth_token = match secret_manager.secret("NATS_AUTH_TOKEN").await {
+        Ok(token) => Some(token),
+        Err(err) => {
+            warn!(error = %err, "không lấy được NATS_AUTH_TOKEN, executor sẽ kết nối NATS không bảo vệ");
+            None
+        }
+    };
+
+    let mut nats_options =
+        NatsOptions::new(&config.nats_url, "executor").auth_token(nats_auth_token);
+    if let Some(tls) = config.nats_tls.clone() {
+        nats_options = nats_options.tls(Some(tls));
+    }
+
+    let connection = NatsConnection::connect_with_options(nats_options).await?;
+    let mut subscription = connection
+        .queue_subscribe(&config.subject, &config.queue_group)
+        .await?;
     let store = JobStoreBuilder::from_env().build().await?;
 
-    info!(url = %nats_url, %subject, %queue_group, "executor subscribed");
+    info!(
+        url = %config.nats_url,
+        subject = %config.subject,
+        queue_group = %config.queue_group,
+        "executor subscribed"
+    );
 
-    process_loop(connection, &ack_subject, &mut subscription, store).await
+    let state = Arc::new(ExecutorState {
+        ack_subject: config.ack_subject,
+        store,
+        audit: audit_logger.clone(),
+    });
+
+    process_loop(connection, &mut subscription, state).await
 }
 
 async fn process_loop(
     connection: NatsConnection,
-    ack_subject: &str,
     subscription: &mut NatsSubscription,
-    store: DynJobStore,
+    state: Arc<ExecutorState>,
 ) -> Result<()> {
     while let Some(payload) = subscription.next().await {
         metrics::counter!("executor_jobs_received_total").increment(1);
         match serde_json::from_slice::<JobRequest>(&payload) {
             Ok(job) => {
-                if let Err(err) = handle_job(&connection, ack_subject, store.clone(), job).await {
+                if let Err(err) = handle_job(&connection, Arc::clone(&state), job).await {
                     error!(error = %err, "xử lý job thất bại");
                     metrics::counter!("executor_jobs_failed_total").increment(1);
                 }
             }
             Err(err) => {
-                error!(error = %err, "deserialize job thất bại");
                 metrics::counter!("executor_jobs_deserialize_error_total").increment(1);
+                state.audit.record_or_warn(&json!({
+                    "event": "executor_job_deserialize_failed",
+                    "error": err.to_string(),
+                }));
+                error!(error = %err, "deserialize job thất bại");
             }
         }
     }
@@ -92,31 +151,37 @@ async fn process_loop(
 
 async fn handle_job(
     connection: &NatsConnection,
-    ack_subject: &str,
-    store: DynJobStore,
+    state: Arc<ExecutorState>,
     job: JobRequest,
 ) -> Result<()> {
-    info!(job_id = %job.id, "job_received");
+    state.audit.record_or_warn(&json!({
+        "event": "executor_job_received",
+        "job_id": job.id,
+    }));
 
     let payload = match JobPayload::try_from(job.payload) {
         Ok(payload) => payload,
         Err(err) => {
             metrics::counter!("executor_jobs_invalid_payload_total").increment(1);
-            error!(job_id = %job.id, error = ?err, "payload không hợp lệ tại executor");
+            state.audit.record_or_warn(&json!({
+                "event": "executor_job_invalid_payload",
+                "job_id": job.id,
+                "error": err.to_string(),
+            }));
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
                 error: Some(format!("payload invalid: {err}")),
                 duration_secs: None,
             };
-            if let Err(store_err) = store.update_job(&job.id, update).await {
+            if let Err(store_err) = state.store.update_job(&job.id, update).await {
                 warn!(job_id = %job.id, error = ?store_err, "không thể cập nhật job failed sau khi payload invalid");
             }
             return Ok(());
         }
     };
 
-    if let Err(err) = store.update_job(&job.id, JobUpdate::running()).await {
+    if let Err(err) = state.store.update_job(&job.id, JobUpdate::running()).await {
         metrics::counter!("executor_jobs_store_error_total").increment(1);
         warn!(job_id = %job.id, error = ?err, "không thể đánh dấu job đang chạy");
     }
@@ -125,19 +190,23 @@ async fn handle_job(
         Ok(plan) => plan,
         Err(err) => {
             metrics::counter!("executor_jobs_invalid_payload_total").increment(1);
-            error!(job_id = %job.id, error = %err, "không tạo được execution plan");
+            state.audit.record_or_warn(&json!({
+                "event": "executor_job_plan_failed",
+                "job_id": job.id,
+                "error": err.to_string(),
+            }));
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
                 error: Some(err.to_string()),
                 duration_secs: None,
             };
-            if let Err(store_err) = store.update_job(&job.id, update).await {
+            if let Err(store_err) = state.store.update_job(&job.id, update).await {
                 warn!(job_id = %job.id, error = ?store_err, "không thể cập nhật job failed sau khi tạo plan thất bại");
             }
             publish_ack(
                 connection,
-                ack_subject,
+                &state.ack_subject,
                 &job.id,
                 JobStatus::Failed,
                 None,
@@ -154,19 +223,23 @@ async fn handle_job(
         Ok(output) => output,
         Err(err) => {
             metrics::counter!("executor_jobs_gpu_error_total").increment(1);
-            error!(job_id = %job.id, error = %err, "GPU job không thể chạy");
+            state.audit.record_or_warn(&json!({
+                "event": "executor_job_exec_failed",
+                "job_id": job.id,
+                "error": err.to_string(),
+            }));
             let update = JobUpdate {
                 status: JobStatus::Failed,
                 result: None,
                 error: Some(err.to_string()),
                 duration_secs: None,
             };
-            if let Err(store_err) = store.update_job(&job.id, update).await {
+            if let Err(store_err) = state.store.update_job(&job.id, update).await {
                 warn!(job_id = %job.id, error = ?store_err, "không thể cập nhật store sau GPU error");
             }
             publish_ack(
                 connection,
-                ack_subject,
+                &state.ack_subject,
                 &job.id,
                 JobStatus::Failed,
                 None,
@@ -181,19 +254,19 @@ async fn handle_job(
         metrics::counter!("executor_jobs_completed_total").increment(1);
         metrics::histogram!("executor_job_duration_seconds").record(execution.duration_secs);
         let update = JobUpdate::succeeded(execution.result.clone(), execution.duration_secs);
-        if let Err(err) = store.update_job(&job.id, update).await {
+        if let Err(err) = state.store.update_job(&job.id, update).await {
             metrics::counter!("executor_jobs_store_error_total").increment(1);
             warn!(job_id = %job.id, error = ?err, "không thể cập nhật trạng thái thành công");
         }
-        info!(
-            job_id = %job.id,
-            duration_secs = execution.duration_secs,
-            exit_code = ?execution.result.exit_code,
-            "job_completed"
-        );
+        state.audit.record_or_warn(&json!({
+            "event": "executor_job_completed",
+            "job_id": job.id,
+            "duration_secs": execution.duration_secs,
+            "exit_code": execution.result.exit_code,
+        }));
         publish_ack(
             connection,
-            ack_subject,
+            &state.ack_subject,
             &job.id,
             JobStatus::Succeeded,
             Some(execution.duration_secs),
@@ -208,20 +281,20 @@ async fn handle_job(
             error: execution.error.clone(),
             duration_secs: Some(execution.duration_secs),
         };
-        if let Err(err) = store.update_job(&job.id, update).await {
+        if let Err(err) = state.store.update_job(&job.id, update).await {
             metrics::counter!("executor_jobs_store_error_total").increment(1);
             warn!(job_id = %job.id, error = ?err, "không thể cập nhật trạng thái failed");
         }
-        error!(
-            job_id = %job.id,
-            duration_secs = execution.duration_secs,
-            error = ?execution.error,
-            exit_code = ?execution.result.exit_code,
-            "gpu job trả về thất bại"
-        );
+        state.audit.record_or_warn(&json!({
+            "event": "executor_job_failed",
+            "job_id": job.id,
+            "duration_secs": execution.duration_secs,
+            "error": execution.error,
+            "exit_code": execution.result.exit_code,
+        }));
         publish_ack(
             connection,
-            ack_subject,
+            &state.ack_subject,
             &job.id,
             JobStatus::Failed,
             Some(execution.duration_secs),
@@ -343,7 +416,7 @@ async fn publish_ack(
     duration_secs: Option<f64>,
     error: Option<&str>,
 ) -> Result<()> {
-    let payload = serde_json::json!({
+    let payload = json!({
         "id": job_id,
         "status": status_label(&status),
         "duration_secs": duration_secs,
@@ -379,4 +452,75 @@ fn init_metrics() -> Result<()> {
 
     let _ = PROM_HANDLE.set(handle);
     Ok(())
+}
+
+impl ExecutorConfig {
+    fn from_env() -> Result<Self> {
+        let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "127.0.0.1:4222".into());
+        let subject = std::env::var("EXECUTOR_SUBJECT").unwrap_or_else(|_| "gpu.jobs".into());
+        let ack_subject =
+            std::env::var("EXECUTOR_ACK_SUBJECT").unwrap_or_else(|_| format!("{subject}.ack"));
+        let queue_group =
+            std::env::var("EXECUTOR_QUEUE_GROUP").unwrap_or_else(|_| "gpu-executors".into());
+
+        let audit_path = std::env::var("AUDIT_LOG_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| default_audit_path("executor"));
+
+        let secret_refresh = std::env::var("SECRET_REFRESH_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_secs);
+        let secret_file_dir = std::env::var("SECRET_FILE_DIR").ok().map(PathBuf::from);
+        let simulated_vault = std::env::var("SIMULATED_VAULT_PATH")
+            .ok()
+            .map(PathBuf::from);
+
+        let nats_tls = build_nats_tls_config(&nats_url)?;
+
+        Ok(Self {
+            nats_url,
+            subject,
+            ack_subject,
+            queue_group,
+            nats_tls,
+            audit_path,
+            secret_refresh,
+            secret_file_dir,
+            simulated_vault,
+        })
+    }
+}
+
+fn build_nats_tls_config(nats_url: &str) -> Result<Option<NatsTlsConfig>> {
+    let ca_file = match std::env::var("NATS_TLS_CA_FILE") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => return Ok(None),
+    };
+    let domain =
+        std::env::var("NATS_TLS_DOMAIN").unwrap_or_else(|_| derive_domain_from_address(nats_url));
+    let client_cert = std::env::var("NATS_TLS_CLIENT_CERT")
+        .ok()
+        .map(PathBuf::from);
+    let client_key = std::env::var("NATS_TLS_CLIENT_KEY").ok().map(PathBuf::from);
+    if client_cert.is_some() ^ client_key.is_some() {
+        return Err(anyhow!(
+            "cần thiết lập đồng thời NATS_TLS_CLIENT_CERT và NATS_TLS_CLIENT_KEY khi bật mutual TLS"
+        ));
+    }
+    Ok(Some(NatsTlsConfig {
+        domain,
+        ca_file,
+        client_cert,
+        client_key,
+    }))
+}
+
+fn derive_domain_from_address(address: &str) -> String {
+    address
+        .split(':')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("127.0.0.1")
+        .to_string()
 }

@@ -1,29 +1,42 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
+use audit::{default_audit_path, AuditLogger};
 use axum::{
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
 };
+use axum_server::Handle;
 use job_core::{
     DynJobStore, JobError, JobPayload, JobRecord, JobStatus, JobStoreBuilder, JobUpdate,
 };
 use metrics_exporter_prometheus::PrometheusBuilder;
-use nats_lite::NatsConnection;
+use nats_lite::{NatsConnection, NatsOptions, NatsTlsConfig};
 use once_cell::sync::OnceCell;
+use secret_manager::{SecretManager, SecretManagerBuilder};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::{net::TcpListener, signal};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
+
+use self::tls::load_server_config;
 
 #[derive(Clone)]
 struct AppState {
     nats: NatsConnection,
     subject: String,
-    bearer_token: Option<String>,
+    secret_manager: Arc<SecretManager<secret_manager::ChainedSecretProvider>>,
+    bearer_token_key: Option<String>,
     store: DynJobStore,
+    audit: AuditLogger,
 }
 
 #[derive(Serialize)]
@@ -48,6 +61,26 @@ struct JobDetailsResponse {
     job: JobRecord,
 }
 
+#[derive(Debug)]
+struct SchedulerConfig {
+    http_addr: SocketAddr,
+    tls: Option<SchedulerTlsConfig>,
+    nats_url: String,
+    subject: String,
+    nats_tls: Option<NatsTlsConfig>,
+    audit_path: PathBuf,
+    secret_refresh: Option<Duration>,
+    secret_file_dir: Option<PathBuf>,
+    simulated_vault: Option<PathBuf>,
+}
+
+#[derive(Debug)]
+struct SchedulerTlsConfig {
+    cert: PathBuf,
+    key: PathBuf,
+    client_ca: PathBuf,
+}
+
 async fn health_handler() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
@@ -56,25 +89,23 @@ async fn health_handler() -> Json<HealthResponse> {
 }
 
 async fn create_job(
+    ConnectInfo(source): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(request): Json<CreateJobRequest>,
 ) -> Result<Json<CreateJobResponse>, StatusCode> {
-    if let Some(expected) = &state.bearer_token {
-        let provided = headers
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok());
-        let expected_header = format!("Bearer {expected}");
-        if provided != Some(expected_header.as_str()) {
-            metrics::counter!("scheduler_jobs_unauthorized_total").increment(1);
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-    }
+    state.ensure_authorized(&headers).await?;
 
     metrics::counter!("scheduler_jobs_received_total").increment(1);
     let job_id = Uuid::new_v4().to_string();
     let payload = JobPayload::try_from(request.payload).map_err(|err| {
         metrics::counter!("scheduler_jobs_invalid_payload_total").increment(1);
+        state.audit.record_or_warn(&json!({
+            "event": "job_invalid_payload",
+            "job_id": job_id,
+            "source": source.to_string(),
+            "error": err.to_string(),
+        }));
         error!(error = ?err, "payload không hợp lệ");
         StatusCode::UNPROCESSABLE_ENTITY
     })?;
@@ -82,11 +113,17 @@ async fn create_job(
     let job_record = JobRecord::new(job_id.clone(), payload.clone());
     if let Err(err) = state.store.create_job(job_record.clone()).await {
         metrics::counter!("scheduler_jobs_store_error_total").increment(1);
+        state.audit.record_or_warn(&json!({
+            "event": "job_store_error",
+            "job_id": job_id,
+            "source": source.to_string(),
+            "error": err.to_string(),
+        }));
         error!(error = ?err, job_id = %job_id, "không thể lưu job vào store");
         return Err(status_from_store_error(&err));
     }
 
-    let message = serde_json::json!({
+    let message = json!({
         "id": job_record.id.clone(),
         "payload": payload,
         "created_at": job_record.created_at,
@@ -104,26 +141,53 @@ async fn create_job(
         if let Err(store_err) = state.store.update_job(&job_id, update).await {
             error!(error = ?store_err, job_id = %job_id, "không thể cập nhật trạng thái thất bại");
         }
+        state.audit.record_or_warn(&json!({
+            "event": "job_publish_failed",
+            "job_id": job_id,
+            "source": source.to_string(),
+            "error": err.to_string(),
+        }));
         return Err(StatusCode::BAD_GATEWAY);
     }
 
     metrics::counter!("scheduler_jobs_published_total").increment(1);
     metrics::histogram!("scheduler_job_payload_bytes").record(job_bytes.len() as f64);
+    state.audit.record_or_warn(&json!({
+        "event": "job_enqueued",
+        "job_id": job_id,
+        "source": source.to_string(),
+        "payload_bytes": job_bytes.len(),
+    }));
 
     Ok(Json(CreateJobResponse {
-        id: job_id,
+        id: job_record.id,
         status: JobStatus::Queued,
     }))
 }
 
 async fn get_job(
+    ConnectInfo(source): ConnectInfo<SocketAddr>,
     Path(job_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<JobDetailsResponse>, StatusCode> {
     match state.store.get_job(&job_id).await {
-        Ok(Some(record)) => Ok(Json(JobDetailsResponse { job: record })),
+        Ok(Some(record)) => {
+            state.audit.record_or_warn(&json!({
+                "event": "job_query",
+                "job_id": job_id,
+                "source": source.to_string(),
+                "status": format!("{:?}", record.status),
+            }));
+            Ok(Json(JobDetailsResponse { job: record }))
+        }
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(err) => {
+            state.audit.record_or_warn(&json!({
+                "event": "job_query_failed",
+                "job_id": job_id,
+                "source": source.to_string(),
+                "error": err.to_string(),
+            }));
             error!(error = ?err, job_id = %job_id, "không thể truy vấn job");
             Err(status_from_store_error(&err))
         }
@@ -140,19 +204,53 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     init_metrics()?;
+    let config = SchedulerConfig::from_env()?;
 
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "127.0.0.1:4222".into());
-    let subject = std::env::var("SCHEDULER_SUBJECT").unwrap_or_else(|_| "gpu.jobs".into());
-    let bearer_token = std::env::var("SCHEDULER_BEARER_TOKEN").ok();
-    let auth_token = std::env::var("NATS_AUTH_TOKEN").ok();
+    let mut secret_builder =
+        SecretManagerBuilder::new().with_env_provider(None, config.secret_file_dir.clone());
+    if let Some(path) = &config.simulated_vault {
+        secret_builder = secret_builder.with_simulated_vault(path.clone());
+    }
+    if let Some(refresh) = config.secret_refresh {
+        secret_builder = secret_builder.with_refresh_interval(refresh);
+    }
+    let secret_manager = secret_builder.build();
 
-    let nats = NatsConnection::connect(&nats_url, "scheduler", auth_token.as_deref()).await?;
+    let audit_logger = AuditLogger::new(&config.audit_path).await?;
+
+    let nats_auth_token = match secret_manager.secret("NATS_AUTH_TOKEN").await {
+        Ok(token) => Some(token),
+        Err(err) => {
+            warn!(error = %err, "không lấy được NATS_AUTH_TOKEN, kết nối sẽ không dùng auth");
+            None
+        }
+    };
+
+    let mut nats_options =
+        NatsOptions::new(&config.nats_url, "scheduler").auth_token(nats_auth_token.clone());
+    if let Some(tls) = config.nats_tls.clone() {
+        nats_options = nats_options.tls(Some(tls));
+    }
+    let nats = NatsConnection::connect_with_options(nats_options).await?;
     let store = JobStoreBuilder::from_env().build().await?;
+
+    let bearer_token_key = if secret_manager
+        .secret("SCHEDULER_BEARER_TOKEN")
+        .await
+        .is_ok()
+    {
+        Some("SCHEDULER_BEARER_TOKEN".to_string())
+    } else {
+        None
+    };
+
     let state = Arc::new(AppState {
         nats,
-        subject,
-        bearer_token,
+        subject: config.subject,
+        secret_manager: Arc::clone(&secret_manager),
+        bearer_token_key,
         store,
+        audit: audit_logger.clone(),
     });
 
     let app = Router::new()
@@ -161,34 +259,144 @@ async fn main() -> anyhow::Result<()> {
         .route("/jobs/:id", get(get_job))
         .with_state(state);
 
-    let addr: SocketAddr = std::env::var("SCHEDULER_HTTP_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
-        .parse()?;
+    info!(address = %config.http_addr, "starting scheduler");
 
-    info!(address = %addr, "starting scheduler");
+    let shutdown_handle = Handle::new();
+    let graceful = shutdown_signal(shutdown_handle.clone());
 
-    let listener = TcpListener::bind(addr).await?;
-    let server = axum::serve(listener, app);
-
-    tokio::select! {
-        res = server => {
-            if let Err(err) = res {
-                error!("scheduler server error: {err}");
-            }
-        }
-        _ = shutdown_signal() => {
-            info!("shutdown signal received");
-        }
+    if let Some(tls) = config.tls {
+        let server_config = Arc::new(load_server_config(&tls)?);
+        axum_server::bind_rustls_config(config.http_addr, server_config)
+            .handle(shutdown_handle)
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+            .with_graceful_shutdown(graceful)
+            .await?;
+    } else {
+        let listener = TcpListener::bind(config.http_addr).await?;
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(graceful)
+        .await?;
     }
 
     info!("scheduler stopped");
     Ok(())
 }
 
-async fn shutdown_signal() {
-    if let Err(err) = signal::ctrl_c().await {
-        error!("failed to listen for shutdown signal: {err}");
+impl SchedulerConfig {
+    fn from_env() -> anyhow::Result<Self> {
+        let http_addr: SocketAddr = std::env::var("SCHEDULER_HTTP_ADDR")
+            .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
+            .parse()?;
+
+        let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "127.0.0.1:4222".into());
+        let subject = std::env::var("SCHEDULER_SUBJECT").unwrap_or_else(|_| "gpu.jobs".into());
+
+        let audit_path = std::env::var("AUDIT_LOG_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| default_audit_path("scheduler"));
+
+        let secret_refresh = std::env::var("SECRET_REFRESH_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_secs);
+
+        let secret_file_dir = std::env::var("SECRET_FILE_DIR").ok().map(PathBuf::from);
+        let simulated_vault = std::env::var("SIMULATED_VAULT_PATH")
+            .ok()
+            .map(PathBuf::from);
+
+        let nats_tls = build_nats_tls_config(&nats_url)?;
+        let tls = build_scheduler_tls_config()?;
+
+        Ok(Self {
+            http_addr,
+            tls,
+            nats_url,
+            subject,
+            nats_tls,
+            audit_path,
+            secret_refresh,
+            secret_file_dir,
+            simulated_vault,
+        })
     }
+}
+
+impl AppState {
+    async fn ensure_authorized(&self, headers: &HeaderMap) -> Result<(), StatusCode> {
+        let Some(token_key) = &self.bearer_token_key else {
+            return Ok(());
+        };
+
+        match self.secret_manager.secret(token_key).await {
+            Ok(expected) => {
+                let provided = headers
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok());
+                let expected_header = format!("Bearer {expected}");
+                if provided != Some(expected_header.as_str()) {
+                    metrics::counter!("scheduler_jobs_unauthorized_total").increment(1);
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
+                Ok(())
+            }
+            Err(err) => {
+                warn!(error = %err, "không thể tải bearer token từ secret manager");
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+}
+
+fn build_nats_tls_config(nats_url: &str) -> anyhow::Result<Option<NatsTlsConfig>> {
+    let ca_file = match std::env::var("NATS_TLS_CA_FILE") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => return Ok(None),
+    };
+    let domain = std::env::var("NATS_TLS_DOMAIN")
+        .unwrap_or_else(|_| derive_domain_from_address(nats_url).to_string());
+    let client_cert = std::env::var("NATS_TLS_CLIENT_CERT")
+        .ok()
+        .map(PathBuf::from);
+    let client_key = std::env::var("NATS_TLS_CLIENT_KEY").ok().map(PathBuf::from);
+    if client_cert.is_some() ^ client_key.is_some() {
+        return Err(anyhow!(
+            "cần thiết lập đồng thời NATS_TLS_CLIENT_CERT và NATS_TLS_CLIENT_KEY khi bật mutual TLS"
+        ));
+    }
+
+    Ok(Some(NatsTlsConfig {
+        domain,
+        ca_file,
+        client_cert,
+        client_key,
+    }))
+}
+
+fn build_scheduler_tls_config() -> anyhow::Result<Option<SchedulerTlsConfig>> {
+    let cert = match std::env::var("SCHEDULER_TLS_CERT") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => return Ok(None),
+    };
+    let key = PathBuf::from(std::env::var("SCHEDULER_TLS_KEY")?);
+    let client_ca = PathBuf::from(std::env::var("SCHEDULER_TLS_CLIENT_CA")?);
+    Ok(Some(SchedulerTlsConfig {
+        cert,
+        key,
+        client_ca,
+    }))
+}
+
+fn derive_domain_from_address(address: &str) -> String {
+    address
+        .split(':')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("127.0.0.1")
+        .to_string()
 }
 
 fn status_from_store_error(err: &JobError) -> StatusCode {
@@ -213,4 +421,82 @@ fn init_metrics() -> anyhow::Result<()> {
 
     let _ = PROM_HANDLE.set(handle);
     Ok(())
+}
+
+async fn shutdown_signal(handle: Handle) {
+    if let Err(err) = signal::ctrl_c().await {
+        error!("failed to listen for shutdown signal: {err}");
+    }
+    handle.shutdown();
+}
+
+mod tls {
+    use std::{fs, io::BufReader, path::Path, sync::Arc};
+
+    use anyhow::{anyhow, Context, Result};
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls::{self, server::AllowAnyAuthenticatedClient, RootCertStore, ServerConfig};
+    use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+
+    use super::SchedulerTlsConfig;
+
+    pub fn load_server_config(tls: &SchedulerTlsConfig) -> Result<ServerConfig> {
+        let certs = load_certs(&tls.cert)?;
+        let key = load_private_key(&tls.key)?;
+        let client_roots = load_root_store(&tls.client_ca)?;
+        let verifier = AllowAnyAuthenticatedClient::new(client_roots);
+
+        let mut config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_client_cert_verifier(Arc::new(verifier))
+            .with_single_cert(certs, key)?;
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Ok(config)
+    }
+
+    fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
+        let file = fs::File::open(path)
+            .with_context(|| format!("không mở được cert: {}", path.display()))?;
+        let mut reader = BufReader::new(file);
+        let certs = certs(&mut reader).map_err(|err| anyhow!("đọc cert thất bại: {err}"))?;
+        Ok(certs)
+    }
+
+    fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
+        let file = fs::File::open(path)
+            .with_context(|| format!("không mở được private key: {}", path.display()))?;
+        let mut reader = BufReader::new(file);
+        if let Some(key) = pkcs8_private_keys(&mut reader)
+            .map_err(|err| anyhow!("đọc PKCS#8 key thất bại: {err}"))?
+            .into_iter()
+            .next()
+        {
+            return Ok(key);
+        }
+        let file = fs::File::open(path)
+            .with_context(|| format!("không mở được private key: {}", path.display()))?;
+        let mut reader = BufReader::new(file);
+        if let Some(key) = rsa_private_keys(&mut reader)
+            .map_err(|err| anyhow!("đọc RSA key thất bại: {err}"))?
+            .into_iter()
+            .next()
+        {
+            return Ok(key);
+        }
+        Err(anyhow!(
+            "không tìm thấy private key hợp lệ trong {}",
+            path.display()
+        ))
+    }
+
+    fn load_root_store(path: &Path) -> Result<RootCertStore> {
+        let certs = load_certs(path)?;
+        let mut store = RootCertStore::empty();
+        for cert in certs {
+            store
+                .add(cert)
+                .map_err(|err| anyhow!("không thêm được CA: {err}"))?;
+        }
+        Ok(store)
+    }
 }

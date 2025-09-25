@@ -9,7 +9,10 @@
 ## 🗂️ Bối Cảnh Kỹ Thuật
 - Toàn bộ codebase trong `directory: ~/opus-gpu/app`.
 - Docker image: build từ `Dockerfile`, tag `api-models:latest`.
-- Mục tiêu tổng: Dựa vào phân tích chương trình trong codebase trong `~/opus-gpu/app`, thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn, tuân thủ. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ.
+
+- Mục tiêu tổng:
+ - `Source Code Audit` (audit mã nguồn) toàn bộ codebase trong `directory: ~/opus-gpu/app`.
+ - Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. Hãy thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn, tuân thủ. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ.
 
 ## 🎯 Mục Tiêu
 1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[Module]** (mô-đun – đơn vị chức năng).
@@ -197,7 +200,7 @@ Bạn là **[Principal Engineer]** (kỹ sư chính – kiến trúc & tiêu chu
  * Dựa vào quá trình phân tích, đề xuất kiến trúc (mẫu khởi điểm) 
 ---
 
-## ✅ Yêu cầu xuất ra (khi chạy prompt này)
+## ✅ Yêu cầu xuất ra:
 1) Kết quả phân tích có **trích dẫn file/dòng**.
 2) So sánh 3 nhánh kiến trúc (ToT), chọn 1, giải thích bằng số đo/kỳ vọng.
 3) Kế hoạch triển khai từng bước (1–3 ngày/bước), kèm **DoD** & KPI.
