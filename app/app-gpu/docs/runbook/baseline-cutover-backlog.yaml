@@ -29,3 +29,24 @@ backlog:
     definition_of_done:
       - README cập nhật
       - Runbook baseline cutover hoàn thiện
+  - id: BC-5
+    title: Scheduler queue integration & bearer auth
+    owner: platform
+    status: done
+    definition_of_done:
+      - POST /jobs publish tới NATS với client nội bộ
+      - Hỗ trợ `SCHEDULER_BEARER_TOKEN` và `NATS_AUTH_TOKEN`
+  - id: BC-6
+    title: Executor metrics & ACK pipeline
+    owner: sre
+    status: done
+    definition_of_done:
+      - Executor dùng `nats-lite` queue_subscribe + publish ACK
+      - Prometheus metrics exposes latency, counters (`EXECUTOR_METRICS_ADDR`)
+  - id: BC-7
+    title: Global observability bootstrap
+    owner: devx
+    status: done
+    definition_of_done:
+      - Metrics exporter cho scheduler/executor chạy được
+      - Script `tooling/scripts/bench_scheduler.sh` gửi tải đồng thời
