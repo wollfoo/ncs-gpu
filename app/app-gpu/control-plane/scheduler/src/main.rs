@@ -1,14 +1,13 @@
-use std::{
-    net::SocketAddr,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
+};
+use job_core::{
+    DynJobStore, JobError, JobPayload, JobRecord, JobStatus, JobStoreBuilder, JobUpdate,
 };
 use metrics_exporter_prometheus::PrometheusBuilder;
 use nats_lite::NatsConnection;
@@ -24,6 +23,7 @@ struct AppState {
     nats: NatsConnection,
     subject: String,
     bearer_token: Option<String>,
+    store: DynJobStore,
 }
 
 #[derive(Serialize)]
@@ -40,6 +40,12 @@ struct CreateJobRequest {
 #[derive(Serialize)]
 struct CreateJobResponse {
     id: String,
+    status: JobStatus,
+}
+
+#[derive(Serialize)]
+struct JobDetailsResponse {
+    job: JobRecord,
 }
 
 async fn health_handler() -> Json<HealthResponse> {
@@ -67,33 +73,61 @@ async fn create_job(
 
     metrics::counter!("scheduler_jobs_received_total").increment(1);
     let job_id = Uuid::new_v4().to_string();
-    let job_id_for_message = job_id.clone();
-    let created_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .as_secs_f64();
+    let payload = JobPayload::try_from(request.payload).map_err(|err| {
+        metrics::counter!("scheduler_jobs_invalid_payload_total").increment(1);
+        error!(error = ?err, "payload không hợp lệ");
+        StatusCode::UNPROCESSABLE_ENTITY
+    })?;
+
+    let job_record = JobRecord::new(job_id.clone(), payload.clone());
+    if let Err(err) = state.store.create_job(job_record.clone()).await {
+        metrics::counter!("scheduler_jobs_store_error_total").increment(1);
+        error!(error = ?err, job_id = %job_id, "không thể lưu job vào store");
+        return Err(status_from_store_error(&err));
+    }
+
     let message = serde_json::json!({
-        "id": job_id_for_message,
-        "payload": request.payload,
-        "created_at": created_at,
+        "id": job_record.id.clone(),
+        "payload": payload,
+        "created_at": job_record.created_at,
     });
 
-    let job_bytes = serde_json::to_vec(&message).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let job_bytes = serde_json::to_vec(&message).map_err(|err| {
+        error!(error = %err, "không serialize được job message");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    state
-        .nats
-        .publish(&state.subject, &job_bytes)
-        .await
-        .map_err(|err| {
-            metrics::counter!("scheduler_jobs_publish_error_total").increment(1);
-            error!(error = %err, "không thể publish job tới NATS");
-            StatusCode::BAD_GATEWAY
-        })?;
+    if let Err(err) = state.nats.publish(&state.subject, &job_bytes).await {
+        metrics::counter!("scheduler_jobs_publish_error_total").increment(1);
+        error!(error = %err, "không thể publish job tới NATS");
+        let update = JobUpdate::failed(format!("publish NATS error: {err}"));
+        if let Err(store_err) = state.store.update_job(&job_id, update).await {
+            error!(error = ?store_err, job_id = %job_id, "không thể cập nhật trạng thái thất bại");
+        }
+        return Err(StatusCode::BAD_GATEWAY);
+    }
 
     metrics::counter!("scheduler_jobs_published_total").increment(1);
     metrics::histogram!("scheduler_job_payload_bytes").record(job_bytes.len() as f64);
 
-    Ok(Json(CreateJobResponse { id: job_id }))
+    Ok(Json(CreateJobResponse {
+        id: job_id,
+        status: JobStatus::Queued,
+    }))
+}
+
+async fn get_job(
+    Path(job_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<JobDetailsResponse>, StatusCode> {
+    match state.store.get_job(&job_id).await {
+        Ok(Some(record)) => Ok(Json(JobDetailsResponse { job: record })),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(err) => {
+            error!(error = ?err, job_id = %job_id, "không thể truy vấn job");
+            Err(status_from_store_error(&err))
+        }
+    }
 }
 
 #[tokio::main]
@@ -113,15 +147,18 @@ async fn main() -> anyhow::Result<()> {
     let auth_token = std::env::var("NATS_AUTH_TOKEN").ok();
 
     let nats = NatsConnection::connect(&nats_url, "scheduler", auth_token.as_deref()).await?;
+    let store = JobStoreBuilder::from_env().build().await?;
     let state = Arc::new(AppState {
         nats,
         subject,
         bearer_token,
+        store,
     });
 
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/jobs", post(create_job))
+        .route("/jobs/:id", get(get_job))
         .with_state(state);
 
     let addr: SocketAddr = std::env::var("SCHEDULER_HTTP_ADDR")
@@ -151,6 +188,15 @@ async fn main() -> anyhow::Result<()> {
 async fn shutdown_signal() {
     if let Err(err) = signal::ctrl_c().await {
         error!("failed to listen for shutdown signal: {err}");
+    }
+}
+
+fn status_from_store_error(err: &JobError) -> StatusCode {
+    match err {
+        JobError::InvalidPayload(_) => StatusCode::UNPROCESSABLE_ENTITY,
+        JobError::NotFound => StatusCode::NOT_FOUND,
+        JobError::Redis(_) => StatusCode::BAD_GATEWAY,
+        JobError::Serialization(_) | JobError::StoreFailure(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 

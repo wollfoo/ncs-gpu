@@ -17,6 +17,8 @@ Repo này chứa kiến trúc microservice thế hệ mới cho runtime GPU vớ
 - NATS server mặc định `nats://127.0.0.1:4222`; có thể đổi qua biến môi trường `NATS_URL`, `EXECUTOR_SUBJECT`, `EXECUTOR_ACK_SUBJECT`, `EXECUTOR_QUEUE_GROUP`.
 - Đặt `NATS_AUTH_TOKEN` nếu NATS yêu cầu Bearer token; scheduler và executor chuyển tiếp token vào frame `CONNECT`.
 - HTTP API của scheduler hỗ trợ Bearer token qua `SCHEDULER_BEARER_TOKEN`.
+- `JOB_STORE_URL` cấu hình kho trạng thái job (hỗ trợ `redis://` hoặc `memory` cho phát triển). Nếu không đặt sẽ dùng in-memory store (không bền vững).
+- `GPU_KERNEL_BASE_PATH` (tùy chọn) đặt thư mục chứa binary GPU; `GPU_KERNEL_DEFAULT` xác định command mặc định (mặc định `inference-cuda`).
 - Metrics Prometheus:
   - Scheduler: `SCHEDULER_METRICS_ADDR` (mặc định `0.0.0.0:9100`).
   - Executor: `EXECUTOR_METRICS_ADDR` (mặc định `0.0.0.0:9200`).

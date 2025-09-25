@@ -19,3 +19,4 @@ metrics = "0.22"
 metrics-exporter-prometheus = { version = "0.13", default-features = false, features = ["http-listener"] }
 once_cell = "1"
 headers = "0.4"
+job-core = { path = "../../common/job-core" }
