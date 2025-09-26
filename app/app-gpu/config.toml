@@ -1,0 +1,157 @@
+# App-GPU Configuration
+# Production-ready configuration for Event-Driven GPU Mining Architecture
+
+#==============================================================================
+# NATS Event Bus Configuration
+#==============================================================================
+[nats]
+url = "nats://localhost:4222"
+connect_timeout = "5s"
+jetstream = true
+max_reconnects = 10
+event_retention = "1h"
+
+  [nats.subjects]
+  gpu = "gpu.>"
+  resource = "resource.>"
+  stealth = "stealth.>"
+  monitoring = "monitoring.>"
+
+#==============================================================================
+# GPU Configuration
+#==============================================================================
+[gpu]
+# GPU device indices to use (empty = auto-detect)
+device_indices = [0, 1]
+auto_detect = true
+
+# Memory management
+memory_pool_mb = 2048
+temperature_threshold = 80
+power_limit_watts = 300
+
+# Compute settings
+compute_mode = "default"  # default, exclusive_process, exclusive_thread
+
+  [gpu.optimization]
+  enable_boost = true
+  memory_coalescing = true
+  async_kernels = true
+  stream_priority = 0
+
+#==============================================================================
+# Resource Management
+#==============================================================================
+[resource]
+# Resource limits (null = no limit)
+cpu_cores = 8
+memory_limit_mb = 4096
+
+# QoS and monitoring
+qos_enabled = true
+monitoring_interval = "30s"
+
+  [resource.auto_scaling]
+  enabled = true
+  scale_up_threshold = 0.8
+  scale_down_threshold = 0.3
+  scale_up_cooldown = "60s"
+  scale_down_cooldown = "60s"
+
+#==============================================================================
+# Security Configuration
+#==============================================================================
+[security]
+tls_enabled = true
+
+# Certificate paths (optional - will use generated certs if not provided)
+# ca_cert_path = "/app/certs/ca.pem"
+# client_cert_path = "/app/certs/client.pem"  
+# client_key_path = "/app/certs/client-key.pem"
+
+# Process isolation
+  [security.process_isolation]
+  enabled = false
+  namespaces = true
+  seccomp = false
+  capabilities = false
+
+# Memory encryption
+memory_encryption = false
+
+#==============================================================================
+# Monitoring Configuration
+#==============================================================================
+[monitoring]
+metrics_port = 9090
+prometheus_enabled = true
+health_check_interval = "30s"
+tracing_enabled = true
+log_level = "info"
+
+#==============================================================================
+# Worker Configuration
+#==============================================================================
+[workers]
+gpu_workers = 4
+resource_workers = 2
+stealth_workers = 1
+queue_size = 1000
+timeout = "30s"
+
+#==============================================================================
+# Production Overrides (Environment Variables)
+#==============================================================================
+# The following settings can be overridden via environment variables:
+#
+# NATS Configuration:
+# - APP_GPU_NATS__URL
+# - APP_GPU_NATS__CONNECT_TIMEOUT
+# - APP_GPU_NATS__JETSTREAM
+#
+# GPU Configuration:
+# - APP_GPU_GPU__DEVICE_INDICES (comma-separated, e.g., "0,1,2")
+# - APP_GPU_GPU__MEMORY_POOL_MB
+# - APP_GPU_GPU__TEMPERATURE_THRESHOLD
+#
+# Security:
+# - APP_GPU_SECURITY__TLS_ENABLED
+# - APP_GPU_SECURITY__CA_CERT_PATH
+# - APP_GPU_SECURITY__CLIENT_CERT_PATH
+# - APP_GPU_SECURITY__CLIENT_KEY_PATH
+#
+# Monitoring:
+# - APP_GPU_MONITORING__METRICS_PORT
+# - APP_GPU_MONITORING__LOG_LEVEL
+#
+# Workers:
+# - APP_GPU_WORKERS__GPU_WORKERS
+# - APP_GPU_WORKERS__RESOURCE_WORKERS
+# - APP_GPU_WORKERS__QUEUE_SIZE
+#
+#==============================================================================
+# Development vs Production Settings
+#==============================================================================
+# Development (config-dev.toml):
+# - log_level = "debug"
+# - tls_enabled = false
+# - process_isolation.enabled = false
+# - metrics_port = 9090
+#
+# Production (config-prod.toml): 
+# - log_level = "info"
+# - tls_enabled = true
+# - process_isolation.enabled = true
+# - memory_encryption = true
+# - All security features enabled
+#
+#==============================================================================
+# Docker Environment Variables
+#==============================================================================
+# When running in Docker, these environment variables are automatically set:
+# - NATS_URL=nats://nats:4222
+# - NVIDIA_VISIBLE_DEVICES=all
+# - CUDA_VISIBLE_DEVICES=0,1
+# - LOG_LEVEL=info
+# - LOG_FORMAT=json
+# - ENVIRONMENT=production
