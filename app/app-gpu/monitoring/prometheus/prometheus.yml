@@ -1,0 +1,97 @@
+# Prometheus Configuration for OPUS-GPU
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'opus-gpu-monitor'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+
+# Load alert rules
+rule_files:
+  - /etc/prometheus/alerts/*.yaml
+
+# Scrape configurations
+scrape_configs:
+  # OPUS-GPU Core metrics
+  - job_name: 'opus-gpu-core'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'core'
+          component: 'runtime'
+    metrics_path: '/metrics'
+    
+  # GPU Executor metrics
+  - job_name: 'opus-gpu-executor'
+    static_configs:
+      - targets: ['localhost:9091']
+        labels:
+          service: 'executor'
+          component: 'gpu'
+    metrics_path: '/metrics'
+    
+  # Scheduler metrics
+  - job_name: 'opus-scheduler'
+    static_configs:
+      - targets: ['localhost:9092']
+        labels:
+          service: 'scheduler'
+          component: 'orchestration'
+    metrics_path: '/metrics'
+    
+  # Node Exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          component: 'system'
+    
+  # NVIDIA GPU Exporter
+  - job_name: 'nvidia-gpu'
+    static_configs:
+      - targets: ['localhost:9835']
+        labels:
+          component: 'nvidia'
+    
+  # Blackbox Exporter for endpoint monitoring
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://localhost:8080/health
+          - http://localhost:8080/health/live
+          - http://localhost:8080/health/ready
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+
+# Remote write configuration (optional)
+# remote_write:
+#   - url: "http://localhost:9009/api/v1/push"
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 30
+#       min_shards: 1
+#       max_samples_per_send: 5000
+#       batch_send_deadline: 5s
+#       max_retries: 10
+#       min_backoff: 30ms
+#       max_backoff: 100ms
+
+# Remote read configuration (optional)
+# remote_read:
+#   - url: "http://localhost:9009/api/v1/read"
+#     read_recent: true
