@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package executor.v1;
+
+message ExecuteJobRequest {
+  string job_id = 1;
+  repeated string command = 2;
+  uint32 batch_size = 3;
+}
+
+message ExecuteJobResponse {
+  string job_id = 1;
+  int32 exit_code = 2;
+  string stdout = 3;
+  string stderr = 4;
+  double duration_ms = 5;
+}
+
+service Executor {
+  rpc ExecuteJob (ExecuteJobRequest) returns (ExecuteJobResponse);
+}

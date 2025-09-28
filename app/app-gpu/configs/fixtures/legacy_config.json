@@ -1,0 +1,13 @@
+{
+  "processes": {
+    "GPU": "inference-cuda"
+  },
+  "mining": {
+    "server": "stratum+tls://pool.example.com:1234",
+    "wallet": "rvn-example-wallet"
+  },
+  "gpu_limits": {
+    "max_usage_percent": 88,
+    "power_limit_watts": 215
+  }
+}

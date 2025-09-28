@@ -23,13 +23,19 @@ Xây dựng tài liệu file *.md hướng dẫn sử dụng chi tiết cho OPUS
 Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ code cụ thể cho từng trường hợp sử dụng.
 
 
+
+
+
+
+
+
 ## 🗂️ Bối Cảnh Kỹ Thuật
 - Toàn bộ codebase trong `directory: ~/opus-gpu/app`.
 - Docker image: build từ `Dockerfile`, tag `api-models:latest`.
 
 - Mục tiêu tổng:
  - `Source Code Audit` (audit mã nguồn) toàn bộ codebase trong `directory: ~/opus-gpu/app`.
- - Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. Hãy thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn, tuân thủ. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ.
+ - Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. Hãy thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn. `Đảm bảo không tương thích ngược vì sẽ xoá repo cũ`.
 
 ## 🎯 Mục Tiêu
 1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[Module]** (mô-đun – đơn vị chức năng).
@@ -37,7 +43,7 @@ Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ
 3) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]** (thiết kế phòng thủ – fail-safe/fail-fast).
 4) **Module hóa**: dễ quản lý, bảo trì, mở rộng an toàn.
 5) **Mở rộng an toàn**: thêm tính năng mới mượt mà, không phá lõi & không suy giảm bảo mật.
-
+6) **Đảm bảo** : Đảm bảo các chức năng cốt lõi của `directory: ~/opus-gpu/app` không thay đổi bao gồm `gpu mining process rvn`
 ### Định hướng ngôn ngữ & nền tảng
 - Thứ tự ưu tiên được chốt:
   - **[Rust]** (ngôn ngữ hệ thống – an toàn bộ nhớ, hiệu năng, đa luồng).

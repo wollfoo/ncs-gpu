@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+option go_package = "github.com/opus-gpu/app-gpu/control-plane/proto;proto";
+
+message SubmitJobRequest {
+  string job_id = 1;
+  string priority = 2;
+  uint32 batch_size = 3;
+  map<string, string> metadata = 4;
+}
+
+message SubmitJobResponse {
+  string job_id = 1;
+  string status = 2;
+}
+
+message GetStatusRequest {
+  string job_id = 1;
+}
+
+message GetStatusResponse {
+  string job_id = 1;
+  string status = 2;
+}
+
+service ControlPlane {
+  rpc SubmitJob (SubmitJobRequest) returns (SubmitJobResponse);
+  rpc GetStatus (GetStatusRequest) returns (GetStatusResponse);
+}

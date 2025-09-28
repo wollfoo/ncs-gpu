@@ -1,0 +1,6 @@
+target/
+node_modules/
+certs/
+**/*.pyc
+*.log
+.DS_Store

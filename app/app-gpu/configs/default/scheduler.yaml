@@ -1,0 +1,11 @@
+version: 1
+pool:
+  url: "stratum+tls://pool.example.com:1234"
+  transport: "tls"
+  worker_process: "inference-cuda"
+wallet:
+  address: "rvn-example-wallet"
+gpu:
+  max_usage_percent: 88
+qos:
+  target_p95_latency_ms: 150

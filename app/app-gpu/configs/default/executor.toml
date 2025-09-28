@@ -1,0 +1,8 @@
+version = 1
+
+[gpu]
+power_limit_watts = 215
+temperature_max_c = 78
+
+[telemetry]
+prometheus_endpoint = "0.0.0.0:9100"
