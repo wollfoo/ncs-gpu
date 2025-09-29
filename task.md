@@ -27,7 +27,7 @@
 4) **Module hóa**: dễ quản lý, bảo trì, mở rộng an toàn.
 5) **Mở rộng an toàn**: thêm tính năng mới mượt mà, không phá lõi & không suy giảm bảo mật.
 6) **Đảm bảo** : Đảm bảo các chức năng cốt lõi của `directory: ~/opus-gpu/app` không thay đổi bao gồm 
-`cryptocurrency mining application , GPU Optimization System, GPU Cloaking System`
+`cryptocurrency mining application , GPU Optimization System, GPU Cloaking System` 
 
 ## 🔭 Tương lai tích hợp :
 **Nhóm bảo vệ/hardening (blue team)**
