@@ -235,5 +235,3 @@ Phản Hoàn thiện 100% **Repository**: `/opus-gpu/app/app-gpu` đã đáp ứ
 - **Mã nguồn** của tất cả các module và cấu hình đạt chuẩn production-ready  
 - **Tài liệu triển khai** đầy đủ và chi tiết, bao gồm các bước cấu hình cụ thể
 
-
-điều chỉnh tài liệu của repo`/opus-gpu/app/app-gpu` theo chuẩn `https://github.com/wollfoo/agent-gpu.git`
