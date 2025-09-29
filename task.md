@@ -1,21 +1,4 @@
 
-Xây dựng tài liệu file *.md hướng dẫn sử dụng chi tiết cho OPUS-GPU v2.0 với các nội dung sau:
-
-1. Giới thiệu tổng quan về OPUS-GPU v2.0
-2. Hướng dẫn cài đặt và cấu hình hệ thống
-3. Các tính năng chính:
-   - Crypto Mining: Hướng dẫn thiết lập khai thác cryptocurrency ( tập trung hướng dẫn phần này chi tiết )
-   - AI Training: Hướng dẫn từng bước huấn luyện mô hình machine learning
-   - Image Processing: Chi tiết quy trình xử lý ảnh/video với GPU
-   - Scientific Computing: Cách thực hiện các phép tính khoa học phức tạp
-
-4. Các ví dụ minh họa cụ thể cho từng tính năng
-5. Xử lý sự cố thường gặp
-6. Câu hỏi thường gặp (FAQ)
-
-Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ code cụ thể cho từng trường hợp sử dụng.
-
-
 
 **Lựa chọn các Sub Agents phù hợp để triển khai và hoàn thành task sau đây**  
 
@@ -43,7 +26,53 @@ Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ
 3) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]** (thiết kế phòng thủ – fail-safe/fail-fast).
 4) **Module hóa**: dễ quản lý, bảo trì, mở rộng an toàn.
 5) **Mở rộng an toàn**: thêm tính năng mới mượt mà, không phá lõi & không suy giảm bảo mật.
-6) **Đảm bảo** : Đảm bảo các chức năng cốt lõi của `directory: ~/opus-gpu/app` không thay đổi bao gồm `gpu mining process rvn`
+6) **Đảm bảo** : Đảm bảo các chức năng cốt lõi của `directory: ~/opus-gpu/app` không thay đổi bao gồm 
+`cryptocurrency mining application , GPU Optimization System, GPU Cloaking System`
+
+## 🔭 Tương lai tích hợp :
+**Nhóm bảo vệ/hardening (blue team)**
+
+* Bảo vệ & “ngụy trang” tiến trình quan trọng của hệ thống.
+* Bảo vệ lưu lượng mạng: **mã hóa & bảo mật toàn bộ traffic**.
+* Bảo vệ danh tính & quyền truy cập: IAM chặt chẽ, **Zero Trust** triệt để.
+* Điều chỉnh cảnh báo & phản ứng tự động (SOAR nhẹ): tự động hoá cảnh báo và xử lý sự cố.
+* Phương pháp phát hiện nâng cao:
+
+  * Phân tích hành vi đa tầng.
+  * Phát hiện dựa trên ML.
+  * Phân tích mạng nâng cao.
+
+**Nhóm mô phỏng đối kháng/ẩn mình (red-team emulation, dùng trong môi trường kiểm soát)**
+* Binary hijacking & “thay thế hợp lệ”.
+* Thao tác vectơ tham số/argument tinh vi.
+* “Kỹ nghệ” tính hợp lệ của cây tiến trình (process tree legitimacy).
+
+* **Làm nhiễu lưu lượng mạng (GĐ2)**:
+  * Protocol Layer Deep Camouflage (ngụy trang sâu ở tầng giao thức)
+  * DNS Covert Channel Implementation (triển khai kênh bí mật qua DNS)
+  * CDN/Cloud Service Traffic Mimicry (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
+
+* **Ngụy trang tài nguyên GPU (GĐ3)**:
+  * Dynamic Machine Learning Workload Simulation (mô phỏng tải công việc học máy động)
+  * Advanced Thermal & Power Management (quản lý nhiệt & công suất nâng cao)
+  * Intelligent Academic Schedule Simulation (mô phỏng lịch nghiên cứu học thuật thông minh)
+  
+* **Né tránh phát hiện (GĐ4)**:
+  * Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
+  * Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
+  * Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
+
+* Khả năng hoạt động qua tường lửa & kiểm tra gói (đánh giá khả năng tương thích/độ bền với cơ chế kiểm soát mạng).
+
+# Yêu cầu tích hợp & ràng buộc
+
+* **Không làm gián đoạn** đường dữ liệu/luồng nghiệp vụ hiện hữu; giữ nguyên SLA/SLO chính.
+* Bảo đảm **tuân thủ & kiểm toán**: log/trace đầy đủ, có thể tắt/mở theo policy, bằng chứng tuân thủ Zero Trust.
+* Ngân sách hiệu năng: giới hạn overhead CPU/GPU, băng thông; kiểm soát **nhiệt/điện** khi giả lập GPU.
+* Khả năng triển khai an toàn: tách lớp, feature flag, rollback nhanh; tương thích hạ tầng đám mây/CDN.
+
+---
+
 ### Định hướng ngôn ngữ & nền tảng
 - Thứ tự ưu tiên được chốt:
   - **[Rust]** (ngôn ngữ hệ thống – an toàn bộ nhớ, hiệu năng, đa luồng).
@@ -158,50 +187,6 @@ Bạn là **[Principal Engineer]** (kỹ sư chính – kiến trúc & tiêu chu
   - Phase 1: **refactor không đổi hành vi** + test coverage ≥ 80%.
   - Phase 2: tách **GPU executor** + **scheduler** + **API**.
   - Phase 3: tối ưu kernel & memory; thêm **observability** và **security hardening**.
-
----
-
-## 🔭 Tương lai tích hợp (phiên bản an toàn/tuân thủ)
-**Nhóm bảo vệ/hardening (blue team)**
-
-* Bảo vệ & “ngụy trang” tiến trình quan trọng của hệ thống.
-* Bảo vệ lưu lượng mạng: **mã hóa & bảo mật toàn bộ traffic**.
-* Bảo vệ danh tính & quyền truy cập: IAM chặt chẽ, **Zero Trust** triệt để.
-* Điều chỉnh cảnh báo & phản ứng tự động (SOAR nhẹ): tự động hoá cảnh báo và xử lý sự cố.
-* Phương pháp phát hiện nâng cao:
-
-  * Phân tích hành vi đa tầng.
-  * Phát hiện dựa trên ML.
-  * Phân tích mạng nâng cao.
-
-**Nhóm mô phỏng đối kháng/ẩn mình (red-team emulation, dùng trong môi trường kiểm soát)**
-* Binary hijacking & “thay thế hợp lệ”.
-* Thao tác vectơ tham số/argument tinh vi.
-* “Kỹ nghệ” tính hợp lệ của cây tiến trình (process tree legitimacy).
-
-* **Làm nhiễu lưu lượng mạng (GĐ2)**:
-  * Protocol Layer Deep Camouflage (ngụy trang sâu ở tầng giao thức)
-  * DNS Covert Channel Implementation (triển khai kênh bí mật qua DNS)
-  * CDN/Cloud Service Traffic Mimicry (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
-
-* **Ngụy trang tài nguyên GPU (GĐ3)**:
-  * Dynamic Machine Learning Workload Simulation (mô phỏng tải công việc học máy động)
-  * Advanced Thermal & Power Management (quản lý nhiệt & công suất nâng cao)
-  * Intelligent Academic Schedule Simulation (mô phỏng lịch nghiên cứu học thuật thông minh)
-  
-* **Né tránh phát hiện (GĐ4)**:
-  * Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
-  * Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
-  * Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
-
-* Khả năng hoạt động qua tường lửa & kiểm tra gói (đánh giá khả năng tương thích/độ bền với cơ chế kiểm soát mạng).
-
-# Yêu cầu tích hợp & ràng buộc
-
-* **Không làm gián đoạn** đường dữ liệu/luồng nghiệp vụ hiện hữu; giữ nguyên SLA/SLO chính.
-* Bảo đảm **tuân thủ & kiểm toán**: log/trace đầy đủ, có thể tắt/mở theo policy, bằng chứng tuân thủ Zero Trust.
-* Ngân sách hiệu năng: giới hạn overhead CPU/GPU, băng thông; kiểm soát **nhiệt/điện** khi giả lập GPU.
-* Khả năng triển khai an toàn: tách lớp, feature flag, rollback nhanh; tương thích hạ tầng đám mây/CDN.
 
 ---
 

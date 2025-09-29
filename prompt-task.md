@@ -206,3 +206,34 @@ Hãy **chọn 1 chính + 1 phụ** và nêu tác động đến build/CI, **[Doc
 
 ## ▶️ Điểm bắt đầu bắt buộc
 - Hãy liệt kê **cấu trúc thư mục** `~/opus-gpu/app` và **entrypoints** chính.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Xây dựng tài liệu file *.md hướng dẫn sử dụng chi tiết cho OPUS-GPU v2.0 với các nội dung sau:
+
+1. Giới thiệu tổng quan về OPUS-GPU v2.0
+2. Hướng dẫn cài đặt và cấu hình hệ thống
+3. Các tính năng chính:
+   - Crypto Mining: Hướng dẫn thiết lập khai thác cryptocurrency ( tập trung hướng dẫn phần này chi tiết )
+   - AI Training: Hướng dẫn từng bước huấn luyện mô hình machine learning
+   - Image Processing: Chi tiết quy trình xử lý ảnh/video với GPU
+   - Scientific Computing: Cách thực hiện các phép tính khoa học phức tạp
+
+4. Các ví dụ minh họa cụ thể cho từng tính năng
+5. Xử lý sự cố thường gặp
+6. Câu hỏi thường gặp (FAQ)
+
+Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ code cụ thể cho từng trường hợp sử dụng.
+
