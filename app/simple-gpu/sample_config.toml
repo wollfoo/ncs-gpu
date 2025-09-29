@@ -1,0 +1,18 @@
+[mining]
+pool_url = "stratum+tcp://eth.pool.com:4444"
+worker_name = "opus-gpu-worker"
+gpu_count = 1
+intensity = 7
+algorithm = "ethash"
+
+[thermal]
+max_temperature = 85.0
+warning_temperature = 75.0
+fan_curve = "auto"
+throttling_enabled = true
+
+[system]
+log_level = "info"
+metrics_enabled = false
+api_port = 8080
+monitor_interval = 5
