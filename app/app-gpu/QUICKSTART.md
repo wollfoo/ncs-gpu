@@ -1,10 +1,10 @@
-# OPUS-GPU Quick Start Guide
+# Agent-GPU Quick Start Guide
 
-🚀 **5-Minute Quick Start** cho **OPUS-GPU v2.0** - Bắt đầu mining trong 5 phút!
+🚀 **5-Minute Quick Start** cho **Agent-GPU v2.0** - Bắt đầu mining trong 5 phút!
 
 ## 📋 Tổng quan
 
-Hướng dẫn này giúp bạn bắt đầu với **OPUS-GPU** trong thời gian ngắn nhất với **minimal setup** (cấu hình tối thiểu).
+Hướng dẫn này giúp bạn bắt đầu với **Agent-GPU** trong thời gian ngắn nhất với **minimal setup** (cấu hình tối thiểu).
 
 ## ⚡ Yêu cầu tối thiểu
 
@@ -40,11 +40,11 @@ sudo systemctl restart docker
 docker run --rm --gpus all nvidia/cuda:12.2-base-ubuntu22.04 nvidia-smi
 ```
 
-### Step 2: Chạy OPUS-GPU
+### Step 2: Chạy Agent-GPU
 ```bash
 # Quick start với default settings
 docker run -d \
-  --name opus-gpu-quickstart \
+  --name agent-gpu-quickstart \
   --runtime=nvidia \
   --gpus all \
   --restart unless-stopped \
@@ -53,10 +53,10 @@ docker run -d \
   -e OPUS_GPU_POOL_URL="stratum+tcp://pool.example.com:4444" \
   -e OPUS_GPU_WALLET_ADDRESS="your_wallet_address_here" \
   -e OPUS_GPU_WORKER_NAME="worker01" \
-  opus-gpu:latest
+  agent-gpu:latest
 
 # Check status
-docker logs opus-gpu-quickstart -f
+docker logs agent-gpu-quickstart -f
 ```
 
 ### Step 3: Verify Operation
@@ -76,13 +76,13 @@ curl http://localhost:9090/metrics | grep gpu
 ### Step 1: Download Binary
 ```bash
 # Linux x64
-wget https://github.com/opus-gpu/opus-gpu/releases/latest/download/opus-gpu-linux-x64.tar.gz
-tar -xzf opus-gpu-linux-x64.tar.gz
-chmod +x opus-gpu
+wget https://github.com/agent-gpu/agent-gpu/releases/latest/download/agent-gpu-linux-x64.tar.gz
+tar -xzf agent-gpu-linux-x64.tar.gz
+chmod +x agent-gpu
 
 # Windows x64
-# Download opus-gpu-windows-x64.zip from GitHub releases
-# Extract and run opus-gpu.exe
+# Download agent-gpu-windows-x64.zip from GitHub releases
+# Extract and run agent-gpu.exe
 ```
 
 ### Step 2: Basic Configuration
@@ -108,10 +108,10 @@ EOF
 ### Step 3: Start Mining
 ```bash
 # Linux/macOS
-./opus-gpu --config config.toml
+./agent-gpu --config config.toml
 
 # Windows
-opus-gpu.exe --config config.toml
+agent-gpu.exe --config config.toml
 ```
 
 ## 🔧 Quick Configuration Examples
@@ -172,23 +172,23 @@ port = 8080
 ### Essential Commands
 ```bash
 # Start với default config
-opus-gpu
+agent-gpu
 
 # Specify config file
-opus-gpu --config my-config.toml
+agent-gpu --config my-config.toml
 
 # Quick mining với command line
-opus-gpu \
+agent-gpu \
   --pool-url "stratum+tcp://pool.example.com:4444" \
   --wallet-address "your_wallet_here" \
   --gpu-devices "0,1" \
   --worker-name "quickstart"
 
 # Development mode
-opus-gpu --dev-mode --log-level debug
+agent-gpu --dev-mode --log-level debug
 
 # Benchmark mode
-opus-gpu --benchmark --gpu-devices "0"
+agent-gpu --benchmark --gpu-devices "0"
 ```
 
 ### Environment Variables
@@ -201,7 +201,7 @@ export OPUS_GPU_GPU_DEVICES="0,1"
 export OPUS_GPU_LOG_LEVEL="info"
 
 # Start mining
-opus-gpu
+agent-gpu
 ```
 
 ## 📊 Quick Monitoring
@@ -249,10 +249,10 @@ ws.onopen = function() {
 ### Check GPU Detection
 ```bash
 # Verify GPUs are detected
-opus-gpu --list-devices
+agent-gpu --list-devices
 
 # Test GPU functionality
-opus-gpu --benchmark --duration 30
+agent-gpu --benchmark --duration 30
 ```
 
 ### Network Connectivity
@@ -273,7 +273,7 @@ nvidia-smi -l 1
 htop
 
 # View mining logs
-tail -f /var/log/opus-gpu.log
+tail -f /var/log/agent-gpu.log
 ```
 
 ## 🚀 Quick Optimization
@@ -322,7 +322,7 @@ ping pool.example.com
 telnet pool.example.com 4444
 
 # Check logs
-docker logs opus-gpu-quickstart
+docker logs agent-gpu-quickstart
 ```
 
 #### Low Performance
@@ -334,13 +334,13 @@ nvidia-smi
 nvidia-smi -q -d TEMPERATURE
 
 # Verify configuration
-opus-gpu --config config.toml --validate
+agent-gpu --config config.toml --validate
 ```
 
 ### Quick Fixes
 ```bash
 # Restart mining
-docker restart opus-gpu-quickstart
+docker restart agent-gpu-quickstart
 
 # Reset configuration
 cp config/default.toml config/current.toml
@@ -386,17 +386,17 @@ curl http://localhost:8080/api/v1/metrics/summary
 - Optimize performance cho hardware cụ thể
 
 ### **Community**
-- Join Discord: https://discord.gg/opus-gpu
-- GitHub Issues: https://github.com/opus-gpu/opus-gpu/issues
-- Documentation: https://docs.opus-gpu.com
+- Join Discord: https://discord.gg/agent-gpu
+- GitHub Issues: https://github.com/agent-gpu/agent-gpu/issues
+- Documentation: https://docs.agent-gpu.com
 
 ## 💡 Pro Tips
 
 ```bash
 # Quick alias for easier management
-echo 'alias opus="docker logs opus-gpu-quickstart -f"' >> ~/.bashrc
+echo 'alias opus="docker logs agent-gpu-quickstart -f"' >> ~/.bashrc
 echo 'alias opus-stats="curl -s http://localhost:8080/api/v1/mining/stats | jq"' >> ~/.bashrc
-echo 'alias opus-restart="docker restart opus-gpu-quickstart"' >> ~/.bashrc
+echo 'alias opus-restart="docker restart agent-gpu-quickstart"' >> ~/.bashrc
 
 # Reload bash
 source ~/.bashrc
@@ -411,20 +411,20 @@ opus-restart
 ### **Self-Help**
 ```bash
 # Built-in help
-opus-gpu --help
+agent-gpu --help
 
 # Configuration validation
-opus-gpu --config config.toml --validate
+agent-gpu --config config.toml --validate
 
 # System diagnostics
-opus-gpu --diagnose
+agent-gpu --diagnose
 ```
 
 ### **Get Help**
-- **Discord**: https://discord.gg/opus-gpu (fastest response)
-- **GitHub**: https://github.com/opus-gpu/opus-gpu/issues
-- **Email**: support@opus-gpu.com
+- **Discord**: https://discord.gg/agent-gpu (fastest response)
+- **GitHub**: https://github.com/agent-gpu/agent-gpu/issues
+- **Email**: support@agent-gpu.com
 
 ---
 
-**🎉 Happy Mining with OPUS-GPU!** | **Optimized for Performance & Simplicity**
+**🎉 Happy Mining with Agent-GPU!** | **Optimized for Performance & Simplicity**

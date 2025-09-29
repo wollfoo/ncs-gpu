@@ -1,4 +1,4 @@
-# OPUS-GPU Configuration Management System
+# Agent-GPU Configuration Management System
 
 **Advanced Configuration Management** (Hệ thống quản lý cấu hình cao cấp) với đầy đủ tính năng **security** (bảo mật), **hot reload** (tải lại nóng), **validation** (xác thực), và **audit logging** (ghi log kiểm toán).
 
@@ -482,10 +482,10 @@ MIT License - xem [LICENSE](../../LICENSE) file for details.
 
 ## 📞 Support (Hỗ trợ)
 
-- **Documentation**: [docs.rs/opus-gpu-config](https://docs.rs/opus-gpu-config)
-- **Issues**: [GitHub Issues](https://github.com/opus-gpu/opus-gpu/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/opus-gpu/opus-gpu/discussions)
+- **Documentation**: [docs.rs/agent-gpu-config](https://docs.rs/agent-gpu-config)
+- **Issues**: [GitHub Issues](https://github.com/agent-gpu/agent-gpu/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/agent-gpu/agent-gpu/discussions)
 
 ---
 
-**OPUS-GPU Configuration Management System** - Building the future of **secure** (bảo mật), **scalable** (có thể mở rộng), và **reliable** (đáng tin cậy) configuration management! 🚀
+**Agent-GPU Configuration Management System** - Building the future of **secure** (bảo mật), **scalable** (có thể mở rộng), và **reliable** (đáng tin cậy) configuration management! 🚀

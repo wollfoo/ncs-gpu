@@ -1,0 +1,49 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Dependencies
+node_modules/
+
+# Testing
+coverage/
+*.lcov
+
+# Security
+*.key
+*.pem
+*.cert
+keys/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Build output
+dist/
+build/
+release/
+
+# Cache
+.cache/
+*.cache

@@ -1,10 +1,10 @@
-# OPUS-GPU API Reference
+# Agent-GPU API Reference
 
-🌐 **Complete API Documentation** cho **OPUS-GPU v2.0** - REST, WebSocket & gRPC APIs
+🌐 **Complete API Documentation** cho **Agent-GPU v2.0** - REST, WebSocket & gRPC APIs
 
 ## 📋 Tổng quan
 
-**OPUS-GPU** cung cấp 3 loại API interface:
+**Agent-GPU** cung cấp 3 loại API interface:
 - **REST API** (HTTP/JSON) - General purpose operations
 - **WebSocket API** - Real-time events và notifications
 - **gRPC API** - High-performance binary protocol
@@ -796,7 +796,7 @@ import (
     "log"
 
     "google.golang.org/grpc"
-    pb "github.com/opus-gpu/opus-gpu/api/grpc/proto"
+    pb "github.com/agent-gpu/agent-gpu/api/grpc/proto"
 )
 
 func main() {
@@ -951,7 +951,7 @@ if __name__ == "__main__":
 
 ### **JavaScript SDK**
 ```javascript
-import { OpusGPUClient } from 'opus-gpu-sdk';
+import { OpusGPUClient } from 'agent-gpu-sdk';
 
 const client = new OpusGPUClient('http://localhost:8080');
 
@@ -991,4 +991,4 @@ X-RateLimit-Window: 60
 
 ---
 
-**🚀 Complete API Reference for OPUS-GPU** | **Build Powerful Mining Applications**
+**🚀 Complete API Reference for Agent-GPU** | **Build Powerful Mining Applications**

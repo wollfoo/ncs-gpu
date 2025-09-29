@@ -1,6 +1,6 @@
-# OPUS-GPU Pool Communication Module
+# Agent-GPU Pool Communication Module
 
-Advanced pool communication module for OPUS-GPU mining platform, supporting Stratum protocols, multi-pool management, and intelligent failover capabilities.
+Advanced pool communication module for Agent-GPU mining platform, supporting Stratum protocols, multi-pool management, and intelligent failover capabilities.
 
 ## Features
 
@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         password: "x".to_string(),
         stratum: StratumConfig {
             version: StratumVersion::V1,
-            user_agent: "OPUS-GPU/1.0.0".to_string(),
+            user_agent: "Agent-GPU/1.0.0".to_string(),
             ..Default::default()
         },
         ..Default::default()
@@ -158,7 +158,7 @@ let config = PoolConfig {
 
     stratum: StratumConfig {
         version: StratumVersion::V1,
-        user_agent: "OPUS-GPU/1.0.0".to_string(),
+        user_agent: "Agent-GPU/1.0.0".to_string(),
         extra_nonce1_size: 4,
         compression: false,
         ..Default::default()
@@ -457,8 +457,8 @@ config.connection.max_reconnect_delay = Duration::from_secs(120);
 
 ## Contributing
 
-Contributions are welcome! Please see the main OPUS-GPU repository for contribution guidelines.
+Contributions are welcome! Please see the main Agent-GPU repository for contribution guidelines.
 
 ## License
 
-This module is part of the OPUS-GPU project and is licensed under the MIT License.
+This module is part of the Agent-GPU project and is licensed under the MIT License.

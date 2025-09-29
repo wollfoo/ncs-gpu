@@ -1,10 +1,10 @@
-# OPUS-GPU Security Documentation
+# Agent-GPU Security Documentation
 
-**OPUS-GPU v1.0.0** - Comprehensive Security Hardening and Anti-Reverse Engineering
+**Agent-GPU v1.0.0** - Comprehensive Security Hardening and Anti-Reverse Engineering
 
 ## Overview (Tổng quan)
 
-**OPUS-GPU** đã được triển khai với **comprehensive security hardening** (tăng cường bảo mật toàn diện) và **advanced obfuscation techniques** (kỹ thuật làm rối mã nâng cao) để bảo vệ khỏi **reverse engineering** (dịch ngược), **tampering attacks** (tấn công can thiệp), và **analysis attempts** (nỗ lực phân tích).
+**Agent-GPU** đã được triển khai với **comprehensive security hardening** (tăng cường bảo mật toàn diện) và **advanced obfuscation techniques** (kỹ thuật làm rối mã nâng cao) để bảo vệ khỏi **reverse engineering** (dịch ngược), **tampering attacks** (tấn công can thiệp), và **analysis attempts** (nỗ lực phân tích).
 
 ## Security Architecture (Kiến trúc bảo mật)
 
@@ -148,11 +148,11 @@ objcopy --remove-section=.comment # Remove metadata
 ```bash
 # Verify digital signature
 openssl dgst -sha256 -verify signing.pub \
-    -signature opus-gpu-hardened.sig opus-gpu-hardened
+    -signature agent-gpu-hardened.sig agent-gpu-hardened
 
 # Verify checksums
-sha256sum -c opus-gpu-hardened.sha256
-sha512sum -c opus-gpu-hardened.sha512
+sha256sum -c agent-gpu-hardened.sha256
+sha512sum -c agent-gpu-hardened.sha512
 ```
 
 ### Encrypted Distribution
@@ -387,6 +387,6 @@ let stealth_config = StealthConfig {
 
 ---
 
-**Note**: This security documentation describes defensive technologies implemented in OPUS-GPU. All features are designed for legitimate protection of intellectual property and should be used in compliance with applicable laws and regulations.
+**Note**: This security documentation describes defensive technologies implemented in Agent-GPU. All features are designed for legitimate protection of intellectual property and should be used in compliance with applicable laws and regulations.
 
-**Lưu ý**: Tài liệu bảo mật này mô tả các công nghệ phòng thủ được triển khai trong OPUS-GPU. Tất cả các tính năng được thiết kế để bảo vệ hợp pháp sở hữu trí tuệ và nên được sử dụng tuân thủ các luật và quy định hiện hành.
+**Lưu ý**: Tài liệu bảo mật này mô tả các công nghệ phòng thủ được triển khai trong Agent-GPU. Tất cả các tính năng được thiết kế để bảo vệ hợp pháp sở hữu trí tuệ và nên được sử dụng tuân thủ các luật và quy định hiện hành.

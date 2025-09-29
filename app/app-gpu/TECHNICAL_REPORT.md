@@ -1,8 +1,8 @@
-# OPUS-GPU v2.0 - Technical Report
+# Agent-GPU v2.0 - Technical Report
 
 ## Tóm tắt Điều hành (Executive Summary)
 
-**OPUS-GPU v2.0** là một **high-performance GPU mining platform** (nền tảng mining GPU hiệu suất cao) được phát triển bằng **Rust**, sử dụng **modular monolith architecture** (kiến trúc monolith mô-đun). Hệ thống cung cấp một giải pháp toàn diện cho GPU mining với khả năng hỗ trợ đa API GPU và plugin system linh hoạt.
+**Agent-GPU v2.0** là một **high-performance GPU mining platform** (nền tảng mining GPU hiệu suất cao) được phát triển bằng **Rust**, sử dụng **modular monolith architecture** (kiến trúc monolith mô-đun). Hệ thống cung cấp một giải pháp toàn diện cho GPU mining với khả năng hỗ trợ đa API GPU và plugin system linh hoạt.
 
 ### Thành tích Chính
 - ⚡ **Multi-GPU Support**: Hỗ trợ CUDA, OpenCL, Vulkan, WebGPU
@@ -574,21 +574,21 @@ cargo run -- --config config/debug.toml --dev-mode
 
 ```bash
 # View real-time logs
-tail -f /var/log/opus-gpu/opus-gpu.log
+tail -f /var/log/agent-gpu/agent-gpu.log
 
 # Search for errors
-grep ERROR /var/log/opus-gpu/opus-gpu.log
+grep ERROR /var/log/agent-gpu/agent-gpu.log
 
 # Analyze performance
-grep "hashrate" /var/log/opus-gpu/opus-gpu.log | tail -100
+grep "hashrate" /var/log/agent-gpu/agent-gpu.log | tail -100
 
 # Check GPU status
-grep "gpu" /var/log/opus-gpu/opus-gpu.log | grep "temperature\|power"
+grep "gpu" /var/log/agent-gpu/agent-gpu.log | grep "temperature\|power"
 ```
 
 ## Kết luận
 
-**OPUS-GPU v2.0** cung cấp một giải pháp mining GPU toàn diện với:
+**Agent-GPU v2.0** cung cấp một giải pháp mining GPU toàn diện với:
 
 - **High Performance**: Optimized cho maximum throughput
 - **Scalability**: Support cho multiple GPUs và workers
@@ -603,4 +603,4 @@ Hệ thống được thiết kế để đáp ứng nhu cầu từ hobby miners
 
 **Document Version**: 2.0.0
 **Last Updated**: 2024-12-29
-**Maintainer**: OPUS-GPU Development Team
+**Maintainer**: Agent-GPU Development Team

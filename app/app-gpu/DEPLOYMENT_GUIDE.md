@@ -1,10 +1,10 @@
-# OPUS-GPU Deployment Guide
+# Agent-GPU Deployment Guide
 
-🚀 **Production Deployment Guide** cho **OPUS-GPU v2.0** - High-performance GPU mining platform với modular monolith architecture
+🚀 **Production Deployment Guide** cho **Agent-GPU v2.0** - High-performance GPU mining platform với modular monolith architecture
 
 ## 📋 Tổng quan
 
-Hướng dẫn này cung cấp quy trình triển khai production đầy đủ cho **OPUS-GPU**, bao gồm yêu cầu phần cứng, cài đặt phần mềm, cấu hình bảo mật và monitoring.
+Hướng dẫn này cung cấp quy trình triển khai production đầy đủ cho **Agent-GPU**, bao gồm yêu cầu phần cứng, cài đặt phần mềm, cấu hình bảo mật và monitoring.
 
 ## 🔧 Yêu cầu hệ thống
 
@@ -141,14 +141,14 @@ NVIDIA GPU Operator: 23.6+
 #### **Single GPU Setup**
 ```bash
 # 1. Pull latest image
-docker pull opus-gpu:latest
+docker pull agent-gpu:latest
 
 # 2. Create configuration
-mkdir -p /opt/opus-gpu/{config,data,logs}
+mkdir -p /opt/agent-gpu/{config,data,logs}
 
 # 3. Deploy with GPU support
 docker run -d \
-  --name opus-gpu-miner \
+  --name agent-gpu-miner \
   --runtime=nvidia \
   --gpus all \
   --restart unless-stopped \
@@ -156,19 +156,19 @@ docker run -d \
   -p 8081:8081 \
   -p 8082:8082 \
   -p 9090:9090 \
-  -v /opt/opus-gpu/config:/app/config \
-  -v /opt/opus-gpu/data:/app/data \
-  -v /opt/opus-gpu/logs:/app/logs \
+  -v /opt/agent-gpu/config:/app/config \
+  -v /opt/agent-gpu/data:/app/data \
+  -v /opt/agent-gpu/logs:/app/logs \
   -e OPUS_GPU_POOL_URL="stratum+tcp://pool.example.com:4444" \
   -e OPUS_GPU_WALLET_ADDRESS="your_wallet_address" \
   -e OPUS_GPU_WORKER_NAME="miner01" \
-  opus-gpu:latest
+  agent-gpu:latest
 ```
 
 #### **Multi-GPU Production Setup**
 ```bash
 # 1. Create production configuration
-cat > /opt/opus-gpu/config/production.toml << EOF
+cat > /opt/agent-gpu/config/production.toml << EOF
 [mining]
 algorithm = "SHA256"
 max_workers = 8
@@ -202,7 +202,7 @@ EOF
 
 # 2. Deploy with production config
 docker run -d \
-  --name opus-gpu-production \
+  --name agent-gpu-production \
   --runtime=nvidia \
   --gpus all \
   --restart unless-stopped \
@@ -212,13 +212,13 @@ docker run -d \
   -p 8081:8081 \
   -p 8082:8082 \
   -p 9090:9090 \
-  -v /opt/opus-gpu/config:/app/config \
-  -v /opt/opus-gpu/data:/app/data \
-  -v /opt/opus-gpu/logs:/app/logs \
+  -v /opt/agent-gpu/config:/app/config \
+  -v /opt/agent-gpu/data:/app/data \
+  -v /opt/agent-gpu/logs:/app/logs \
   --log-driver=json-file \
   --log-opt max-size=100m \
   --log-opt max-file=3 \
-  opus-gpu:latest \
+  agent-gpu:latest \
   --config config/production.toml
 ```
 
@@ -228,9 +228,9 @@ docker run -d \
 version: '3.8'
 
 services:
-  opus-gpu:
-    image: opus-gpu:latest
-    container_name: opus-gpu-miner
+  agent-gpu:
+    image: agent-gpu:latest
+    container_name: agent-gpu-miner
     restart: unless-stopped
     runtime: nvidia
     environment:
@@ -309,58 +309,58 @@ sudo dnf install -y openssl-devel sqlite-devel \
   cmake clang llvm-devel opencl-headers
 
 # 3. Clone và build
-git clone https://github.com/opus-gpu/opus-gpu.git
-cd opus-gpu/app/app-gpu
+git clone https://github.com/agent-gpu/agent-gpu.git
+cd agent-gpu/app/app-gpu
 cargo build --release --features "cuda,opencl,security"
 
 # 4. Install binary
-sudo cp target/release/opus-gpu /usr/local/bin/
-sudo chmod +x /usr/local/bin/opus-gpu
+sudo cp target/release/agent-gpu /usr/local/bin/
+sudo chmod +x /usr/local/bin/agent-gpu
 
 # 5. Create service user
-sudo useradd --system --shell /bin/false opus-gpu
-sudo mkdir -p /opt/opus-gpu/{config,data,logs}
-sudo chown -R opus-gpu:opus-gpu /opt/opus-gpu
+sudo useradd --system --shell /bin/false agent-gpu
+sudo mkdir -p /opt/agent-gpu/{config,data,logs}
+sudo chown -R agent-gpu:agent-gpu /opt/agent-gpu
 ```
 
 #### **Pre-compiled Binary**
 ```bash
 # 1. Download latest release
-wget https://github.com/opus-gpu/opus-gpu/releases/download/v2.0.0/opus-gpu-linux-x86_64.tar.gz
+wget https://github.com/agent-gpu/agent-gpu/releases/download/v2.0.0/agent-gpu-linux-x86_64.tar.gz
 
 # 2. Extract và install
-tar -xzf opus-gpu-linux-x86_64.tar.gz
-sudo cp opus-gpu /usr/local/bin/
-sudo chmod +x /usr/local/bin/opus-gpu
+tar -xzf agent-gpu-linux-x86_64.tar.gz
+sudo cp agent-gpu /usr/local/bin/
+sudo chmod +x /usr/local/bin/agent-gpu
 
 # 3. Verify installation
-opus-gpu --version
+agent-gpu --version
 ```
 
 ### Method 3: Kubernetes Deployment
 
 #### **Kubernetes Manifest**
 ```yaml
-# opus-gpu-deployment.yaml
+# agent-gpu-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: opus-gpu-miner
+  name: agent-gpu-miner
   labels:
-    app: opus-gpu
+    app: agent-gpu
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: opus-gpu
+      app: agent-gpu
   template:
     metadata:
       labels:
-        app: opus-gpu
+        app: agent-gpu
     spec:
       containers:
-      - name: opus-gpu
-        image: opus-gpu:latest
+      - name: agent-gpu
+        image: agent-gpu:latest
         resources:
           limits:
             nvidia.com/gpu: 4
@@ -402,19 +402,19 @@ spec:
       volumes:
       - name: config
         configMap:
-          name: opus-gpu-config
+          name: agent-gpu-config
       - name: data
         persistentVolumeClaim:
-          claimName: opus-gpu-data
+          claimName: agent-gpu-data
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: opus-gpu-service
+  name: agent-gpu-service
 spec:
   selector:
-    app: opus-gpu
+    app: agent-gpu
   ports:
   - name: rest-api
     port: 8080
@@ -435,7 +435,7 @@ spec:
 
 ### Production Configuration
 ```toml
-# /opt/opus-gpu/config/production.toml
+# /opt/agent-gpu/config/production.toml
 [mining]
 algorithm = "SHA256"
 max_workers = 8
@@ -461,8 +461,8 @@ connection_timeout_secs = 15
 keepalive_interval_secs = 30
 
 [wallet]
-keystore_dir = "/opt/opus-gpu/secure/keystore"
-backup_dir = "/opt/opus-gpu/backup"
+keystore_dir = "/opt/agent-gpu/secure/keystore"
+backup_dir = "/opt/agent-gpu/backup"
 encryption_enabled = true
 
 [monitoring]
@@ -475,7 +475,7 @@ enable_alerts = true
 alert_webhook_url = "https://hooks.slack.com/your-webhook"
 
 [storage]
-data_dir = "/opt/opus-gpu/data"
+data_dir = "/opt/agent-gpu/data"
 database_url = "postgres://opus:password@localhost:5432/opus_gpu"
 max_connections = 20
 backup_enabled = true
@@ -506,7 +506,7 @@ keepalive_timeout_secs = 5
 
 [plugins]
 disabled = false
-plugin_dir = "/opt/opus-gpu/plugins"
+plugin_dir = "/opt/agent-gpu/plugins"
 max_plugins = 100
 load_timeout_secs = 60
 whitelist = ["trusted-plugin", "monitoring-plugin"]
@@ -517,7 +517,7 @@ buffer_size = 2000
 max_subscribers = 200
 message_timeout_secs = 10
 enable_persistence = true
-persistence_file = "/opt/opus-gpu/data/bus_state.json"
+persistence_file = "/opt/agent-gpu/data/bus_state.json"
 ```
 
 ## 🔒 Security Configuration
@@ -525,8 +525,8 @@ persistence_file = "/opt/opus-gpu/data/bus_state.json"
 ### SSL/TLS Setup
 ```bash
 # 1. Generate SSL certificates
-sudo mkdir -p /opt/opus-gpu/ssl
-cd /opt/opus-gpu/ssl
+sudo mkdir -p /opt/agent-gpu/ssl
+cd /opt/agent-gpu/ssl
 
 # Self-signed certificate (development)
 sudo openssl req -x509 -newkey rsa:4096 -keyout private.key -out certificate.crt -days 365 -nodes
@@ -534,8 +534,8 @@ sudo openssl req -x509 -newkey rsa:4096 -keyout private.key -out certificate.crt
 # Let's Encrypt (production)
 sudo apt install certbot
 sudo certbot certonly --standalone -d your-mining-domain.com
-sudo cp /etc/letsencrypt/live/your-mining-domain.com/fullchain.pem /opt/opus-gpu/ssl/
-sudo cp /etc/letsencrypt/live/your-mining-domain.com/privkey.pem /opt/opus-gpu/ssl/
+sudo cp /etc/letsencrypt/live/your-mining-domain.com/fullchain.pem /opt/agent-gpu/ssl/
+sudo cp /etc/letsencrypt/live/your-mining-domain.com/privkey.pem /opt/agent-gpu/ssl/
 ```
 
 ### Authentication Setup
@@ -551,14 +551,14 @@ lockout_duration_minutes = 15
 [api.rest]
 require_auth = true
 tls_enabled = true
-tls_cert_file = "/opt/opus-gpu/ssl/certificate.crt"
-tls_key_file = "/opt/opus-gpu/ssl/private.key"
+tls_cert_file = "/opt/agent-gpu/ssl/certificate.crt"
+tls_key_file = "/opt/agent-gpu/ssl/private.key"
 
 [api.websocket]
 require_auth = true
 tls_enabled = true
-tls_cert_file = "/opt/opus-gpu/ssl/certificate.crt"
-tls_key_file = "/opt/opus-gpu/ssl/private.key"
+tls_cert_file = "/opt/agent-gpu/ssl/certificate.crt"
+tls_key_file = "/opt/agent-gpu/ssl/private.key"
 ```
 
 ### Firewall Configuration
@@ -571,7 +571,7 @@ sudo ufw default allow outgoing
 # Allow SSH
 sudo ufw allow ssh
 
-# Allow OPUS-GPU ports
+# Allow Agent-GPU ports
 sudo ufw allow 8080/tcp  # REST API
 sudo ufw allow 8081/tcp  # WebSocket
 sudo ufw allow 8082/tcp  # gRPC
@@ -598,7 +598,7 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'opus-gpu'
+  - job_name: 'agent-gpu'
     static_configs:
       - targets: ['localhost:9090']
     scrape_interval: 5s
@@ -621,7 +621,7 @@ alerting:
 ```yaml
 # monitoring/alert_rules.yml
 groups:
-  - name: opus-gpu-alerts
+  - name: agent-gpu-alerts
     rules:
       - alert: HighGPUTemperature
         expr: opus_gpu_temperature > 80
@@ -654,7 +654,7 @@ groups:
 ```json
 {
   "dashboard": {
-    "title": "OPUS-GPU Monitoring",
+    "title": "Agent-GPU Monitoring",
     "panels": [
       {
         "title": "Hashrate",
@@ -696,32 +696,32 @@ groups:
 ### Automated Backup Script
 ```bash
 #!/bin/bash
-# /opt/opus-gpu/scripts/backup.sh
+# /opt/agent-gpu/scripts/backup.sh
 
-BACKUP_DIR="/opt/opus-gpu/backups"
+BACKUP_DIR="/opt/agent-gpu/backups"
 DATE=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="opus-gpu-backup-${DATE}.tar.gz"
+BACKUP_FILE="agent-gpu-backup-${DATE}.tar.gz"
 
 # Create backup directory
 mkdir -p ${BACKUP_DIR}
 
 # Stop mining temporarily
-docker stop opus-gpu-miner
+docker stop agent-gpu-miner
 
 # Backup configuration và data
 tar -czf ${BACKUP_DIR}/${BACKUP_FILE} \
-  /opt/opus-gpu/config \
-  /opt/opus-gpu/data \
-  /opt/opus-gpu/ssl
+  /opt/agent-gpu/config \
+  /opt/agent-gpu/data \
+  /opt/agent-gpu/ssl
 
 # Backup database
 pg_dump opus_gpu > ${BACKUP_DIR}/database-${DATE}.sql
 
 # Restart mining
-docker start opus-gpu-miner
+docker start agent-gpu-miner
 
 # Clean old backups (keep 30 days)
-find ${BACKUP_DIR} -name "opus-gpu-backup-*.tar.gz" -mtime +30 -delete
+find ${BACKUP_DIR} -name "agent-gpu-backup-*.tar.gz" -mtime +30 -delete
 find ${BACKUP_DIR} -name "database-*.sql" -mtime +30 -delete
 
 # Upload to cloud storage (optional)
@@ -731,22 +731,22 @@ find ${BACKUP_DIR} -name "database-*.sql" -mtime +30 -delete
 ### Disaster Recovery Plan
 ```bash
 # 1. Emergency shutdown procedure
-docker stop opus-gpu-miner
-systemctl stop opus-gpu
+docker stop agent-gpu-miner
+systemctl stop agent-gpu
 
 # 2. Restore from backup
-cd /opt/opus-gpu
-tar -xzf backups/opus-gpu-backup-YYYYMMDD_HHMMSS.tar.gz
+cd /opt/agent-gpu
+tar -xzf backups/agent-gpu-backup-YYYYMMDD_HHMMSS.tar.gz
 
 # 3. Restore database
 psql opus_gpu < backups/database-YYYYMMDD_HHMMSS.sql
 
 # 4. Verify configuration
-opus-gpu --config config/production.toml --validate
+agent-gpu --config config/production.toml --validate
 
 # 5. Restart services
-docker start opus-gpu-miner
-systemctl start opus-gpu
+docker start agent-gpu-miner
+systemctl start agent-gpu
 ```
 
 ## ⚡ Performance Tuning
@@ -770,8 +770,8 @@ echo 'net.ipv4.tcp_rmem = 4096 65536 16777216' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 
 # Increase file descriptor limits
-echo 'opus-gpu soft nofile 65536' | sudo tee -a /etc/security/limits.conf
-echo 'opus-gpu hard nofile 65536' | sudo tee -a /etc/security/limits.conf
+echo 'agent-gpu soft nofile 65536' | sudo tee -a /etc/security/limits.conf
+echo 'agent-gpu hard nofile 65536' | sudo tee -a /etc/security/limits.conf
 ```
 
 ### GPU Optimization
@@ -861,13 +861,13 @@ sudo nvidia-smi -q -d TEMPERATURE
 ### Log Analysis
 ```bash
 # Container logs
-docker logs opus-gpu-miner --tail 100 -f
+docker logs agent-gpu-miner --tail 100 -f
 
 # System logs
-journalctl -u opus-gpu -f
+journalctl -u agent-gpu -f
 
 # Application logs
-tail -f /opt/opus-gpu/logs/opus-gpu.log
+tail -f /opt/agent-gpu/logs/agent-gpu.log
 
 # GPU logs
 sudo dmesg | grep -i nvidia
@@ -897,7 +897,7 @@ curl http://localhost:9090/metrics
 - Update mining pool lists
 
 # Monthly tasks
-- Update OPUS-GPU to latest version
+- Update Agent-GPU to latest version
 - Clean log files
 - Optimize database
 - Security audit
@@ -913,16 +913,16 @@ curl http://localhost:9090/metrics
 ### Update Procedure
 ```bash
 # 1. Backup current installation
-/opt/opus-gpu/scripts/backup.sh
+/opt/agent-gpu/scripts/backup.sh
 
 # 2. Stop mining
-docker stop opus-gpu-miner
+docker stop agent-gpu-miner
 
 # 3. Pull new image
-docker pull opus-gpu:latest
+docker pull agent-gpu:latest
 
 # 4. Verify configuration compatibility
-opus-gpu --config config/production.toml --validate
+agent-gpu --config config/production.toml --validate
 
 # 5. Deploy update
 docker-compose up -d
@@ -934,8 +934,8 @@ curl http://localhost:8080/health
 ## 📞 Support & Resources
 
 ### **Emergency Contacts**
-- **Technical Support**: support@opus-gpu.com
-- **Security Issues**: security@opus-gpu.com
+- **Technical Support**: support@agent-gpu.com
+- **Security Issues**: security@agent-gpu.com
 - **Business Critical**: +1-XXX-XXX-XXXX
 
 ### **Documentation**
@@ -944,10 +944,10 @@ curl http://localhost:8080/health
 - **Quick Start**: [QUICKSTART.md](QUICKSTART.md)
 
 ### **Community**
-- **GitHub Issues**: https://github.com/opus-gpu/opus-gpu/issues
-- **Discord Server**: https://discord.gg/opus-gpu
+- **GitHub Issues**: https://github.com/agent-gpu/agent-gpu/issues
+- **Discord Server**: https://discord.gg/agent-gpu
 - **Telegram Group**: https://t.me/opus_gpu
 
 ---
 
-**Made with ❤️ by OPUS-GPU Team** | **Production-Ready Since 2024**
+**Made with ❤️ by Agent-GPU Team** | **Production-Ready Since 2024**

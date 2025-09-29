@@ -1,10 +1,10 @@
-# OPUS-GPU Architecture Documentation
+# Agent-GPU Architecture Documentation
 
-🏗️ **System Architecture** cho **OPUS-GPU v2.0** - Modular Monolith Design
+🏗️ **System Architecture** cho **Agent-GPU v2.0** - Modular Monolith Design
 
 ## 📋 Tổng quan kiến trúc
 
-**OPUS-GPU** sử dụng **Modular Monolith Architecture** (kiến trúc monolith mô-đun) được thiết kế để cân bằng giữa **simplicity** (đơn giản) và **modularity** (tính mô-đun), tối ưu hóa cho **high-performance GPU mining** (mining GPU hiệu suất cao).
+**Agent-GPU** sử dụng **Modular Monolith Architecture** (kiến trúc monolith mô-đun) được thiết kế để cân bằng giữa **simplicity** (đơn giản) và **modularity** (tính mô-đun), tối ưu hóa cho **high-performance GPU mining** (mining GPU hiệu suất cao).
 
 ### 🎯 Design Goals
 
@@ -30,7 +30,7 @@ reliability:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                          OPUS-GPU System                            │
+│                          Agent-GPU System                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                        External APIs                                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
@@ -716,7 +716,7 @@ impl TracingSystem {
 
         // Add custom attributes
         span.set_attribute("operation.type", "mining");
-        span.set_attribute("system.component", "opus-gpu");
+        span.set_attribute("system.component", "agent-gpu");
 
         let result = operation();
 

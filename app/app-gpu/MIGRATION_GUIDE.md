@@ -1,10 +1,10 @@
-# OPUS-GPU Migration Guide
+# Agent-GPU Migration Guide
 
-🔄 **Migration Guide** từ hệ thống cũ sang **OPUS-GPU v2.0** - Safe & Comprehensive Migration
+🔄 **Migration Guide** từ hệ thống cũ sang **Agent-GPU v2.0** - Safe & Comprehensive Migration
 
 ## 📋 Tổng quan Migration
 
-Hướng dẫn này cung cấp quy trình migration toàn diện từ các hệ thống mining cũ sang **OPUS-GPU v2.0**, đảm bảo **zero downtime** (không gián đoạn) và **data integrity** (toàn vẹn dữ liệu).
+Hướng dẫn này cung cấp quy trình migration toàn diện từ các hệ thống mining cũ sang **Agent-GPU v2.0**, đảm bảo **zero downtime** (không gián đoạn) và **data integrity** (toàn vẹn dữ liệu).
 
 ## 🔍 Pre-Migration Assessment
 
@@ -64,7 +64,7 @@ unsupported_scenarios:
 □ Record current performance baselines
 □ Plan migration timeline
 □ Prepare rollback strategy
-□ Test OPUS-GPU on secondary system
+□ Test Agent-GPU on secondary system
 □ Validate GPU compatibility
 □ Check network requirements
 □ Notify pools of potential IP changes
@@ -83,7 +83,7 @@ unsupported_scenarios:
 ```
 
 ### Type B: Complete System Migration
-**Scenario**: Migrate từ old mining OS sang standard Linux + OPUS-GPU
+**Scenario**: Migrate từ old mining OS sang standard Linux + Agent-GPU
 
 ```bash
 # Estimated time: 2-4 hours
@@ -111,7 +111,7 @@ unsupported_scenarios:
 #!/bin/bash
 # backup-current-system.sh
 
-BACKUP_DIR="/backup/opus-gpu-migration-$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="/backup/agent-gpu-migration-$(date +%Y%m%d_%H%M%S)"
 mkdir -p $BACKUP_DIR
 
 echo "Creating comprehensive system backup..."
@@ -180,8 +180,8 @@ if [ -f "/etc/t-rex/config.json" ]; then
     jq '.pools[] | {url: .url, user: .user, pass: .pass}' /etc/t-rex/config.json > extracted_pools.json
 fi
 
-# Generate OPUS-GPU configuration template
-cat > opus-gpu-migrated.toml << EOF
+# Generate Agent-GPU configuration template
+cat > agent-gpu-migrated.toml << EOF
 # Migrated configuration from previous mining setup
 # Generated on: $(date)
 
@@ -207,7 +207,7 @@ host = "127.0.0.1"
 port = 8080
 EOF
 
-echo "Configuration template created: opus-gpu-migrated.toml"
+echo "Configuration template created: agent-gpu-migrated.toml"
 ```
 
 #### **Step 1.3: Validate Prerequisites**
@@ -269,14 +269,14 @@ fi
 echo "Prerequisites validation completed"
 ```
 
-### Phase 2: OPUS-GPU Installation
+### Phase 2: Agent-GPU Installation
 
-#### **Step 2.1: Install OPUS-GPU (Docker Method)**
+#### **Step 2.1: Install Agent-GPU (Docker Method)**
 ```bash
 #!/bin/bash
-# install-opus-gpu-docker.sh
+# install-agent-gpu-docker.sh
 
-echo "Installing OPUS-GPU via Docker..."
+echo "Installing Agent-GPU via Docker..."
 
 # 1. Install Docker if not present
 if ! command -v docker &> /dev/null; then
@@ -296,19 +296,19 @@ if ! command -v nvidia-container-runtime &> /dev/null; then
     sudo systemctl restart docker
 fi
 
-# 3. Create OPUS-GPU directory structure
-sudo mkdir -p /opt/opus-gpu/{config,data,logs,backup}
-sudo chown -R $USER:$USER /opt/opus-gpu
+# 3. Create Agent-GPU directory structure
+sudo mkdir -p /opt/agent-gpu/{config,data,logs,backup}
+sudo chown -R $USER:$USER /opt/agent-gpu
 
-# 4. Pull OPUS-GPU image
-echo "Pulling OPUS-GPU Docker image..."
-docker pull opus-gpu:latest
+# 4. Pull Agent-GPU image
+echo "Pulling Agent-GPU Docker image..."
+docker pull agent-gpu:latest
 
 # 5. Test Docker installation
 echo "Testing Docker + GPU access..."
 docker run --rm --gpus all nvidia/cuda:12.2-base-ubuntu22.04 nvidia-smi
 
-echo "OPUS-GPU Docker installation completed"
+echo "Agent-GPU Docker installation completed"
 ```
 
 #### **Step 2.2: Configuration Migration**
@@ -316,15 +316,15 @@ echo "OPUS-GPU Docker installation completed"
 #!/bin/bash
 # migrate-configuration.sh
 
-echo "Migrating configuration to OPUS-GPU format..."
+echo "Migrating configuration to Agent-GPU format..."
 
 # Read backup data
-BACKUP_DIR="/backup/opus-gpu-migration-*"
-CONFIG_FILE="/opt/opus-gpu/config/migrated.toml"
+BACKUP_DIR="/backup/agent-gpu-migration-*"
+CONFIG_FILE="/opt/agent-gpu/config/migrated.toml"
 
 # Start với base configuration
 cat > $CONFIG_FILE << 'EOF'
-# OPUS-GPU Configuration
+# Agent-GPU Configuration
 # Migrated from previous mining setup
 
 [mining]
@@ -348,8 +348,8 @@ connection_timeout_secs = 10
 keepalive_interval_secs = 30
 
 [wallet]
-keystore_dir = "/opt/opus-gpu/keystore"
-backup_dir = "/opt/opus-gpu/backup"
+keystore_dir = "/opt/agent-gpu/keystore"
+backup_dir = "/opt/agent-gpu/backup"
 encryption_enabled = true
 
 [monitoring]
@@ -361,8 +361,8 @@ memory_threshold = 90.0
 enable_alerts = true
 
 [storage]
-data_dir = "/opt/opus-gpu/data"
-database_url = "sqlite://opus-gpu.db"
+data_dir = "/opt/agent-gpu/data"
+database_url = "sqlite://agent-gpu.db"
 max_connections = 10
 backup_enabled = true
 backup_interval_hours = 24
@@ -392,7 +392,7 @@ keepalive_timeout_secs = 5
 
 [plugins]
 disabled = false
-plugin_dir = "/opt/opus-gpu/plugins"
+plugin_dir = "/opt/agent-gpu/plugins"
 max_plugins = 50
 load_timeout_secs = 30
 whitelist = []
@@ -403,7 +403,7 @@ buffer_size = 1000
 max_subscribers = 100
 message_timeout_secs = 5
 enable_persistence = false
-persistence_file = "/opt/opus-gpu/data/bus_state.json"
+persistence_file = "/opt/agent-gpu/data/bus_state.json"
 EOF
 
 # Extract pools from backup
@@ -434,8 +434,8 @@ echo "Configuration migration completed: $CONFIG_FILE"
 
 echo "Migrating wallet data..."
 
-BACKUP_WALLET_DIR="/backup/opus-gpu-migration-*/wallets"
-OPUS_WALLET_DIR="/opt/opus-gpu/keystore"
+BACKUP_WALLET_DIR="/backup/agent-gpu-migration-*/wallets"
+OPUS_WALLET_DIR="/opt/agent-gpu/keystore"
 
 mkdir -p $OPUS_WALLET_DIR
 
@@ -462,7 +462,7 @@ cat > $OPUS_WALLET_DIR/wallet_info.txt << EOF
 
 # Original wallet location: $BACKUP_WALLET_DIR
 # New wallet location: $OPUS_WALLET_DIR
-# Encryption: Enabled by default in OPUS-GPU
+# Encryption: Enabled by default in Agent-GPU
 
 # Important: Verify wallet access before deleting backup files
 EOF
@@ -475,8 +475,8 @@ EOF
 
 echo "Migrating historical mining data..."
 
-BACKUP_DATA_DIR="/backup/opus-gpu-migration-*/data"
-OPUS_DATA_DIR="/opt/opus-gpu/data"
+BACKUP_DATA_DIR="/backup/agent-gpu-migration-*/data"
+OPUS_DATA_DIR="/opt/agent-gpu/data"
 
 mkdir -p $OPUS_DATA_DIR
 
@@ -497,9 +497,9 @@ else
     echo "No historical data found"
 fi
 
-# Initialize OPUS-GPU database
-echo "Initializing OPUS-GPU database..."
-# This would be done by OPUS-GPU on first run
+# Initialize Agent-GPU database
+echo "Initializing Agent-GPU database..."
+# This would be done by Agent-GPU on first run
 ```
 
 ### Phase 4: Testing & Validation
@@ -507,15 +507,15 @@ echo "Initializing OPUS-GPU database..."
 #### **Step 4.1: Test Installation**
 ```bash
 #!/bin/bash
-# test-opus-gpu-installation.sh
+# test-agent-gpu-installation.sh
 
-echo "Testing OPUS-GPU installation..."
+echo "Testing Agent-GPU installation..."
 
 # 1. Test Docker container
 echo "Testing Docker container..."
 docker run --rm --gpus all \
-  -v /opt/opus-gpu/config:/app/config \
-  opus-gpu:latest \
+  -v /opt/agent-gpu/config:/app/config \
+  agent-gpu:latest \
   --config config/migrated.toml --validate
 
 if [ $? -eq 0 ]; then
@@ -528,14 +528,14 @@ fi
 # 2. Test GPU detection
 echo "Testing GPU detection..."
 docker run --rm --gpus all \
-  opus-gpu:latest \
+  agent-gpu:latest \
   --list-devices
 
 # 3. Test benchmark mode
 echo "Running benchmark test..."
 docker run --rm --gpus all \
-  -v /opt/opus-gpu/config:/app/config \
-  opus-gpu:latest \
+  -v /opt/agent-gpu/config:/app/config \
+  agent-gpu:latest \
   --benchmark --duration 30 --config config/migrated.toml
 
 echo "Installation testing completed"
@@ -549,31 +549,31 @@ echo "Installation testing completed"
 echo "Comparing performance với previous system..."
 
 # Record baseline from backup
-BACKUP_PERFORMANCE="/backup/opus-gpu-migration-*/current_processes.txt"
+BACKUP_PERFORMANCE="/backup/agent-gpu-migration-*/current_processes.txt"
 if [ -f "$BACKUP_PERFORMANCE" ]; then
     echo "Previous system baseline:"
     cat $BACKUP_PERFORMANCE
 fi
 
-# Test OPUS-GPU performance
-echo "Testing OPUS-GPU performance..."
-docker run -d --name opus-gpu-test \
+# Test Agent-GPU performance
+echo "Testing Agent-GPU performance..."
+docker run -d --name agent-gpu-test \
   --gpus all \
-  -v /opt/opus-gpu/config:/app/config \
-  -v /opt/opus-gpu/data:/app/data \
-  opus-gpu:latest \
+  -v /opt/agent-gpu/config:/app/config \
+  -v /opt/agent-gpu/data:/app/data \
+  agent-gpu:latest \
   --config config/migrated.toml
 
 # Wait for startup
 sleep 30
 
 # Collect performance metrics
-echo "Collecting OPUS-GPU metrics..."
+echo "Collecting Agent-GPU metrics..."
 curl -s http://localhost:8080/api/v1/status > opus_gpu_performance.json
 curl -s http://localhost:8080/api/v1/mining/stats >> opus_gpu_performance.json
 
 # Stop test container
-docker stop opus-gpu-test && docker rm opus-gpu-test
+docker stop agent-gpu-test && docker rm agent-gpu-test
 
 echo "Performance comparison data saved"
 ```
@@ -589,7 +589,7 @@ echo "Stopping old mining software..."
 
 # Record final statistics
 echo "Recording final statistics from old system..."
-ps aux | grep -E "(cgminer|miner)" > /opt/opus-gpu/backup/final_old_system_stats.txt
+ps aux | grep -E "(cgminer|miner)" > /opt/agent-gpu/backup/final_old_system_stats.txt
 
 # Stop mining processes gracefully
 echo "Stopping mining processes..."
@@ -608,18 +608,18 @@ pkill -KILL t-rex 2>/dev/null || true
 echo "Old mining software stopped"
 ```
 
-#### **Step 5.2: Deploy OPUS-GPU Production**
+#### **Step 5.2: Deploy Agent-GPU Production**
 ```bash
 #!/bin/bash
-# deploy-opus-gpu-production.sh
+# deploy-agent-gpu-production.sh
 
-echo "Deploying OPUS-GPU in production mode..."
+echo "Deploying Agent-GPU in production mode..."
 
 # 1. Final configuration check
 echo "Final configuration validation..."
 docker run --rm --gpus all \
-  -v /opt/opus-gpu/config:/app/config \
-  opus-gpu:latest \
+  -v /opt/agent-gpu/config:/app/config \
+  agent-gpu:latest \
   --config config/migrated.toml --validate
 
 if [ $? -ne 0 ]; then
@@ -627,10 +627,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 2. Start OPUS-GPU production container
-echo "Starting OPUS-GPU production container..."
+# 2. Start Agent-GPU production container
+echo "Starting Agent-GPU production container..."
 docker run -d \
-  --name opus-gpu-production \
+  --name agent-gpu-production \
   --runtime=nvidia \
   --gpus all \
   --restart unless-stopped \
@@ -638,26 +638,26 @@ docker run -d \
   -p 8081:8081 \
   -p 8082:8082 \
   -p 9090:9090 \
-  -v /opt/opus-gpu/config:/app/config \
-  -v /opt/opus-gpu/data:/app/data \
-  -v /opt/opus-gpu/logs:/app/logs \
+  -v /opt/agent-gpu/config:/app/config \
+  -v /opt/agent-gpu/data:/app/data \
+  -v /opt/agent-gpu/logs:/app/logs \
   --log-driver=json-file \
   --log-opt max-size=100m \
   --log-opt max-file=3 \
-  opus-gpu:latest \
+  agent-gpu:latest \
   --config config/migrated.toml
 
 # 3. Wait for startup
-echo "Waiting for OPUS-GPU startup..."
+echo "Waiting for Agent-GPU startup..."
 sleep 30
 
 # 4. Verify operation
-echo "Verifying OPUS-GPU operation..."
+echo "Verifying Agent-GPU operation..."
 if curl -f http://localhost:8080/health >/dev/null 2>&1; then
-    echo "✓ OPUS-GPU health check passed"
+    echo "✓ Agent-GPU health check passed"
 else
-    echo "✗ OPUS-GPU health check failed"
-    docker logs opus-gpu-production
+    echo "✗ Agent-GPU health check failed"
+    docker logs agent-gpu-production
     exit 1
 fi
 
@@ -665,7 +665,7 @@ fi
 echo "Starting mining..."
 curl -X POST http://localhost:8080/api/v1/mining/start
 
-echo "OPUS-GPU production deployment completed successfully!"
+echo "Agent-GPU production deployment completed successfully!"
 ```
 
 ### Phase 6: Post-Migration Validation
@@ -679,13 +679,13 @@ echo "Starting 24-hour post-migration monitoring..."
 
 MONITOR_DURATION=86400  # 24 hours in seconds
 START_TIME=$(date +%s)
-LOG_FILE="/opt/opus-gpu/logs/migration_monitoring.log"
+LOG_FILE="/opt/agent-gpu/logs/migration_monitoring.log"
 
 while [ $(($(date +%s) - START_TIME)) -lt $MONITOR_DURATION ]; do
     echo "=== Monitoring Check: $(date) ===" >> $LOG_FILE
 
     # Check container status
-    docker ps | grep opus-gpu-production >> $LOG_FILE
+    docker ps | grep agent-gpu-production >> $LOG_FILE
 
     # Check mining status
     curl -s http://localhost:8080/api/v1/status >> $LOG_FILE
@@ -716,7 +716,7 @@ echo "Validating migration success..."
 
 # 1. Compare hashrates
 echo "Comparing hashrates..."
-OLD_HASHRATE=$(grep -E "hashrate|MH/s" /opt/opus-gpu/backup/final_old_system_stats.txt | head -1)
+OLD_HASHRATE=$(grep -E "hashrate|MH/s" /opt/agent-gpu/backup/final_old_system_stats.txt | head -1)
 NEW_HASHRATE=$(curl -s http://localhost:8080/api/v1/mining/stats | jq -r '.current.hashrate')
 
 echo "Old system hashrate: $OLD_HASHRATE"
@@ -744,7 +744,7 @@ fi
 
 # 4. Validate data integrity
 echo "Validating data integrity..."
-if [ -f "/opt/opus-gpu/keystore/wallet_info.txt" ]; then
+if [ -f "/opt/agent-gpu/keystore/wallet_info.txt" ]; then
     echo "✓ Wallet data preserved"
 else
     echo "⚠ Wallet data may be missing"
@@ -762,14 +762,14 @@ echo "Migration validation completed"
 
 echo "Initiating emergency rollback..."
 
-# 1. Stop OPUS-GPU
-echo "Stopping OPUS-GPU..."
-docker stop opus-gpu-production
-docker rm opus-gpu-production
+# 1. Stop Agent-GPU
+echo "Stopping Agent-GPU..."
+docker stop agent-gpu-production
+docker rm agent-gpu-production
 
 # 2. Restore old configuration
 echo "Restoring old configuration..."
-BACKUP_DIR="/backup/opus-gpu-migration-*"
+BACKUP_DIR="/backup/agent-gpu-migration-*"
 cp -r $BACKUP_DIR/config/* /etc/cgminer/ 2>/dev/null || true
 
 # 3. Restart old mining software
@@ -789,8 +789,8 @@ echo "Emergency rollback completed"
 
 echo "Initiating gradual rollback..."
 
-# 1. Reduce OPUS-GPU load
-echo "Reducing OPUS-GPU GPU allocation..."
+# 1. Reduce Agent-GPU load
+echo "Reducing Agent-GPU GPU allocation..."
 curl -X PUT http://localhost:8080/api/v1/config \
   -H "Content-Type: application/json" \
   -d '{"mining": {"gpu_devices": [0]}}'
@@ -810,7 +810,7 @@ echo "Gradual rollback initiated"
 ### Technical Verification
 ```bash
 # Post-migration checklist
-□ OPUS-GPU container running successfully
+□ Agent-GPU container running successfully
 □ All GPUs detected và utilized
 □ Pool connections established
 □ Hashrate matches or exceeds previous system
@@ -858,7 +858,7 @@ nvidia-smi -q -d POWER
 # 2. Verify thermal throttling
 nvidia-smi -q -d TEMPERATURE
 
-# 3. Optimize OPUS-GPU configuration
+# 3. Optimize Agent-GPU configuration
 curl -X PUT http://localhost:8080/api/v1/config \
   -H "Content-Type: application/json" \
   -d '{"mining": {"batch_size": 2000, "worker_threads": 2}}'
@@ -883,18 +883,18 @@ curl http://localhost:8080/api/v1/pool/status
 # Problem: Invalid configuration format
 # Solution:
 # 1. Validate configuration
-docker run --rm -v /opt/opus-gpu/config:/app/config \
-  opus-gpu:latest --config config/migrated.toml --validate
+docker run --rm -v /opt/agent-gpu/config:/app/config \
+  agent-gpu:latest --config config/migrated.toml --validate
 
 # 2. Reset to default configuration
-cp /opt/opus-gpu/config/default.toml /opt/opus-gpu/config/migrated.toml
+cp /opt/agent-gpu/config/default.toml /opt/agent-gpu/config/migrated.toml
 ```
 
 ## 📞 Migration Support
 
 ### **Emergency Support**
 - **Migration Hotline**: +1-XXX-XXX-XXXX (24/7 during migration window)
-- **Emergency Email**: migration-support@opus-gpu.com
+- **Emergency Email**: migration-support@agent-gpu.com
 - **Discord Channel**: #migration-support
 
 ### **Documentation**
@@ -909,4 +909,4 @@ cp /opt/opus-gpu/config/default.toml /opt/opus-gpu/config/migrated.toml
 
 ---
 
-**🔄 Safe & Successful Migration to OPUS-GPU** | **Zero Downtime, Maximum Performance**
+**🔄 Safe & Successful Migration to Agent-GPU** | **Zero Downtime, Maximum Performance**

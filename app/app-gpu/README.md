@@ -1,4 +1,4 @@
-# OPUS-GPU v2.0
+# Agent-GPU v2.0
 
 🚀 **High-Performance GPU Mining Platform** với **Modular Monolith Architecture** (kiến trúc monolith mô-đun)
 
@@ -6,10 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
 [![CUDA](https://img.shields.io/badge/CUDA-12.2+-green.svg)](https://developer.nvidia.com/cuda-zone)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black)](https://github.com/wollfoo/agent-gpu)
 
 ## 📋 Tổng quan
 
-**OPUS-GPU** là một nền tảng mining GPU hiệu suất cao được xây dựng bằng **Rust** với kiến trúc **modular monolith**. Hệ thống hỗ trợ nhiều **GPU APIs** (CUDA, OpenCL, Vulkan, WebGPU) và cung cấp **plugin system** (hệ thống plugin) linh hoạt cho việc mở rộng tính năng.
+**Agent-GPU** (formerly OPUS-GPU) là một nền tảng mining GPU hiệu suất cao được xây dựng bằng **Rust** với kiến trúc **modular monolith**. Hệ thống hỗ trợ nhiều **GPU APIs** (CUDA, OpenCL, Vulkan, WebGPU) và cung cấp **plugin system** (hệ thống plugin) linh hoạt cho việc mở rộng tính năng.
 
 ### ✨ Tính năng chính
 
@@ -74,8 +75,8 @@ app-gpu/
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/opus-gpu/opus-gpu.git
-cd opus-gpu/app/app-gpu
+git clone https://github.com/wollfoo/agent-gpu.git
+cd agent-gpu
 ```
 
 ### 2. Install Rust Dependencies
@@ -103,7 +104,7 @@ nano config/production.toml
 cargo run -- --config config/default.toml
 
 # Production mode
-./target/release/opus-gpu --config config/production.toml
+./target/release/agent-gpu --config config/production.toml
 ```
 
 ## 🐳 Docker Deployment
@@ -111,26 +112,26 @@ cargo run -- --config config/default.toml
 ### Production Deployment
 ```bash
 # Build production image
-docker build --target production -t opus-gpu:latest .
+docker build --target production -t agent-gpu:latest .
 
 # Run with GPU support
 docker run --runtime=nvidia --gpus all \
   -p 8080:8080 -p 8081:8081 -p 8082:8082 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/data:/app/data \
-  opus-gpu:latest
+  agent-gpu:latest
 ```
 
 ### Development Environment
 ```bash
 # Build development image
-docker build --target development -t opus-gpu:dev .
+docker build --target development -t agent-gpu:dev .
 
 # Run development container
 docker run --runtime=nvidia --gpus all \
-  -v $(pwd):/usr/src/opus-gpu \
+  -v $(pwd):/usr/src/agent-gpu \
   -p 8080:8080 -p 8081:8081 -p 8082:8082 \
-  opus-gpu:dev
+  agent-gpu:dev
 ```
 
 ## ⚙️ Configuration
@@ -138,19 +139,19 @@ docker run --runtime=nvidia --gpus all \
 ### Environment Variables
 ```bash
 # Core configuration
-export OPUS_GPU_CONFIG_PATH=/path/to/config.toml
-export OPUS_GPU_LOG_LEVEL=info
-export OPUS_GPU_DATA_DIR=/path/to/data
+export AGENT_GPU_CONFIG_PATH=/path/to/config.toml
+export AGENT_GPU_LOG_LEVEL=info
+export AGENT_GPU_DATA_DIR=/path/to/data
 
 # Mining configuration
-export OPUS_GPU_MINING_ALGORITHM=SHA256
-export OPUS_GPU_GPU_DEVICES=0,1,2
-export OPUS_GPU_POOL_URL=stratum+tcp://pool.example.com:4444
-export OPUS_GPU_WALLET_ADDRESS=your_wallet_address
+export AGENT_GPU_MINING_ALGORITHM=SHA256
+export AGENT_GPU_GPU_DEVICES=0,1,2
+export AGENT_GPU_POOL_URL=stratum+tcp://pool.example.com:4444
+export AGENT_GPU_WALLET_ADDRESS=your_wallet_address
 
 # API configuration
-export OPUS_GPU_API_REST_HOST=0.0.0.0
-export OPUS_GPU_API_REST_PORT=8080
+export AGENT_GPU_API_REST_HOST=0.0.0.0
+export AGENT_GPU_API_REST_PORT=8080
 ```
 
 ### Configuration File Structure
@@ -177,7 +178,7 @@ metrics_port = 9090
 ## 🔧 Command Line Interface
 
 ```bash
-opus-gpu [OPTIONS]
+agent-gpu [OPTIONS]
 
 OPTIONS:
     -c, --config <PATH>         Configuration file path
@@ -193,16 +194,16 @@ OPTIONS:
 ### Usage Examples
 ```bash
 # Basic mining with default configuration
-opus-gpu --config config/default.toml
+agent-gpu --config config/default.toml
 
 # Mining with specific GPUs and pool
-opus-gpu -g "0,1" -p "stratum+tcp://pool.example.com:4444" -w "your_wallet"
+agent-gpu -g "0,1" -p "stratum+tcp://pool.example.com:4444" -w "your_wallet"
 
 # Development mode with debug logging
-opus-gpu --dev-mode --log-level debug
+agent-gpu --dev-mode --log-level debug
 
 # Benchmark mode
-opus-gpu --benchmark --gpu-devices "0"
+agent-gpu --benchmark --gpu-devices "0"
 ```
 
 ## 📊 API Documentation
@@ -248,7 +249,7 @@ service MiningService {
 ### Creating a Plugin
 ```rust
 // Plugin trait implementation
-use opus_gpu_plugin_api::{Plugin, PluginResult};
+use agent_gpu_plugin_api::{Plugin, PluginResult};
 
 #[derive(Default)]
 pub struct MyPlugin;
@@ -324,7 +325,7 @@ cargo test --bench mining_benchmarks
 ### Docker Testing
 ```bash
 # Build and test in Docker
-docker build --target testing -t opus-gpu:test .
+docker build --target testing -t agent-gpu:test .
 ```
 
 ## 🏗️ Development
@@ -459,9 +460,9 @@ Contributions được hoan nghênh! Vui lòng đọc [CONTRIBUTING.md](CONTRIBU
 
 ## 📞 Support
 
-- **GitHub Issues**: [https://github.com/opus-gpu/opus-gpu/issues](https://github.com/opus-gpu/opus-gpu/issues)
-- **Documentation**: [https://docs.opus-gpu.com](https://docs.opus-gpu.com)
-- **Community**: [Discord Server](https://discord.gg/opus-gpu)
+- **GitHub Issues**: [https://github.com/wollfoo/agent-gpu/issues](https://github.com/wollfoo/agent-gpu/issues)
+- **Documentation**: [https://github.com/wollfoo/agent-gpu/wiki](https://github.com/wollfoo/agent-gpu/wiki)
+- **Community**: [GitHub Discussions](https://github.com/wollfoo/agent-gpu/discussions)
 
 ## 🙏 Acknowledgments
 
@@ -471,4 +472,4 @@ Contributions được hoan nghênh! Vui lòng đọc [CONTRIBUTING.md](CONTRIBU
 
 ---
 
-**Made with ❤️ by OPUS-GPU Team**
+**Made with ❤️ by Agent-GPU Team**

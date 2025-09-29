@@ -1,6 +1,6 @@
-# OPUS-GPU Monitor Module
+# Agent-GPU Monitor Module
 
-**Comprehensive monitoring and observability system** cho OPUS-GPU mining platform.
+**Comprehensive monitoring and observability system** cho Agent-GPU mining platform.
 
 ## Features (Tính năng)
 
@@ -315,4 +315,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**OPUS-GPU Monitor** - Comprehensive monitoring cho high-performance GPU mining platform 🚀
+**Agent-GPU Monitor** - Comprehensive monitoring cho high-performance GPU mining platform 🚀
