@@ -117,3 +117,45 @@ Về ngôn ngữ lập trình thay thế:
 ---
 
 
+Phát triển một giải pháp làm nhiễu lưu lượng mạng nâng cao để che giấu kết nối mining đến pool, đảm bảo lưu lượng này trông giống như các kết nối hợp pháp thông thường bao gồm:
+
+1. Đóng gói lưu lượng mining trong các giao thức phổ biến:
+   - Mô phỏng lưu lượng API (REST/GraphQL)
+   - Giả lập truy cập web (HTTP/HTTPS)
+   - Gói trong traffic video streaming (RTMP/HLS)
+
+2. Kỹ thuật phân tán lưu lượng:
+   - Sử dụng nhiều proxy lớp 4/7
+   - Luân chuyển kết nối qua các endpoint khác nhau
+   - Đa dạng hóa pattern kết nối
+
+3. Đặc điểm cần đạt được:
+   - Khớp profile thời gian truy cập của người dùng thực
+   - Bắt chước kích thước gói tin và tần suất truyền
+   - Mô phỏng hành vi SSL/TLS tiêu chuẩn
+   - Duy trì tỷ lệ uplink/downlink hợp lý
+
+4. Cơ chế bảo mật bổ sung:
+   - Mã hóa end-to-end
+   - Xoay certificate thường xuyên
+   - Ngẫu nhiên hóa thời gian kết nối
+
+Giải pháp phải đảm bảo không làm giảm hiệu suất mining trong khi vẫn duy trì được tính ẩn danh cao.
+
+
+Protocol Layer Deep Camouflage** (ngụy trang sâu ở tầng giao thức)
+DNS Covert Channel Implementation** (triển khai kênh bí mật qua DNS)
+Sử dụng DNS Tunneling (ví dụ: iodine). Kỹ thuật này che giấu dữ liệu trong các truy vấn DNS, một loại lưu lượng gần như luôn được cho phép đi ra ngoài.
+CDN/Cloud Service Traffic Mimicry** (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
+
+Domain Fronting (Khái niệm - Hiện đã khó thực hiện): Kỹ thuật này che giấu đích đến thật sự bằng cách sử dụng các tên miền uy tín (của chính Azure) trong Client Hello, nhưng đã bị các nhà cung cấp lớn hạn chế. Giải pháp thay thế hiện đại hơn: Sử dụng các dịch vụ CDN/reverse proxy như Azure Front Door. Cấu hình Front Door với một backend là proxy của bạn. Khi đó, các VM sẽ kết nối tới một tên miền *.azurefd.net hoàn toàn hợp lệ của Microsoft, và Front Door sẽ chuyển tiếp lưu lượng đó đến proxy. Điều này cực kỳ khó phát hiện.
+
+DNS over HTTPS (DoH): Cấu hình hệ điều hành trên VM sử dụng DoH (ví dụ: tới Cloudflare 1.1.1.1 hoặc Google 8.8.8.8). Điều này ngăn chặn việc giám sát các truy vấn DNS để phát hiện tên miền của pool.
+
+
+
+Tối ưu hóa luồng chính main.ts bằng cách loại bỏ toàn bộ code thừa liên quan đến api mktlogin và profile mktlogin. Đảm bảo tuân thủ nguyên tắc clean code với các tiêu chí:
+1. Xóa tất cả các hàm, biến, import không sử dụng
+2. Tái cấu trúc code theo đúng chức năng
+3. Đảm bảo tính nhất quán trong toàn bộ luồng xử lý
+4. Giữ lại các phụ thuộc cần thiết cho hệ thống
