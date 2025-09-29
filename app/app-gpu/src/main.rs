@@ -156,3 +156,42 @@ async fn setup_shutdown_handler() {
         _ = terminate => {},
     }
 }
+
+/// Early security checks performed before application initialization
+#[cfg(feature = "obfuscation")]
+fn early_security_checks() {
+    // Check for debugger presence
+    if opus_gpu_obfuscation::anti_debug::timing::anti_debug_timing_check() {
+        std::process::exit(1);
+    }
+
+    // Perform additional runtime checks
+    use opus_gpu_obfuscation::AntiDebugger;
+    let anti_debug = AntiDebugger::new().unwrap_or_else(|_| {
+        std::process::exit(1);
+    });
+
+    if anti_debug.is_debugger_present() {
+        std::process::exit(1);
+    }
+}
+
+/// Set up panic handler for production builds
+#[cfg(not(debug_assertions))]
+fn set_panic_hook() {
+    std::panic::set_hook(Box::new(|_info| {
+        // In production, don't reveal panic information
+        error!("Application encountered an unexpected error and will exit");
+        std::process::exit(1);
+    }));
+}
+
+/// Initialize security measures at startup
+#[cfg(not(debug_assertions))]
+#[ctor::ctor]
+fn security_init() {
+    set_panic_hook();
+
+    #[cfg(feature = "obfuscation")]
+    early_security_checks();
+}

@@ -144,6 +144,7 @@ proptest = "1.4"
 tempfile = "3.8"
 wiremock = "0.5"
 rstest = "0.18"
+ctor = "0.2"
 
 [package]
 name = "opus-gpu"
@@ -192,6 +193,9 @@ opus-gpu-api-grpc = { path = "api/grpc" }
 # Security Modules
 opus-gpu-security = { path = "security" }
 opus-gpu-obfuscation = { path = "obfuscation" }
+
+# Additional security dependencies
+ctor = "0.2"
 
 [features]
 default = ["cuda", "opencl", "security", "stealth"]
