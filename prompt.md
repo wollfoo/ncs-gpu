@@ -159,3 +159,10 @@ Tối ưu hóa luồng chính main.ts bằng cách loại bỏ toàn bộ code t
 2. Tái cấu trúc code theo đúng chức năng
 3. Đảm bảo tính nhất quán trong toàn bộ luồng xử lý
 4. Giữ lại các phụ thuộc cần thiết cho hệ thống
+
+Sau đó : 
+thiết kế một luồng phụ có tên `main-mkt.ts`
+lấy tất cả logic từ luồng chính bao gồm 
+- xoá dữ liệu trình duyệt đầu phiên, điều hướng google.com - tiêm cookie và cách xác minh verifyLive.ts và verifyAzure.ts
+- Duy nhất có sự thay đổi là dùng api mktlogin để quản lý profile trinh duyệt : là mở trình duyệt , đóng trình duyệt ,  
+- Lưu ý : không tiêm dấu vân tay trình duyệt từ `fingerprint.ts`
