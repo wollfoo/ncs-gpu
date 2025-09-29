@@ -1,0 +1,55 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/logs/
+/var/log/app-gpu/
+
+# Secrets
+.env
+.env.local
+/var/lib/app-gpu/secrets/
+*.key
+*.pem
+*.crt
+
+# Build artifacts
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# CUDA
+*.ptx
+*.cubin
+
+# Test artifacts
+/test-results/
+/coverage/
+
+# Temporary
+*.tmp
+*.temp
+/tmp/
+
+# Docker
+.dockerignore
+
+# CI/CD
+.github/workflows/*.bak

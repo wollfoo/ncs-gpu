@@ -1,0 +1,47 @@
+[package]
+name = "app-gpu-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "app-gpu"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+crossbeam = { workspace = true }
+parking_lot = { workspace = true }
+config = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+
+# Internal crates
+app-gpu-common = { path = "../common" }
+app-gpu-gpu-executor = { path = "../gpu-executor" }
+app-gpu-cloaking = { path = "../cloaking" }
+app-gpu-resource-manager = { path = "../resource-manager" }
+app-gpu-security = { path = "../security" }
+
+# Plugin loading
+libloading = "0.8"
+
+# Signal handling
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }

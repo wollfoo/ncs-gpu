@@ -16,7 +16,7 @@ activation: always_on
 ## Standard Syntax
 **\<English Term\>** (Vietnamese description – function/purpose)
 
-## Code Comments / Logs / Docstrings – Language usage
+## Code Comments /document /Logs /Docstrings – Language usage
 - Default: Code comments (comments), log messages (logs), and docstrings must be in Vietnamese, in accordance with `rules/language-rules.md`.
 - Bilingual at critical places: For module-level and Public API docstrings, as well as operational guides, provide bilingual content when the team primarily uses Vietnamese:
   - First line: Vietnamese (prioritized for internal users).
