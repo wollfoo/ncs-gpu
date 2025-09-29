@@ -1,4 +1,7 @@
-# OPUS-GPU v2.0 - High-Performance GPU Mining System
+# OPUS-GPU v2.0 - Production GPU Mining System
+
+**Repository duy nhất**: `/home/azureuser/opus-gpu/app/app-gpu`
+**Không tương thích ngược** với repository cũ (sẽ được xóa)
 
 **[Production-Ready]** (Sẵn sàng production) **[GPU Mining Platform]** (Nền tảng khai thác GPU) với **[Advanced Resource Management]** (Quản lý tài nguyên nâng cao) và **[Enterprise Security]** (Bảo mật doanh nghiệp).
 
