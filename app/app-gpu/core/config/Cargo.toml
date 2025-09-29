@@ -1,0 +1,35 @@
+[package]
+name = "opus-gpu-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+figment.workspace = true
+config.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+
+# Additional dependencies for enhanced config management
+notify = "6.1"
+serde_yaml = "0.9"
+aes-gcm = "0.10"
+sha2 = "0.10"
+ring = "0.17"
+base64 = "0.21"
+validator = { version = "0.16", features = ["derive"] }
+jsonschema = "0.17"
+secrecy = { version = "0.8", features = ["serde"] }
+zeroize = "1.7"
+parking_lot = "0.12"
+async-trait = "0.1"
+num_cpus = "1.16"
+reqwest = { version = "0.11", features = ["json"] }

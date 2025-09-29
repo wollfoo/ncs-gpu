@@ -1,0 +1,173 @@
+# OPUS-GPU Configuration File
+# This file contains the default configuration for OPUS-GPU mining platform
+
+[mining]
+# Mining algorithm to use
+algorithm = "SHA256"
+
+# Maximum number of concurrent workers
+max_workers = 4
+
+# Target difficulty for mining
+difficulty = 1000000
+
+# Work request timeout in seconds
+work_timeout_secs = 30
+
+# Statistics update interval in seconds
+stats_interval_secs = 5
+
+# GPU devices to use (indices)
+gpu_devices = [0]
+
+# Number of threads per worker
+worker_threads = 1
+
+# Work batch size
+batch_size = 1000
+
+# Memory allocation size (512MB)
+memory_size = 536870912
+
+[pool]
+# Mining pool URLs (primary and fallback)
+urls = [
+    "stratum+tcp://pool.example.com:4444",
+    "stratum+tcp://backup-pool.example.com:4444"
+]
+
+# Pool username (typically your wallet address)
+username = "your_wallet_address"
+
+# Worker password/name
+password = "worker1"
+
+# Connection retry attempts
+retry_attempts = 3
+
+# Retry delay in seconds
+retry_delay_secs = 5
+
+# Connection timeout in seconds
+connection_timeout_secs = 10
+
+# Keep-alive interval in seconds
+keepalive_interval_secs = 30
+
+[wallet]
+# Wallet address (optional - can be set via command line)
+# address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+
+# Private key file path (optional)
+# private_key_file = "./keys/private.key"
+
+# Keystore directory
+keystore_dir = "./keystore"
+
+# Backup directory for wallet files
+backup_dir = "./backup"
+
+# Enable wallet encryption
+encryption_enabled = true
+
+[monitoring]
+# Enable monitoring and metrics
+enabled = true
+
+# Prometheus metrics port
+metrics_port = 9090
+
+# Statistics update interval in seconds
+stats_interval_secs = 10
+
+# GPU temperature threshold (Celsius)
+temperature_threshold = 80.0
+
+# Memory usage threshold (percentage)
+memory_threshold = 90.0
+
+# Enable alert notifications
+enable_alerts = false
+
+# Webhook URL for alerts (optional)
+# alert_webhook_url = "https://hooks.slack.com/your-webhook"
+
+[storage]
+# Data directory for persistent storage
+data_dir = "./data"
+
+# Database connection URL
+database_url = "sqlite://opus-gpu.db"
+
+# Maximum database connections
+max_connections = 10
+
+# Enable automatic backups
+backup_enabled = true
+
+# Backup interval in hours
+backup_interval_hours = 24
+
+# Data retention period in days
+retention_days = 30
+
+[api]
+# REST API configuration
+[api.rest]
+host = "127.0.0.1"
+port = 8080
+cors_enabled = true
+cors_origins = ["*"]
+rate_limit = 100
+request_timeout_secs = 30
+
+# WebSocket API configuration
+[api.websocket]
+host = "127.0.0.1"
+port = 8081
+max_connections = 1000
+message_buffer_size = 1000
+heartbeat_interval_secs = 30
+
+# gRPC API configuration
+[api.grpc]
+host = "127.0.0.1"
+port = 8082
+max_message_size = 4194304  # 4MB
+keepalive_interval_secs = 30
+keepalive_timeout_secs = 5
+
+[plugins]
+# Disable plugin system
+disabled = false
+
+# Plugin directory
+plugin_dir = "./plugins"
+
+# Maximum number of plugins to load
+max_plugins = 50
+
+# Plugin load timeout in seconds
+load_timeout_secs = 30
+
+# Plugin whitelist (empty = allow all)
+whitelist = []
+
+# Plugin blacklist
+blacklist = []
+
+[bus]
+# Message bus buffer size
+buffer_size = 1000
+
+# Maximum subscribers per topic
+max_subscribers = 100
+
+# Message timeout in seconds
+message_timeout_secs = 5
+
+# Enable message persistence
+enable_persistence = false
+
+# Persistence file path
+persistence_file = "./bus_state.json"

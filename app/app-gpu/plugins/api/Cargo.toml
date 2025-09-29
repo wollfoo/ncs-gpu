@@ -1,0 +1,32 @@
+[package]
+name = "opus-gpu-plugin-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Plugin API for OPUS-GPU - Defines traits and interfaces for plugin development"
+
+[dependencies]
+# Core async & traits
+tokio.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+# Plugin system
+abi_stable.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[features]
+default = []
+stable_abi = ["abi_stable"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile.workspace = true

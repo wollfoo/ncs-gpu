@@ -1,0 +1,193 @@
+[workspace]
+members = [
+    "core/mining",
+    "core/pool",
+    "core/wallet",
+    "core/monitor",
+    "core/config",
+    "plugins/api",
+    "plugins/loader",
+    "plugins/registry",
+    "infrastructure/bus",
+    "infrastructure/storage",
+    "infrastructure/gpu",
+    "api/rest",
+    "api/websocket",
+    "api/grpc",
+    "tests"
+]
+
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+authors = ["OPUS-GPU Team <opus-gpu@example.com>"]
+license = "MIT"
+repository = "https://github.com/opus-gpu/opus-gpu"
+rust-version = "1.75.0"
+
+[workspace.dependencies]
+# Async Runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-util = "0.7"
+futures = "0.3"
+async-trait = "0.1"
+
+# Web Framework
+actix-web = { version = "4.4", features = ["rustls"] }
+actix-cors = "0.7"
+actix-files = "0.6"
+actix-web-actors = "4.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+
+# Configuration
+config = { version = "0.14", features = ["toml", "yaml", "json"] }
+figment = { version = "0.10", features = ["toml", "yaml", "json", "env"] }
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "json", "env-filter"] }
+tracing-opentelemetry = "0.22"
+opentelemetry = "0.21"
+tracing-appender = "0.2"
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+eyre = "0.6"
+
+# GPU Computing
+cuda-sys = "0.3"
+ocl-core = "0.11"
+vulkano = "0.34"
+wgpu = "0.18"
+
+# Cryptography
+sha2 = "0.10"
+sha3 = "0.10"
+blake3 = "0.4"
+rand = "0.8"
+secp256k1 = "0.28"
+ed25519-dalek = "2.1"
+
+# Networking
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"] }
+tungstenite = "0.21"
+tokio-tungstenite = "0.21"
+quinn = "0.10"
+
+# gRPC
+tonic = "0.10"
+prost = "0.12"
+tonic-build = "0.10"
+
+# Database & Storage
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid"] }
+redis = { version = "0.24", features = ["tokio-comp"] }
+rocksdb = "0.21"
+
+# Metrics & Monitoring
+prometheus = "0.13"
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.4", features = ["derive", "env"] }
+once_cell = "1.19"
+parking_lot = "0.12"
+crossbeam = "0.8"
+rayon = "1.8"
+bytes = "1.5"
+dashmap = "5.5"
+
+# Plugin System
+libloading = "0.8"
+abi_stable = "0.11"
+
+# Development Dependencies
+[workspace.dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+tempfile = "3.8"
+wiremock = "0.5"
+rstest = "0.18"
+
+[package]
+name = "opus-gpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "High-performance GPU mining platform with modular architecture"
+
+[[bin]]
+name = "opus-gpu"
+path = "src/main.rs"
+
+[dependencies]
+# Core Dependencies
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+config.workspace = true
+figment.workspace = true
+clap.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+# Local Workspace Dependencies
+opus-gpu-mining = { path = "core/mining" }
+opus-gpu-pool = { path = "core/pool" }
+opus-gpu-wallet = { path = "core/wallet" }
+opus-gpu-monitor = { path = "core/monitor" }
+opus-gpu-config = { path = "core/config" }
+opus-gpu-bus = { path = "infrastructure/bus" }
+opus-gpu-storage = { path = "infrastructure/storage" }
+opus-gpu-gpu = { path = "infrastructure/gpu" }
+opus-gpu-plugin-api = { path = "plugins/api" }
+opus-gpu-plugin-loader = { path = "plugins/loader" }
+opus-gpu-plugin-registry = { path = "plugins/registry" }
+opus-gpu-api-rest = { path = "api/rest" }
+opus-gpu-api-websocket = { path = "api/websocket" }
+opus-gpu-api-grpc = { path = "api/grpc" }
+
+[features]
+default = ["cuda", "opencl"]
+cuda = ["opus-gpu-gpu/cuda"]
+opencl = ["opus-gpu-gpu/opencl"]
+vulkan = ["opus-gpu-gpu/vulkan"]
+webgpu = ["opus-gpu-gpu/webgpu"]
+full-gpu = ["cuda", "opencl", "vulkan", "webgpu"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+inherits = "release"
+debug = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+
+# Cargo config for faster builds
+[build]
+rustflags = ["-C", "target-cpu=native"]

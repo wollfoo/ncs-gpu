@@ -16,6 +16,11 @@ Xây dựng tài liệu file *.md hướng dẫn sử dụng chi tiết cho OPUS
 Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ code cụ thể cho từng trường hợp sử dụng.
 
 
+
+**Lựa chọn các Sub Agents phù hợp để triển khai và hoàn thành task sau đây**  
+
+### Task cần hoàn thành:
+
 ## ✅ Language Rules
 - **MANDATORY**: Trả lời **100% bằng tiếng Việt**.
 - **WITH EXPLANATION**: Mọi **[English Term]** phải kèm diễn giải tiếng Việt theo cú pháp sau.
@@ -23,7 +28,6 @@ Tài liệu cần trình bày rõ ràng, có hình ảnh minh họa và ví dụ
   **[English Term]** (mô tả tiếng Việt – chức năng/mục đích)
 
 ---
-
 
 ## 🗂️ Bối Cảnh Kỹ Thuật
 - Toàn bộ codebase trong `directory: ~/opus-gpu/app`.

@@ -1,0 +1,82 @@
+[package]
+name = "opus-gpu-wallet"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Secure multi-coin wallet management with HD wallet support"
+
+[dependencies]
+# Async Runtime
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+# Error Handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Cryptography & HD Wallet Support
+secp256k1.workspace = true
+ed25519-dalek.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+blake3.workspace = true
+rand.workspace = true
+
+# HD Wallet & BIP Standards
+bip39 = "2.0"
+bip32 = "0.5"
+bitcoin_hashes = "0.13"
+ripemd = "0.1"
+
+# Encryption & Security
+aes-gcm = "0.10"
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+zeroize = { version = "1.7", features = ["derive", "aarch64"] }
+secrecy = { version = "0.8", features = ["serde"] }
+
+# Hardware Wallet Support
+ledger-transport = { version = "0.10", optional = true }
+trezor-client = { version = "0.9", optional = true }
+
+# Storage
+rocksdb.workspace = true
+parking_lot.workspace = true
+
+# Utilities
+uuid.workspace = true
+chrono.workspace = true
+bytes.workspace = true
+hex = "0.4"
+base58 = "0.2"
+
+# Multi-signature
+k256 = "0.13"
+ecdsa = "0.16"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+
+[features]
+default = ["sqlite", "hardware-wallet"]
+sqlite = []
+hardware-wallet = ["ledger-transport", "trezor-client"]
+testing = []
+
+[[bench]]
+name = "wallet_benchmark"
+harness = false
