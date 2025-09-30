@@ -1,0 +1,92 @@
+# Multi-stage Dockerfile for OPUS-GPU miner
+# Stage 1: Rust binary builder
+FROM rust:1.80-slim AS rust-builder
+
+WORKDIR /build
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Rust source code
+COPY app/ ./
+
+# Build Rust binary (release mode)
+RUN cargo build --release --bin gpu-miner
+
+# Strip binary để giảm size
+RUN strip target/release/gpu-miner
+
+# ============================================================================
+# Stage 2: Go tools builder
+# ============================================================================
+FROM golang:1.23-alpine AS go-builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apk add --no-cache git make
+
+# Copy Go source code
+COPY gpu-tools/ ./
+
+# Build Go binaries
+RUN go mod download && \
+    go build -ldflags="-s -w" -o bin/gpu-ctl cmd/gpu-ctl/main.go && \
+    go build -ldflags="-s -w" -o bin/gpu-watchdog cmd/gpu-watchdog/main.go && \
+    go build -ldflags="-s -w" -o bin/metrics-aggregator cmd/metrics-aggregator/main.go
+
+# ============================================================================
+# Stage 3: Runtime image
+# ============================================================================
+FROM nvidia/cuda:12.0-runtime-ubuntu22.04
+
+LABEL maintainer="OPUS-GPU Team"
+LABEL description="OPUS-GPU Mining Runtime with Go Tools"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash miner
+
+# Copy binaries from builders
+COPY --from=rust-builder /build/target/release/gpu-miner /usr/local/bin/
+COPY --from=go-builder /build/bin/* /usr/local/bin/
+
+# Copy configuration files
+COPY deploy/docker/config/ /etc/miner/
+
+# Set permissions
+RUN chown -R miner:miner /etc/miner && \
+    chmod +x /usr/local/bin/gpu-miner \
+             /usr/local/bin/gpu-ctl \
+             /usr/local/bin/gpu-watchdog \
+             /usr/local/bin/metrics-aggregator
+
+# Create directories
+RUN mkdir -p /var/log/miner /var/run/miner && \
+    chown -R miner:miner /var/log/miner /var/run/miner
+
+# Switch to non-root user
+USER miner
+
+# Expose ports
+EXPOSE 8080   # HTTP API
+EXPOSE 9090   # gRPC
+EXPOSE 9091   # Prometheus metrics
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD gpu-ctl status || exit 1
+
+# Default entrypoint
+ENTRYPOINT ["/usr/local/bin/gpu-watchdog"]
+
+# Default command
+CMD ["--config", "/etc/miner/config.yaml"]

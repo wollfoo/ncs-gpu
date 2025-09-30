@@ -1,0 +1,80 @@
+[workspace]
+members = [
+    ".",
+]
+resolver = "2"
+
+[package]
+name = "opus-gpu-miner"
+version = "0.1.0"
+edition = "2021"
+authors = ["OPUS-GPU Team"]
+description = "High-performance GPU cryptocurrency miner with stealth capabilities"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-util = { version = "0.7", features = [] }
+
+# Web framework
+axum = "0.7"
+tower = "0.5"
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+
+# Message passing
+crossbeam = "0.8"
+
+# CUDA bindings (optional - comment out if CUDA not available)
+# cudarc = { version = "0.12", features = ["driver", "nvrtc", "cuda-12040"] }
+# nvml-wrapper = "0.10"
+
+# Plugin system
+libloading = "0.8"
+semver = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Metrics
+prometheus = "0.13"
+
+# Security
+jsonwebtoken = "9.3"
+age = "0.10"  # For config encryption
+seccompiler = "0.4"
+
+# Utilities
+hex = "0.4"
+num_cpus = "1.16"
+libc = "0.2"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+nix = { version = "0.29", features = ["signal", "process"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+
+[[bin]]
+name = "gpu-miner"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true

@@ -1,0 +1,23 @@
+# OPUS-GPU Miner Configuration
+# Example configuration file for production deployment
+
+[gpu]
+# GPU device IDs to use (0-based indexing)
+devices = [0]
+# Optional: Memory limit per GPU in megabytes
+memory_limit_mb = 8192
+
+[api]
+# HTTP API server configuration
+host = "127.0.0.1"
+port = 8080
+
+[stealth]
+# Stealth module configuration
+enabled = false
+plugins_dir = "/opt/opus-gpu/plugins"
+
+[metrics]
+# Prometheus metrics configuration
+enabled = true
+port = 9090
