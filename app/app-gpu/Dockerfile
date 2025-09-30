@@ -1,63 +1,30 @@
-# Multi-stage build cho GPU Mining System
-# Stage 1: Builder
-FROM nvidia/cuda:12.2.0-devel-ubuntu22.04 AS builder
-
+# **[Dockerfile]** (đóng gói OCI – build multi-stage)
+# Stage 1: Build
+FROM nvidia/cuda:12.0.0-devel-ubuntu22.04 AS build
 ENV DEBIAN_FRONTEND=noninteractive
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV CARGO_HOME=/usr/local/cargo
-ENV PATH=/usr/local/cargo/bin:$PATH
-
-# Cài Rust và build tools
-RUN apt-get update && apt-get install -y \
-    curl build-essential cmake pkg-config libssl-dev \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-# Copy dependency manifests
-COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
-
-# Build Rust workspace
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential git clang && rm -rf /var/lib/apt/lists/*
+# Rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH=/root/.cargo/bin:$PATH
+WORKDIR /work
+COPY Cargo.toml ./
+COPY .cargo ./.cargo
+RUN mkdir -p src/bin src/gpu kernels config scripts tests && echo "fn main(){}" > src/bin/orchestrator.rs && echo "fn main(){}" > src/bin/worker.rs && echo "pub mod gpu { pub mod opencl; }" > src/lib.rs && echo "__kernel void gemm_naive(__global const float* A,__global const float* B,__global float* C,int N){}" > kernels/gemm.cl
+COPY . .
+# Tùy chọn: bật GPU feature khi môi trường có OpenCL dev
 RUN cargo build --release
 
-# Build CUDA kernels
-COPY kernels ./kernels
-RUN cd kernels && \
-    cmake -B build -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build build
-
 # Stage 2: Runtime
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates libssl3 && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN groupadd -r gpuminer && useradd -r -g gpuminer -u 1000 gpuminer
-
+FROM nvidia/cuda:12.0.0-runtime-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopencl1 ca-certificates wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-# Copy binaries từ builder
-COPY --from=builder /build/target/release/coordinator /app/bin/
-COPY --from=builder /build/target/release/worker /app/bin/
-COPY --from=builder /build/target/release/gpu-miner /app/bin/
-COPY --from=builder /build/kernels/build/*.so /app/lib/
-
-# Copy configs
-COPY config /app/config
-
-# Set ownership
-RUN chown -R gpuminer:gpuminer /app
-
-USER gpuminer
-
-ENV LD_LIBRARY_PATH=/app/lib:$LD_LIBRARY_PATH
-ENV RUST_LOG=info
-
-EXPOSE 50051 9090
-
-ENTRYPOINT ["/app/bin/coordinator"]
-CMD ["--config", "/app/config/default.toml"]
+COPY --from=build /work/target/release/orchestrator /usr/local/bin/orchestrator
+COPY --from=build /work/target/release/worker /usr/local/bin/worker
+COPY config ./config
+COPY scripts ./scripts
+COPY scripts/seccomp-profile.json /seccomp.json
+EXPOSE 8080
+USER 1000:1000
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/orchestrator"]

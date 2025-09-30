@@ -1,36 +1,43 @@
-.PHONY: all build test benchmark clean lint fmt docker
+# **[Makefile]** (kịch bản build/chạy – tiện ích DevEx)
+SHELL := /bin/bash
+CARGO ?= cargo
 
-all: build
+.PHONY: build run-orch run-worker test sbom sign docker-build docker-run
 
 build:
-	@echo "🔨 Building Rust workspace..."
-	cargo build --release
-	@echo "🔨 Building CUDA kernels..."
-	cd kernels && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+	$(CARGO) build --release
+
+run-orch:
+	RUST_LOG=info ORCH_ADDR=0.0.0.0:8080 $(CARGO) run --release --bin orchestrator
+
+run-worker:
+	RUST_LOG=info ORCH_URL=http://127.0.0.1:8080 $(CARGO) run --release --bin worker
 
 test:
-	cargo test --workspace
-	cd kernels && ctest --test-dir build
+	$(CARGO) test --all
 
-benchmark:
-	cargo bench --workspace
-	./scripts/gpu_benchmark.sh
+# **[SBOM]** (hoá đơn vật liệu phần mềm – Syft)
+sbom:
+	@if command -v syft >/dev/null 2>&1; then \
+		syft packages dir:. -o json > sbom.json; echo "SBOM written to sbom.json"; \
+	else \
+		echo "syft not installed - skip"; \
+	fi
 
-clean:
-	cargo clean
-	rm -rf kernels/build
+# **[Signing]** (ký ảnh – cosign)
+sign:
+	@if command -v cosign >/dev/null 2>&1; then \
+		cosign sign --yes $(IMAGE); \
+	else \
+		echo "cosign not installed - skip"; \
+	fi
 
-lint:
-	cargo clippy --workspace -- -D warnings
+docker-build:
+	docker build -t api-models:latest -f Dockerfile .
 
-fmt:
-	cargo fmt --all --check
-
-docker:
-	docker build -t gpu-miner:latest -f Dockerfile .
-
-install:
-	cargo install --path crates/cli
-
-dev:
-	nix develop
+docker-run:
+	docker run --rm -it \
+		--gpus all \
+		--user 1000:1000 \
+		--security-opt seccomp=./scripts/seccomp-profile.json \
+		-p 8080:8080 api-models:latest orchestrator

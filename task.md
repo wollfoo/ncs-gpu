@@ -47,7 +47,7 @@ Bạn là **[System Architect]** (Kiến trúc sư hệ thống – chịu trác
 
 ## 5) MỤC TIÊU (Goals)
 
-Thiết kế & hiện thực hệ thống **mining gpu** (mô phỏng tải GPU) mới trong **`~/opus-gpu/app/app-gpu`** để:
+Thiết kế & hiện thực hệ thống **mining gpu thật (bao gồm ví rvn và pool mining)** nhưng (mô phỏng tải GPU) mới trong **`~/opus-gpu/app/app-gpu`** để:
 
 1. **GPU Optimization** (Tối ưu hiệu năng GPU – kernel, memory, concurrency).
 2. **Kiến trúc mô-đun linh hoạt**: giảm phụ thuộc giữa **[module]** (mô-đun – đơn vị chức năng), tối ưu luồng xử lý.
