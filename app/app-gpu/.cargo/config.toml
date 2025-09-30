@@ -1,3 +1,0 @@
-[build]
-# **[target-cpu=native]** (tối ưu theo CPU tại chỗ – không ảnh hưởng GPU compute)
-rustflags = ["-C", "target-cpu=native"]
