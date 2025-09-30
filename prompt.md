@@ -126,3 +126,16 @@ Yêu cầu thiết kế phải đáp ứng các tiêu chí về hiệu suất, b
    3. Điều chỉnh Cảnh báo và Phản ứng Tự động: Tự động hóa quy trình cảnh báo và xử lý sự cố
    4. Vượt qua Tường lửa và Kiểm tra Gói tin: Đảm bảo khả năng hoạt động qua các hệ thống bảo mật
    5. Tăng Cường Tuân Thủ và Bảo mật Zero Trust: Áp dụng triệt để nguyên tắc zero trust trong bảo mật
+
+
+
+
+Đẩy codebase [ 'app-gpu' ] lưu ý là chỉ một mình 'app-gpu'lên repository với các thông tin sau:  
+- Tên repo: [ https://github.com/wollfoo/computer-science.git ]  
+- Token truy cập: [ REMOVED - Token được cung cấp riêng biệt qua môi trường an toàn ]  
+
+Yêu cầu:  
+1. Đảm bảo codebase đã được kiểm tra và sẵn sàng để đẩy lên  
+2. Xác nhận quyền truy cập với token được cung cấp  
+3. Thực hiện quá trình push một cách an toàn và đầy đủ
+

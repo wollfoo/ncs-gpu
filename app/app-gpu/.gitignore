@@ -1,0 +1,69 @@
+# General OS
+.DS_Store
+Thumbs.db
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+.pytest_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Node / JS
+node_modules/
+.npm/
+.pnpm-store/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE & tooling
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+
+# C/C++/CUDA build artifacts
+*.o
+*.so
+*.a
+*.out
+*.exe
+*.dll
+*.dylib
+*.ptx
+build*/
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+
+# Images & data caches
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.pickle
+*.pkl
+*.npz
+*.npy
+
+# Others
+*.bak
+*.tmp
+*.temp
