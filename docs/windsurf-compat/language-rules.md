@@ -1,0 +1,32 @@
+# language-rules (Windsurf compatibility wrapper)
+---
+globs:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.js'
+  - '**/*.jsx'
+  - '**/*.py'
+  - '**/*.go'
+  - '**/*.rs'
+  - '**/*.java'
+  - '**/*.kt'
+  - '**/*.cpp'
+  - '**/*.cc'
+  - '**/*.c'
+  - '**/*.h'
+  - '**/*.hpp'
+  - '**/*.cu'
+  - '**/*.cuh'
+  - '**/*.sh'
+  - '**/*.bash'
+  - '**/*.zsh'
+  - '**/*.ps1'
+  - '**/*.sql'
+  - '**/*.proto'
+  - '**/*.toml'
+  - '**/*.json'
+  - 'bench/**'
+  - 'benchmark/**'
+  - 'benchmarks/**'
+---
+See @.windsurf/rules/language-rules.md
