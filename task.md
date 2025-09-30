@@ -18,7 +18,23 @@
 
 - Mục tiêu tổng:
  - `Source Code Audit` (audit mã nguồn) toàn bộ codebase trong `directory: ~/opus-gpu/app`.
- - Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. Hãy thiết kế kiến trúc mới hoàn toàn sang repo **`~/opus-gpu/app/app-gpu`** với hiệu năng GPU cao, kiến trúc mô-đun, kiến trúc phân tán, an toàn. `Đảm bảo không tương thích ngược vì sẽ xoá repo cũ`.
+- Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. 
+Hãy Thiết kế hệ thống `mining gpu` hoàn toàn mới trong repository **`~/opus-gpu/app/app-gpu`** với các yêu cầu sau:
+
+  1. Tối ưu hiệu năng GPU (GPU Optimization)
+  2. Kiến trúc mô-đun linh hoạt
+  3. Hỗ trợ kiến trúc phân tán
+  4. Đảm bảo an toàn hệ thống
+
+Hệ thống cần mô phỏng hoạt động `mining gpu` tương tự các tác vụ:
+- **AI Training** (Huấn luyện AI)
+- **Image Processing** (Xử lý hình ảnh)
+- **Scientific Computing** (Tính toán khoa học)
+- **AI Inference** (Suy luận AI)
+
+Yêu cầu thiết kế phải đáp ứng các tiêu chí về hiệu suất, bảo mật và khả năng mở rộng. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ (~/opus-gpu/app)
+ 
+
 
 ## 🎯 Mục Tiêu
 1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[Module]** (mô-đun – đơn vị chức năng).
