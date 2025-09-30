@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package gpu_mining;
+
+// **[Coordinator Service]** (Dịch vụ điều phối – gRPC API cho client và workers)
+service CoordinatorService {
+  // **[Submit Task]** (Gửi tác vụ – client submit workload)
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+  
+  // **[Get Task Status]** (Lấy trạng thái tác vụ – query task state)
+  rpc GetTaskStatus(GetTaskStatusRequest) returns (GetTaskStatusResponse);
+  
+  // **[List Workers]** (Liệt kê workers – admin monitoring)
+  rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
+  
+  // **[Register Worker]** (Đăng ký worker – worker registration)
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+  
+  // **[Heartbeat]** (Heartbeat – worker keep-alive)
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // **[Poll Task]** (Poll tác vụ – worker lấy task để execute)
+  rpc PollTask(PollTaskRequest) returns (PollTaskResponse);
+  
+  // **[Report Result]** (Báo cáo kết quả – worker gửi result về)
+  rpc ReportResult(ReportResultRequest) returns (ReportResultResponse);
+}
+
+// ============================================================================
+// Request/Response Messages - Client API
+// ============================================================================
+
+message SubmitTaskRequest {
+  WorkloadConfig config = 1;
+}
+
+message SubmitTaskResponse {
+  string task_id = 1;
+  TaskStatus status = 2;
+}
+
+message GetTaskStatusRequest {
+  string task_id = 1;
+}
+
+message GetTaskStatusResponse {
+  TaskStatus status = 1;
+  optional WorkloadResult result = 2;
+  optional string error_message = 3;
+}
+
+message ListWorkersRequest {
+  // Empty - list all workers
+}
+
+message ListWorkersResponse {
+  repeated WorkerInfo workers = 1;
+}
+
+// ============================================================================
+// Request/Response Messages - Worker API
+// ============================================================================
+
+message RegisterWorkerRequest {
+  string worker_id = 1;
+  repeated GpuDevice gpu_devices = 2;
+}
+
+message RegisterWorkerResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message HeartbeatRequest {
+  string worker_id = 1;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+}
+
+message PollTaskRequest {
+  string worker_id = 1;
+  int32 timeout_secs = 2; // Long-polling timeout
+}
+
+message PollTaskResponse {
+  optional string task_id = 1;
+  optional WorkloadConfig config = 2;
+  bool has_task = 3;
+}
+
+message ReportResultRequest {
+  string task_id = 1;
+  string worker_id = 2;
+  WorkloadResult result = 3;
+}
+
+message ReportResultResponse {
+  bool acknowledged = 1;
+}
+
+// ============================================================================
+// Data Models
+// ============================================================================
+
+// **[Workload Type]** (Loại workload)
+enum WorkloadType {
+  WORKLOAD_TYPE_UNSPECIFIED = 0;
+  AI_TRAINING = 1;
+  IMAGE_PROCESSING = 2;
+  SCIENTIFIC_COMPUTING = 3;
+  AI_INFERENCE = 4;
+}
+
+// **[Task Status]** (Trạng thái tác vụ)
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  RUNNING = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+  CANCELLED = 5;
+}
+
+// **[Workload Config]** (Cấu hình workload)
+message WorkloadConfig {
+  WorkloadType workload_type = 1;
+  uint64 duration_secs = 2;
+  uint32 batch_size = 3;
+  float gpu_utilization_target = 4;
+  uint32 memory_size_mb = 5;
+}
+
+// **[Workload Result]** (Kết quả workload)
+message WorkloadResult {
+  double throughput = 1;
+  double avg_latency_ms = 2;
+  double p95_latency_ms = 3;
+  double p99_latency_ms = 4;
+  float gpu_utilization = 5;
+  uint32 memory_used_mb = 6;
+  uint64 total_operations = 7;
+}
+
+// **[GPU Device]** (Thiết bị GPU)
+message GpuDevice {
+  uint32 index = 1;
+  string name = 2;
+  uint64 total_memory = 3;
+  ComputeCapability compute_capability = 4;
+  string uuid = 5;
+}
+
+message ComputeCapability {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+// **[Worker Info]** (Thông tin worker)
+message WorkerInfo {
+  string worker_id = 1;
+  repeated GpuDevice gpu_devices = 2;
+  int64 last_heartbeat_unix = 3;
+  bool is_busy = 4;
+}

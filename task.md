@@ -1,237 +1,212 @@
-
-
 **Lựa chọn các Sub Agents phù hợp để triển khai và hoàn thành task sau đây**  
-
 ### Task cần hoàn thành:
 
-## ✅ Language Rules
-- **MANDATORY**: Trả lời **100% bằng tiếng Việt**.
-- **WITH EXPLANATION**: Mọi **[English Term]** phải kèm diễn giải tiếng Việt theo cú pháp sau.
-- **Standard Syntax**:
-  **[English Term]** (mô tả tiếng Việt – chức năng/mục đích)
-
+**Lưu ý quy tắc ngôn ngữ**
+* **Bắt buộc**: Trả lời bằng **Tiếng Việt**.
+* **Kèm giải thích**: Mọi thuật ngữ tiếng Anh phải có mô tả tiếng Việt theo cú pháp chuẩn:
+## Code Comments /document /Logs /Docstrings – Language usage
+- Default: Code comments (comments), log messages (logs), document and docstrings must be in Vietnamese.
+* **Cú pháp chuẩn**: **[English Term]** (mô tả tiếng Việt – chức năng/mục đích)
 ---
 
-## 🗂️ Bối Cảnh Kỹ Thuật
-- Toàn bộ codebase trong `directory: ~/opus-gpu/app`.
-- Docker image: build từ `Dockerfile`, tag `api-models:latest`.
+## 1) BỐI CẢNH (Context)
 
-- Mục tiêu tổng:
- - `Source Code Audit` (audit mã nguồn) toàn bộ codebase trong `directory: ~/opus-gpu/app`.
-- Dựa vào phân tích `Source Code Audit` mã nguồn trong codebase trong `~/opus-gpu/app`. 
-Hãy Thiết kế hệ thống `mining gpu` hoàn toàn mới trong repository **`~/opus-gpu/app/app-gpu`** với các yêu cầu sau:
+* Toàn bộ codebase hiện tại ở **`~/opus-gpu/app`**.
+* Docker image (ảnh Docker – ảnh thực thi đóng gói): build từ `Dockerfile`, tag **`api-models:latest`**.
+* Mục tiêu:
 
-  1. Tối ưu hiệu năng GPU (GPU Optimization)
-  2. Kiến trúc mô-đun linh hoạt
-  3. Hỗ trợ kiến trúc phân tán
-  4. Đảm bảo an toàn hệ thống
+  1. **Source Code Audit** (đánh giá mã nguồn – rà soát chất lượng, kiến trúc, bảo mật) toàn bộ codebase `~/opus-gpu/app`.
+  2. Dựa trên kết quả audit, **thiết kế & hiện thực** hệ thống **mining gpu** (mô phỏng tải GPU) hoàn toàn mới trong **`~/opus-gpu/app/app-gpu`**.
 
-Hệ thống cần mô phỏng hoạt động `mining gpu` tương tự các tác vụ:
-- **AI Training** (Huấn luyện AI)
-- **Image Processing** (Xử lý hình ảnh)
-- **Scientific Computing** (Tính toán khoa học)
-- **AI Inference** (Suy luận AI)
+## 2) VAI TRÒ (Role)
 
-Yêu cầu thiết kế phải đáp ứng các tiêu chí về hiệu suất, bảo mật và khả năng mở rộng. Đảm bảo không tương thích ngược vì sẽ xoá repo cũ (~/opus-gpu/app)
- 
+Bạn là **[System Architect]** (Kiến trúc sư hệ thống – chịu trách nhiệm thiết kế & tiêu chuẩn kỹ thuật), **[GPU Perf Engineer]** (Kỹ sư tối ưu GPU – tối ưu kernel, memory, throughput), **[Security Engineer]** (Kỹ sư bảo mật – cô lập, mã hoá, quyền hạn), và **[DevEx Lead]** (Phụ trách trải nghiệm dev – DX, build/test/release).
 
+## 3) ĐÁNH GIÁ (Evaluation)
 
-## 🎯 Mục Tiêu
-1) **Giảm độ trễ**: tối ưu luồng xử lý, giảm phụ thuộc giữa **[Module]** (mô-đun – đơn vị chức năng).
-2) **Tối ưu hiệu năng phần cứng**: tận dụng GPU tối đa, cân bằng **[QoS]** (chất lượng dịch vụ – giới hạn tài nguyên) để **không ảnh hưởng** đến hệ thống/ứng dụng khác.
-3) **Loại bỏ lỗi tiềm ẩn**: kiểm thử tự động + **[Defensive Design]** (thiết kế phòng thủ – fail-safe/fail-fast).
-4) **Module hóa**: dễ quản lý, bảo trì, mở rộng an toàn.
-5) **Mở rộng an toàn**: thêm tính năng mới mượt mà, không phá lõi & không suy giảm bảo mật.
-6) **Đảm bảo** : Đảm bảo các chức năng cốt lõi của `directory: ~/opus-gpu/app` không thay đổi bao gồm 
-`cryptocurrency mining application , GPU Optimization System, GPU Cloaking System` 
+### 3.1 Đánh giá năng lực (Self-assessment)
 
-## 🔭 Tương lai tích hợp :
-**Nhóm bảo vệ/hardening (blue team)**
+* Tự nêu điểm mạnh/yếu liên quan đến: **[GPU Programming]** (lập trình GPU), **[Distributed Systems]** (hệ phân tán), **[Containerization]** (đóng gói container), **[Secure Software Supply Chain]** (chuỗi cung ứng phần mềm an toàn).
+* Phạm vi tự tin, giới hạn, giả định.
 
-* Bảo vệ & “ngụy trang” tiến trình quan trọng của hệ thống.
-* Bảo vệ lưu lượng mạng: **mã hóa & bảo mật toàn bộ traffic**.
-* Bảo vệ danh tính & quyền truy cập: IAM chặt chẽ, **Zero Trust** triệt để.
-* Điều chỉnh cảnh báo & phản ứng tự động (SOAR nhẹ): tự động hoá cảnh báo và xử lý sự cố.
-* Phương pháp phát hiện nâng cao:
+### 3.2 Checklist năng lực cần thiết
 
-  * Phân tích hành vi đa tầng.
-  * Phát hiện dựa trên ML.
-  * Phân tích mạng nâng cao.
+* Kiến trúc mô-đun (module boundaries, SRP), GPU kernels (CUDA/OpenCL/ROCm – chọn & lý do), song song & đa luồng, IO pipeline, telemetry (NVML/rocm-smi – giám sát GPU), packaging (OCI/Nix/Bazel), bảo mật (cgroups/seccomp/AppArmor), ký & SBOM (cosign/Syft), obfuscation (garble/pyarmor/llvm-obfuscator/strip/LTO), test & benchmark.
 
-**Nhóm mô phỏng đối kháng/ẩn mình (red-team emulation, dùng trong môi trường kiểm soát)**
-* Binary hijacking & “thay thế hợp lệ”.
-* Thao tác vectơ tham số/argument tinh vi.
-* “Kỹ nghệ” tính hợp lệ của cây tiến trình (process tree legitimacy).
+## 4) SUY LUẬN SÂU (Thinking hard)
 
-* **Làm nhiễu lưu lượng mạng (GĐ2)**:
-  * Protocol Layer Deep Camouflage (ngụy trang sâu ở tầng giao thức)
-  * DNS Covert Channel Implementation (triển khai kênh bí mật qua DNS)
-  * CDN/Cloud Service Traffic Mimicry (bắt chước lưu lượng qua CDN/dịch vụ đám mây)
+### Quy trình suy luận 3 tầng
 
-* **Ngụy trang tài nguyên GPU (GĐ3)**:
-  * Dynamic Machine Learning Workload Simulation (mô phỏng tải công việc học máy động)
-  * Advanced Thermal & Power Management (quản lý nhiệt & công suất nâng cao)
-  * Intelligent Academic Schedule Simulation (mô phỏng lịch nghiên cứu học thuật thông minh)
-  
-* **Né tránh phát hiện (GĐ4)**:
-  * Behavioral Analysis Countermeasures (biện pháp đối phó phân tích hành vi)
-  * Performance Counter Obfuscation (làm nhiễu bộ đếm hiệu năng).
-  * Advanced Sandbox & VM Detection (phát hiện sandbox & máy ảo nâng cao).
+1. **Tầng 1 – Tầm nhìn**: Vẽ bức tranh tổng thể kiến trúc & các ràng buộc hiệu năng/bảo mật/mở rộng.
+2. **Tầng 2 – Thiết kế mô-đun**: Xác định module, interface, hợp đồng dữ liệu, luồng điều khiển & dữ liệu.
+3. **Tầng 3 – Hiện thực**: Cấu trúc repo, code skeleton, API, cấu hình build, script CI, test & benchmark.
 
-* Khả năng hoạt động qua tường lửa & kiểm tra gói (đánh giá khả năng tương thích/độ bền với cơ chế kiểm soát mạng).
+> **TREE-OF-THOUGHT (😭)**: Liệt kê ≥3 phương án (ví dụ: [Rust] (ngôn ngữ – an toàn bộ nhớ), [Go] (ngôn ngữ – runtime gọn), [C++] (ngôn ngữ – cực hiệu năng)) với ưu/nhược; chọn phương án tối ưu theo tiêu chí đã nêu và giải thích ngắn gọn.
 
-# Yêu cầu tích hợp & ràng buộc
+> **SELF-REFINE (2 vòng)**: Sau mỗi bản nháp thiết kế, tự phê bình (rủi ro, nợ kỹ thuật, bảo mật, DX) và chỉnh sửa **tối đa 2 vòng**. Ghi rõ thay đổi.
 
-* **Không làm gián đoạn** đường dữ liệu/luồng nghiệp vụ hiện hữu; giữ nguyên SLA/SLO chính.
-* Bảo đảm **tuân thủ & kiểm toán**: log/trace đầy đủ, có thể tắt/mở theo policy, bằng chứng tuân thủ Zero Trust.
-* Ngân sách hiệu năng: giới hạn overhead CPU/GPU, băng thông; kiểm soát **nhiệt/điện** khi giả lập GPU.
-* Khả năng triển khai an toàn: tách lớp, feature flag, rollback nhanh; tương thích hạ tầng đám mây/CDN.
+## 5) MỤC TIÊU (Goals)
 
----
+Thiết kế & hiện thực hệ thống **mining gpu** (mô phỏng tải GPU) mới trong **`~/opus-gpu/app/app-gpu`** để:
 
-### Định hướng ngôn ngữ & nền tảng
-- Thứ tự ưu tiên được chốt:
+1. **GPU Optimization** (Tối ưu hiệu năng GPU – kernel, memory, concurrency).
+2. **Kiến trúc mô-đun linh hoạt**: giảm phụ thuộc giữa **[module]** (mô-đun – đơn vị chức năng), tối ưu luồng xử lý.
+3. **Hỗ trợ phân tán** (dễ quản lý/bảo trì/mở rộng an toàn; thêm tính năng mượt, không phá cốt lõi).
+4. **An toàn hệ thống**: cô lập tác vụ mining không ảnh hưởng chương trình khác.
+
+Mô phỏng các tải:
+
+* **[AI Training]** (Huấn luyện AI – ma trận/loss/backprop giả lập)
+* **[Image Processing]** (Xử lý ảnh – convolution/resize/batching)
+* **[Scientific Computing]** (Tính toán khoa học – FFT/BLAS giả lập)
+* **[AI Inference]** (Suy luận AI – gemm/activation/latency)
+
+## 6) RÀNG BUỘC (Constraints)
+
+* **Không tương thích ngược**: repo cũ có thể bị xoá.
+* Mọi **English term** phải kèm mô tả tiếng Việt theo cú pháp chuẩn.
+* **ANTI-HALLUCINATION** (Chống ảo tưởng):
+
+  * Chỉ dựa trên **chứng cứ** (file/thư mục/dòng code có thật).
+  * **Trích dẫn** rõ nguồn: `path:line-range`.
+  * **Giữ nguyên** code gốc khi trích dẫn.
+  * Nếu **thiếu dữ liệu** (không truy cập được mã nguồn), nêu rõ “không có chứng cứ”; tiếp tục phần thiết kế ở chế độ **giả định** (ghi chú rõ giả định).
+
+## 7) TIÊU CHÍ CHỌN NGÔN NGỮ & ĐÓNG GÓI
+
+### 7.1 Ngôn ngữ hiện thực
+
+* Thứ tự ưu tiên được chốt:
   - **[Rust]** (ngôn ngữ hệ thống – an toàn bộ nhớ, hiệu năng, đa luồng).
   - **[Go]** (ngôn ngữ hệ thống – concurrency nhẹ, DevOps thân thiện).
   - **[C++]** (ngôn ngữ hệ thống – hiệu năng cao, hệ sinh thái GPU phong phú).
   - **[Node.js/TypeScript] (sinh thái ML – tooling/SDK- orchestration, offload sang Rust/C++/CUDA)** → tooling, không xử lý nặng.
+* **Quyết định 1 ngôn ngữ chính**, nêu lý do & tác động DX/bảo mật.
 
-  - **Đề xuất phương án đóng gói mã nguồn** : Ngoài `Dockerfile`, đề xuất thêm các phương án đóng gói mã nguồn khác. Phương án cần tập trung vào: Mã hóa toàn bộ mã nguồn bằng công cụ obfuscation để tăng tính ẩn danh
-- Tiêu chí: đa luồng, song song, hỗ trợ mã hóa/bảo mật, phù hợp tải **GPU compute**.
+### 7.2 Đóng gói & bảo mật chuỗi cung ứng
 
----
+* Ngoài `Dockerfile`:
 
-## 👤 Vai Trò
-Bạn là **[Principal Engineer]** (kỹ sư chính – kiến trúc & tiêu chuẩn), **[GPU Systems Architect]** (kiến trúc sư hệ GPU – tối ưu pipeline thiết bị), **[Security Engineer]** (kỹ sư bảo mật – phòng thủ & tuân thủ), và **[SRE]** (kỹ sư độ tin cậy – vận hành & ổn định).
+  * **[OCI Image]** (ảnh chuẩn OCI – tương thích registry)
+  * **[Nix/Flakes]** (mô tả dựng – tái lập môi trường)
+  * **[Bazel]** (hệ thống build – hermetic, cache)
+  * **[SBOM]** (Bill of Materials phần mềm – Syft)
+  * **[Signing]** (ký ảnh – cosign), **[Provenance/SLSA]** (chuỗi chứng thực – slsa-framework)
+* **Obfuscation** (làm rối mã – tăng ẩn danh):
 
----
+  * **[Go/garble]**, **[Python/pyarmor]**, **[C++/llvm-obfuscator]**, **[Rust/strip + LTO]**, **[UPX]** (nén thực thi – cân nhắc).
+  * Nêu trade-off (debuggability/overhead/pháp lý giấy phép).
+* Cô lập runtime: **[seccomp]** (lọc syscall), **[AppArmor/SELinux]** (policy), **[cgroups]** (giới hạn tài nguyên), **[user namespaces]** (tách quyền).
 
-## 🧪 Đánh giá
-### Đánh giá năng lực
-- Hiểu sâu **[GPU Pipeline]** (đường ống GPU – dispatch, memory transfers, kernels).
-- Vững **[Concurrency]** (đồng thời – goroutines/threads/async), **[Memory Safety]** (an toàn bộ nhớ), **[Lock-Free]** (không khóa – cấu trúc dữ liệu).
-- CI/CD, **[Infrastructure as Code]** (hạ tầng như mã), Docker, **[NVIDIA Container Toolkit]** (bộ công cụ container NVIDIA – truy cập GPU).
-- Bảo mật: **[Zero Trust]**, **[mTLS]** (TLS hai chiều – xác thực hai phía), **[SBOM]** (bill of materials – kê khai thành phần), **[SAST/DAST]** (phân tích bảo mật tĩnh/động).
+## 8) QUY TRÌNH THỰC HIỆN
 
-### Checklist Năng Lực Cần Thiết
-- [ ] Phân tích call graph & dependency graph.
-- [ ] Định tuyến dữ liệu qua **[Message Queue]** (hàng đợi thông điệp – khử kết dính).
-- [ ] Thiết kế **[Backpressure]** (phản áp – chống tràn tải).
-- [ ] Bộ kiểm thử (unit/integration/performance).
-- [ ] Quan sát (metrics/logs/traces), **[SLI/SLO]** (chỉ số/ mục tiêu mức dịch vụ).
-- [ ] Chính sách bảo mật, quyền & audit.
+1. **Hiểu dữ liệu**: Duyệt cây `~/opus-gpu/app`; liệt kê module, dependency, config, script. Trích dẫn có đường dẫn & dòng.
+2. **Lên kế hoạch phân tích**: Xác định tiêu chí audit (đúng chức năng, hiệu năng, bảo mật, DX).
+3. **Thực hiện phân tích**:
 
----
+   * Phát hiện code smell, anti-pattern, bottleneck GPU/IO, rủi ro bảo mật.
+   * Tạo **Báo cáo Audit** (Markdown) có bảng phát hiện & đề xuất.
+4. **Xác thực kết quả**: Cross-check, “Measure Twice, Cut Once”; chỉ ra bằng chứng/dòng code liên quan.
+5. **Tái cấu trúc & Thiết kế mới**:
 
-## 🧠 Suy luận sâu (thinking hard)
-### Quy trình suy luận 3 tầng
-1) **Tầng 1 – Khảo sát**: liệt kê mô-đun, dữ liệu vào/ra, nút nghẽn (I/O, memory, PCIe), rủi ro.
-2) **Tầng 2 – Khoan sâu**: so sánh 2–3 phương án kiến trúc, mô phỏng luồng dữ liệu, tính **[Critical Path]** (đường găng – giới hạn thông lượng).
-3) **Tầng 3 – Quyết định**: chọn phương án + lộ trình triển khai tuần tự, có rollback.
+   * Vẽ kiến trúc mục tiêu (ASCII).
+   * Định nghĩa **API/ABI** (giao diện – input/output, hợp đồng).
+   * Thiết kế **module boundaries** & sơ đồ luồng dữ liệu/điều khiển.
+   * Lập kế hoạch migration (nếu cần dữ liệu cấu hình).
+6. **Hiện thực**: Tạo repo **`~/opus-gpu/app/app-gpu`** với skeleton + mã hoàn chỉnh có thể chạy.
+7. **Kiểm thử & Benchmark**:
 
----
+   * Unit/integration/e2e.
+   * **[GPU Benchmark]** (đo thông lượng/độ trễ – script NVML/rocm-smi).
+   * Hồ sơ tài nguyên (CPU/GPU/RAM/PCIe/IO).
 
-## 🔒 Ràng buộc (bắt buộc)
-- **ANTI-HALLUCINATION**: Chỉ dựa trên **chứng cứ** từ repo; **trích dẫn file/đường dẫn/dòng** cụ thể; khi không đủ dữ liệu → yêu cầu cung cấp thêm.
-- **Giữ nguyên** code gốc (verbatim) khi trích dẫn.
-- **Không** đề xuất/kể tên/kể cách làm: ngụy trang tiến trình, né tránh phát hiện, kênh bí mật, chiếm dụng nhị phân, vượt tường lửa bất hợp pháp.
-- Tuân thủ giấy phép phần mềm & pháp luật sở tại.
+## 9) KẾT QUẢ & DELIVERABLES
 
----
+### 9.1 Repository mới
 
-## 🌳 TREE-OF-THOUGHT (😭)
-- Phân nhánh tối thiểu 3 phương án kiến trúc **Module**:
-  - **A.** **[Event-Driven]** (hướng sự kiện – queue + worker GPU).
-  - **B.** **[Microservice]** (vi dịch vụ – tách API, scheduler, GPU executors).
-  - **C.** **[Monolith Modular]** (nguyên khối mô-đun – plugin).
-- Với mỗi nhánh: ưu/nhược, độ trễ, thông lượng, độ phức tạp vận hành, bảo mật.
-- Chấm điểm (0–10) theo tiêu chí mục tiêu; chọn 1 nhánh, nêu lý do.
+* **Đường dẫn**: `~/opus-gpu/app/app-gpu`
+* **Yêu cầu**:
 
----
+  * **Build & Run ngay** (local + Docker).
+  * Cấu trúc mô-đun rõ ràng, giảm coupling, tăng cohesion.
+  * Hỗ trợ **distributed mode** (nhiều GPU/nhiều node – có orchestrator).
+  * Bảo mật mặc định: hạn quyền, cấu hình cgroups, profile seccomp.
 
-## 🔁 SELF-REFINE (tối đa 2 vòng)
-- Vòng 1: Tự phê bình giả định sai, thiếu chứng cứ, rủi ro bảo mật; chỉnh sửa.
-- Vòng 2: Kiểm tra lại ràng buộc/tiêu chí đo; tối ưu kế hoạch phát hành.
+### 9.2 Báo cáo kỹ thuật (Markdown)
 
----
+* Heading/bullet rõ ràng; có **code block** khi cần.
+* **Cây thư mục chi tiết**; mô tả **trách nhiệm từng module**.
+* Nêu **lựa chọn ngôn ngữ** & **đóng gói** (kèm lý do & trade-off).
+* Phần **Audit**: phát hiện + bằng chứng (đường dẫn, dòng code).
 
-## 🧯 ANTI-HALLUCINATION (chi tiết)
-- Mọi mệnh đề kỹ thuật phải có **Evidence-Only** (đường dẫn file + dòng).
-- Không suy diễn khi chưa đọc file; thay vào đó hỏi xin tệp/cây thư mục.
-- Khi trích dẫn log/đoạn code: để trong ```code block``` và **verbatim**.
+### 9.3 Sơ đồ kiến trúc (ASCII)
 
----
+* Phù hợp với nhánh code đã chọn; thể hiện module chính, hàng đợi (queue), worker, monitor, orchestrator, storage, API, CLI.
 
-## 🪜 Think Big, Do Baby Steps
-- Trình bày bức tranh lớn, nhưng chia nhỏ thành **bước khả thi** (1–3 ngày/bước).
-- Mỗi bước có tiêu chí **Definition of Done** (định nghĩa hoàn tất – điều kiện nghiệm thu).
+## 10) ĐỊNH DẠNG XUẤT (rất quan trọng)
 
-## 🧮 Measure Twice, Cut Once
-- Đưa **benchmark plan** (kế hoạch đo), chạy thử nhỏ trước khi thay đổi lớn.
-- Thống nhất KPI trước khi viết lại mô-đun.
+* **Dạng nộp repo bằng văn bản**:
 
-## 🔢 Quantity & Order
-- Bảo toàn thứ tự xử lý, ưu tiên **idempotency** (tính lặp không đổi) & **exactly-once** khi cần.
-- Ràng buộc dữ liệu: kiểu, phạm vi, kiểm tra đầu vào.
+  * In **cây thư mục** bằng khối code:
 
-## 🔎 Always Double-Check
-- Xác minh kiến trúc bằng **design review checklist**.
-- Soi lại bảo mật, quyền, bí mật (secrets), supply chain.
+    ```
+    /opus-gpu/app/app-gpu
+    └─ README.md
+    ```
+  * Với **mỗi file**, xuất theo mẫu:
 
----
+    ```text
+    --- BEGIN FILE: /opus-gpu/app/app-gpu/cmd/worker/main.go
+    <nội dung file đầy đủ>
+    --- END FILE
+    ```
 
-## 🧭 Quy trình thực hiện
-### 1) Hiểu dữ liệu
-- Yêu cầu: **cây thư mục + tệp quan trọng** (đường dẫn, vai trò).
-- Tạo **[System Context Diagram]** (sơ đồ ngữ cảnh hệ thống – tác nhân & luồng).
-- Xác định **critical path** & hotspots (CPU-bound, GPU-bound, I/O-bound).
+* **Báo cáo**: `--- BEGIN REPORT` / `--- END REPORT`.
 
-### 2) Lên kế hoạch phân tích
-- Sinh **dependency graph**, **call graph**, ma trận mô-đun ↔ mô-đun.
-- Chọn bộ đo: **[Latency]** (độ trễ), **[Throughput]** (thông lượng), **[GPU Utilization]** (mức dùng GPU), **[P95/P99]** (bách phân vị).
+* **Sơ đồ ASCII**: `--- BEGIN DIAGRAM` / `--- END DIAGRAM`.
 
-### 3) Thực hiện phân tích
-- Đọc & trích **đoạn code** gây nghẽn; đo **PCIe copy**, **kernel occupancy**.
-- Đánh giá **memory layout**, **coalesced access** (truy cập hợp khối – tối ưu băng thông), **pinning**.
+* **Tuân thủ quy tắc ngôn ngữ**: mọi **English term** phải có mô tả tiếng Việt.
 
-### 4) Xác thực kết quả
-- Chạy **micro-benchmarks** (thử nghiệm vi mô – so sánh trước/sau).
-- Báo cáo kết quả có số đo, đồ thị, sai số.
+## 11) TIÊU CHÍ CHẤP NHẬN (Acceptance)
+- 01 repository `/opus-gpu/app/app-gpu` chứa đầy đủ mã nguồn đã hoàn thiện, bao gồm tất cả các tệp và module phiên bản production-ready.
+* Build thành công (local + Docker), có lệnh chạy rõ ràng.
+* Có **test** và **benchmark** tối thiểu; báo cáo số liệu.
+* Mức sử dụng GPU ổn định; không gây ảnh hưởng hệ thống khác (được chứng minh bởi giới hạn cgroups/ưu tiên/nice + tài liệu).
+* Tài liệu đầy đủ (README, hướng dẫn vận hành, cấu hình).
+* Thực hiện **SELF-REFINE** đủ 2 vòng (ghi rõ thay đổi).
 
-### 5) Tái cấu trúc chương trình
-- Chọn nhánh kiến trúc; xuất **kế hoạch phát hành** theo phase:
-  - Phase 1: **refactor không đổi hành vi** + test coverage ≥ 80%.
-  - Phase 2: tách **GPU executor** + **scheduler** + **API**.
-  - Phase 3: tối ưu kernel & memory; thêm **observability** và **security hardening**.
+## 12) KIỂM TRA LẠI (Always Double-Check)
+
+* Xác minh **Quantity & Order**: tính toàn vẹn, thứ tự build/run/test.
+* Kiểm tra liên kết gãy, chỉ dẫn thiếu, lệnh không chạy.
+* Đảm bảo **ANTI-HALLUCINATION**: mọi trích dẫn đều có nguồn; nếu thiếu nguồn → đánh dấu **giả định**.
 
 ---
 
-## 📦 Kết quả / Deliverables
-1. **Repository**: `/opus-gpu/app/app-gpu` sẵn sàng chạy sản xuất:
+### 13) GỢI Ý KHỞI TẠO (Think Big, Do Baby Steps)
 
-2. **Báo cáo kỹ thuật (Markdown)**:
-   - Heading rõ ràng, bullet points, code blocks, cây thư mục chi tiết, trách nhiệm mô-đun.
-   - Lý do chọn nhánh kiến trúc + số đo benchmark.
-3. **Sơ đồ kiến trúc hệ thống**:
-   - **ASCII art** phù hợp nhánh đã chọn.
-4. **Bộ kiểm thử đầy đủ**:
-   - **Unit Tests**, **Integration Tests**, **Performance Tests**.
-   - Tiêu chí định lượng pass/fail: ví dụ P95 latency ↓ ≥ 30%, GPU utilization ↑ ≥ 20%, lỗi race = 0.
+1. In ra **Checklist năng lực** và **kế hoạch audit** ngắn gọn.
+2. Thực hiện **Audit** (nếu có dữ liệu), xuất **Báo cáo Audit**.
+3. Trình bày **TREE-OF-THOUGHT**, chọn phương án.
+4. Xuất **thiết kế chi tiết** + **sơ đồ ASCII**.
+5. Xuất **repo đầy đủ** theo định dạng file nêu trên.
+6. Chạy **SELF-REFINE (2 vòng)**, cập nhật.
+7. Tổng hợp **Báo cáo kỹ thuật** cuối cùng.
 
 ---
 
-## 🛠️ Đề xuất kiến trúc (mẫu khởi điểm) : 
- * Dựa vào quá trình phân tích, đề xuất kiến trúc (mẫu khởi điểm) 
+## 14) GỢI Ý KỸ THUẬT (tham khảo nhanh)
+
+* **GPU Backend**: [CUDA] (nền tảng NVIDIA – hiệu năng cao), [ROCm] (AMD – mở), [OpenCL] (chuẩn mở – đa nền tảng), [Vulkan Compute] (API đồ hoạ – compute).
+* **Distributed**: [gRPC] (RPC hiệu quả), [Protobuf] (định nghĩa schema), [NATS/Kafka] (hàng đợi – điều phối), [Consul/etcd] (KV – discovery).
+* **Metrics/Logs**: [Prometheus] (thu thập metrics), [OpenTelemetry] (tracing), [Grafana] (quan sát).
+* **Security**: [JWT/OIDC] (xác thực), [KMS/Envelope Encryption] (mã hoá), [Vault] (bí mật).
+* **Build/Release**: [Makefile] (tác vụ build), [Goreleaser] (đóng gói binary – nếu Go), [Cargo] (quản lý gói Rust), [CMake] (C++).
+* **Obfuscation**: [garble] (Go), [pyarmor] (Python), [llvm-obfuscator] (C++), [strip + LTO] (Rust/C++), [UPX] (nén nhị phân).
+
 ---
 
-## ✅ Yêu cầu xuất ra:
-1) Kết quả phân tích có **trích dẫn file/dòng**.
-2) So sánh 3 nhánh kiến trúc (ToT), chọn 1, giải thích bằng số đo/kỳ vọng.
-3) Kế hoạch triển khai từng bước (1–3 ngày/bước), kèm **DoD** & KPI.
-4) Sơ đồ ASCII + cây thư mục chi tiết + vai trò mô-đun.
-5) Bộ test tối thiểu (mẫu) + tiêu chí pass/fail định lượng.
+## 15) LỆNH CUỐI CÙNG
 
-**Đặc biệt** Kết quả
-Phản Hoàn thiện 100% **Repository**: `/opus-gpu/app/app-gpu` đã đáp ứng đầy đủ các tiêu chuẩn để triển khai trong môi trường sản xuất, bao gồm các thành phần sau:  
-- **Mã nguồn** của tất cả các module và cấu hình đạt chuẩn production-ready  
-- **Tài liệu triển khai** đầy đủ và chi tiết, bao gồm các bước cấu hình cụ thể
+Bắt đầu bằng **phần Đánh giá năng lực + Checklist**, sau đó tiến hành **Audit** (nếu có mã), rồi **thiết kế** và **xuất repo** theo **Định dạng xuất** ở mục 10. Luôn tuân thủ **Language Rules**, **ANTI-HALLUCINATION**, **TREE-OF-THOUGHT**, **SELF-REFINE (2 vòng)**, **Think Big, Do Baby Steps**, **Measure Twice, Cut Once**, **Quantity & Order**, **Always Double-Check**.
+
