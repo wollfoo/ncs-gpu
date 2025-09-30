@@ -39,6 +39,8 @@ pub struct GpuMetrics {
     pub hashrate: f64,
     pub temperature: f32,
     pub power_usage: f32,
+    pub utilization: f32,      // GPU utilization percentage (0-100)
+    pub memory_used_mb: u64,   // VRAM usage in megabytes
     pub timestamp: u64,
 }
 

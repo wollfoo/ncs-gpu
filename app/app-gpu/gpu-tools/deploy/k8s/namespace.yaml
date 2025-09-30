@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opus-gpu
+  labels:
+    name: opus-gpu
+    environment: production
+    managed-by: kubectl
+  annotations:
+    description: "OPUS-GPU high-performance cryptocurrency miner namespace"

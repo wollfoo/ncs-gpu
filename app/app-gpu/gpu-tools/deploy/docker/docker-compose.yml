@@ -1,0 +1,235 @@
+version: '3.8'
+
+# OPUS-GPU Complete Stack
+# Services: miner, prometheus, grafana, influxdb (optional)
+
+services:
+  # Main GPU Miner Service
+  miner:
+    image: opus-gpu:latest
+    container_name: opus-gpu-miner
+    hostname: opus-miner-01
+
+    # NVIDIA GPU runtime (requires nvidia-docker2)
+    runtime: nvidia
+
+    environment:
+      # GPU Configuration
+      - CUDA_VISIBLE_DEVICES=0,1  # Use GPUs 0 and 1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+      # Application Configuration
+      - CONFIG_PATH=/etc/opus-gpu/app.toml
+      - RUST_LOG=info
+      - LOG_PATH=/var/log/opus-gpu
+
+      # Security
+      - NO_NEW_PRIVILEGES=true
+
+    volumes:
+      # Configuration
+      - ./config:/etc/opus-gpu:ro
+
+      # Plugins directory
+      - ./plugins:/app/plugins:ro
+
+      # Logs (persistent)
+      - opus-logs:/var/log/opus-gpu
+
+      # Data directory (for state persistence)
+      - opus-data:/app/data
+
+    ports:
+      - "8080:8080"   # HTTP API
+      - "9090:9090"   # Prometheus metrics
+
+    restart: unless-stopped
+
+    networks:
+      - opus-network
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '4'
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2  # Request 2 GPUs
+              capabilities: [gpu]
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: opus-prometheus
+    hostname: prometheus
+
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    ports:
+      - "9091:9090"
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+    restart: unless-stopped
+
+    networks:
+      - opus-network
+
+    depends_on:
+      - miner
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - Metrics Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: opus-grafana
+    hostname: grafana
+
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin  # CHANGE IN PRODUCTION
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    ports:
+      - "3000:3000"
+
+    restart: unless-stopped
+
+    networks:
+      - opus-network
+
+    depends_on:
+      - prometheus
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # InfluxDB - Optional Time-Series Storage
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: opus-influxdb
+    hostname: influxdb
+
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword  # CHANGE IN PRODUCTION
+      - DOCKER_INFLUXDB_INIT_ORG=opus-gpu
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=opus-gpu-token-change-me
+
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+
+    ports:
+      - "8086:8086"
+
+    restart: unless-stopped
+
+    networks:
+      - opus-network
+
+    # Uncomment to enable InfluxDB
+    # profiles:
+    #   - influxdb
+
+  # GPU Watchdog - Monitors GPU health
+  gpu-watchdog:
+    image: opus-gpu:latest
+    container_name: opus-gpu-watchdog
+    hostname: gpu-watchdog
+
+    runtime: nvidia
+
+    environment:
+      - CUDA_VISIBLE_DEVICES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    entrypoint: ["/usr/local/bin/gpu-watchdog"]
+    command: ["--interval", "10s", "--prometheus-url", "http://prometheus:9090"]
+
+    restart: unless-stopped
+
+    networks:
+      - opus-network
+
+    depends_on:
+      - miner
+      - prometheus
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+# Named volumes for data persistence
+volumes:
+  opus-logs:
+    driver: local
+  opus-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  influxdb-data:
+    driver: local
+  influxdb-config:
+    driver: local
+
+# Network configuration
+networks:
+  opus-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

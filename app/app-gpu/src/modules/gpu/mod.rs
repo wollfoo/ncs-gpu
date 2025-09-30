@@ -10,9 +10,9 @@
 
 use crate::error::{MinerError, Result};
 use crate::legacy::{LegacyMinerBridge, MiningTask as LegacyTask};
-use crate::messaging::{GpuMetrics, Message, MessageBus, MessageBusHandles};
+use crate::messaging::bus::GpuMetrics;
+use crate::messaging::{Message, MessageBusHandles};
 use serde::Deserialize;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -244,8 +244,10 @@ async fn gpu_execution_loop(
                 let metrics = GpuMetrics {
                     gpu_id: gpu_id as usize,
                     hashrate: calculate_hashrate(tasks_processed, bridge.uptime()),
-                    temperature: 0.0, // TODO: Get from NVML
-                    power_usage: 0.0, // TODO: Get from NVML
+                    temperature: 0.0,     // TODO: Get from NVML
+                    power_usage: 0.0,     // TODO: Get from NVML
+                    utilization: 0.0,     // TODO: Get from NVML
+                    memory_used_mb: 0,    // TODO: Get from NVML
                     timestamp,
                 };
 

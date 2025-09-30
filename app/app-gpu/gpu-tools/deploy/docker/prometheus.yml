@@ -1,0 +1,78 @@
+# Prometheus Configuration for OPUS-GPU Monitoring
+
+global:
+  scrape_interval: 5s       # Scrape targets every 5 seconds
+  evaluation_interval: 5s   # Evaluate rules every 5 seconds
+  scrape_timeout: 4s        # Timeout for scrapes
+
+  external_labels:
+    cluster: 'opus-gpu'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # OPUS-GPU Miner Metrics
+  - job_name: 'opus-gpu-miner'
+    static_configs:
+      - targets: ['miner:8080']
+        labels:
+          service: 'miner'
+          component: 'core'
+
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+    # Relabel configurations
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'opus-miner-01'
+
+  # GPU Watchdog Metrics
+  - job_name: 'gpu-watchdog'
+    static_configs:
+      - targets: ['gpu-watchdog:9091']
+        labels:
+          service: 'watchdog'
+          component: 'monitoring'
+
+    scrape_interval: 10s
+
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+
+    scrape_interval: 15s
+
+  # Node Exporter (if deployed)
+  # - job_name: 'node-exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         service: 'node-exporter'
+  #         component: 'system'
+
+# Remote write (optional - for long-term storage)
+# remote_write:
+#   - url: http://influxdb:8086/api/v1/prom/write?db=prometheus
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 200
+#       min_shards: 1
+#       max_samples_per_send: 5000
+#       batch_send_deadline: 5s

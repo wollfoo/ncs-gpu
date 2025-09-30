@@ -10,4 +10,4 @@ pub mod bus;
 pub use bus::MessageBus;
 
 #[allow(unused_imports)]
-pub use bus::{MessageBusHandles, Message, SendError};
+pub use bus::{MessageBusHandles, Message, SendError, GpuMetrics, MiningTask};

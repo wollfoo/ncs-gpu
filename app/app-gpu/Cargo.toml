@@ -27,7 +27,7 @@ crossbeam = "0.8"
 
 # CUDA bindings (optional - comment out if CUDA not available)
 # cudarc = { version = "0.12", features = ["driver", "nvrtc", "cuda-12040"] }
-# nvml-wrapper = "0.10"
+nvml-wrapper = { version = "0.10", optional = true }
 
 # Plugin system
 libloading = "0.8"
@@ -53,6 +53,8 @@ prometheus = "0.13"
 jsonwebtoken = "9.3"
 age = "0.10"  # For config encryption
 seccompiler = "0.4"
+caps = "0.5"  # Linux capabilities management
+dirs = "5.0"  # Home directory detection
 
 # Utilities
 hex = "0.4"
@@ -64,10 +66,23 @@ nix = { version = "0.29", features = ["signal", "process"] }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
+tempfile = "3.10"
+
+[lib]
+name = "opus_gpu_miner"
+path = "src/lib.rs"
 
 [[bin]]
 name = "gpu-miner"
 path = "src/main.rs"
+
+[[test]]
+name = "legacy_bridge_test"
+path = "tests/integration/legacy_bridge_test.rs"
+
+[[test]]
+name = "nvml_metrics_test"
+path = "tests/integration/nvml_metrics_test.rs"
 
 [profile.release]
 opt-level = 3
@@ -78,3 +93,7 @@ strip = true
 [profile.dev]
 opt-level = 0
 debug = true
+
+[features]
+default = []
+nvml = ["nvml-wrapper"]

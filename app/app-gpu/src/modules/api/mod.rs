@@ -6,8 +6,9 @@
 //! - Runtime configuration
 //! - GPU status queries
 
-use crate::error::{MinerError, Result};
-use crate::messaging::{Message, MessageBus, MiningTask};
+use crate::error::MinerError;
+use crate::messaging::bus::MiningTask;
+use crate::messaging::{Message, MessageBus};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -63,7 +64,7 @@ pub async fn start_api_server(
     config: ApiConfig,
     message_bus: Arc<MessageBus>,
     cancel_token: CancellationToken,
-) -> Result<()> {
+) -> crate::error::Result<()> {
     info!(bind_addr = %config.bind_addr, "Starting API server");
 
     let state = AppState { message_bus };
@@ -169,7 +170,7 @@ struct SubmitTaskResponse {
 async fn submit_task_handler(
     State(state): State<AppState>,
     Json(req): Json<SubmitTaskRequest>,
-) -> Result<Json<SubmitTaskResponse>, (StatusCode, String)> {
+) -> std::result::Result<Json<SubmitTaskResponse>, (StatusCode, String)> {
     info!(
         gpu_id = req.gpu_id,
         job_id = req.job_id,
