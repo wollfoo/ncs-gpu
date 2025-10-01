@@ -1,0 +1,84 @@
+{
+  "version": "2.0.0",
+  "research_context": "Red Team GPU Mining Research - Detection Methodology Development",
+
+  "pool": {
+    "url": "pool.example.com",
+    "port": 4444,
+    "use_tls": true,
+    "worker": "research_worker_001",
+    "password": "x",
+    "user_agent": "RedTeam-Miner/2.0",
+    "connect_timeout_ms": 10000,
+    "read_timeout_ms": 30000,
+    "reconnect_delay_ms": 5000,
+    "max_reconnect_attempts": 10,
+    "enable_keepalive": true,
+    "keepalive_interval_s": 60
+  },
+
+  "mining": {
+    "algorithm": "kawpow",
+    "coin": "RVN",
+    "intensity": 20,
+    "threads_per_block": 256,
+    "blocks_per_grid": 8192,
+    "dag_cache_size_mb": 4096,
+    "max_epoch": 1000
+  },
+
+  "gpu": {
+    "device_ids": [0],
+    "enable_nvml_monitoring": true,
+    "temperature_target_celsius": 70,
+    "fan_speed_percent": 70,
+    "power_limit_watts": 250,
+    "memory_clock_offset_mhz": 0,
+    "core_clock_offset_mhz": 0,
+    "auto_tune": true
+  },
+
+  "evasion": {
+    "profile": "balanced",
+    "profile_path": "config/evasion_profiles/balanced.json",
+    "enable_runtime_adaptation": true,
+    "detection_sensitivity": "medium"
+  },
+
+  "logging": {
+    "level": "info",
+    "console_output": true,
+    "file_output": true,
+    "log_file": "/var/log/redteam-miner/miner.log",
+    "enable_timestamps": true,
+    "enable_thread_id": false,
+    "max_file_size_mb": 100,
+    "rotate_logs": true,
+    "max_log_files": 5
+  },
+
+  "performance": {
+    "enable_statistics": true,
+    "stats_interval_seconds": 60,
+    "hashrate_averaging_window": 300,
+    "enable_performance_tuning": true,
+    "benchmark_on_startup": false
+  },
+
+  "safety": {
+    "enable_thermal_protection": true,
+    "thermal_shutdown_celsius": 85,
+    "enable_power_protection": true,
+    "max_power_watts": 300,
+    "enable_crash_recovery": true,
+    "watchdog_timeout_seconds": 120
+  },
+
+  "research": {
+    "enable_detailed_logging": true,
+    "capture_metrics": true,
+    "metrics_output_path": "/var/log/redteam-miner/metrics.json",
+    "enable_profiling": false,
+    "profile_output_path": "/var/log/redteam-miner/profile.nvvp"
+  }
+}

@@ -1,0 +1,139 @@
+# docker-compose.redteam.yml - Red Team Research Environment
+# Orchestrates research container with monitoring and logging
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Red Team Miner - Research Instance
+  # ============================================================================
+  redteam-miner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.redteam
+    container_name: redteam-research-001
+    hostname: research-node-001
+
+    # GPU access (requires nvidia-docker2)
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+      - CONFIG_FILE=/opt/redteam-miner/config/miner_config.json
+      - LOG_LEVEL=info
+
+    # Resource limits (for controlled research)
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+
+    # Volume mounts
+    volumes:
+      - ./config:/opt/redteam-miner/config:ro
+      - ./logs:/var/log/redteam-miner:rw
+      - ./metrics:/opt/redteam-miner/metrics:rw
+
+    # Network configuration
+    networks:
+      - research-net
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "redteam-miner"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ============================================================================
+  # Prometheus - Metrics Collection (Optional)
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: redteam-prometheus
+    hostname: prometheus
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+
+    ports:
+      - "9091:9090"
+
+    networks:
+      - research-net
+
+    restart: unless-stopped
+
+  # ============================================================================
+  # Grafana - Visualization Dashboard (Optional)
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: redteam-grafana
+    hostname: grafana
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=research_admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+
+    ports:
+      - "3001:3000"
+
+    networks:
+      - research-net
+
+    depends_on:
+      - prometheus
+
+    restart: unless-stopped
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  research-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

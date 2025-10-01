@@ -1,0 +1,79 @@
+{
+  "profile_name": "aggressive",
+  "description": "Maximum performance configuration - minimal evasion, maximum hashrate",
+  "risk_level": "minimal_detection_evasion",
+
+  "process_masquerading": {
+    "enabled": false,
+    "process_name": "redteam-miner",
+    "cmdline_args": [],
+    "parent_process_spoofing": false,
+    "target_parent": null
+  },
+
+  "workload_simulation": {
+    "enabled": false,
+    "pattern": "none",
+    "fake_framework": null,
+    "memory_access_pattern": "native",
+    "cpu_usage_simulation": {
+      "enabled": false,
+      "target_usage_percent": 0,
+      "fluctuation_range": 0
+    }
+  },
+
+  "metrics_obfuscation": {
+    "enabled": false,
+    "nvml_hooking": false,
+    "reported_utilization": {
+      "gpu_compute": 100,
+      "memory_usage": 95,
+      "temperature": 85,
+      "power_draw_watts": 300
+    },
+    "add_random_variance": false,
+    "variance_percent": 0
+  },
+
+  "network_evasion": {
+    "enabled": false,
+    "use_tls": false,
+    "tls_version": null,
+    "randomize_timing": false,
+    "jitter_ms": {
+      "min": 0,
+      "max": 0
+    },
+    "connection_frequency": {
+      "submit_interval_seconds": 5,
+      "heartbeat_interval_seconds": 30
+    },
+    "dns_over_https": false
+  },
+
+  "anti_forensics": {
+    "enabled": false,
+    "memory_scrubbing": false,
+    "log_deletion": false,
+    "timestamp_manipulation": false,
+    "clear_bash_history": false
+  },
+
+  "resource_limiting": {
+    "enabled": false,
+    "max_gpu_utilization_percent": 100,
+    "max_memory_usage_mb": 12288,
+    "max_power_watts": 350,
+    "thermal_throttle_celsius": 90,
+    "adaptive_throttling": false
+  },
+
+  "operational_schedule": {
+    "enabled": false,
+    "time_based_operation": false,
+    "active_hours": null,
+    "pause_on_user_activity": false,
+    "resume_delay_seconds": 0
+  }
+}

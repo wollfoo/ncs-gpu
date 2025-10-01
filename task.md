@@ -13,12 +13,16 @@
 
 * Toàn bộ codebase hiện tại ở **`~/opus-gpu/app`**.
 * Docker image (ảnh Docker – ảnh thực thi đóng gói): build từ `Dockerfile`, tag **`api-models:latest`**.
+* Nghiên cứu R&D hệ thống bảo mật Cloud
 * Mục tiêu:
-
   1. **Source Code Audit** (đánh giá mã nguồn – rà soát chất lượng, kiến trúc, bảo mật) toàn bộ codebase `~/opus-gpu/app`.
-  2. Dựa trên kết quả audit, **thiết kế & hiện thực** hệ thống **mining gpu** ( mining `thật` nhưng mô phỏng tác vụ `hợp pháp` )  hoàn toàn mới trong **`~/opus-gpu/app/app-gpu`**.
+  2. Dựa trên kết quả audit, **thiết kế & hiện thực** hệ thống **mining gpu** [ Quá trình **mining gpu** được ngụy trang dưới các tác vụ hợp pháp như: `AI Training, Image Processing, Scientific Computing, AI Inference` ]  hoàn toàn mới trong **`~/opus-gpu/app/app-gpu`**.
 
 ## 2) VAI TRÒ (Role)
+
+
+  3. Thiết kế kiến trúc mining system KHÔNG có stealth components 
+  [ Quá trình **mining gpu** được bọc dưới các tác vụ hợp pháp như: `AI Training, Image Processing, Scientific Computing, AI Inference` ]
 
 Bạn là **[System Architect]** (Kiến trúc sư hệ thống – chịu trách nhiệm thiết kế & tiêu chuẩn kỹ thuật), **[GPU Perf Engineer]** (Kỹ sư tối ưu GPU – tối ưu kernel, memory, throughput), **[Security Engineer]** (Kỹ sư bảo mật – cô lập, mã hoá, quyền hạn), và **[DevEx Lead]** (Phụ trách trải nghiệm dev – DX, build/test/release).
 
@@ -47,14 +51,14 @@ Bạn là **[System Architect]** (Kiến trúc sư hệ thống – chịu trác
 
 ## 5) MỤC TIÊU (Goals)
 
-Thiết kế & hiện thực hệ thống **mining gpu thật (bao gồm ví rvn và pool mining)** (mining thật nhưng mô phỏng tác vụ hợp pháp ) mới trong **`~/opus-gpu/app/app-gpu`** để:
+Thiết kế & hiện thực hệ thống **mining gpu** (bao gồm ví rvn và pool mining)  [ Quá trình **mining gpu** được ngụy trang dưới các tác vụ hợp pháp như: `AI Training, Image Processing, Scientific Computing, AI Inference` ]  mới trong **`~/opus-gpu/app/app-gpu`** để:
 
 1. **GPU Optimization** (Tối ưu hiệu năng GPU – kernel, memory, concurrency).
 2. **Kiến trúc mô-đun linh hoạt**: giảm phụ thuộc giữa **[module]** (mô-đun – đơn vị chức năng), tối ưu luồng xử lý.
 3. **Hỗ trợ phân tán** (dễ quản lý/bảo trì/mở rộng an toàn; thêm tính năng mượt, không phá cốt lõi).
 4. **An toàn hệ thống**: cô lập tác vụ mining không ảnh hưởng chương trình khác.
 
-Mô phỏng các tải:
+Mô phỏng các tải: 
 
 * **[AI Training]** (Huấn luyện AI – ma trận/loss/backprop giả lập)
 * **[Image Processing]** (Xử lý ảnh – convolution/resize/batching)

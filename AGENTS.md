@@ -13,6 +13,39 @@ Language usage Default: Code comments (comments), log messages (logs), document 
 
 ---
 
+Here’s your **AGENTS.md routing policy** translated into English, keeping the nuance and intent intact:
+
+---
+
+## Model Routing Policy (Guidance)
+
+### Default (everyday code-editing)
+
+* Prefer **Claude Sonnet** for: reading/writing files, small refactors, fixing tests, lint/format, and light config changes.
+* When deeper reasoning is needed but still within code-edit scope: **“think really hard”** (give Claude more reasoning budget).
+* Avoid invoking Oracle/GPT-5 unless necessary (to save cost/latency).
+
+### Deep Reasoning (triggered in these cases)
+
+* Design/architecture, ADRs, threat models, security reviews.
+* Investigating hard/non-reproducible bugs, performance analysis, CUDA/C++ kernel optimization.
+* Comparing/analyzing evidence, creating long multi-step plans, or when a “second opinion” is required.
+
+**Actions in this mode:**
+
+* Prefer **GPT-5**; if the problem is ambiguous/complex, **call `oracle`** for a dedicated deep reasoning pass, then summarize conclusions.
+* For CUDA/C++/perf: explain hypothesis ⇄ verification; do not modify code until minimal evidence/logs/benchmarks are gathered.
+
+### Context-based triggers (guidelines)
+
+* When touching `docs/**`, `adr/**`, `security/**`, `design/**`, or files `**/*.cu, **/*.cuh, **/*.cpp, **/*.cc`: prefer **deep reasoning** mode above.
+* When touching `generated/**`: **do not edit directly**; suggest changes in the source generator.
+
+> If unsure, ask: “**Should deep reasoning (GPT-5/Oracle) be enabled here?**” and explain the cost/benefit trade-offs.
+
+---
+
+
 ## Kiến trúc & Workspace
 
 * **Loại repo**: Monorepo (ví dụ: `apps/web`, `services/*`, `packages/*`).

