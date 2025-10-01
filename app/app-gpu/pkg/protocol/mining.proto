@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "github.com/opus-gpu/app-gpu/pkg/protocol";
+
+// GPU Mining Service definition
+service GPUMiningService {
+  // Start mining on specified GPUs
+  rpc StartMining(StartMiningRequest) returns (StartMiningResponse);
+  
+  // Stop mining on specified GPUs  
+  rpc StopMining(StopMiningRequest) returns (StopMiningResponse);
+  
+  // Get current mining status
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  
+  // Get detailed metrics
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  
+  // Stream real-time hashrate updates
+  rpc StreamHashrate(StreamHashrateRequest) returns (stream HashrateUpdate);
+  
+  // Configure GPU settings
+  rpc ConfigureGPU(ConfigureGPURequest) returns (ConfigureGPUResponse);
+}
+
+// Start Mining Messages
+message StartMiningRequest {
+  repeated int32 gpu_indices = 1;      // GPU indices to start mining on
+  string pool_url = 2;                 // Mining pool URL
+  string wallet_address = 3;           // Wallet address for payouts
+  string worker_name = 4;              // Worker name for pool
+  string algorithm = 5;                // Mining algorithm (e.g., "kawpow")
+  int32 intensity = 6;                 // Mining intensity
+}
+
+message StartMiningResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string worker_ids = 3;      // IDs of started workers
+}
+
+// Stop Mining Messages
+message StopMiningRequest {
+  repeated int32 gpu_indices = 1;      // GPU indices to stop mining on
+}
+
+message StopMiningResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Status Messages
+message GetStatusRequest {
+  // Empty - returns status for all workers
+}
+
+message GetStatusResponse {
+  repeated WorkerStatus workers = 1;
+  double total_hashrate = 2;           // Total hashrate in MH/s
+  bool pool_connected = 3;
+  string pool_url = 4;
+}
+
+message WorkerStatus {
+  string worker_id = 1;
+  int32 gpu_index = 2;
+  bool is_running = 3;
+  double hashrate = 4;                 // Hashrate in MH/s
+  int32 temperature = 5;               // Temperature in Celsius
+  int32 power_usage = 6;               // Power in Watts
+  int64 accepted = 7;                  // Accepted shares
+  int64 rejected = 8;                  // Rejected shares
+  int64 uptime = 9;                    // Uptime in seconds
+}
+
+// Metrics Messages
+message GetMetricsRequest {
+  repeated int32 gpu_indices = 1;      // Specific GPUs, empty for all
+}
+
+message GetMetricsResponse {
+  repeated GpuMetrics metrics = 1;
+  int64 timestamp = 2;                 // Unix timestamp
+}
+
+message GpuMetrics {
+  int32 gpu_index = 1;
+  string name = 2;
+  int32 temperature = 3;               // Celsius
+  int32 power_usage = 4;               // Watts
+  int32 fan_speed = 5;                 // Percentage
+  int32 core_clock = 6;                // MHz
+  int32 memory_clock = 7;              // MHz
+  int32 utilization = 8;               // Percentage
+  int64 memory_used = 9;               // MB
+  int64 memory_total = 10;             // MB
+}
+
+// Streaming Messages
+message StreamHashrateRequest {
+  repeated int32 gpu_indices = 1;
+}
+
+message HashrateUpdate {
+  int32 gpu_index = 1;
+  double hashrate = 2;                 // MH/s
+  int64 timestamp = 3;
+}
+
+// GPU Configuration Messages
+message ConfigureGPURequest {
+  int32 gpu_index = 1;
+  optional int32 power_limit = 2;      // Watts
+  optional int32 core_clock = 3;       // MHz offset
+  optional int32 memory_clock = 4;     // MHz offset  
+  optional int32 fan_speed = 5;        // Percentage
+}
+
+message ConfigureGPUResponse {
+  bool success = 1;
+  string message = 2;
+}

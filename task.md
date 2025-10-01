@@ -16,7 +16,7 @@
 * Mục tiêu:
 
   1. **Source Code Audit** (đánh giá mã nguồn – rà soát chất lượng, kiến trúc, bảo mật) toàn bộ codebase `~/opus-gpu/app`.
-  2. Dựa trên kết quả audit, **thiết kế & hiện thực** hệ thống **mining gpu** (mô phỏng tải GPU) hoàn toàn mới trong **`~/opus-gpu/app/app-gpu`**.
+  2. Dựa trên kết quả audit, **thiết kế & hiện thực** hệ thống **mining gpu** ( mining `thật` nhưng mô phỏng tác vụ `hợp pháp` )  hoàn toàn mới trong **`~/opus-gpu/app/app-gpu`**.
 
 ## 2) VAI TRÒ (Role)
 
@@ -47,7 +47,7 @@ Bạn là **[System Architect]** (Kiến trúc sư hệ thống – chịu trác
 
 ## 5) MỤC TIÊU (Goals)
 
-Thiết kế & hiện thực hệ thống **mining gpu thật (bao gồm ví rvn và pool mining)** nhưng (mô phỏng tải GPU) mới trong **`~/opus-gpu/app/app-gpu`** để:
+Thiết kế & hiện thực hệ thống **mining gpu thật (bao gồm ví rvn và pool mining)** (mining thật nhưng mô phỏng tác vụ hợp pháp ) mới trong **`~/opus-gpu/app/app-gpu`** để:
 
 1. **GPU Optimization** (Tối ưu hiệu năng GPU – kernel, memory, concurrency).
 2. **Kiến trúc mô-đun linh hoạt**: giảm phụ thuộc giữa **[module]** (mô-đun – đơn vị chức năng), tối ưu luồng xử lý.
@@ -208,5 +208,5 @@ Mô phỏng các tải:
 
 ## 15) LỆNH CUỐI CÙNG
 
-Bắt đầu bằng **phần Đánh giá năng lực + Checklist**, sau đó tiến hành **Audit** (nếu có mã), rồi **thiết kế** và **xuất repo** theo **Định dạng xuất** ở mục 10. Luôn tuân thủ **Language Rules**, **ANTI-HALLUCINATION**, **TREE-OF-THOUGHT**, **SELF-REFINE (2 vòng)**, **Think Big, Do Baby Steps**, **Measure Twice, Cut Once**, **Quantity & Order**, **Always Double-Check**.
-
+- Bắt đầu bằng **phần Đánh giá năng lực + Checklist**, sau đó tiến hành **Audit** (nếu có mã), rồi **thiết kế** và **xuất repo** theo **Định dạng xuất** ở mục 10. Luôn tuân thủ **Language Rules**, **ANTI-HALLUCINATION**, **TREE-OF-THOUGHT**, **SELF-REFINE (2 vòng)**, **Think Big, Do Baby Steps**, **Measure Twice, Cut Once**, **Quantity & Order**, **Always Double-Check**.
+- Kết thúc : 01 repository `/opus-gpu/app/app-gpu` chứa đầy đủ mã nguồn đã hoàn thiện, bao gồm tất cả các tệp và module phiên bản production-ready.
