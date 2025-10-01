@@ -1,0 +1,85 @@
+# Prometheus configuration cho GPU Mining monitoring
+# Academic Security Research Framework
+
+global:
+  scrape_interval: 15s      # Thời gian thu thập metrics
+  scrape_timeout: 10s       # Timeout cho mỗi scrape
+  evaluation_interval: 15s  # Thời gian evaluate rules
+
+# Rule files - chứa alerting rules
+rule_files:
+  - "alert_rules.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Nếu có alert manager, uncomment và cấu hình
+          # - alertmanager:9093
+
+# Scrape configs
+scrape_configs:
+  # GPU Miner metrics endpoint
+  - job_name: 'gpu-miner'
+    static_configs:
+      - targets: ['gpu-miner:9090']  # GPU miner service port
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+    # Metrics relabeling
+    metric_relabel_configs:
+      # Filter chỉ lấy metrics quan trọng
+      - source_labels: [__name__]
+        regex: 'gpu_miner_(hash_rate|blocks_found|worker_count|active_workers|gpu_temperature|gpu_memory|gpu_utilization|cpu_usage|memory_usage|network_bytes)'
+        action: keep
+
+      # Add environment label
+      - target_label: environment
+        replacement: 'academic-research'
+
+      # Add research purpose label
+      - target_label: purpose
+        replacement: 'defensive-security'
+
+  # Node Exporter (nếu chạy trên node)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # cAdvisor cho container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+
+    # Filter container metrics
+    metric_relabel_configs:
+      - source_labels: [container_label_com_docker_compose_service]
+        regex: 'gpu-miner'
+        action: keep
+
+  # GPU metrics (nếu có DCGM exporter)
+  - job_name: 'gpu-metrics'
+    static_configs:
+      - targets: ['dcgm-exporter:9400']
+    scrape_interval: 10s
+
+    # GPU specific metrics
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '(DCGM_FI_DEV_GPU_TEMP|DCGM_FI_DEV_MEMORY_TEMP|DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_MEM_COPY_UTIL|DCGM_FI_DEV_ENC_UTIL|DCGM_FI_DEV_DEC_UTIL|DCGM_FI_DEV_FB_USED|DCGM_FI_DEV_FB_FREE|DCGM_FI_DEV_POWER_USAGE)'
+        action: keep
+
+  # System metrics
+  - job_name: 'system'
+    static_configs:
+      - targets: ['gpu-miner:8081']  # Optional system metrics port
+    scrape_interval: 30s
+
+# Remote write (nếu cần gửi metrics đến remote)
+# remote_write:
+#   - url: "https://prometheus-prod-10-prod-us-central-0.grafana.net/api/prom/push"
+#     authorization:
+#       credentials: "your-api-key"

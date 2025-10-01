@@ -1,0 +1,227 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "GPU Mining Academic Research Monitoring",
+    "tags": ["gpu-mining", "academic-research", "security"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Hash Rate Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gpu_miner_hash_rate",
+            "legendFormat": "Hash Rate (H/s)",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "format": "short",
+            "label": "Hash Rate"
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "xAxis": {
+          "mode": "time"
+        }
+      },
+      {
+        "id": 2,
+        "title": "GPU Temperature",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "gpu_temperature",
+            "legendFormat": "GPU Temp (°C)",
+            "refId": "A"
+          }
+        ],
+        "thresholds": [
+          {
+            "value": 85,
+            "colorMode": "critical",
+            "op": "gt",
+            "fill": true,
+            "line": true
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "GPU Memory Usage",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "(gpu_memory_used / gpu_memory_total) * 100",
+            "legendFormat": "GPU Memory %",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 80,
+                  "color": "orange"
+                },
+                {
+                  "value": 90,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Worker Pool Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gpu_miner_worker_count",
+            "legendFormat": "Active Workers",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": []
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Network I/O",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(network_bytes_incoming[5m])",
+            "legendFormat": "Incoming (bytes/s)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(network_bytes_outgoing[5m])",
+            "legendFormat": "Outgoing (bytes/s)",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Container Health",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=\"gpu-miner\"}",
+            "legendFormat": "Container Status",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Research Compliance Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "gpu_miner_mode{research=\"true\"}",
+            "legendFormat": "Research Mode",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "text": "NON-COMPLIANT",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "COMPLIANT",
+                    "color": "green"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ]
+    },
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "links": [],
+    "refresh": "30s",
+    "schemaVersion": 16,
+    "style": "dark",
+    "version": 1
+  }
+}

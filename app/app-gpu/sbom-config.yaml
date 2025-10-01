@@ -1,0 +1,129 @@
+# SBOM Configuration cho GPU Mining Project
+# Academic Security Research Framework
+
+project:
+  name: "gpu-miner"
+  version: "0.1.0"
+  description: "Secure GPU Mining Core for Academic Security Research"
+  purpose: "academic-defensive-security"
+  criticality: "high"
+  author: "Academic Security Research Team"
+  organization: "Academic Research Institute"
+
+# SBOM Generation Settings
+sbom:
+  formats:
+    - spdx
+    - cyclonedx-json
+
+  tools:
+    primary: "syft"
+    vulnerability_scanner: "grype"
+    signer: "cosign"
+
+  output:
+    directory: "./sbom"
+    include_signatures: true
+    include_report: true
+
+# Component Classification (cho research)
+components:
+  research_categories:
+    - "gpu-acceleration"
+    - "mining-algorithms"
+    - "camouflage-wrappers"
+    - "security-hardening"
+
+  development_dependencies:
+    - rust_toolchain: "1.75.0"
+    - cuda_version: "11.8"
+    - vulkan_sdk: "latest"
+
+  runtime_dependencies:
+    - libc: "*"
+    - libcuda: "11.8+"
+    - libvulkan: "1.3+"
+    - openssl: "3.0+"
+
+# Security Scanning Rules
+security:
+  # High-severity vulnerabilities are blocked
+  fail_on:
+    severity:
+      - critical
+      - high
+    types:
+      - "rce"      # Remote Code Execution
+      - "privilege-escalation"
+      - "data-exfiltration"
+    exceptions:
+      # Accept known crypto mining libraries
+      - package: "sha2|argon2"
+        reason: "required-for-mining-algorithms"
+
+  # Allow academic use cases
+  academic_use:
+    permitted:
+      - "cryptocurrency-research"
+      - "security-pattern-analysis"
+    restricted:
+      - "production-mining"
+      - "monetary-gain"
+
+# SPDX Configuration
+spdx:
+  document_name: "gpu-miner-academic-research"
+  namespace: "https://academic-research.edu/gpu-miner/sbom"
+  creators:
+    - "Tool: Syft"
+    - "Organization: Academic Research Institute"
+  license_list_version: "3.23"
+
+# CycloneDX Configuration
+cyclonedx:
+  tool_name: "GPU Miner Academic Security Research"
+  tool_vendor: "Academic Research Institute"
+  tool_version: "0.1.0"
+  metadata:
+    authors:
+      - name: "Academic Security Research Team"
+        email: "security-research@academic.edu"
+    licenses:
+      - license:
+          id: "MIT"
+    properties:
+      - name: "research-purpose"
+        value: "academic-defensive-security"
+      - name: "criticality"
+        value: "high"
+      - name: "language"
+        value: "rust"
+
+# Compliance và Reporting
+compliance:
+  standards:
+    - "NIST SP 800-161"    # Supply Chain Security
+    - "ISO/IEC 27001"      # Information Security Management
+    - "OWASP Application Security Verification Standard"
+
+  reporting:
+    export_control: "Academic Research - No Dual Use"
+    data_classification: "Public Research Data"
+    retention_period: "5 years"
+
+  annotations:
+    - type: "security-research"
+      annotator: "academic-security-research"
+      text: "Application developed solely for defensive security research purposes"
+
+# CI/CD Integration
+ci_integration:
+  github_actions:
+    security_scan: true
+    sbom_upload: true
+    signature_upload: true
+
+  artifact_retention:
+    sbom_files: "7 days"
+    signature_files: "30 days"
+    reports: "90 days"
