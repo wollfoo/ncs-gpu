@@ -132,7 +132,7 @@ Yêu cầu thiết kế phải đáp ứng các tiêu chí về hiệu suất, b
 
 Đẩy codebase [ 'amp-gpu' ] lưu ý là chỉ một mình 'amp-gpu'lên repository với các thông tin sau:  
 - Tên repo: [ https://github.com/ntv-com-vn/amp-gpu.git ]  
-- Token truy cập: [ [REDACTED_TOKEN] ]  
+- Token truy cập: [  ]  
 
 Yêu cầu:  
 1. Đảm bảo codebase đã được kiểm tra và sẵn sàng để đẩy lên  
