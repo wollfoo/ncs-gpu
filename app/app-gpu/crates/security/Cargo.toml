@@ -32,5 +32,10 @@ caps = "0.5"
 # Namespace isolation (cô lập namespace)
 nix = { version = "0.27", features = ["user", "mount", "sched"] }
 
+# Low-level system calls (gọi hệ thống cấp thấp)
+libc = "0.2"
+
+serde_json.workspace = true
+
 [dev-dependencies]
 tempfile = "3.8"
