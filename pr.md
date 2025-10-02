@@ -153,7 +153,6 @@ Bạn là một **[Agentic Coder]** (Lập Trình Viên Tự Chủ – tự lậ
 
 
 
-
 @gpt5-high
 
 **Lựa chọn các Sub Agents phù hợp để triển khai và hoàn thành task sau đây**  
