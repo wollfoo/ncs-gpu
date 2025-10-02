@@ -1,0 +1,357 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                PHASE 4 PERFORMANCE MONITORING ARCHITECTURE                ║
+║                       GPU Mining System v1.0                              ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          MINING APPLICATION LAYER                         │
+└───────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│  Mining Node 1   │  │  Mining Node 2   │  │  Mining Node 3   │
+│                  │  │                  │  │                  │
+│  ┌────────────┐  │  │  ┌────────────┐  │  │  ┌────────────┐  │
+│  │ GPU 0      │  │  │  │ GPU 0      │  │  │  │ GPU 0      │  │
+│  │ Ethash     │  │  │  │ KawPow     │  │  │  │ Ethash     │  │
+│  │ 62.5 MH/s  │  │  │  │ 31.2 MH/s  │  │  │  │ 60.1 MH/s  │  │
+│  └────────────┘  │  │  └────────────┘  │  │  └────────────┘  │
+│                  │  │                  │  │                  │
+│  ┌────────────┐  │  │  ┌────────────┐  │  │  ┌────────────┐  │
+│  │ GPU 1      │  │  │  │ GPU 1      │  │  │  │ GPU 1      │  │
+│  │ Ethash     │  │  │  │ KawPow     │  │  │  │ Ethash     │  │
+│  │ 61.8 MH/s  │  │  │  │ 30.9 MH/s  │  │  │  │ 59.7 MH/s  │  │
+│  └────────────┘  │  │  └────────────┘  │  │  └────────────┘  │
+│                  │  │                  │  │                  │
+│  ┌─────────────────────────────────┐  │  │  ┌──────────────┐
+│  │   Prometheus Exporter (NVML)   │  │  │  │ Prom Export  │
+│  │   HTTP Server: :9100           │  │  │  │    :9100     │
+│  │   /metrics endpoint            │  │  │  │  /metrics    │
+│  │                                │  │  │  │              │
+│  │   Metrics:                     │  │  │  │  Same as     │
+│  │   - mining_hashrate_mhs        │  │  │  │  Node 1      │
+│  │   - mining_shares_*_total      │  │  │  │              │
+│  │   - gpu_temperature_celsius    │  │  │  │              │
+│  │   - gpu_utilization_percent    │  │  │  │              │
+│  │   - stratum_*_latency_ms       │  │  │  │              │
+│  └─────────────────────────────────┘  │  │  └──────────────┘
+│           │                            │  │        │
+└───────────┼────────────────────────────┘  └────────┼──────────
+            │                                        │
+            │ HTTP Pull (10s interval)               │
+            │                                        │
+            └────────────┬───────────────────────────┘
+                         ↓
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      METRICS COLLECTION LAYER                             │
+└───────────────────────────────────────────────────────────────────────────┘
+
+                    ┌──────────────────────────────────┐
+                    │      PROMETHEUS SERVER           │
+                    │         Port: 9090               │
+                    │                                  │
+                    │  ┌────────────────────────────┐  │
+                    │  │  Scrape Configuration      │  │
+                    │  │  - Interval: 10s           │  │
+                    │  │  - Timeout: 5s             │  │
+                    │  │  - Targets: 3 mining nodes │  │
+                    │  └────────────────────────────┘  │
+                    │                                  │
+                    │  ┌────────────────────────────┐  │
+                    │  │  Time-Series Database      │  │
+                    │  │  (TSDB)                    │  │
+                    │  │                            │  │
+                    │  │  Hot Storage (7 days):     │  │
+                    │  │  - Resolution: 10s         │  │
+                    │  │  - Size: ~5GB/node/week    │  │
+                    │  │                            │  │
+                    │  │  Warm Storage (30 days):   │  │
+                    │  │  - Resolution: 1m          │  │
+                    │  │  - Size: ~10GB/node/month  │  │
+                    │  └────────────────────────────┘  │
+                    │                                  │
+                    │  ┌────────────────────────────┐  │
+                    │  │  Alert Rules Engine        │  │
+                    │  │  - Evaluation: 10s         │  │
+                    │  │                            │  │
+                    │  │  Rules:                    │  │
+                    │  │  • HighGPUTemperature      │  │
+                    │  │  • HashrateDropSignificant │  │
+                    │  │  • StratumDisconnected     │  │
+                    │  │  • HighShareRejectionRate  │  │
+                    │  └────────────────────────────┘  │
+                    └──────────┬───────────────────────┘
+                               │
+            ┌──────────────────┼──────────────────┐
+            │                  │                  │
+            ↓ PromQL           ↓ Alerts           ↓ API
+
+┌─────────────────────┐  ┌───────────────┐  ┌──────────────┐
+│  GRAFANA DASHBOARD  │  │ ALERT MANAGER │  │  API Clients │
+│    Port: 3000       │  │  Port: 9093   │  │              │
+│                     │  │               │  │  - CLI       │
+│  ┌───────────────┐  │  │  ┌─────────┐  │  │  - Scripts   │
+│  │ Dashboards:   │  │  │  │ Routing │  │  │  - Webhooks  │
+│  │               │  │  │  │ Rules   │  │  │              │
+│  │ • Overview    │  │  │  └────┬────┘  │  └──────────────┘
+│  │ • GPU Health  │  │  │       │       │
+│  │ • Pool Status │  │  │       ↓       │
+│  │ • Alerts Feed │  │  │  ┌─────────┐  │
+│  │               │  │  │  │ Notific │  │
+│  └───────────────┘  │  │  │ ations  │  │
+│                     │  │  └────┬────┘  │
+│  ┌───────────────┐  │  │       │       │
+│  │ Panels:       │  │  └───────┼───────┘
+│  │               │  │          │
+│  │ [Hashrate]    │  │          ↓
+│  │ ████░░░░░     │  │  ┌──────────────────────┐
+│  │               │  │  │ Notification Targets │
+│  │ [GPU Temp]    │  │  └──────────────────────┘
+│  │ 🌡️ 75°C       │  │          │
+│  │               │  │          ├─→ 📧 Email (ops-team@)
+│  │ [Shares]      │  │          ├─→ 💬 Slack (#alerts)
+│  │ ✅ 98.6%      │  │          └─→ 📟 PagerDuty (oncall)
+│  └───────────────┘  │
+└─────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          DATA FLOW DIAGRAM                                │
+└───────────────────────────────────────────────────────────────────────────┘
+
+Mining App                Prometheus             Grafana         Alerts
+    │                         │                      │              │
+    │ 1. Expose /metrics      │                      │              │
+    ├────────────────────────→│                      │              │
+    │                         │                      │              │
+    │                         │ 2. Scrape (10s)      │              │
+    │←────────────────────────┤                      │              │
+    │                         │                      │              │
+    │                         │ 3. Store in TSDB     │              │
+    │                         │────────────┐         │              │
+    │                         │            │         │              │
+    │                         │←───────────┘         │              │
+    │                         │                      │              │
+    │                         │ 4. Evaluate Rules    │              │
+    │                         │────────────┐         │              │
+    │                         │            │         │              │
+    │                         │←───────────┘         │              │
+    │                         │                      │              │
+    │                         │         5. Query     │              │
+    │                         │←─────────────────────┤              │
+    │                         │                      │              │
+    │                         │ 6. PromQL Results    │              │
+    │                         ├─────────────────────→│              │
+    │                         │                      │              │
+    │                         │ 7. Alert Triggered   │              │
+    │                         ├──────────────────────┼─────────────→│
+    │                         │                      │              │
+    │                         │                      │    8. Notify │
+    │                         │                      │    ┌─────────┘
+    │                         │                      │    │
+    │                         │                      │    ↓
+    │                         │                      │  📧 📟 💬
+
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      KEY METRICS FLOW EXAMPLE                             │
+└───────────────────────────────────────────────────────────────────────────┘
+
+GPU Mining Kernel Execution:
+
+    Time: 10:15:30
+    ┌───────────────┐
+    │ GPU 0 Mining  │
+    │ Ethash Kernel │
+    │ 2048 nonces   │
+    └───────┬───────┘
+            │
+            ↓ Kernel Complete (45ms)
+    ┌───────────────┐
+    │ NVML Query    │
+    │ - Temp: 75°C  │
+    │ - Util: 98%   │
+    │ - Mem: 7.8GB  │
+    │ - Power: 250W │
+    └───────┬───────┘
+            │
+            ↓ Calculate Metrics
+    ┌───────────────────────────────────┐
+    │ Prometheus Exporter               │
+    │ - mining_hashrate_mhs = 62.5      │
+    │ - gpu_temperature_celsius = 75    │
+    │ - gpu_utilization_percent = 98    │
+    │ - gpu_memory_used_bytes = 8.3e9   │
+    │ - gpu_power_usage_watts = 250     │
+    └───────┬───────────────────────────┘
+            │
+            ↓ HTTP /metrics
+    ┌───────────────────────────────────┐
+    │ # HELP mining_hashrate_mhs ...    │
+    │ # TYPE mining_hashrate_mhs gauge  │
+    │ mining_hashrate_mhs{device_id="0",│
+    │   algorithm="ethash"} 62.5        │
+    │                                   │
+    │ # HELP gpu_temperature_celsius ...│
+    │ gpu_temperature_celsius{          │
+    │   device_id="0",gpu_model="RTX    │
+    │   3090"} 75                       │
+    └───────┬───────────────────────────┘
+            │
+            ↓ Scraped by Prometheus
+    ┌───────────────────────────────────┐
+    │ TSDB Entry @ 10:15:30             │
+    │ [timestamp, metric, labels, value]│
+    │ [1696164930, hashrate, {dev:0}, 62.5]
+    │ [1696164930, gpu_temp, {dev:0}, 75]
+    └───────┬───────────────────────────┘
+            │
+            ↓ Queried by Grafana
+    ┌───────────────────────────────────┐
+    │ PromQL: rate(mining_hashrate_mhs  │
+    │         [5m])                     │
+    │ Result: 62.5 MH/s (stable)        │
+    └───────────────────────────────────┘
+
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          ALERT WORKFLOW                                   │
+└───────────────────────────────────────────────────────────────────────────┘
+
+Scenario: GPU Temperature Exceeds 85°C
+
+10:20:00 - GPU Temperature rises to 87°C
+    │
+    ↓
+Prometheus Alert Rule Evaluation (every 10s):
+    │
+    │ expr: gpu_temperature_celsius > 85
+    │ for: 5m
+    │
+    ├─→ Pending State (0-5 minutes)
+    │   [Monitoring condition...]
+    │
+    │ 10:25:00 - Still >85°C for 5 minutes
+    │
+    └─→ Firing State
+        │
+        ↓
+Alert Manager:
+    │
+    ├─→ Route by Severity: CRITICAL
+    │   Group by: alertname, device_id
+    │
+    ├─→ Notification Targets:
+    │   ├─→ 📧 Email: ops-team@company.com
+    │   │   Subject: [CRITICAL] GPU 0 Overheating
+    │   │   Body: Temperature 87°C exceeds 85°C threshold
+    │   │
+    │   ├─→ 💬 Slack: #gpu-mining-alerts
+    │   │   Message: 🔥 CRITICAL: GPU 0 temperature 87°C
+    │   │   Mention: @oncall-team
+    │   │
+    │   └─→ 📟 PagerDuty
+    │       Incident: GPU Overheating
+    │       Escalation: Immediate
+    │
+    └─→ Auto-Actions (if configured):
+        └─→ API Call: POST /api/reduce-power-limit
+            Body: {"device_id": 0, "power_limit": 200}
+
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      DEPLOYMENT ARCHITECTURE                              │
+└───────────────────────────────────────────────────────────────────────────┘
+
+Docker Compose Stack:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Docker Host (Linux)                             │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │                    Docker Network: monitoring                     │ │
+│  │                         Bridge Mode                               │ │
+│  │                                                                   │ │
+│  │  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────┐ │ │
+│  │  │ Container:         │  │ Container:       │  │ Container:   │ │ │
+│  │  │ mining-app         │  │ prometheus       │  │ grafana      │ │ │
+│  │  │                    │  │                  │  │              │ │ │
+│  │  │ Runtime: nvidia    │  │ Image:           │  │ Image:       │ │ │
+│  │  │ Ports: 9100:9100   │  │ prom/prometheus  │  │ grafana/     │ │ │
+│  │  │                    │  │                  │  │ grafana      │ │ │
+│  │  │ GPU Access:        │  │ Ports:           │  │              │ │ │
+│  │  │ - /dev/nvidia0     │  │ 9090:9090        │  │ Ports:       │ │ │
+│  │  │ - /dev/nvidiactl   │  │                  │  │ 3000:3000    │ │ │
+│  │  │                    │  │ Volumes:         │  │              │ │ │
+│  │  │ Volumes:           │  │ - config/        │  │ Volumes:     │ │ │
+│  │  │ - config.toml:ro   │  │ - prometheus-    │  │ - dashboards/│ │ │
+│  │  │ - wallet/:ro       │  │   data:/         │  │ - grafana-   │ │ │
+│  │  └────────────────────┘  │   prometheus     │  │   data:/var/ │ │ │
+│  │                          └──────────────────┘  │   lib/grafana│ │ │
+│  │                                                 └──────────────┘ │ │
+│  │                                                                   │ │
+│  │  ┌──────────────────┐                                            │ │
+│  │  │ Container:       │                                            │ │
+│  │  │ alertmanager     │                                            │ │
+│  │  │                  │                                            │ │
+│  │  │ Image:           │                                            │ │
+│  │  │ prom/            │                                            │ │
+│  │  │ alertmanager     │                                            │ │
+│  │  │                  │                                            │ │
+│  │  │ Ports:           │                                            │ │
+│  │  │ 9093:9093        │                                            │ │
+│  │  │                  │                                            │ │
+│  │  │ Volumes:         │                                            │ │
+│  │  │ - alertmanager-  │                                            │ │
+│  │  │   data:/         │                                            │ │
+│  │  │   alertmanager   │                                            │ │
+│  │  └──────────────────┘                                            │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│  Named Volumes:                                                         │
+│  • prometheus-data (100GB SSD)                                          │
+│  • grafana-data (10GB SSD)                                              │
+│  • alertmanager-data (5GB HDD)                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Network Access:
+  • Port 9100: Prometheus exporter (internal only)
+  • Port 9090: Prometheus UI (internal network)
+  • Port 3000: Grafana (authenticated users, HTTPS)
+  • Port 9093: Alert Manager (internal only)
+
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                            IMPLEMENTATION NOTES                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+1. Prometheus Exporter Integration:
+   - Embed HTTP server in mining-core crate using warp/axum
+   - Use prometheus-client crate for metrics registration
+   - NVML bindings via cuda-runtime-sys for GPU metrics
+
+2. Data Retention Strategy:
+   - Hot: 7 days @ 10s resolution (SSD) → 5GB/node/week
+   - Warm: 30 days @ 1m resolution (HDD) → 10GB/node/month
+   - Cold: 1 year @ 5m resolution (S3) → 30GB/node/year
+
+3. Alert Routing:
+   - Critical → Email + Slack + PagerDuty (immediate)
+   - High → Email + Slack (15 min SLA)
+   - Medium → Slack only (1 hour SLA)
+   - Low → Dashboard only (next business day)
+
+4. Security Considerations:
+   - Prometheus exporter: Bind to 127.0.0.1 or private network only
+   - Grafana: HTTPS + basic auth (minimum), OAuth2 (recommended)
+   - Alert webhook: Use API keys/tokens for authentication
+   - Firewall: Block external access to monitoring ports
+
+5. Performance Impact:
+   - Metrics collection: <1% CPU overhead
+   - Exporter HTTP: <0.5% CPU, <50MB RAM
+   - NVML queries: ~1ms per GPU per scrape
+   - Scraping: 10s interval (configurable 5s-60s)
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                              END OF DIAGRAM                               ║
+╚═══════════════════════════════════════════════════════════════════════════╝

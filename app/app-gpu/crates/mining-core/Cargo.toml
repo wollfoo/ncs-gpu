@@ -37,6 +37,9 @@ tokio-test = "0.4"  # Async test utilities (tiện ích test bất đồng bộ)
 mockall = "0.11"    # Mock generation library (thư viện tạo mock)
 assert_matches = "1.5"  # Assertions for pattern matching (khẳng định mẫu khớp)
 criterion = { version = "0.5", features = ["html_reports"] }  # Benchmarking framework (khung đo điểm chuẩn)
+proptest = { workspace = true }  # Property-based testing (kiểm thử dựa trên thuộc tính)
+test-case = { workspace = true }  # Parameterized tests (test tham số hóa)
+rstest = { workspace = true }  # Fixture-based testing (test dựa trên fixture)
 
 [features]
 default = ["nvml"]

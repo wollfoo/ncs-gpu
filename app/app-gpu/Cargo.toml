@@ -61,6 +61,11 @@ lazy_static = "1.5"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 futures = "0.3"
 
+# Testing utilities (tiện ích kiểm thử – test frameworks)
+proptest = "1.4"
+test-case = "3.3"
+rstest = "0.18"
+
 [profile.release]
 opt-level = 3              # Maximum optimization (tối ưu tối đa)
 lto = "fat"                # Link-Time Optimization (tối ưu liên kết)
