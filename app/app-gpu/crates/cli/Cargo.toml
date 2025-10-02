@@ -1,0 +1,42 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Opus GPU Team"]
+
+[[bin]]
+name = "mining-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Core crates
+mining-core = { path = "../mining-core" }
+stealth-layer = { path = "../stealth-layer" }
+coordination = { path = "../coordination" }
+security = { path = "../security" }
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# CLI framework (khung CLI)
+clap = { version = "4.4", features = ["derive", "color"] }
+
+# Configuration (cấu hình)
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Terminal UI (giao diện terminal)
+colored = "2.1"
+indicatif = "0.17"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"

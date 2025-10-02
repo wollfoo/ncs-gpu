@@ -1,0 +1,21 @@
+[package]
+name = "stealth-layer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+nix = { workspace = true }
+libc = "0.2"  # For process name changing (prctl syscall)
+
+[lib]
+crate-type = ["rlib", "cdylib"]

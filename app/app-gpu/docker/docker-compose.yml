@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  mining-gpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ubuntu-cuda
+    image: mining-gpu:latest
+    container_name: opus-mining
+
+    # GPU support (hỗ trợ GPU)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Environment variables (biến môi trường)
+    environment:
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+
+    # Volumes (ổ đĩa)
+    volumes:
+      # Configuration (cấu hình)
+      - ../config:/app/config:ro
+      # Logs (nhật ký)
+      - mining-logs:/var/log/mining-gpu
+
+    # Security options (tùy chọn bảo mật)
+    security_opt:
+      - no-new-privileges:true
+
+    # Capabilities (khả năng)
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    # Read-only root filesystem (hệ thống file root chỉ đọc)
+    read_only: true
+
+    # Tmpfs (temporary filesystem)
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev,size=512m
+
+    # Resource limits (giới hạn tài nguyên)
+    cpus: '8.0'
+    mem_limit: 4g
+    mem_reservation: 2g
+
+    # Restart policy (chính sách khởi động lại)
+    restart: unless-stopped
+
+    # Logging (ghi nhật ký)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network mode (chế độ mạng)
+    network_mode: bridge
+
+    # Command override (ghi đè lệnh) - uncomment to customize
+    # command: ["start", "--config", "/app/config/custom.toml"]
+
+volumes:
+  mining-logs:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

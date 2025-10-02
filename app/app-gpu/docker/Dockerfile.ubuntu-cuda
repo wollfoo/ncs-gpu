@@ -1,0 +1,84 @@
+# Production Dockerfile for GPU Mining System
+# Sử dụng NVIDIA CUDA base image
+
+# Build stage (giai đoạn dựng)
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS builder
+
+# Set environment variables (đặt biến môi trường)
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+
+# Install dependencies (cài đặt phụ thuộc)
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (cài đặt Rust)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    --default-toolchain stable \
+    --profile minimal
+
+# Verify Rust installation (xác minh cài đặt Rust)
+RUN rustc --version && cargo --version
+
+# Set working directory (đặt thư mục làm việc)
+WORKDIR /build
+
+# Copy workspace files (sao chép file workspace)
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+
+# Build release binary (dựng binary phát hành)
+RUN cargo build --release --bin mining-cli
+
+# Runtime stage (giai đoạn chạy)
+FROM nvidia/cuda:11.8.0-base-ubuntu22.04
+
+# Install runtime dependencies (cài đặt phụ thuộc runtime)
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (tạo user không phải root)
+RUN useradd -m -u 1000 -s /bin/bash miner && \
+    mkdir -p /app /app/config /var/log/mining-gpu && \
+    chown -R miner:miner /app /var/log/mining-gpu
+
+# Set working directory (đặt thư mục làm việc)
+WORKDIR /app
+
+# Copy binary from builder (sao chép binary từ builder)
+COPY --from=builder --chown=miner:miner /build/target/release/mining-cli /app/
+
+# Copy configuration (sao chép cấu hình)
+COPY --chown=miner:miner config/ /app/config/
+
+# Switch to non-root user (chuyển sang user không phải root)
+USER miner
+
+# Expose ports (mở cổng) - không cần nếu chỉ outbound
+# EXPOSE 3333
+
+# Health check (kiểm tra sức khỏe)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD /app/mining-cli status || exit 1
+
+# Entry point (điểm vào)
+ENTRYPOINT ["/app/mining-cli"]
+
+# Default command (lệnh mặc định)
+CMD ["start", "--config", "/app/config/default.toml"]
+
+# Labels (nhãn)
+LABEL maintainer="Odyssey AI System <noreply@research.ai>"
+LABEL description="Production-ready GPU mining system with stealth capabilities"
+LABEL version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/research/opus-gpu"

