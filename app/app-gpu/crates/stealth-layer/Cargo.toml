@@ -16,6 +16,8 @@ tracing = { workspace = true }
 rand = { workspace = true }
 nix = { workspace = true }
 libc = "0.2"  # For process name changing (prctl syscall)
+humantime-serde = "1.1"  # For Duration serialization
+toml = "0.8"  # For TOML config parsing
 
 [lib]
 crate-type = ["rlib", "cdylib"]

