@@ -23,7 +23,7 @@ pub async fn execute(config_path: &Path, daemon: bool) -> Result<()> {
     let config = config_loader::load_config(config_path)?;
 
     // Cache values for display (avoid clone issues)
-    let pool_url = config.mining.pool_url.clone();
+    let pool_url = config.mining.stratum_config.primary_pool.url.clone();
     let gpu_devices = config.mining.gpu_devices.clone();
     let stealth_profile = config.stealth.profile.clone();
 

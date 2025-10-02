@@ -160,9 +160,6 @@ Bạn là một **[Agentic Coder]** (Lập Trình Viên Tự Chủ – tự lậ
 ### Task cần hoàn thành:
 
 Thực hiện kiểm toán mã nguồn (Source Code Audit) toàn bộ codebase (app-gpu) tại đường dẫn /home/azureuser/opus-gpu/app/app-gpu/. 
-
-sau đó đối chiếu với tài liệu `/app/app-gpu/BAO-CAO-KY-THUAT-MINING-GPU.md` , `PRODUCTION-ROADMAP.md`
-Yêu cầu đánh giá:
 1. Hệ thống mining trong codebase đã được triển khai và hoạt động chính xác chưa?
 2. Liệt kê các thành phần còn thiếu để đạt chuẩn sản xuất (production-ready)
 

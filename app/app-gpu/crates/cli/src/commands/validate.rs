@@ -21,8 +21,8 @@ pub async fn execute(config_path: &Path) -> Result<()> {
         Ok(config) => {
             println!("{}", "✅ Configuration is valid!".green().bold());
             println!("\n{}", "Configuration Summary:".bright_cyan());
-            println!("  Pool URL:         {}", config.mining.pool_url);
-            println!("  Wallet:           {}", mask_wallet(&config.mining.wallet_address));
+            println!("  Pool URL:         {}", config.mining.stratum_config.primary_pool.url);
+            println!("  Worker:           {}", config.mining.stratum_config.primary_pool.worker_name);
             println!("  GPUs:             {:?}", config.mining.gpu_devices);
             println!("  Algorithm:        {:?}", config.mining.algorithm);
             println!("  Stealth Profile:  {:?}", config.stealth.profile);

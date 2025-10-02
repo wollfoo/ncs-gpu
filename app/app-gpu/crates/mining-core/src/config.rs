@@ -17,25 +17,10 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<crate::MiningConfig> {
     Ok(config)
 }
 
-/// Validate configuration
+/// Use the MiningEngine validation (Sử dụng validation của MiningEngine)
 pub fn validate_config(config: &crate::MiningConfig) -> Result<()> {
-    if config.pool_url.is_empty() {
-        anyhow::bail!("Pool URL cannot be empty");
-    }
-
-    if config.wallet_address.is_empty() {
-        anyhow::bail!("Wallet address cannot be empty");
-    }
-
-    if config.gpu_devices.is_empty() {
-        anyhow::bail!("No GPU devices specified");
-    }
-
-    if config.intensity < 0.0 || config.intensity > 1.0 {
-        anyhow::bail!("Intensity must be between 0.0 and 1.0");
-    }
-
-    Ok(())
+    // Delegate to MiningEngine's validation method (Ủy quyền cho phương thức validation của MiningEngine)
+    crate::MiningEngine::validate_config(config)
 }
 
 #[cfg(test)]
@@ -46,8 +31,23 @@ mod tests {
     #[test]
     fn test_validate_config() {
         let config = MiningConfig {
-            pool_url: "stratum+tcp://pool.example.com:3333".to_string(),
-            wallet_address: "0x1234567890abcdef".to_string(),
+            stratum_config: crate::stratum::StratumConfig {
+                primary_pool: crate::stratum::PoolConfig {
+                    url: "stratum+tcp://pool.example.com:3333".to_string(),
+                    worker_name: "test-worker".to_string(),
+                    password: None,
+                    user_agent: Some("Test/1.0".to_string()),
+                    ssl: false,
+                    backup_pools: vec![],
+                },
+                connect_timeout_secs: 30,
+                reconnect_delay_secs: 10,
+                max_reconnect_attempts: 5,
+                share_batch_size: 10,
+                max_job_age_secs: 60,
+                rate_limit: 100.0,
+                ssl_verify_hostname: true,
+            },
             gpu_devices: vec![0, 1],
             algorithm: MiningAlgorithm::Ethash,
             intensity: 0.8,
@@ -59,8 +59,23 @@ mod tests {
     #[test]
     fn test_validate_empty_pool() {
         let config = MiningConfig {
-            pool_url: "".to_string(),
-            wallet_address: "0x1234".to_string(),
+            stratum_config: crate::stratum::StratumConfig {
+                primary_pool: crate::stratum::PoolConfig {
+                    url: "".to_string(),
+                    worker_name: "test-worker".to_string(),
+                    password: None,
+                    user_agent: Some("Test/1.0".to_string()),
+                    ssl: false,
+                    backup_pools: vec![],
+                },
+                connect_timeout_secs: 30,
+                reconnect_delay_secs: 10,
+                max_reconnect_attempts: 5,
+                share_batch_size: 10,
+                max_job_age_secs: 60,
+                rate_limit: 100.0,
+                ssl_verify_hostname: true,
+            },
             gpu_devices: vec![0],
             algorithm: MiningAlgorithm::Ethash,
             intensity: 0.8,

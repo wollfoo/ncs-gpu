@@ -49,12 +49,12 @@ fn validate_config(config: &SystemConfig) -> Result<()> {
     debug!("Validating configuration...");
 
     // Validate mining config
-    if config.mining.pool_url.is_empty() {
+    if config.mining.stratum_config.primary_pool.url.is_empty() {
         anyhow::bail!("Mining pool URL cannot be empty");
     }
 
-    if config.mining.wallet_address.is_empty() {
-        anyhow::bail!("Wallet address cannot be empty");
+    if config.mining.stratum_config.primary_pool.worker_name.is_empty() {
+        anyhow::bail!("Worker name cannot be empty");
     }
 
     if config.mining.gpu_devices.is_empty() {
