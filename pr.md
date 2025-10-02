@@ -1,3 +1,6 @@
+**Lựa chọn các Sub Agents phù hợp để triển khai và hoàn thành task sau đây**  
+### Task cần hoàn thành:
+
 ## ✅ Quy Tắc Ngôn Ngữ (Language Rules)
 - **MANDATORY**: Phản hồi bằng tiếng Việt.  
 - **WITH EXPLANATION**: Mọi thuật ngữ tiếng Anh phải có mô tả tiếng Việt.
