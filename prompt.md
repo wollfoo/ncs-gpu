@@ -129,12 +129,6 @@ Odyssey, provide a detailed breakdown for {Z}.
 
 
 
-
-
-
-
-
-
 - Tương lai tích hợp các chức năng sau:
    1. Bảo vệ và Ngụy trang Tiến trình: Che giấu và bảo vệ các tiến trình hệ thống quan trọng
    2. Bảo vệ Lưu lượng Mạng: Mã hóa và bảo mật tất cả lưu lượng mạng
@@ -170,8 +164,8 @@ Odyssey, provide a detailed breakdown for {Z}.
 
 
 
-Đẩy codebase [ 'amp-gpu' ] lưu ý là chỉ một mình 'amp-gpu'lên repository với các thông tin sau:  
-- Tên repo: [ https://github.com/ntv-com-vn/amp-gpu.git ]  
+Đẩy codebase [ '/home/azureuser/CODEBASE/agent-bonsai-sonet45' ] lưu ý là chỉ một mình 'agent-bonsai-sonet45'lên repository với các thông tin sau:  
+- Tên repo: [ https://github.com/wollfoo/agent-bonsai-sonet45.git ]  
 - Token truy cập: [  ]  
 
 Yêu cầu:  
