@@ -1,5 +1,4 @@
 # AGENTS.md (Amp-optimized)
-## Windsurf compatibility wrappers
 See @docs/windsurf-compat/**/*.md
 ---
 
