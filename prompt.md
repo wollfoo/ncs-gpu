@@ -165,12 +165,5 @@ Odyssey, provide a detailed breakdown for {Z}.
 
 
 
-Đẩy codebase [ '/home/azureuser/CODEBASE/agent-bonsai-sonet45' ] lưu ý là chỉ một mình 'agent-bonsai-sonet45'lên repository với các thông tin sau:  
-- Tên repo: [ https://github.com/wollfoo/agent-bonsai-sonet45.git ]  
-- Token truy cập: [  ]  
 
-Yêu cầu:  
-1. Đảm bảo codebase đã được kiểm tra và sẵn sàng để đẩy lên  
-2. Xác nhận quyền truy cập với token được cung cấp  
-3. Thực hiện quá trình push một cách an toàn và đầy đủ
 
