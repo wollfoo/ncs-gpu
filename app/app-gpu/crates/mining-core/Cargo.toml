@@ -1,0 +1,37 @@
+[package]
+name = "mining-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# Thêm loại crate "cdylib" để biên dịch thành một thư viện liên kết động tương thích với C.
+# (Add the "cdylib" crate type to compile into a C-compatible dynamic library.)
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# Định nghĩa một tính năng "ffi" để biên dịch có điều kiện module FFI.
+# (Define an "ffi" feature to conditionally compile the FFI module.)
+ffi = []
+
+# Định nghĩa các phụ thuộc của crate.
+# (Defining the crate's dependencies.)
+[dependencies]
+# Thư viện để thực hiện các thuật toán băm SHA-2.
+# (Library for performing SHA-2 hashing algorithms.)
+sha2 = "0.10"
+
+# Serde là một framework để tuần tự hóa và giải tuần tự hóa các cấu trúc dữ liệu Rust một cách hiệu quả.
+# (Serde is a framework for serializing and deserializing Rust data structures efficiently.)
+serde = { version = "1.0", features = ["derive"] }
+
+# Tokio là một runtime bất đồng bộ cho Rust, cung cấp các khối xây dựng cần thiết để viết mã mạng.
+# (Tokio is an asynchronous runtime for Rust, providing the building blocks needed for writing network code.)
+tokio = { version = "1", features = ["full"] }
+
+# Thư viện ghi nhật ký (logging) linh hoạt cho Rust.
+# (A flexible logging library for Rust.)
+log = "0.4"
+
+# Thư viện để phân tích cú pháp các đối số dòng lệnh.
+# (A library for parsing command-line arguments.)
+clap = { version = "4.0", features = ["derive"] }

@@ -1,0 +1,15 @@
+[package]
+name = "stealth-layer"
+version = "0.1.0"
+edition = "2021"
+
+# Định nghĩa các phụ thuộc của crate.
+# (Defining the crate's dependencies.)
+[dependencies]
+# Thư viện để tạo số ngẫu nhiên, cần thiết cho việc tạo các mẫu hành vi khó dự đoán.
+# (Library for random number generation, necessary for creating unpredictable behavior patterns.)
+rand = "0.8"
+
+# Thư viện ghi nhật ký (logging) linh hoạt cho Rust.
+# (A flexible logging library for Rust.)
+log = "0.4"

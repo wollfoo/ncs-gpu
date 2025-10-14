@@ -1,0 +1,19 @@
+[workspace]
+# Định nghĩa không gian làm việc (workspace) cho dự án Rust.
+# Điều này cho phép quản lý nhiều crate (gói) trong cùng một dự án.
+
+members = [
+    # Liệt kê các crate thành viên của workspace.
+    "crates/mining-cli",
+    "crates/mining-core",
+    "crates/stealth-layer",
+]
+
+resolver = "2" # Sử dụng trình phân giải (resolver) phiên bản 2 để cải thiện việc quản lý phụ thuộc.
+
+[profile.release]
+# Cấu hình cho bản dựng phát hành (release build).
+lto = true           # Kích hoạt Link-Time Optimization (Tối ưu hóa thời gian liên kết) để tăng hiệu suất.
+codegen-units = 1    # Giảm số đơn vị sinh mã xuống 1 để tối ưu hóa tốt hơn.
+panic = "abort"      # Thiết lập hành vi khi xảy ra panic là hủy bỏ (abort) thay vì giải phóng (unwind), giúp giảm kích thước tệp nhị phân.
+strip = true         # Loại bỏ các biểu tượng (symbols) không cần thiết khỏi tệp nhị phân cuối cùng.
