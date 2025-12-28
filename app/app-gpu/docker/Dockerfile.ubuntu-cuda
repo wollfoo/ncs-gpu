@@ -1,0 +1,50 @@
+# Sử dụng quy trình xây dựng đa giai đoạn để giữ cho image cuối cùng nhỏ gọn.
+# (Using a multi-stage build process to keep the final image small.)
+
+# --- Giai đoạn 1: Builder ---
+# Sử dụng image Rust chính thức làm môi trường xây dựng.
+# (Using the official Rust image as the build environment.)
+FROM rust:1.70 as builder
+
+# Tạo một thư mục làm việc.
+# (Create a working directory.)
+WORKDIR /usr/src/app
+
+# Sao chép mã nguồn vào container.
+# (Copy the source code into the container.)
+COPY . .
+
+# Biên dịch dự án ở chế độ phát hành.
+# (Compile the project in release mode.)
+RUN cargo build --release
+
+# --- Giai đoạn 2: Final Image ---
+# SỬ DỤNG IMAGE CƠ SỞ CỦA NVIDIA
+# Image này chứa các thư viện CUDA cần thiết để chạy các ứng dụng GPU.
+# (USING AN NVIDIA BASE IMAGE)
+# (This image contains the necessary CUDA libraries to run GPU applications.)
+FROM nvidia/cuda:12.1.1-base-ubuntu22.04
+
+# Cài đặt các gói cần thiết có thể bị thiếu trong image base.
+# (Install necessary packages that might be missing from the base image.)
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Thiết lập thư mục làm việc.
+# (Set the working directory.)
+WORKDIR /app
+
+# Sao chép tệp nhị phân đã được biên dịch từ giai đoạn builder.
+# (Copy the compiled binary from the builder stage.)
+COPY --from=builder /usr/src/app/target/release/mining-cli .
+
+# Sao chép thư mục cấu hình.
+# (Copy the configuration directory.)
+COPY ./config ./config
+
+# Thiết lập các biến môi trường cần thiết.
+# (Set necessary environment variables.)
+ENV RUST_LOG=info
+
+# Lệnh sẽ được chạy khi container khởi động.
+# (The command that will be run when the container starts.)
+CMD ["./mining-cli", "--config", "./config/default.toml", "start"]

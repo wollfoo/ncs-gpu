@@ -1,0 +1,33 @@
+[package]
+name = "mining-cli"
+version = "0.1.0"
+edition = "2021"
+
+# Định nghĩa các phụ thuộc của crate.
+# (Defining the crate's dependencies.)
+[dependencies]
+# Các crate cục bộ trong workspace.
+# (Local crates in the workspace.)
+mining-core = { path = "../mining-core" }
+stealth-layer = { path = "../stealth-layer" }
+
+# Thư viện để phân tích cú pháp các đối số dòng lệnh một cách mạnh mẽ.
+# (A powerful library for parsing command-line arguments.)
+clap = { version = "4.0", features = ["derive"] }
+
+# Tokio là một runtime bất đồng bộ cho Rust.
+# (Tokio is an asynchronous runtime for Rust.)
+tokio = { version = "1", features = ["full"] }
+
+# Thư viện để quản lý cấu hình từ nhiều nguồn (ví dụ: tệp, biến môi trường).
+# (A library to manage configuration from various sources (e.g., files, environment variables).)
+config = "0.13"
+
+# Serde cho việc tuần tự hóa/giải tuần tự hóa.
+# (Serde for serialization/deserialization.)
+serde = { version = "1.0", features = ["derive"] }
+
+# Thư viện ghi nhật ký (logging).
+# (Logging library.)
+log = "0.4"
+env_logger = "0.9"
